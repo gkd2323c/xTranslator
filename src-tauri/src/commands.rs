@@ -12,6 +12,7 @@ use xt_core::xml::{import_xml_to_sky_strings, parse_xml_file, sky_strings_to_xml
 use xt_shared::dto::{
     EspLoadProgress, HeuristicMatchDTO, HeuristicSearchRequest, LoadEspResponse, LoadSstResponse, QueryRequest,
     QueryResponse, SaveStringsRequest, SaveStringsResponse, SkyStringDTO, TranslateRequest, XmlExportRequest, XmlImportResponse,
+    XmlProgress,
 };
 
 /// 已加载的 ESP 文件信息
@@ -154,42 +155,61 @@ pub async fn load_esp(
             message: "Loading strings files...".to_string(),
         });
 
-        // 如果提供了 strings 目录则加载配套字符串文件；未提供也允许继续解析 ESP。
+        // 加载配套 strings 文件。
+        // 策略：优先从指定的 strings 目录加载独立文件；
+        // 若未指定或加载不到，回退到 ESP 所在目录扫描 BSA 归档。
         let lang = language_clone.as_deref().unwrap_or("english");
-        let strings_loaded = if let Some(ref dir) = strings_dir_clone {
+        let base_name = std::path::Path::new(&esp_path_clone)
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("skyrim");
+
+        // 若存在 codepage 配置，优先使用它来提升非 UTF-8 文本解码准确性。
+        let codepage_path = data_dir
+            .join(match game_id {
+                GameId::Skyrim => "Skyrim",
+                GameId::SkyrimSE => "SkyrimSE",
+                GameId::Fallout4 => "Fallout4",
+                GameId::FalloutNV => "FalloutNV",
+                GameId::Fallout76 => "Fallout76",
+                GameId::Starfield => "Starfield",
+            })
+            .join("codepage.txt");
+        let codepage_table = if codepage_path.exists() {
+            CodepageTable::load_from_file(&codepage_path).ok()
+        } else {
+            None
+        };
+
+        let mut strings_loaded = 0u8;
+
+        // 1. 若前端提供了 strings 目录，先尝试加载
+        if let Some(ref dir) = strings_dir_clone {
             let dir_path = std::path::Path::new(dir);
-            let base_name = std::path::Path::new(&esp_path_clone)
-                .file_stem()
-                .and_then(|s| s.to_str())
-                .unwrap_or("skyrim");
-
-            // 若存在 codepage 配置，优先使用它来提升非 UTF-8 文本解码准确性。
-            let codepage_path = data_dir
-                .join(match game_id {
-                    GameId::Skyrim => "Skyrim",
-                    GameId::SkyrimSE => "SkyrimSE",
-                    GameId::Fallout4 => "Fallout4",
-                    GameId::FalloutNV => "FalloutNV",
-                    GameId::Fallout76 => "Fallout76",
-                    GameId::Starfield => "Starfield",
-                })
-                .join("codepage.txt");
-
-            if codepage_path.exists() {
-                if let Ok(table) = CodepageTable::load_from_file(&codepage_path) {
-                    parser.strings_files = StringsFiles::load_from_dir_with_language(
-                        dir_path, base_name, lang, &table,
-                    );
-                } else {
-                    parser.load_strings_files(dir_path, base_name);
-                }
+            if let Some(ref table) = codepage_table {
+                parser.strings_files = StringsFiles::load_from_dir_with_language(
+                    dir_path, base_name, lang, table,
+                );
             } else {
                 parser.load_strings_files(dir_path, base_name);
             }
-            parser.strings_files.loaded_count() as u8
-        } else {
-            0
-        };
+            strings_loaded = parser.strings_files.loaded_count() as u8;
+        }
+
+        // 2. 如果指定的目录没加载到任何文件，回退到 ESP 所在目录扫描 BSA
+        if strings_loaded == 0 {
+            let esp_dir = std::path::Path::new(&esp_path_clone)
+                .parent()
+                .unwrap_or_else(|| std::path::Path::new("."));
+            if let Some(ref table) = codepage_table {
+                parser.strings_files = StringsFiles::load_from_dir_with_language(
+                    esp_dir, base_name, lang, table,
+                );
+            } else {
+                parser.load_strings_files(esp_dir, base_name);
+            }
+            strings_loaded = parser.strings_files.loaded_count() as u8;
+        }
 
         let _ = window.emit("esp-load-progress", EspLoadProgress {
             stage: "loading_strings".to_string(),
@@ -618,14 +638,35 @@ pub async fn set_api_key(
 
 /// 将当前已翻译内容导出为 Delphi 兼容 XML。
 ///
+fn emit_xml_progress(window: &tauri::Window, stage: &str, current: u64, total: u64, message: &str) {
+    let percentage = if total > 0 {
+        ((current as f64 / total as f64) * 100.0) as u8
+    } else {
+        0
+    };
+    let _ = window.emit(
+        "xml-progress",
+        XmlProgress {
+            stage: stage.to_string(),
+            current,
+            total,
+            percentage,
+            message: message.to_string(),
+        },
+    );
+}
+
 /// 返回值为实际导出的条目数。
 #[tauri::command]
 pub async fn export_xml(
+    window: tauri::Window,
     state: tauri::State<'_, Arc<AppState>>,
     request: XmlExportRequest,
 ) -> Result<u32, String> {
     let strings = state.strings.lock().map_err(|e| e.to_string())?;
     let file_info = state.file_info.lock().map_err(|e| e.to_string())?;
+
+    emit_xml_progress(&window, "preparing", 0, 3, "Preparing XML export...");
 
     let addon = file_info
         .as_ref()
@@ -643,9 +684,11 @@ pub async fn export_xml(
         .map(|fi| fi.language.clone())
         .unwrap_or_else(|| "english".to_string());
 
-    // 仅导出“已有译文”的条目，行为与 Delphi 版本保持一致。
+    // 仅导出"已有译文"的条目，行为与 Delphi 版本保持一致。
     let entries = sky_strings_to_xml_entries(&strings);
     let exported_count = entries.len() as u32;
+
+    emit_xml_progress(&window, "collecting", 1, 3, &format!("Collected {} entries...", exported_count));
 
     let params = XmlExportParams {
         addon,
@@ -654,8 +697,12 @@ pub async fn export_xml(
         version: 2,
     };
 
+    emit_xml_progress(&window, "writing", 2, 3, "Writing XML file...");
+
     let path = std::path::Path::new(&request.path);
     write_xml_file(path, &params, &entries).map_err(|e| format!("Failed to write XML: {}", e))?;
+
+    emit_xml_progress(&window, "done", 3, 3, "Export complete");
 
     // 导出成功后清除脏标记
     *state.is_dirty.lock().map_err(|e| e.to_string())? = false;
@@ -668,17 +715,24 @@ pub async fn export_xml(
 /// 返回匹配/未匹配数量及被更新的内部 ID 列表。
 #[tauri::command]
 pub async fn import_xml(
+    window: tauri::Window,
     state: tauri::State<'_, Arc<AppState>>,
     xml_path: String,
 ) -> Result<XmlImportResponse, String> {
+    emit_xml_progress(&window, "parsing", 0, 2, "Parsing XML file...");
+
     // 先解析 XML，再按三元组规则写回内存数据。
     let (_, xml_entries) = parse_xml_file(std::path::Path::new(&xml_path))
         .map_err(|e| format!("Failed to parse XML: {}", e))?;
 
     let total = xml_entries.len() as u32;
 
+    emit_xml_progress(&window, "merging", 1, 2, &format!("Merging {} entries...", total));
+
     let mut strings = state.strings.lock().map_err(|e| e.to_string())?;
     let (matched, unmatched, updated_ids) = import_xml_to_sky_strings(&mut strings, &xml_entries);
+
+    emit_xml_progress(&window, "done", 2, 2, "Import complete");
 
     // 导入修改了数据，标记为脏
     *state.is_dirty.lock().map_err(|e| e.to_string())? = true;

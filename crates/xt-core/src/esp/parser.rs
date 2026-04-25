@@ -1,5 +1,5 @@
 use crate::esp::header::{FieldHeader, GenericHeader, GrupHeader, RecordHeaderData};
-use crate::strings::{CodepageTable, StringsFile};
+use crate::strings::{CodepageTable, StringsFile, StringsFormat};
 use crate::types::esp_pointer::EspPointer;
 use crate::types::game_id::GameId;
 use crate::types::params::SkyStringParams;
@@ -9,14 +9,14 @@ use std::path::Path;
 
 /// 解压 Bethesda 压缩记录
 ///
-/// Bethesda 特有的压缩格式（用于 Oblivion/Skyrim 等游戏）：
-/// - 前4字节：小端序的解压后大小（u32）
+/// Bethesda 特有的压缩格式(用于 Oblivion/Skyrim 等游戏)：
+/// - 前4字节：小端序的解压后大小(u32)
 /// - 剩余数据：zlib 压缩数据
 ///
 /// 参考 Delphi 实现：DecompressToUserBuf(@b[4], header.dsize - sizeOf(cardinal), ...)
 ///
 /// # 参数
-/// * `data` - 压缩记录数据（包含4字节大小头）
+/// * `data` - 压缩记录数据(包含4字节大小头)
 ///
 /// # 返回
 /// 解压后的数据，或错误
@@ -31,7 +31,7 @@ fn decompress_bethesda_record(data: &[u8]) -> Result<Vec<u8>> {
         ));
     }
 
-    // 读取解压后大小（小端序）
+    // 读取解压后大小(小端序)
     let decompressed_size = u32::from_le_bytes([data[0], data[1], data[2], data[3]]) as usize;
 
     // 大小为0表示空记录
@@ -39,7 +39,7 @@ fn decompress_bethesda_record(data: &[u8]) -> Result<Vec<u8>> {
         return Ok(Vec::new());
     }
 
-    // 合理性检查：防止异常声明大小导致内存膨胀（常见于损坏文件）。
+    // 合理性检查：防止异常声明大小导致内存膨胀(常见于损坏文件)。
     if decompressed_size > 100_000_000 {
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
@@ -47,7 +47,7 @@ fn decompress_bethesda_record(data: &[u8]) -> Result<Vec<u8>> {
         ));
     }
 
-    // 压缩体从第 5 字节开始（前 4 字节是解压后大小）。
+    // 压缩体从第 5 字节开始(前 4 字节是解压后大小)。
     let compressed = &data[4..];
     if compressed.is_empty() {
         // 只有大小头，没有压缩数据，返回全0
@@ -81,15 +81,15 @@ fn decompress_bethesda_record(data: &[u8]) -> Result<Vec<u8>> {
 /// 从 _recorddefs.txt 解析而来，描述哪些字段包含可翻译的字符串
 #[derive(Clone, Debug)]
 pub struct TranslatableField {
-    /// 记录类型签名（4字节 ASCII，如 "INFO", "QUST"）
+    /// 记录类型签名(4字节 ASCII，如 "INFO", "QUST")
     pub record_sig: [u8; 4],
-    /// 字段签名（4字节 ASCII，如 "NAM1", "FULL"）
+    /// 字段签名(4字节 ASCII，如 "NAM1", "FULL")
     pub field_sig: [u8; 4],
     /// Strings 文件类型索引：0=.STRINGS, 1=.DLSTRINGS, 2=.ILSTRINGS
     pub list_index: u8,
-    /// Not-null 标记（*）：字符串不能为空
+    /// Not-null 标记(*)：字符串不能为空
     pub not_null: bool,
-    /// Ignored 标记（?）：此定义应被忽略
+    /// Ignored 标记(?)：此定义应被忽略
     pub ignored: bool,
 }
 
@@ -115,12 +115,13 @@ pub struct StringsFiles {
 }
 
 impl StringsFiles {
-    /// 从目录加载所有 strings 文件（使用默认 UTF-8 编码）
+    /// 从目录加载所有 strings 文件(使用默认 UTF-8 编码)
+    /// 如果磁盘文件不存在，会尝试从同目录下的 BSA 归档中提取
     pub fn load_from_dir<P: AsRef<Path>>(dir: P, base_name: &str) -> Self {
         let dir = dir.as_ref();
-        let strings = Self::try_load(dir.join(format!("{}_english.STRINGS", base_name)));
-        let dlstrings = Self::try_load(dir.join(format!("{}_english.DLSTRINGS", base_name)));
-        let ilstrings = Self::try_load(dir.join(format!("{}_english.ILSTRINGS", base_name)));
+        let strings = Self::try_load(dir, base_name, "english", "STRINGS");
+        let dlstrings = Self::try_load(dir, base_name, "english", "DLSTRINGS");
+        let ilstrings = Self::try_load(dir, base_name, "english", "ILSTRINGS");
 
         StringsFiles {
             strings,
@@ -138,12 +139,9 @@ impl StringsFiles {
     ) -> Self {
         let dir = dir.as_ref();
 
-        let strings =
-            Self::try_load_with_table(dir.join(format!("{}_english.STRINGS", base_name)), table);
-        let dlstrings =
-            Self::try_load_with_table(dir.join(format!("{}_english.DLSTRINGS", base_name)), table);
-        let ilstrings =
-            Self::try_load_with_table(dir.join(format!("{}_english.ILSTRINGS", base_name)), table);
+        let strings = Self::try_load_with_table(dir, base_name, "english", "STRINGS", table);
+        let dlstrings = Self::try_load_with_table(dir, base_name, "english", "DLSTRINGS", table);
+        let ilstrings = Self::try_load_with_table(dir, base_name, "english", "ILSTRINGS", table);
 
         StringsFiles {
             strings,
@@ -162,18 +160,9 @@ impl StringsFiles {
     ) -> Self {
         let dir = dir.as_ref();
 
-        let strings = Self::try_load_with_table(
-            dir.join(format!("{}_{}.STRINGS", base_name, language)),
-            table,
-        );
-        let dlstrings = Self::try_load_with_table(
-            dir.join(format!("{}_{}.DLSTRINGS", base_name, language)),
-            table,
-        );
-        let ilstrings = Self::try_load_with_table(
-            dir.join(format!("{}_{}.ILSTRINGS", base_name, language)),
-            table,
-        );
+        let strings = Self::try_load_with_table(dir, base_name, language, "STRINGS", table);
+        let dlstrings = Self::try_load_with_table(dir, base_name, language, "DLSTRINGS", table);
+        let ilstrings = Self::try_load_with_table(dir, base_name, language, "ILSTRINGS", table);
 
         StringsFiles {
             strings,
@@ -183,15 +172,86 @@ impl StringsFiles {
         }
     }
 
-    fn try_load<P: AsRef<Path>>(path: P) -> Option<StringsFile> {
-        let path = path.as_ref();
-        let format = StringsFile::detect_format(path);
-        StringsFile::load_with_format(path, format).ok()
+    fn try_load(dir: &Path, base_name: &str, language: &str, ext: &str) -> Option<StringsFile> {
+        let filename = format!("{}_{}.{}", base_name, language, ext);
+        let path = dir.join(&filename);
+
+        // 1. 优先尝试从磁盘直接加载
+        let format = StringsFile::detect_format(path.as_path());
+        if let Ok(sf) = StringsFile::load_with_format(&path, format) {
+            return Some(sf);
+        }
+
+        // 2. 磁盘文件不存在，尝试从 BSA 归档中提取
+        Self::try_load_from_bsa(dir, &filename, format)
     }
 
-    fn try_load_with_table<P: AsRef<Path>>(path: P, table: &CodepageTable) -> Option<StringsFile> {
-        let path = path.as_ref();
-        StringsFile::load_with_codepage_table(path, table).ok()
+    fn try_load_with_table(
+        dir: &Path,
+        base_name: &str,
+        language: &str,
+        ext: &str,
+        table: &CodepageTable,
+    ) -> Option<StringsFile> {
+        let filename = format!("{}_{}.{}", base_name, language, ext);
+        let path = dir.join(&filename);
+
+        // 1. 优先尝试从磁盘直接加载
+        let format = StringsFile::detect_format(path.as_path());
+        if let Ok(sf) = StringsFile::load_with_codepage_table(&path, table) {
+            return Some(sf);
+        }
+
+        // 2. 磁盘文件不存在，尝试从 BSA 归档中提取
+        let codepage = table.get_for_filename(&filename);
+        Self::try_load_from_bsa_with_codepage(dir, &filename, format, codepage)
+    }
+
+    fn try_load_from_bsa(dir: &Path, filename: &str, format: StringsFormat) -> Option<StringsFile> {
+        use crate::bsa::BsaArchive;
+        use std::ffi::OsStr;
+
+        let bsa_path_in_archive = format!("strings/{}", filename.to_lowercase());
+
+        if let Ok(entries) = std::fs::read_dir(dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.extension().and_then(OsStr::to_str) == Some("bsa") {
+                    if let Ok(bsa) = BsaArchive::open(&path) {
+                        if let Ok(data) = bsa.extract_file(&bsa_path_in_archive) {
+                            return StringsFile::load_from_bytes(&data, format, crate::strings::CodepageConfig::utf8()).ok();
+                        }
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    fn try_load_from_bsa_with_codepage(
+        dir: &Path,
+        filename: &str,
+        format: StringsFormat,
+        codepage: crate::strings::CodepageConfig,
+    ) -> Option<StringsFile> {
+        use crate::bsa::BsaArchive;
+        use std::ffi::OsStr;
+
+        let bsa_path_in_archive = format!("strings/{}", filename.to_lowercase());
+
+        if let Ok(entries) = std::fs::read_dir(dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.extension().and_then(OsStr::to_str) == Some("bsa") {
+                    if let Ok(bsa) = BsaArchive::open(&path) {
+                        if let Ok(data) = bsa.extract_file(&bsa_path_in_archive) {
+                            return StringsFile::load_from_bytes(&data, format, codepage).ok();
+                        }
+                    }
+                }
+            }
+        }
+        None
     }
 
     /// 根据 list_index 查找字符串
@@ -226,17 +286,17 @@ impl StringsFiles {
 /// `Def_:FIELD=RECORD=LIST[*|?][-procN]`
 ///
 /// 各部分说明：
-/// - FIELD  : 字段签名（4字符，如 FULL, NAM1, DESC）
-/// - RECORD : 记录类型（4字符，如 ****=通配, INFO, QUST）
-/// - LIST   : Strings 文件索引（0,1,2）+ 可选标记
-/// - *      : not-null 标记（字符串不能为空）
-/// - ?      : ignored 标记（此定义应被忽略）
-/// - -procN : 内部处理程序标记（当前实现中忽略）
+/// - FIELD  : 字段签名(4字符，如 FULL, NAM1, DESC)
+/// - RECORD : 记录类型(4字符，如 ****=通配, INFO, QUST)
+/// - LIST   : Strings 文件索引(0,1,2)+ 可选标记
+/// - `*`    : not-null 标记 (字符串不能为空)
+/// - `?`    : ignored 标记 (此定义应被忽略)
+/// - `-procN` : 内部处理程序标记(当前实现中忽略)
 ///
 /// 示例：
 /// - `Def_:FULL=****=0`    → 所有记录的 FULL 字段，使用 .STRINGS
 /// - `Def_:NAM1=INFO=2*`   → INFO 记录的 NAM1 字段，使用 .ILSTRINGS，不能为空
-/// - `Def_:DATA=GMST=0-proc1` → GMST 记录的 DATA 字段（实际被过滤）
+/// - `Def_:DATA=GMST=0-proc1` → GMST 记录的 DATA 字段(实际被过滤)
 ///
 /// # 参数
 /// * `content` - _recorddefs.txt 文件内容
@@ -259,7 +319,7 @@ pub fn parse_record_defs(content: &str) -> Vec<TranslatableField> {
             continue; // 格式错误：跳过该行
         }
 
-        // 解析字段签名（4字节 ASCII）
+        // 解析字段签名(4字节 ASCII)
         let field_sig = {
             let mut sig = [0u8; 4];
             let bytes = parts[0].as_bytes();
@@ -268,7 +328,7 @@ pub fn parse_record_defs(content: &str) -> Vec<TranslatableField> {
             }
             sig
         };
-        // 解析记录类型签名（4字节 ASCII）
+        // 解析记录类型签名(4字节 ASCII)
         let record_sig = {
             let mut sig = [0u8; 4];
             let bytes = parts[1].as_bytes();
@@ -278,21 +338,21 @@ pub fn parse_record_defs(content: &str) -> Vec<TranslatableField> {
             sig
         };
 
-        // 解析 LIST 部分（可能包含 *、?、-proc 等标记）
+        // 解析 LIST 部分(可能包含 *、?、-proc 等标记)
         let list_str = parts[2];
         let mut not_null = false;
         let mut ignored = false;
 
-        // 检查 ignored 标记（? 表示此定义应被忽略）
+        // 检查 ignored 标记(? 表示此定义应被忽略)
         if list_str.find('?').is_some() {
             ignored = true;
         }
-        // 检查 not-null 标记（* 表示字符串不能为空）
+        // 检查 not-null 标记(* 表示字符串不能为空)
         if list_str.find('*').is_some() {
             not_null = true;
         }
 
-        // 提取 list_index：只看首个数字（0/1/2），忽略后续标记（如 -procN）。
+        // 提取 list_index：只看首个数字(0/1/2)，忽略后续标记(如 -procN)。
         let list_index = list_str
             .chars()
             .next()
@@ -343,7 +403,7 @@ pub struct EspParser {
 
 impl EspParser {
     pub fn new() -> Self {
-        // 使用内置的默认定义（SkyrimSE 简化版）
+        // 使用内置的默认定义(SkyrimSE 简化版)
         let default_defs = include_str!("../esp_default_defs.txt");
         Self {
             record_defs: parse_record_defs(default_defs),
@@ -385,7 +445,7 @@ impl EspParser {
         }
     }
 
-    /// 加载 Strings 文件（.STRINGS/.DLSTRINGS/.ILSTRINGS）
+    /// 加载 Strings 文件(.STRINGS/.DLSTRINGS/.ILSTRINGS)
     ///
     /// 根据基础文件名自动加载三种格式的字符串文件：
     /// - {base_name}_english.STRINGS
@@ -394,7 +454,7 @@ impl EspParser {
     ///
     /// # 参数
     /// * `dir` - 字符串文件所在目录
-    /// * `base_name` - 基础文件名（如 "Skyrim" 会加载 Skyrim_english.STRINGS 等）
+    /// * `base_name` - 基础文件名(如 "Skyrim" 会加载 Skyrim_english.STRINGS 等)
     pub fn load_strings_files<P: AsRef<Path>>(&mut self, dir: P, base_name: &str) {
         self.strings_files = StringsFiles::load_from_dir(dir, base_name);
     }
@@ -410,7 +470,7 @@ impl EspParser {
     pub fn parse<R: Read>(&mut self, reader: &mut R) -> Result<()> {
         self.strings.clear();
 
-        // 先读取 TES4 头记录（插件主头）。
+        // 先读取 TES4 头记录(插件主头)。
         let tes4_header = GenericHeader::read_from(reader)?;
         if !tes4_header.is_tes4() {
             return Err(std::io::Error::new(
@@ -419,10 +479,10 @@ impl EspParser {
             ));
         }
 
-        // 读取 TES4 RecordHeaderData（16 字节）。
+        // 读取 TES4 RecordHeaderData(16 字节)。
         let _tes4_record_header = RecordHeaderData::read_from(reader)?;
 
-        // 读取 TES4 字段体（注意：dsize 不包含 RecordHeaderData 本身）。
+        // 读取 TES4 字段体(注意：dsize 不包含 RecordHeaderData 本身)。
         let mut tes4_data = vec![0u8; tes4_header.dsize as usize];
         reader.read_exact(&mut tes4_data)?;
 
@@ -492,7 +552,7 @@ impl EspParser {
 
         if header.is_grup() {
             *grup_count += 1;
-            // 读取 GRUP 专用头（16 字节）。
+            // 读取 GRUP 专用头(16 字节)。
             let _grup_header = GrupHeader::read_from(reader)?;
             // GRUP 结构：GenericHeader(8) + GrupHeader(16) + payload
             // 注意：GRUP 的 dsize 包含自身头部，因此 payload = dsize - 24。
@@ -523,7 +583,7 @@ impl EspParser {
                 }
             }
         } else {
-            // 顶层普通记录（非 GRUP）：这里只消费字节，不在此层提取字段。
+            // 顶层普通记录(非 GRUP)：这里只消费字节，不在此层提取字段。
             let mut data = vec![0u8; header.dsize as usize];
             reader.read_exact(&mut data)?;
         }
@@ -585,7 +645,7 @@ impl EspParser {
         let mut record_data = vec![0u8; data_size];
         reader.read_exact(&mut record_data)?;
 
-        // 压缩记录：先解压再解析字段（否则字段偏移全部失效）。
+        // 压缩记录：先解压再解析字段(否则字段偏移全部失效)。
         if record_header_data.is_compressed() {
             match decompress_bethesda_record(&record_data) {
                 Ok(decompressed) => {
@@ -673,15 +733,15 @@ impl EspParser {
                 continue;
             }
 
-            // 提取 EDID（null-terminated ASCII），供后续 GMST:DATA 类型判断使用。
+            // 提取 EDID(null-terminated ASCII)，供后续 GMST:DATA 类型判断使用。
             if &field_header.name == b"EDID" && !field_data.is_empty() {
                 let len = field_data.iter().position(|&b| b == 0).unwrap_or(field_data.len());
                 edid = Some(String::from_utf8_lossy(&field_data[..len]).to_string());
             }
 
-            // 检查是否是可翻译字段（根据 record_defs.txt 定义）
+            // 检查是否是可翻译字段(根据 record_defs.txt 定义)
             if let Some(def) = self.find_def(record_sig, &field_header.name) {
-                // GMST:DATA 过滤：只保留字符串型（EDID 以 's' 开头），跳过数值型（f/i/b）。
+                // GMST:DATA 过滤：只保留字符串型(EDID 以 's' 开头)，跳过数值型(f/i/b)。
                 if record_sig == b"GMST" && &field_header.name == b"DATA" {
                     let is_string_gmst = edid.as_ref().map(|e| e.starts_with('s')).unwrap_or(false);
                     if !is_string_gmst {
@@ -706,18 +766,18 @@ impl EspParser {
                         let mut sk = SkyString::new(
                             self.strings.len() as u32,  // 内部 ID
                             source_text,                // 源字符串
-                            String::new(),              // 翻译（初始为空）
+                            String::new(),              // 翻译(初始为空)
                         );
                         
                         // 填充 ESP 指针，用于后续 SST/XML 精确匹配与写回。
                         sk.esp_ptr = EspPointer {
-                            str_id: string_id as i32,  // 实际的字符串 ID（关键：用于 XML 匹配）
+                            str_id: string_id as i32,  // 实际的字符串 ID(关键：用于 XML 匹配)
                             form_id,                    // 记录的 FormID
                             record_sig: *record_sig,    // 记录类型
                             field_sig: field_header.name, // 字段类型
                             index: field_index,         // 字段索引
                             index_max: 1,               // 字段总数
-                            edid_hash: 0,               // Editor ID 哈希（暂未计算）
+                            edid_hash: 0,               // Editor ID 哈希(暂未计算)
                         };
                         
                         // 初始状态：有源文、无译文 => 未完成翻译。
@@ -863,5 +923,32 @@ Def_:CNAM=DOOR=0-proc5
         assert!(parser.find_def(b"TEST", b"FULL").is_some());
         // DESC 被标记为 ignored，应该找不到
         assert!(parser.find_def(b"TEST", b"DESC").is_none());
+    }
+
+    #[test]
+    fn test_load_strings_from_bsa_fallback() {
+        // Skyrim SE strings files are inside Skyrim - Interface.bsa
+        // This test verifies BSA fallback when standalone files don't exist
+        let data_dir = Path::new(r"D:\SteamLibrary\steamapps\common\Skyrim Special Edition\Data");
+        if !data_dir.exists() {
+            return; // Skip if Skyrim SE is not installed
+        }
+
+        let sf = StringsFiles::load_from_dir(data_dir, "skyrim");
+
+        // At least one strings file should be loaded (from BSA)
+        let loaded = sf.loaded_count();
+        println!("Loaded {} strings files from BSA fallback", loaded);
+        assert!(
+            loaded > 0,
+            "Expected at least one strings file loaded from BSA, got {}",
+            loaded
+        );
+
+        // Verify we can look up a known string ID
+        // Skyrim.esm has many GMST records that reference strings by ID
+        if let Some(s) = sf.get(0, 1) {
+            println!("String ID 1 (list 0): {}", s);
+        }
     }
 }

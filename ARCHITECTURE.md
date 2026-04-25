@@ -58,8 +58,11 @@ User selects ESP → MenuBar.tsx
   → src-tauri/src/commands.rs::load_esp()
     → spawn_blocking: CPU-intensive ESP parsing
       → xt-core::EspParser::with_game() → parse() → decompress records → extract strings
-      → xt-core::StringsFiles::load_from_dir_with_language() → load .STRINGS/.DLSTRINGS/.ILSTRINGS
+      → xt-core::StringsFiles::load_from_dir_with_language()
+        → First: try standalone .STRINGS/.DLSTRINGS/.ILSTRINGS files
+        → Fallback: scan .bsa archives in ESP directory, extract strings/ folder via BSAhash64
     → Store Vec<SkyString> in AppState.strings
+  → Emit "esp-load-progress" events (stage: loading_strings / parsing / finalizing)
   → Return LoadEspResponse { total, compressed_records, strings_loaded, parse_time_ms, record_counts }
   → appStore.setEspLoaded() → SidePanel shows stats
 ```
@@ -110,11 +113,9 @@ User clicks Import XML → invoke("import_xml", { xml_path })
 
 ### 1. Full-Load + Client-Side Virtual Scroll
 
-ESP 加载后前端通过 `get_all_strings` 一次性拉取全部 DTOs（~15-20MB for 76K items）。之后筛选、排序、滚动全部在客户端完成（零延迟，<10ms）。`query_strings_command` 保留作为降级方案。
+ESP 加载后前端通过 `get_strings_chunk` 分块拉取全量数据（每批 10K 条 ~2MB JSON，76K 条约 8 批），之后筛选、排序、滚动全部在客户端完成（零延迟，<10ms）。`query_strings_command` 保留作为降级方案。
 
-**Rationale**: 76K DTOs 的序列化 + 传输约 200-500ms，可接受。客户端 filter+sort 远快于 46ms IPC 往返。消除 760 页翻页的中断体验，对标 Delphi 原版 VirtualTreeView。
-
-**⚠️ Risk**: 15-20MB JSON may exceed WebView2 `postMessage` limits on Windows. Monitor for runtime failures.
+**Rationale**: 分块避免一次性传输 15-20MB JSON 超出 WebView2 `postMessage` 限制。客户端 filter+sort 远快于 46ms IPC 往返。消除翻页中断体验，对标 Delphi 原版 VirtualTreeView。
 
 ### 2. Update by ID, Not Index
 
@@ -128,9 +129,13 @@ ESP 加载后前端通过 `get_all_strings` 一次性拉取全部 DTOs（~15-20M
 
 SST 加载 / XML 导入 → backend mutates `AppState.strings` → frontend calls `loadAllStrings()` to reload full dataset. Single-item updates use optimistic local update (`updateItemTranslation(id, text)`) with zero IPC.
 
-### 5. Tauri Dev Workaround
+### 5. BSA Strings Fallback
 
-`tauri.conf.json` sets `beforeDevCommand: "echo ok"` because `cd ui && npm run dev` fails in Windows PowerShell. Development requires two terminals:
+If standalone Strings files are not found in `Data/Strings/`, the loader scans all `.bsa` files in the ESP directory and extracts matching files from the `strings/` folder inside the archive. This matches Bethesda's loading behavior where SSE stores strings inside `Skyrim - Interface.bsa`.
+
+### 6. Tauri Dev Workaround
+
+`tauri.conf.json` sets `beforeDevCommand: "echo ok"` because `cd ui && npm run dev` fails in Windows PowerShell. Use `dev.ps1` for one-click startup, or run two terminals:
 1. `cd ui && npm run dev` (Vite on :5173)
 2. `cargo run -p xtranslator-tauri` (connects to :5173)
 
@@ -146,6 +151,7 @@ Production builds use `beforeBuildCommand: "cd ui && npm run build"` which works
 |--------|----------------|
 | `esp::parser` | ESP/ESM binary parser: record headers, GRUP nesting, compressed record decompression (zlib), subrecord extraction, codepage-aware string decoding |
 | `strings` | Bethesda `.STRINGS` (null-terminated), `.DLSTRINGS`/`.ILSTRINGS` (4-byte length prefix) read/write. Codepage fallback table (932/936/949/950/1250-1257) |
+| `bsa` | BSA v0x68/v0x69 archive parser and file extraction. SSE uses LZ4, Skyrim uses zlib. Supports `BSAhash64` lookup for strings folder fallback |
 | `sst::v8` | SST v8 dictionary format: read/write with Delphi-compatible UTF-16LE encoding, FNV-1a hashing, bidirectional roundtrip |
 | `xml` | Delphi xTranslator XML export/import: `parse_xml_export`, `write_xml_export`, `import_xml_to_sky_strings` |
 | `heuristic` | Similarity search for translation suggestions: Levenshtein distance, longest common substring (LCS), longest common prefix (LCP) |
@@ -157,7 +163,7 @@ Production builds use `beforeBuildCommand: "cd ui && npm run build"` which works
 | File | Responsibility |
 |------|----------------|
 | `main.rs` | Tauri app builder: plugin initialization (`shell`, `dialog`), `AppState` management, command handler registration |
-| `commands.rs` | IPC command implementations: `load_esp`, `load_sst`, `save_sst`, `update_translation`, `query_strings_command`, `get_stats`, `heuristic_search`, `translate_string`, `set_api_key`, `export_xml`, `import_xml` |
+| `commands.rs` | IPC command implementations: `load_esp`, `load_sst`, `save_sst`, `update_translation`, `get_strings_chunk`, `get_strings_count`, `query_strings_command`, `get_stats`, `heuristic_search`, `translate_string`, `set_api_key`, `export_xml`, `import_xml`, `save_strings` |
 
 ### ui
 
@@ -165,10 +171,11 @@ Production builds use `beforeBuildCommand: "cd ui && npm run build"` which works
 |------|----------------|
 | `api/strings.ts` | TypeScript DTO interfaces + Tauri invoke wrappers for every backend command |
 | `stores/appStore.ts` | Zustand store: holds items, pagination state, filter/sort, selection, file info |
-| `components/MenuBar.tsx` | Load ESP/SST, Save SST, Export/Import XML, Reset |
-| `components/SidePanel.tsx` | Stats display: total/translated/incomplete/locked counts |
-| `components/StringTable.tsx` | Virtual scroll list (react-window FixedSizeList): 76K+ strings seamless scroll, client-side filter/sort, ResizeObserver adaptive height |
+| `components/MenuBar.tsx` | Load ESP/SST, Save SST/Strings, Export/Import XML, Reset, language selector |
+| `components/SidePanel.tsx` | Stats display: total/translated/incomplete/locked counts, record type filter list, load progress |
+| `components/StringTable.tsx` | Virtual scroll list (react-window FixedSizeList): 76K+ strings seamless scroll, client-side filter/sort, status filter buttons |
 | `components/EditorPanel.tsx` | Translation editor: source text, textarea, Save (Ctrl+Enter), heuristic search, translate API, API Key dialog, status badge |
+| `App.tsx` | Root layout + global loading overlay (locks UI during critical operations) |
 
 ---
 
@@ -177,6 +184,12 @@ Production builds use `beforeBuildCommand: "cd ui && npm run build"` which works
 ### Bethesda Strings Files
 - `.STRINGS` — null-terminated UTF-8 (or codepage) strings, 4-byte ID prefix
 - `.DLSTRINGS` / `.ILSTRINGS` — 4-byte length-prefixed strings
+
+### BSA Archives (v0x68 / v0x69)
+- Folder/file lookup uses `BSAhash64` algorithm (must match Delphi exactly)
+- SSE (v0x69): LZ4 compression, 64-bit offsets, folder names include null terminator
+- Skyrim (v0x68): zlib compression, 32-bit offsets
+- Strings files live inside `strings/` folder within BSA (e.g. `Skyrim - Interface.bsa`)
 
 ### ESP Compressed Records
 Format: `[4-byte decompressedSize LE] + [zlib data]`. Must decompress before parsing subrecords.
@@ -221,7 +234,7 @@ Delphi xTranslator compatible:
 # Full backend build
 cargo build -p xtranslator-tauri
 
-# Core library unit tests (no external deps)
+# Core library unit tests (80 tests)
 cargo test -p xt-core --lib
 
 # End-to-end tests (requires Skyrim SE at D:\SteamLibrary\...)
@@ -230,8 +243,8 @@ cargo test -p xt-core --test e2e_real_data
 # TypeScript type check
 cd ui && npx tsc --noEmit
 
-# Frontend dev server (run separately — see Dev Workaround above)
-cd ui && npm run dev
+# One-click dev startup (PowerShell)
+.\dev.ps1
 ```
 
 ---

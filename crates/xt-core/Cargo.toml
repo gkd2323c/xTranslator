@@ -16,6 +16,7 @@ encoding_rs = { workspace = true }
 flate2 = { workspace = true }
 quick-xml = "0.39"
 reqwest = { workspace = true }
+lz4 = "1.24"
 
 [dev-dependencies]
 xt-shared = { path = "../xt-shared" }

@@ -89,7 +89,24 @@ impl StringsFile {
     ) -> std::io::Result<Self> {
         let file = File::open(path.as_ref())?;
         let mut reader = std::io::BufReader::new(file);
+        Self::load_from_reader(&mut reader, format, codepage)
+    }
 
+    /// 从字节缓冲区加载 Strings 文件（用于 BSA 提取等场景）
+    pub fn load_from_bytes(
+        bytes: &[u8],
+        format: StringsFormat,
+        codepage: CodepageConfig,
+    ) -> std::io::Result<Self> {
+        let mut cursor = std::io::Cursor::new(bytes);
+        Self::load_from_reader(&mut cursor, format, codepage)
+    }
+
+    fn load_from_reader<R: Read + Seek>(
+        reader: &mut R,
+        format: StringsFormat,
+        codepage: CodepageConfig,
+    ) -> std::io::Result<Self> {
         // 文件头：
         // - u32 count：字符串条目数量
         // - u32 data_size：数据区总字节数
@@ -113,30 +130,25 @@ impl StringsFile {
         let mut strings = HashMap::with_capacity(count as usize);
         for (id, offset) in entries {
             let offset = offset as usize;
-            // 偏移越界说明目录损坏，跳过该条，尽量保留其余可读数据。
             if offset >= data.len() {
                 continue;
             }
 
             let s = match format {
                 StringsFormat::NullTerminated => {
-                    // Null-terminated 格式：查找 0x00 作为字符串结束符
                     let start = offset;
                     let mut end = start;
                     while end < data.len() && data[end] != 0 {
                         end += 1;
                     }
                     if end == start {
-                        continue; // 空字符串，跳过
+                        continue;
                     }
                     codepage.decode(&data[start..end])
                 }
                 StringsFormat::LengthPrefixed => {
-                    // 长度前缀格式：
-                    // - 前 4 字节是小端长度，且“包含结尾 0”
-                    // - 实际内容长度 = str_len - 1
                     if offset + 4 > data.len() {
-                        continue; // 数据不完整
+                        continue;
                     }
                     let str_len = u32::from_le_bytes([
                         data[offset],
@@ -144,11 +156,10 @@ impl StringsFile {
                         data[offset + 2],
                         data[offset + 3],
                     ]) as usize;
-                    // 长度为0或超出数据范围则跳过
                     if str_len == 0 || offset + 4 + str_len.saturating_sub(1) > data.len() {
                         continue;
                     }
-                    let content_len = str_len.saturating_sub(1); // 实际内容长度（不包括末尾的0）
+                    let content_len = str_len.saturating_sub(1);
                     let start = offset + 4;
                     let end = start + content_len;
                     if end > data.len() {

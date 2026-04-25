@@ -49,7 +49,7 @@
 | **XXXX 超大字段** | ✅ 4字节扩展大小 | ✅ | 100% | 已处理 next_field_size 逻辑 |
 | **XML 导入** | ✅ | ✅ 解析+匹配+更新 | ~95% | `import_xml_to_sky_strings` 三元组匹配，状态同步 |
 | **XML 导出** | ✅ | ✅ 写入+实体转义 | ~95% | `write_xml_export` Delphi 兼容格式，只导出有翻译的条目 |
-| **BSA/BA2 归档** | ✅ 提取+浏览 | ❌ | 未实现 | - |
+| **BSA/BA2 归档** | ✅ 提取+浏览 | ✅ Strings 自动提取 | ~30% | `BsaArchive` 支持 v0x68/v0x69，哈希查找，zlib/LZ4 解压；Strings 加载时自动 fallback |
 | **PEX 脚本解析** | ✅ 反编译+编辑 | ❌ | 未实现 | - |
 | **FUZ 音频映射** | ✅ 映射+播放 | ❌ | 未实现 | - |
 

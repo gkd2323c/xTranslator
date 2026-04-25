@@ -119,14 +119,25 @@ export function MenuBar() {
     if (!xmlPath) return;
 
     setLoading(true);
+    setLoadProgress(null);
+
     try {
-      const count = await exportXml({ path: xmlPath, dest_lang: targetLang });
-      setIsDirty(false);
-      toast.success(`XML exported: ${count} entries`);
+      const unlisten = await listen<any>("xml-progress", (event) => {
+        setLoadProgress(event.payload);
+      });
+
+      try {
+        const count = await exportXml({ path: xmlPath, dest_lang: targetLang });
+        setIsDirty(false);
+        toast.success(`XML exported: ${count} entries`);
+      } finally {
+        unlisten();
+      }
     } catch (e: any) {
       toast.error(`Failed to export XML: ${e}`);
     } finally {
       setLoading(false);
+      setLoadProgress(null);
     }
   };
 
@@ -139,15 +150,26 @@ export function MenuBar() {
     if (!xmlPath) return;
 
     setLoading(true);
+    setLoadProgress(null);
+
     try {
-      const stats = await importXml(xmlPath);
-      toast.success(`XML imported: ${stats.matched} matched, ${stats.unmatched} unmatched of ${stats.total} entries`);
-      setIsDirty(true);
-      await loadAllStrings();
+      const unlisten = await listen<any>("xml-progress", (event) => {
+        setLoadProgress(event.payload);
+      });
+
+      try {
+        const stats = await importXml(xmlPath);
+        toast.success(`XML imported: ${stats.matched} matched, ${stats.unmatched} unmatched of ${stats.total} entries`);
+        setIsDirty(true);
+        await loadAllStrings();
+      } finally {
+        unlisten();
+      }
     } catch (e: any) {
       toast.error(`Failed to import XML: ${e}`);
     } finally {
       setLoading(false);
+      setLoadProgress(null);
     }
   };
 

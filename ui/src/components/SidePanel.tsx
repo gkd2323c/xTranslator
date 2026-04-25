@@ -22,10 +22,12 @@ export function SidePanel() {
 
   // 如果正在加载，显示加载进度
   if (loadProgress) {
+    const isXmlOp = loadProgress.stage === "parsing" || loadProgress.stage === "merging" || loadProgress.stage === "writing" || loadProgress.stage === "collecting";
+    const title = isXmlOp ? "Processing XML..." : "Loading ESP...";
     return (
       <div className="sidepanel">
         <div className="sidepanel-section" style={{ paddingTop: 16 }}>
-          <h3 style={{ marginBottom: 12 }}>Loading ESP...</h3>
+          <h3 style={{ marginBottom: 12 }}>{title}</h3>
           <div style={{ marginBottom: 12 }}>
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6, fontSize: 12 }}>
               <span style={{ color: "var(--text-secondary)" }}>{loadProgress.stage}</span>

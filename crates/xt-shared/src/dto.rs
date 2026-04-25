@@ -178,6 +178,21 @@ pub struct SaveStringsRequest {
     pub base_name: String,
 }
 
+/// XML 导入/导出进度事件
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct XmlProgress {
+    /// 操作阶段："parsing", "merging", "writing"
+    pub stage: String,
+    /// 当前进度值
+    pub current: u64,
+    /// 总进度值
+    pub total: u64,
+    /// 百分比 (0-100)
+    pub percentage: u8,
+    /// 用户可读的消息
+    pub message: String,
+}
+
 /// 保存 Strings 文件响应
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SaveStringsResponse {

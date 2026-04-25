@@ -10,7 +10,7 @@ use xt_core::types::params::SkyStringParams;
 use xt_core::types::sky_string::SkyString;
 
 const SKYRIM_ESM: &str = r"D:\SteamLibrary\steamapps\common\Skyrim Special Edition\Data\Skyrim.esm";
-const STRINGS_DIR: &str = r"D:\SteamLibrary\steamapps\common\Skyrim Special Edition\Data\Strings";
+const DATA_DIR: &str = r"D:\SteamLibrary\steamapps\common\Skyrim Special Edition\Data";
 
 /// 模拟 AppState
 struct TestAppState {
@@ -39,13 +39,13 @@ fn e2e_load_esp_skyrim() {
     if codepage_path.exists() {
         if let Ok(table) = CodepageTable::load_from_file(&codepage_path) {
             parser.strings_files = StringsFiles::load_from_dir_with_language(
-                std::path::Path::new(STRINGS_DIR), "skyrim", "english", &table,
+                std::path::Path::new(DATA_DIR), "skyrim", "english", &table,
             );
         } else {
-            parser.load_strings_files(STRINGS_DIR, "skyrim");
+            parser.load_strings_files(DATA_DIR, "skyrim");
         }
     } else {
-        parser.load_strings_files(STRINGS_DIR, "skyrim");
+        parser.load_strings_files(DATA_DIR, "skyrim");
     }
 
     let strings_loaded = parser.strings_files.loaded_count();
@@ -106,7 +106,7 @@ fn e2e_query_filter_sort() {
 
     // 1. 加载 ESP
     let mut parser = EspParser::new();
-    parser.load_strings_files(STRINGS_DIR, "skyrim");
+    parser.load_strings_files(DATA_DIR, "skyrim");
     let mut file = std::fs::File::open(SKYRIM_ESM).unwrap();
     parser.parse(&mut file).unwrap();
     *state.strings.lock().unwrap() = parser.strings;
@@ -150,7 +150,7 @@ fn e2e_update_and_save_sst() {
 
     // 1. 加载 ESP
     let mut parser = EspParser::new();
-    parser.load_strings_files(STRINGS_DIR, "skyrim");
+    parser.load_strings_files(DATA_DIR, "skyrim");
     let mut file = std::fs::File::open(SKYRIM_ESM).unwrap();
     parser.parse(&mut file).unwrap();
     *state.strings.lock().unwrap() = parser.strings;
@@ -214,7 +214,7 @@ fn e2e_load_sst_and_match() {
 
     // 2. 加载 ESP
     let mut parser = EspParser::new();
-    parser.load_strings_files(STRINGS_DIR, "skyrim");
+    parser.load_strings_files(DATA_DIR, "skyrim");
     let mut file = std::fs::File::open(SKYRIM_ESM).unwrap();
     parser.parse(&mut file).unwrap();
 
@@ -255,7 +255,7 @@ fn e2e_performance_benchmark() {
     // 1. 测量 ESP 解析时间
     let start = std::time::Instant::now();
     let mut parser = EspParser::new();
-    parser.load_strings_files(STRINGS_DIR, "skyrim");
+    parser.load_strings_files(DATA_DIR, "skyrim");
     let mut file = std::fs::File::open(SKYRIM_ESM).unwrap();
     parser.parse(&mut file).unwrap();
     let parse_ms = start.elapsed().as_millis();
@@ -310,13 +310,13 @@ fn e2e_ipc_payload_size() {
     if codepage_path.exists() {
         if let Ok(table) = CodepageTable::load_from_file(&codepage_path) {
             parser.strings_files = StringsFiles::load_from_dir_with_language(
-                std::path::Path::new(STRINGS_DIR), "skyrim", "english", &table,
+                std::path::Path::new(DATA_DIR), "skyrim", "english", &table,
             );
         } else {
-            parser.load_strings_files(STRINGS_DIR, "skyrim");
+            parser.load_strings_files(DATA_DIR, "skyrim");
         }
     } else {
-        parser.load_strings_files(STRINGS_DIR, "skyrim");
+        parser.load_strings_files(DATA_DIR, "skyrim");
     }
 
     let mut file = std::fs::File::open(SKYRIM_ESM)

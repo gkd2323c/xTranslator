@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { Toaster } from "react-hot-toast";
+import { Loader } from "lucide-react";
 import { useAppStore } from "./stores/appStore";
 import { MenuBar } from "./components/MenuBar";
 import { SidePanel } from "./components/SidePanel";
@@ -9,6 +10,9 @@ import "./App.css";
 
 function App() {
   const setSelectedById = useAppStore((s) => s.setSelectedById);
+  const isLoading = useAppStore((s) => s.isLoading);
+  const isParsing = useAppStore((s) => s.isParsing);
+  const loadProgress = useAppStore((s) => s.loadProgress);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -19,6 +23,8 @@ function App() {
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [setSelectedById]);
+
+  const isLocked = isLoading || isParsing;
 
   return (
     <div className="app">
@@ -37,6 +43,22 @@ function App() {
           </div>
         </main>
       </div>
+      {isLocked && (
+        <div className="app-overlay">
+          <Loader size={40} className="app-overlay-spinner" />
+          <p className="app-overlay-message">
+            {loadProgress?.message || (isParsing ? "Parsing ESP..." : "Processing...")}
+          </p>
+          {loadProgress && loadProgress.total > 0 && (
+            <div className="app-overlay-progress">
+              <div
+                className="app-overlay-progress-bar"
+                style={{ width: `${loadProgress.percentage}%` }}
+              />
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
