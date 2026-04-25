@@ -16,6 +16,7 @@ fn print_usage() {
     println!("  sst save <input.esp/esm> <output.sst>    Parse ESP and save as SST dictionary");
     println!("  sst roundtrip <input.sst> <output.sst>   Read+write+verify SST roundtrip");
     println!("  apply <input.esp/esm> <sst> [output.txt] Parse ESP and apply SST translation");
+    println!("  apply-xml <input.esp/esm> <sst> <output.xml> Parse ESP, apply SST, export XML");
     println!("  diff <esp/esm> <xml>                     Compare ESP parsing with Delphi XML export");
     println!("  diff-xml <xml1> <xml2>                   Compare two XML exports");
     println!("  strings load <file>                      Load and display strings file");
@@ -57,6 +58,13 @@ fn main() -> Result<()> {
             }
             let output = args.get(4).map(|s| s.as_str());
             commands::parse::apply_sst(&args[2], &args[3], output)?
+        }
+        "apply-xml" => {
+            if args.len() < 5 {
+                println!("Usage: xt-cli apply-xml <input.esp/esm> <sst> <output.xml>");
+                return Ok(());
+            }
+            commands::parse::apply_and_export_xml(&args[2], &args[3], &args[4])?
         }
         "diff" => {
             if args.len() < 4 {

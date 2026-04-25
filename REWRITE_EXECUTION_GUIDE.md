@@ -636,6 +636,7 @@ Week 5-6（当前）:
 | 问题 | 优先级 | 说明 |
 |------|--------|------|
 | ~~压缩记录跳过~~ | ~~P0~~ | ✅ 已修复：4字节大小前缀 + zlib 格式 |
+| ~~GMST:DATA 一刀切过滤~~ | ~~P1~~ | ✅ 已修复：按 EDID 前缀过滤（`s` 开头保留，其余跳过），Rust 与 Delphi SST 导出 100% 一致 |
 | 嵌套 GRUP 跳过 | P1 | CELL/WRLD 内的子 GRUP 被整体跳过，部分 CELL 内字符串可能丢失 |
 | `<ID:0>` 占位符 | P1 | string_id=0 不在 Strings 文件中，需确认是否属于 null 引用 |
 | Codepage fallback | ✅ 已实现 | 932/936/949/950/1250-1257 全部支持，CodepageTable 自动推断 |
@@ -776,7 +777,7 @@ move(b[4], compressionlvl, 2);  // 0x0178=level1, 0xDA78=level9
 
 | 任务 | 状态 | 说明 |
 |------|------|------|
-| GMST:DATA 过滤 | ✅ | 数值字段不再显示在翻译列表中 |
+| GMST:DATA 过滤 | ✅ | 按 EDID 前缀智能过滤：EDID 以 `s` 开头的字符串型保留，其余数值型跳过 |
 | 启发式搜索算法 | ✅ | Levenshtein + LCS + LCP，xt-core heuristic 模块 |
 | Tauri IPC 集成 | ✅ | `heuristic_search` 命令，从已翻译字符串中搜索相似项 |
 | 前端 UI | ✅ | EditorPanel "Similar" 按钮，显示候选翻译列表 |
@@ -811,7 +812,7 @@ const matches = await heuristicSearch({
 
 | 任务 | 状态 | 说明 |
 |------|------|------|
-| GMST:DATA 过滤 | ✅ | 数值字段不再显示在翻译列表中 |
+| GMST:DATA 过滤 | ✅ | 按 EDID 前缀智能过滤：EDID 以 `s` 开头的字符串型保留，其余数值型跳过 |
 | 启发式搜索算法 | ✅ | Levenshtein + LCS + LCP，xt-core heuristic 模块，6 个单元测试 |
 | Tauri IPC 集成 | ✅ | `heuristic_search` 命令，EditorPanel "Similar" 按钮 |
 | 翻译 API 集成 | ✅ | OpenAIProvider，API Key 管理（环境变量 + 弹窗设置），EditorPanel "Translate" 按钮 |

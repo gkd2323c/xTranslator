@@ -632,6 +632,7 @@ impl EspParser {
         let mut cursor = Cursor::new(data);
         let mut next_field_size: u32 = 0;
         let mut field_index = 0u16;
+        let mut edid: Option<String> = None;
 
         while cursor.position() < data.len() as u64 {
             let field_header = match FieldHeader::read_from(&mut cursor) {
@@ -672,11 +673,20 @@ impl EspParser {
                 continue;
             }
 
+            // 提取 EDID（null-terminated ASCII），供后续 GMST:DATA 类型判断使用。
+            if &field_header.name == b"EDID" && !field_data.is_empty() {
+                let len = field_data.iter().position(|&b| b == 0).unwrap_or(field_data.len());
+                edid = Some(String::from_utf8_lossy(&field_data[..len]).to_string());
+            }
+
             // 检查是否是可翻译字段（根据 record_defs.txt 定义）
             if let Some(def) = self.find_def(record_sig, &field_header.name) {
-                // GMST:DATA 是数值字段（int/float），不是字符串 ID，必须跳过。
+                // GMST:DATA 过滤：只保留字符串型（EDID 以 's' 开头），跳过数值型（f/i/b）。
                 if record_sig == b"GMST" && &field_header.name == b"DATA" {
-                    continue;
+                    let is_string_gmst = edid.as_ref().map(|e| e.starts_with('s')).unwrap_or(false);
+                    if !is_string_gmst {
+                        continue;
+                    }
                 }
 
                 // 可翻译字段约定：字段体前 4 字节是小端字符串 ID。

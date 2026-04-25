@@ -120,7 +120,11 @@ SkyString status strings used in DTOs and frontend:
 
 ### GMST:DATA Filtering
 
-GMST records contain a `DATA` field that is often a numeric float (not a string). These are **filtered out** during ESP parsing and do not appear in the UI. First visible item after filtering is typically `CLAS:FULL`.
+GMST records contain a `DATA` field that can be either:
+- **Numeric** (int/float) — filtered out, not translatable
+- **String reference** (when EDID starts with `s`) — kept and resolved via Strings files
+
+Filtering logic: during ESP parsing, if a GMST record's `EDID` field starts with `'s'`, its `DATA` field is treated as a string ID and looked up in `.STRINGS`. Otherwise (EDID starts with `f`/`i`/`b` or missing), the DATA field is assumed numeric and skipped.
 
 ### Heuristic Search
 

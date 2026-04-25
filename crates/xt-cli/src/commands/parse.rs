@@ -1,9 +1,10 @@
 use anyhow::Result;
 use std::fs::File;
-use std::io::BufReader;
+use std::io::{BufReader, BufWriter};
 use std::path::Path;
 use xt_core::esp::parser::EspParser;
 use xt_core::types::params::SkyStringParams;
+use xt_core::xml::{sky_strings_to_xml_entries, write_xml_export, XmlExportParams};
 
 pub fn parse_esp(input: &str, output: Option<&str>) -> Result<()> {
     let path = Path::new(input);
@@ -212,6 +213,82 @@ pub fn apply_sst(esp_path: &str, sst_path: &str, output: Option<&str>) -> Result
     }
 
     println!("===================================\n");
+
+    Ok(())
+}
+
+/// 解析 ESP、应用 SST 字典，并导出为 Delphi 兼容的 XML 格式。
+pub fn apply_and_export_xml(esp_path: &str, sst_path: &str, xml_output: &str) -> Result<()> {
+    let path = Path::new(esp_path);
+    let file = File::open(path)?;
+    let mut reader = BufReader::new(file);
+
+    println!("Parsing: {} with SST: {}", esp_path, sst_path);
+    let start = std::time::Instant::now();
+
+    let mut parser = EspParser::new();
+
+    // 加载 strings 侧文件
+    if let Some(parent) = path.parent() {
+        let strings_dir = parent.join("Strings");
+        if strings_dir.exists() {
+            let base_name = path.file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("Skyrim");
+            parser.load_strings_files(&strings_dir, base_name);
+            let loaded = parser.strings_files.loaded_count();
+            if loaded > 0 {
+                println!("  Loaded {}/3 strings files", loaded);
+            }
+        }
+    }
+
+    parser.parse(&mut reader)?;
+    let elapsed = start.elapsed();
+    println!("Parsing done in {:.2}s, {} strings", elapsed.as_secs_f64(), parser.strings.len());
+
+    // 应用 SST
+    let sst_file = File::open(sst_path)?;
+    let mut sst_reader = BufReader::new(sst_file);
+    let dict = xt_core::sst::v8::SstDictionary::read_from(&mut sst_reader)?;
+    println!("SST loaded: {} entries", dict.entries.len());
+
+    let mut applied = 0;
+    for sst_entry in &dict.entries {
+        for string_entry in parser.strings.iter_mut() {
+            if string_entry.esp_ptr.str_id == sst_entry.esp_ptr.str_id
+                && string_entry.esp_ptr.record_sig == sst_entry.esp_ptr.record_sig
+                && string_entry.esp_ptr.field_sig == sst_entry.esp_ptr.field_sig
+            {
+                if !sst_entry.translation.is_empty() {
+                    string_entry.translation = sst_entry.translation.clone();
+                    string_entry.params.set(SkyStringParams::TRANSLATED, true);
+                    string_entry.params.set(SkyStringParams::INCOMPLETE_TRANS, false);
+                    applied += 1;
+                }
+            }
+        }
+    }
+    println!("Applied {} translations", applied);
+
+    // 导出 XML（与 Delphi 兼容的格式）
+    let entries = sky_strings_to_xml_entries(&parser.strings);
+    println!("XML entries to export: {} (translated only)", entries.len());
+
+    let params = XmlExportParams {
+        addon: path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| "Skyrim".to_string()),
+        source_lang: "english".to_string(),
+        dest_lang: "chinese".to_string(),
+        version: 2,
+    };
+
+    let xml_file = File::create(xml_output)?;
+    let mut xml_writer = BufWriter::new(xml_file);
+    write_xml_export(&mut xml_writer, &params, &entries)?;
+
+    println!("XML exported to: {}", xml_output);
+    println!("  Total entries: {}", entries.len());
+    println!("  Applied translations: {}", applied);
 
     Ok(())
 }
