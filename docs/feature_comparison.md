@@ -1,0 +1,218 @@
+# xTranslator 功能对比：Delphi 原版 vs Rust 重写
+
+> **更新日期**：2025-04-23
+> **原版版本**：xTranslator 1.6.0（Delphi 12.1 CE，~6.7 万行代码，10+ 年迭代）
+> **重写版本**：Phase 2 核心功能完成（60 个 lib 测试 + E2E 测试通过）
+
+---
+
+## 总览
+
+| 维度 | 原版 Delphi | Rust 重写 | 覆盖度 |
+|------|------------|----------|--------|
+| 代码量 | ~67,000 行 | ~7,000 行 | - |
+| 开发时间 | 10+ 年 | ~6 周 | - |
+| 数据格式解析 | 全格式 | 核心格式 | ~90% |
+| 编码系统 | 完整 | 完整 | ~90% |
+| 翻译工作流 | 完整 | 核心就绪 | ~60% |
+| UI 交互 | 完整 VCL | Tauri 基础 | ~45% |
+| 辅助工具 | 完整 | 部分 | ~15% |
+
+---
+
+## 一、编辑模式
+
+| 编辑模式 | 原版 | Rust 重写 | 状态 | 说明 |
+|---------|------|----------|------|------|
+| **ESP 模式** | ✅ 直接翻译 ESP/ESM | ⚠️ 仅解析 | 部分实现 | ESP 解析完整（71,937条），编辑/写入未实现 |
+| **Strings 模式** | ✅ 翻译 STRINGS 文件（已弃用） | ✅ 三格式读写 | 等价实现 | .STRINGS/.DLSTRINGS/.ILSTRINGS 均支持 |
+| **Hybrid 模式** | ✅ 推荐模式：ESP 结构+编辑 Strings | ⚠️ 后端就绪 | 部分实现 | 解析+Strings 读写已有，UI 编辑器未实现 |
+| **MCM/Translate** | ✅ MCM 菜单翻译文件 | ❌ | 未实现 | 自定义 txt 导入解析未开始 |
+| **Papyrus Pex** | ✅ PEX 反编译+翻译 | ❌ | 未实现 | PEX 脚本解析器未开始 |
+
+---
+
+## 二、核心解析引擎
+
+| 功能 | 原版 | Rust 重写 | 覆盖度 | 关键差异 |
+|------|------|----------|--------|---------|
+| **ESP/ESM 解析** | ✅ 全游戏完整 | ✅ Skyrim.esm 验证 | ~80% | 压缩记录解压✅，嵌套 GRUP✅，EDID✅；待验证其他游戏 |
+| **压缩记录解压** | ✅ [4B size]+[zlib] | ✅ 同格式 | 100% | 44,153 条正确解压，NPC_/CELL 字符串可见 |
+| **Strings 文件读取** | ✅ 三格式+codepage | ✅ 三格式+codepage | ~95% | null-终止/长度前缀两种格式均支持 |
+| **Strings 文件写入** | ✅ codepage 编码+去重 | ✅ codepage 编码 | ~80% | 写入功能已有，去重优化（hash_trans+trans 共享偏移）未实现 |
+| **SST v8 字典读取** | ✅ UTF-16LE | ✅ UTF-16LE | 100% | roundtrip 验证通过 |
+| **SST v8 字典写入** | ✅ | ✅ save_to_file | ~95% | 写入+roundtrip 验证通过 |
+| **record_defs 加载** | ✅ 完整标记 | ✅ */?/-proc 标记+GameId | ~95% | parse_record_defs 支持 */?/-proc，load_game_record_defs |
+| **Codepage 编码** | ✅ 完整系统 | ✅ 932/936/949/950/1250-1257 | ~90% | CodepageTable 解析 codepage.txt，自动推断语言 |
+| **EDID 提取** | ✅ | ✅ Option<String> | 100% | 按 FormID 后备 |
+| **VMAD 脚本字段** | ✅ 脚本属性字符串提取 | ❌ | 0% | 需要 Skyrim Script Extender 知识 |
+| **XXXX 超大字段** | ✅ 4字节扩展大小 | ✅ | 100% | 已处理 next_field_size 逻辑 |
+| **XML 导入** | ✅ | ✅ 解析+匹配+更新 | ~95% | `import_xml_to_sky_strings` 三元组匹配，状态同步 |
+| **XML 导出** | ✅ | ✅ 写入+实体转义 | ~95% | `write_xml_export` Delphi 兼容格式，只导出有翻译的条目 |
+| **BSA/BA2 归档** | ✅ 提取+浏览 | ❌ | 未实现 | - |
+| **PEX 脚本解析** | ✅ 反编译+编辑 | ❌ | 未实现 | - |
+| **FUZ 音频映射** | ✅ 映射+播放 | ❌ | 未实现 | - |
+
+---
+
+## 三、翻译工作流
+
+| 功能 | 原版 | Rust 重写 | 覆盖度 | 说明 |
+|------|------|----------|--------|------|
+| **字典应用 (apply)** | ✅ ID+EDID+词汇匹配 | ⚠️ 基础 strId+record+field | ~40% | 缺少 EDID 匹配、词汇匹配、参数匹配 |
+| **启发式搜索** | ✅ Levenshtein/LCS | ✅ | ~80% | xt-core heuristic 模块，Levenshtein+LCS+LCP，IPC+UI 已集成 |
+| **翻译 API** | ✅ DeepL/MS/Google/OpenAI/Youdao/Baidu | ⚠️ OpenAI 已实现 | ~50% | OpenAIProvider 已就绪，DeepL/其他待扩展 |
+| **字符串编辑** | ✅ 行内+窗口编辑 | ⚠️ 基础编辑 | ~65% | EditorPanel：文本编辑、Ctrl+Enter 保存、状态切换、API Key 弹窗 |
+| **正则搜索/替换** | ✅ PCRE+批量 | ❌ | 0% | - |
+| **直接搜索** | ✅ | ✅ 实时筛选 | ~70% | 客户端 filter+sort：文本/状态/排序，零延迟，虚拟滚动 76K+ 条 |
+| **撤销/重做** | ✅ | ❌ | 0% | - |
+| **ESP 写入（Strings 回写）** | ✅ | ⚠️ Strings 保存已有 | ~30% | ESP 本身不修改（原版策略），但需要整合写入流程 |
+| **最终化 (finalize)** | ✅ 导出翻译结果 | ⚠️ XML 导出可用 | ~40% | XML 导出已就绪，Strings 最终化待整合 |
+| **批量处理器** | ✅ 命令式批处理 | ❌ | 0% | - |
+| **RTL 支持 (阿拉伯语)** | ✅ RTL 标签+字符串反向 | ❌ | 0% | `TESVT_TranslateFunc.pas` 中的 RTL 处理 |
+| **中文繁简转换** | ✅ SC↔TC 字符映射 | ❌ | 0% | `buildTCSCList`/`doConvertTCSC` |
+
+---
+
+## 四、对比与验证工具
+
+| 功能 | 原版 | Rust 重写 | 覆盖度 | 说明 |
+|------|------|----------|--------|------|
+| **ESPCompare** | ✅ 两 ESP 建立字符串对 | ❌ | 0% | - |
+| **Diff 查看器** | ✅ 原/更新源字符串差异 | ✅ diff+diff-xml CLI | ~50% | CLI 命令已有，UI 可视化 diff 未实现 |
+| **Strings Compare** | ✅ .Strings 文件对比 | ❌ | 0% | - |
+| **MCM Compare** | ✅ | ❌ | 0% | - |
+| **别名检查** | ✅ 源/翻译 Alias 完整性 | ❌ | 0% | - |
+| **中文繁简转换** | ✅ | ❌ | 0% | - |
+
+---
+
+## 五、数据与配置
+
+| 功能 | 原版 | Rust 重写 | 覆盖度 | 说明 |
+|------|------|----------|--------|------|
+| **ESM 缓存** | ✅ SQLite 缓存加速重载 | ❌ | 0% | - |
+| **自动备份** | ✅ 定时字典备份 | ❌ | 0% | - |
+| **配置系统** | ✅ res.ini+注册表 | ⚠️ Cargo.toml 配置 | ~5% | 跨平台配置方案设计过，未实现 |
+| **vocabulary.txt** | ✅ 词汇列表 | ✅ Data/*/vocabulary.txt 存在 | ~20% | 文件存在但未在代码中使用 |
+| **ctdaFunc.txt** | ✅ 条件函数定义 | ✅ 文件存在 | ~10% | 未解析 |
+| **fieldSizeRef.txt** | ✅ 字段大小参考 | ✅ 文件存在 | ~10% | 未解析 |
+| **pexNoTransProc.txt** | ✅ PEX 不可翻译过程 | ✅ 文件存在 | ~10% | 未解析 |
+| **DialSubType.txt** | ✅ 对话子类型 | ✅ 文件存在 | ~10% | 未解析 |
+| **EmoteDefinition.txt** | ✅ 表情定义 | ✅ 文件存在 | ~10% | 未解析 |
+
+---
+
+## 六、用户界面
+
+| 功能 | 原版 | Rust 重写 | 覆盖度 | 说明 |
+|------|------|----------|--------|------|
+| **主窗口布局** | ✅ 菜单栏+文件树+编辑区 | ⚠️ 基础布局 | ~45% | MenuBar + SidePanel + StringTable + EditorPanel |
+| **虚拟字符串表格** | ✅ VirtualTreeView | ✅ react-window | ~70% | 76K+ 条虚拟滚动，客户端筛选/排序零延迟，ResizeObserver 自适应 |
+| **字符串编辑器** | ✅ SynEdit 高亮+行内编辑 | ⚠️ 基础编辑 | ~55% | textarea 编辑、Ctrl+Enter 保存、状态显示、启发式搜索、翻译 API |
+| **对话列表视图** | ✅ DIAL/INFO/QUST | ❌ | 0% | - |
+| **翻译进度条** | ✅ | ❌ | 0% | - |
+| **筛选/搜索栏** | ✅ 多维度筛选 | ✅ 实时筛选 | ~65% | 文本搜索 + 状态筛选 + 排序，客户端零延迟，虚拟滚动 |
+| **主题支持** | ✅ 默认/亮/灰/暗 | ❌ | 0% | - |
+| **UI 多语言** | ✅ 10+ 语言 | ❌ | 0% | - |
+| **高分辨率 DPI** | ✅ DPI 感知 | ❌ | 0% | - |
+| **拖放加载** | ✅ XML 拖放 | ❌ | 0% | - |
+
+---
+
+## 七、游戏支持
+
+| 游戏 | 原版 | Rust 重写 Data/ | record_defs | codepage | 验证状态 |
+|------|------|----------------|-------------|----------|---------|
+| Skyrim | ✅ | ✅ Skyrim/ | ⚠️ 待验证 | ⚠️ 待验证 | GameId 枚举存在 |
+| **SkyrimSE** | ✅ | ✅ SkyrimSE/ | ✅ 22 条 | ✅ 24 语言 | **主要验证目标，71,937 条** |
+| Fallout4 | ✅ | ✅ Fallout4/ | ⚠️ 待验证 | ⚠️ 待验证 | Data 目录存在 |
+| FalloutNV | ✅ | ✅ FalloutNV/ | ⚠️ 待验证 | ⚠️ 待验证 | GameId 枚举存在 |
+| Fallout76 | ✅ | ✅ Fallout76/ | ✅ 9 文件 | ⚠️ 待验证 | Data 目录有文件 |
+| Starfield | ✅ | ✅ Starfield/ | ✅ 9 文件 | ⚠️ 待验证 | Data 目录有文件 |
+
+---
+
+## 八、关键差距与优先级建议
+
+### P0 - MVP 必需（Phase 1 剩余）
+
+| 差距 | 说明 | 预估工作量 |
+|------|------|-----------|
+| Tauri UI 基础框架 | 字符串列表+编辑器+筛选，这是从 CLI 工具变成可用产品的关键 | 2 周 |
+| 字符串编辑+保存流程 | 编辑翻译 → 保存 SST → 写回 Strings 的完整闭环 | 1 周 |
+| 字典应用增强 | EDID 匹配、词汇匹配、参数匹配 | 1 周 |
+
+### P1 - 核心功能补全
+
+| 差距 | 说明 | 预估工作量 |
+|------|------|-----------|
+| 启发式搜索 | TESVT_HeuristicSearch.pas 分析+实现 | 1-2 周 |
+| 翻译 API 集成 | 至少支持 DeepL + OpenAI | 1 周 |
+| XML 导出 | 闭环 XML 交换格式 | 2-3 天 |
+| 正则搜索/替换 | 基于 regex crate | 3-5 天 |
+
+### P2 - 功能完善
+
+| 差距 | 说明 | 预估工作量 |
+|------|------|-----------|
+| BSA/BA2 归档 | 文件提取+浏览 | 1-2 周 |
+| PEX 脚本解析 | 反编译+翻译 | 2 周 |
+| FUZ 音频映射 | NPC 地图+音频播放 | 1 周 |
+| MCM 翻译 | 自定义 txt 导入 | 3-5 天 |
+| ESPCompare | 两 ESP 对比建字符串对 | 1 周 |
+| ESM 缓存 | SQLite 缓存加速重载 | 3-5 天 |
+| 撤销/重做 | 编辑历史管理 | 3-5 天 |
+
+### P3 - 体验优化
+
+| 差距 | 说明 | 预估工作量 |
+|------|------|-----------|
+| 批量处理器 | 命令式批处理 | 1 周 |
+| Header 处理器 | ESP 头部修改 | 1 周 |
+| 主题系统 | 亮/暗主题 | 3-5 天 |
+| UI 多语言 | i18n 框架 | 1 周 |
+| 自动备份 | 定时字典备份 | 1-2 天 |
+| 高 DPI 支持 | Tauri 原生处理 | 1-2 天 |
+
+### 技术债务
+
+| 问题 | 影响 | 建议 |
+|------|------|------|
+| 嵌套 GRUP 验证 | CELL/WRLD 内的子 GRUP 可能跳过部分字符串 | 需真实数据验证 diff 一致性 |
+| Strings 写入去重 | 文件比 Delphi 大约 17%（914KB vs 782KB） | 功能正确，低优先级优化 |
+| Delphi 交叉验证 | 无法确认 99% 一致率 | 需 Delphi 环境生成对照文件 |
+| SST 旧版本兼容 | 无法读取 v1-v7 SST | 低优先级，v8 是主流格式 |
+
+---
+
+## 九、Delphi 代码分析状态
+
+| 文件 | 分析状态 | Rust 实现状态 |
+|------|---------|-------------|
+| TESVT_typedef.pas | ✅ 已完成 | ✅ 核心类型映射完成 |
+| TESVT_espDefinition.pas | ✅ 已完成 | ✅ ESP 解析器完成 |
+| TESVT_SSTFunc.pas | ✅ 已完成 | ✅ SST v8 读写完成 |
+| TESVT_fstreamSave.pas | ✅ 已完成 | ✅ Codepage 系统完成 |
+| TESVT_StringsFunc.pas | ✅ 已完成 | ✅ Strings 读写完成 |
+| TESVT_Const.pas | ✅ 已分析 | ✅ 常量映射完成 |
+| TESVT_Utils.pas | ✅ 已分析 | ✅ StringHash 复刻完成 |
+| TESVT_HeuristicSearch.pas | ⚠️ 已分析 | ✅ 已实现 |
+| TESVT_TranslateFunc.pas | ❌ 待分析 | ❌ 未实现 |
+| TESVT_MainLoader.pas | ❌ 待分析 | ❌ 未实现 |
+| TESVT_TranslatorApi.pas | ⚠️ 已分析 | ⚠️ OpenAI 已实现 |
+
+---
+
+## 十、与原版的兼容性验证
+
+| 验证项 | 状态 | 说明 |
+|--------|------|------|
+| SST v8 双向兼容 | ✅ roundtrip 测试通过 | Rust 读写 SST 可被 Delphi 正确读取（理论） |
+| Strings 格式兼容 | ✅ 三格式读写 | 格式精确复刻（null-终止/长度前缀） |
+| ESP 解析一致性 | ⚠️ 待验证 | 71,937 条 vs 原版，需 Delphi 环境做 diff |
+| Codepage 行为一致 | ✅ 算法复刻 | UTF-8 优先 + codepage fallback，与 Delphi 逻辑一致 |
+| FNV-1a 哈希 | ✅ 验证通过 | UTF-16LE 低字节 FNV-1a |
+| record_defs 解析 | ✅ 标记支持 | */?/-proc 与原版格式一致 |
+| XML diff 命令 | ✅ CLI 已实现 | `diff <esp> <xml>` 和 `diff-xml <xml1> <xml2>` |
+| XML roundtrip | ✅ 测试通过 | `write_xml_export` → `parse_xml_export` 字段一致 |

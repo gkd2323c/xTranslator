@@ -1,0 +1,845 @@
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+use tauri::Emitter;
+use xt_core::esp::parser::{EspParser, StringsFiles};
+use xt_core::strings::CodepageTable;
+use xt_core::sst::v8::SstDictionary;
+use xt_core::translation_api::{OpenAIProvider, TranslationProvider};
+use xt_core::types::game_id::GameId;
+use xt_core::types::params::SkyStringParams;
+use xt_core::types::sky_string::SkyString;
+use xt_core::xml::{import_xml_to_sky_strings, parse_xml_file, sky_strings_to_xml_entries, write_xml_file, XmlExportParams};
+use xt_shared::dto::{
+    EspLoadProgress, HeuristicMatchDTO, HeuristicSearchRequest, LoadEspResponse, LoadSstResponse, QueryRequest,
+    QueryResponse, SaveStringsRequest, SaveStringsResponse, SkyStringDTO, TranslateRequest, XmlExportRequest, XmlImportResponse,
+};
+
+/// 已加载的 ESP 文件信息
+pub struct EspFileInfo {
+    pub esp_path: String,
+    pub strings_dir: Option<String>,
+    pub language: String,
+}
+
+/// 应用状态：持有所有加载的文件数据
+pub struct AppState {
+    pub strings: Mutex<Vec<SkyString>>,
+    pub file_info: Mutex<Option<EspFileInfo>>,
+    /// 翻译 API Key（内存存储，不持久化）
+    pub api_key: Mutex<Option<String>>,
+    /// 是否有未保存的翻译修改
+    pub is_dirty: Mutex<bool>,
+}
+
+impl AppState {
+    pub fn new() -> Self {
+        // 尝试从环境变量读取 API Key
+        let env_key = std::env::var("XT_TRANSLATE_API_KEY").ok();
+        Self {
+            strings: Mutex::new(Vec::new()),
+            file_info: Mutex::new(None),
+            api_key: Mutex::new(env_key),
+            is_dirty: Mutex::new(false),
+        }
+    }
+}
+
+/// 将 SkyString 状态转为前端字符串
+///
+/// 约定：
+/// - translated：已翻译
+/// - incomplete：未完成翻译
+/// - locked：不可编辑/锁定
+///
+/// 兜底策略：未知状态统一映射为 `locked`，避免前端出现未定义分支。
+fn status_string(sk: &SkyString) -> String {
+    if sk.params.is_translated() {
+        "translated"
+    } else if sk.params.is_incomplete() {
+        "incomplete"
+    } else if sk.params.is_locked() {
+        "locked"
+    } else {
+        "locked"
+    }
+    .to_string()
+}
+
+/// 将 SkyString 转为 DTO
+///
+/// 说明：
+/// - `form_id` 以十六进制字符串返回，便于前端直接展示。
+/// - `list_index` 来自 ESP 解析或 SST 加载，标识 STRINGS/DLSTRINGS/ILSTRINGS 归属。
+fn sky_string_to_dto(sk: &SkyString) -> SkyStringDTO {
+    SkyStringDTO {
+        id: sk.id,
+        source: sk.source.clone(),
+        translation: sk.translation.clone(),
+        record_sig: String::from_utf8_lossy(&sk.esp_ptr.record_sig).to_string(),
+        field_sig: String::from_utf8_lossy(&sk.esp_ptr.field_sig).to_string(),
+        form_id: format!("0x{:08X}", sk.esp_ptr.form_id),
+        status: status_string(sk),
+        list_index: sk.list_index,
+        str_id: sk.esp_ptr.str_id,
+    }
+}
+
+/// 加载 ESP/ESM 文件并构建内存中的字符串列表。
+///
+/// 行为要点：
+/// - 解析会覆盖当前 `AppState.strings`（相当于重新打开文件）。
+/// - 若提供 `strings_dir`，会尝试加载对应语言的 STRINGS 文件。
+/// - 返回值中的统计信息用于前端侧边栏和加载反馈。
+#[tauri::command]
+pub async fn load_esp(
+    window: tauri::Window,
+    state: tauri::State<'_, Arc<AppState>>,
+    esp_path: String,
+    strings_dir: Option<String>,
+    language: Option<String>,
+    game: Option<String>,
+) -> Result<LoadEspResponse, String> {
+    let esp_path_clone = esp_path.clone();
+    let strings_dir_clone = strings_dir.clone();
+    let language_clone = language.clone();
+    let game_clone = game.clone();
+
+    // ESP 解析是 CPU 密集型任务，放到阻塞线程池里执行，避免卡住异步运行时。
+    // 这里返回 (Vec<SkyString>, LoadEspResponse) 二元组，前者写入状态，后者回传前端。
+    let result = tokio::task::spawn_blocking(move || -> Result<(Vec<SkyString>, LoadEspResponse), String> {
+        let start = std::time::Instant::now();
+
+        // 阶段 1：加载 record_defs
+        let _ = window.emit("esp-load-progress", EspLoadProgress {
+            stage: "reading_defs".to_string(),
+            current: 0,
+            total: 100,
+            percentage: 0,
+            message: "Loading record definitions...".to_string(),
+        });
+
+        // 兼容前端传入的游戏别名；无法识别时默认回退到天际特别版。
+        let game_id = game_clone
+            .as_deref()
+            .and_then(|g| match g.to_lowercase().as_str() {
+                "skyrim" => Some(GameId::Skyrim),
+                "skyrimse" | "skyrim se" => Some(GameId::SkyrimSE),
+                "fallout4" | "fo4" => Some(GameId::Fallout4),
+                "falloutnv" | "fonv" => Some(GameId::FalloutNV),
+                "fallout76" | "fo76" => Some(GameId::Fallout76),
+                "starfield" | "sf" => Some(GameId::Starfield),
+                _ => None,
+            })
+            .unwrap_or(GameId::SkyrimSE);
+
+        // 优先加载对应游戏的 record_defs；失败时回退到内置默认定义。
+        let data_dir = std::path::Path::new("Data");
+        let mut parser = EspParser::with_game(data_dir, game_id)
+            .unwrap_or_else(|_| EspParser::new());
+
+        let _ = window.emit("esp-load-progress", EspLoadProgress {
+            stage: "reading_defs".to_string(),
+            current: 100,
+            total: 100,
+            percentage: 5,
+            message: "Record definitions loaded".to_string(),
+        });
+
+        // 阶段 2：加载 Strings 文件
+        let _ = window.emit("esp-load-progress", EspLoadProgress {
+            stage: "loading_strings".to_string(),
+            current: 0,
+            total: 100,
+            percentage: 5,
+            message: "Loading strings files...".to_string(),
+        });
+
+        // 如果提供了 strings 目录则加载配套字符串文件；未提供也允许继续解析 ESP。
+        let lang = language_clone.as_deref().unwrap_or("english");
+        let strings_loaded = if let Some(ref dir) = strings_dir_clone {
+            let dir_path = std::path::Path::new(dir);
+            let base_name = std::path::Path::new(&esp_path_clone)
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("skyrim");
+
+            // 若存在 codepage 配置，优先使用它来提升非 UTF-8 文本解码准确性。
+            let codepage_path = data_dir
+                .join(match game_id {
+                    GameId::Skyrim => "Skyrim",
+                    GameId::SkyrimSE => "SkyrimSE",
+                    GameId::Fallout4 => "Fallout4",
+                    GameId::FalloutNV => "FalloutNV",
+                    GameId::Fallout76 => "Fallout76",
+                    GameId::Starfield => "Starfield",
+                })
+                .join("codepage.txt");
+
+            if codepage_path.exists() {
+                if let Ok(table) = CodepageTable::load_from_file(&codepage_path) {
+                    parser.strings_files = StringsFiles::load_from_dir_with_language(
+                        dir_path, base_name, lang, &table,
+                    );
+                } else {
+                    parser.load_strings_files(dir_path, base_name);
+                }
+            } else {
+                parser.load_strings_files(dir_path, base_name);
+            }
+            parser.strings_files.loaded_count() as u8
+        } else {
+            0
+        };
+
+        let _ = window.emit("esp-load-progress", EspLoadProgress {
+            stage: "loading_strings".to_string(),
+            current: 100,
+            total: 100,
+            percentage: 15,
+            message: "Strings files loaded".to_string(),
+        });
+
+        // 阶段 3：解析 ESP/ESM
+        let _ = window.emit("esp-load-progress", EspLoadProgress {
+            stage: "parsing".to_string(),
+            current: 0,
+            total: 100,
+            percentage: 15,
+            message: "Parsing ESP file...".to_string(),
+        });
+
+        let mut file = std::fs::File::open(&esp_path_clone)
+            .map_err(|e| format!("Failed to open ESP: {}", e))?;
+
+        // 获取文件大小用于进度计算
+        let file_size = file.metadata()
+            .map(|m| m.len())
+            .unwrap_or(1);
+
+        // 创建进度回调闭包
+        let window_clone = window.clone();
+        let file_size_for_callback = file_size;
+        parser.set_progress_callback(move |current_bytes| {
+            let percentage = ((current_bytes as f64 / file_size_for_callback as f64) * 80.0) as u8 + 15;
+            let _ = window_clone.emit("esp-load-progress", EspLoadProgress {
+                stage: "parsing".to_string(),
+                current: current_bytes,
+                total: file_size_for_callback,
+                percentage: percentage.min(95),
+                message: format!("Parsing... {:.1}%", (current_bytes as f64 / file_size_for_callback as f64) * 100.0),
+            });
+        });
+
+        parser
+            .parse(&mut file)
+            .map_err(|e| format!("Failed to parse ESP: {}", e))?;
+
+        let _ = window.emit("esp-load-progress", EspLoadProgress {
+            stage: "finalizing".to_string(),
+            current: 100,
+            total: 100,
+            percentage: 95,
+            message: "Finalizing...".to_string(),
+        });
+
+        let parse_time_ms = start.elapsed().as_millis() as u64;
+        let total = parser.strings.len() as u32;
+
+        // 统计各 record_sig 的数量，供侧边栏展示使用。
+        let mut record_counts: HashMap<String, usize> = HashMap::new();
+        for sk in &parser.strings {
+            let sig = String::from_utf8_lossy(&sk.esp_ptr.record_sig).to_string();
+            *record_counts.entry(sig).or_insert(0) += 1;
+        }
+
+        // 压缩记录数量当前未暴露在解析结果中，先保留占位值。
+        let compressed_records = 0u32;
+
+        let _ = window.emit("esp-load-progress", EspLoadProgress {
+            stage: "finalizing".to_string(),
+            current: 100,
+            total: 100,
+            percentage: 100,
+            message: "Complete".to_string(),
+        });
+
+        Ok((
+            parser.strings,
+            LoadEspResponse {
+                total,
+                compressed_records,
+                strings_loaded,
+                parse_time_ms,
+                record_counts,
+            },
+        ))
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
+    .map_err(|e| e)?;
+
+    // 写回全量字符串状态（覆盖旧数据）。
+    let mut strings = state.strings.lock().map_err(|e| e.to_string())?;
+    *strings = result.0;
+
+    // 同步记录当前文件上下文（用于导出 XML 时回填 addon/source_lang 等信息）。
+    let mut file_info = state.file_info.lock().map_err(|e| e.to_string())?;
+    *file_info = Some(EspFileInfo {
+        esp_path,
+        strings_dir,
+        language: language.unwrap_or_else(|| "english".to_string()),
+    });
+
+    // 重新加载文件时重置脏标记
+    *state.is_dirty.lock().map_err(|e| e.to_string())? = false;
+
+    Ok(result.1)
+}
+
+/// 加载 SST 字典并合并到当前内存字符串。
+///
+/// 匹配键使用：`str_id + record_sig + field_sig`。
+/// 该命令仅更新匹配成功的条目，不会新增行。
+#[tauri::command]
+pub async fn load_sst(
+    state: tauri::State<'_, Arc<AppState>>,
+    sst_path: String,
+) -> Result<LoadSstResponse, String> {
+    // 读取 SST 字典
+    let dict = SstDictionary::load_from_file(&sst_path)
+        .map_err(|e| format!("Failed to load SST: {}", e))?;
+
+    let mut strings = state.strings.lock().map_err(|e| e.to_string())?;
+
+    let mut matched = 0u32;
+    let mut unmatched = 0u32;
+
+    // 按 strId + record_sig + field_sig 三元组精确匹配。
+    // 这与 SST/XML 导入逻辑保持一致，避免误匹配到同 record 下其他字段。
+    for entry in &dict.entries {
+        let found = strings.iter_mut().find(|sk| {
+            sk.esp_ptr.str_id == entry.esp_ptr.str_id
+                && sk.esp_ptr.record_sig == entry.esp_ptr.record_sig
+                && sk.esp_ptr.field_sig == entry.esp_ptr.field_sig
+        });
+
+        if let Some(sk) = found {
+            // 应用翻译
+            if !entry.translation.is_empty() {
+                sk.set_translation(entry.translation.clone());
+            }
+            // 应用状态
+            sk.params = entry.params;
+            // 若存在译文但状态位未标记为已翻译，则补标为“未完成翻译”。
+            if !sk.translation.is_empty() && !sk.params.is_translated() {
+                sk.params.set(SkyStringParams::INCOMPLETE_TRANS, true);
+            }
+            matched += 1;
+        } else {
+            unmatched += 1;
+        }
+    }
+
+    Ok(LoadSstResponse { matched, unmatched })
+}
+
+/// 将当前内存字符串导出为 SST 字典文件。
+///
+/// 当提供 `masters` 时，会写入带主文件信息的 SST 头部。
+#[tauri::command]
+pub async fn save_sst(
+    state: tauri::State<'_, Arc<AppState>>,
+    sst_path: String,
+    masters: Option<Vec<String>>,
+) -> Result<(), String> {
+    let strings = state.strings.lock().map_err(|e| e.to_string())?;
+
+    let dict = if let Some(masters) = masters {
+        SstDictionary::from_entries_with_masters(strings.clone(), masters)
+    } else {
+        SstDictionary::from_entries(strings.clone())
+    };
+
+    dict.save_to_file(&sst_path)
+        .map_err(|e| format!("Failed to save SST: {}", e))?;
+
+    // 保存成功后清除脏标记
+    *state.is_dirty.lock().map_err(|e| e.to_string())? = false;
+
+    Ok(())
+}
+
+/// 按内部 `id` 更新单条翻译文本。
+///
+/// 注意：这里使用内部行 ID，而不是 `str_id`（两者语义不同）。
+#[tauri::command]
+pub async fn update_translation(
+    state: tauri::State<'_, Arc<AppState>>,
+    id: u32,
+    translation: String,
+) -> Result<(), String> {
+    let mut strings = state.strings.lock().map_err(|e| e.to_string())?;
+
+    // 用内部自增 ID 定位条目，避免筛选/排序后索引漂移问题。
+    let found = strings.iter_mut().find(|sk| sk.id == id);
+    let sk = match found {
+        Some(s) => s,
+        None => return Err(format!("String with id {} not found", id)),
+    };
+
+    sk.set_translation(translation);
+
+    // 更新状态：有译文=已翻译；空译文=未完成（与前端状态语义一致）。
+    if !sk.translation.is_empty() {
+        sk.params.set(SkyStringParams::TRANSLATED, true);
+        sk.params.set(SkyStringParams::INCOMPLETE_TRANS, false);
+    } else {
+        sk.params.set(SkyStringParams::TRANSLATED, false);
+        sk.params.set(SkyStringParams::INCOMPLETE_TRANS, true);
+    }
+
+    // 标记有未保存的修改
+    *state.is_dirty.lock().map_err(|e| e.to_string())? = true;
+
+    Ok(())
+}
+
+/// 查询字符串分页结果（后端筛选/排序/分页一体化）。
+///
+/// 该命令主要用于服务端查询模式；全量虚拟滚动模式可走分块接口。
+#[tauri::command]
+pub async fn query_strings_command(
+    state: tauri::State<'_, Arc<AppState>>,
+    request: QueryRequest,
+) -> Result<QueryResponse, String> {
+    let data = state.strings.lock().map_err(|e| e.to_string())?;
+
+    let start = std::time::Instant::now();
+    let total = data.len() as u32;
+
+    // 1) 先做状态筛选，后续文本筛选/排序/分页都在更小的数据集上执行。
+    let status_filtered: Vec<&SkyString> = if let Some(ref sf) = request.status_filter {
+        match sf.as_str() {
+            "translated" => data.iter().filter(|sk| sk.params.is_translated()).collect(),
+            "incomplete" => data
+                .iter()
+                .filter(|sk| sk.params.is_incomplete() && !sk.params.is_translated())
+                .collect(),
+            "locked" => data
+                .iter()
+                .filter(|sk| !sk.params.is_translated() && !sk.params.is_incomplete())
+                .collect(),
+            _ => data.iter().collect(),
+        }
+    } else {
+        data.iter().collect()
+    };
+
+    // 2) 大小写不敏感的文本筛选：匹配 source / translation / record_sig。
+    // 注意：当前实现对每条记录都会做 to_lowercase，后续可按需优化为预计算字段。
+    let mut filtered_data: Vec<&SkyString> = if let Some(ref filter_text) = request.filter {
+        let ft = filter_text.to_lowercase();
+        status_filtered
+            .into_iter()
+            .filter(|sk| {
+                sk.source.to_lowercase().contains(&ft)
+                    || sk.translation.to_lowercase().contains(&ft)
+                    || String::from_utf8_lossy(&sk.esp_ptr.record_sig)
+                        .to_lowercase()
+                        .contains(&ft)
+            })
+            .collect()
+    } else {
+        status_filtered
+    };
+
+    let filtered = filtered_data.len() as u32;
+
+    // 3) 仅对筛选结果排序；未指定排序时保持解析时的原始顺序。
+    if let Some(ref field) = request.sort_field {
+        let is_asc = request.sort_dir.as_deref() != Some("desc");
+        match field.as_str() {
+            "id" => {
+                if is_asc {
+                    filtered_data.sort_by_key(|sk| sk.id);
+                } else {
+                    filtered_data.sort_by_key(|sk| std::cmp::Reverse(sk.id));
+                }
+            }
+            "source" => {
+                if is_asc {
+                    filtered_data.sort_by(|a, b| a.source.cmp(&b.source));
+                } else {
+                    filtered_data.sort_by(|a, b| b.source.cmp(&a.source));
+                }
+            }
+            "record_sig" => {
+                if is_asc {
+                    filtered_data.sort_by(|a, b| a.esp_ptr.record_sig.cmp(&b.esp_ptr.record_sig));
+                } else {
+                    filtered_data.sort_by(|a, b| b.esp_ptr.record_sig.cmp(&a.esp_ptr.record_sig));
+                }
+            }
+            _ => {} // 默认不排序
+        }
+    }
+
+    // 4) 最后执行 offset/limit 分页，仅返回当前视口所需数据。
+    // 即使 offset 超过长度也会安全返回空数组（skip/take 语义保证）。
+    let offset_usize = request.offset as usize;
+    let limit_usize = request.limit as usize;
+    let page: Vec<&SkyString> = filtered_data
+        .into_iter()
+        .skip(offset_usize)
+        .take(limit_usize)
+        .collect();
+
+    let elapsed_ms = start.elapsed().as_millis() as u64;
+
+    let dtos: Vec<SkyStringDTO> = page.iter().map(|sk| sky_string_to_dto(sk)).collect();
+
+    Ok(QueryResponse {
+        total,
+        filtered,
+        items: dtos,
+        offset: request.offset,
+        elapsed_ms,
+    })
+}
+
+/// 返回当前加载数据的概览统计文本。
+#[tauri::command]
+pub async fn get_stats(state: tauri::State<'_, Arc<AppState>>) -> Result<String, String> {
+    let data = state.strings.lock().map_err(|e| e.to_string())?;
+    let translated = data.iter().filter(|sk| sk.params.is_translated()).count();
+    let incomplete = data.iter().filter(|sk| sk.params.is_incomplete()).count();
+    let locked = data.len() - translated - incomplete;
+    Ok(format!(
+        "Total: {} items | Translated: {} | Incomplete: {} | Locked: {} | Memory: ~{} MB",
+        data.len(),
+        translated,
+        incomplete,
+        locked,
+        data.len() * 256 / 1024 / 1024
+    ))
+}
+
+/// 对给定源文本执行启发式相似匹配，返回候选译文。
+#[tauri::command]
+pub async fn heuristic_search(
+    state: tauri::State<'_, Arc<AppState>>,
+    request: HeuristicSearchRequest,
+) -> Result<Vec<HeuristicMatchDTO>, String> {
+    let data = state.strings.lock().map_err(|e| e.to_string())?;
+
+    // 候选集仅来自“已翻译”条目；未翻译条目没有可用目标文本。
+    let candidates: Vec<(String, String)> = data
+        .iter()
+        .filter(|sk| sk.params.is_translated() && !sk.source.is_empty())
+        .map(|sk| (sk.source.clone(), sk.translation.clone()))
+        .collect();
+
+    if candidates.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let min_sim = request.min_similarity.unwrap_or(0.5);
+    let max_res = request.max_results.unwrap_or(5);
+
+    let matches = xt_core::heuristic::find_similar_translations(
+        &request.source,
+        &candidates,
+        min_sim,
+        max_res,
+    );
+
+    let dtos: Vec<HeuristicMatchDTO> = matches
+        .into_iter()
+        .map(|m| HeuristicMatchDTO {
+            source: m.source,
+            translation: m.translation,
+            similarity: m.similarity,
+            levenshtein: m.levenshtein,
+            lcs_len: m.lcs_len,
+        })
+        .collect();
+
+    Ok(dtos)
+}
+
+/// 调用翻译提供方（当前为 OpenAI）翻译单条文本。
+///
+/// API Key 来自 `set_api_key` 或进程环境变量 `XT_TRANSLATE_API_KEY`。
+#[tauri::command]
+pub async fn translate_string(
+    state: tauri::State<'_, Arc<AppState>>,
+    request: TranslateRequest,
+) -> Result<String, String> {
+    // 从内存状态读取 API Key；来源是 set_api_key 或启动时的环境变量。
+    let api_key = {
+        let key = state.api_key.lock().map_err(|e| e.to_string())?;
+        key.clone()
+    };
+
+    let api_key = api_key
+        .ok_or_else(|| "API key not set. Please set via Settings or XT_TRANSLATE_API_KEY env var".to_string())?;
+
+    // 保持默认语言兜底，避免前端漏传参数导致请求失败。
+    let source_lang = request.source_lang.unwrap_or_else(|| "english".to_string());
+    let target_lang = request.target_lang.unwrap_or_else(|| "chinese".to_string());
+    let text = request.text;
+
+    // 网络请求放到阻塞线程池中执行，避免命令 future 长时间占用执行线程。
+    let result = tokio::task::spawn_blocking(move || -> Result<String, String> {
+        let provider = OpenAIProvider::from_key(api_key);
+        provider
+            .translate(&text, &source_lang, &target_lang)
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
+    .map_err(|e| e)?;
+
+    Ok(result)
+}
+
+/// 设置（或清空）运行期 API Key。
+///
+/// 仅写入内存，不做磁盘持久化。
+#[tauri::command]
+pub async fn set_api_key(
+    state: tauri::State<'_, Arc<AppState>>,
+    api_key: String,
+) -> Result<(), String> {
+    let mut key = state.api_key.lock().map_err(|e| e.to_string())?;
+    *key = if api_key.is_empty() { None } else { Some(api_key) };
+    Ok(())
+}
+
+/// 将当前已翻译内容导出为 Delphi 兼容 XML。
+///
+/// 返回值为实际导出的条目数。
+#[tauri::command]
+pub async fn export_xml(
+    state: tauri::State<'_, Arc<AppState>>,
+    request: XmlExportRequest,
+) -> Result<u32, String> {
+    let strings = state.strings.lock().map_err(|e| e.to_string())?;
+    let file_info = state.file_info.lock().map_err(|e| e.to_string())?;
+
+    let addon = file_info
+        .as_ref()
+        .map(|fi| {
+            std::path::Path::new(&fi.esp_path)
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("Unknown")
+                .to_string()
+        })
+        .unwrap_or_else(|| "Unknown".to_string());
+
+    let source_lang = file_info
+        .as_ref()
+        .map(|fi| fi.language.clone())
+        .unwrap_or_else(|| "english".to_string());
+
+    // 仅导出“已有译文”的条目，行为与 Delphi 版本保持一致。
+    let entries = sky_strings_to_xml_entries(&strings);
+    let exported_count = entries.len() as u32;
+
+    let params = XmlExportParams {
+        addon,
+        source_lang,
+        dest_lang: request.dest_lang,
+        version: 2,
+    };
+
+    let path = std::path::Path::new(&request.path);
+    write_xml_file(path, &params, &entries).map_err(|e| format!("Failed to write XML: {}", e))?;
+
+    // 导出成功后清除脏标记
+    *state.is_dirty.lock().map_err(|e| e.to_string())? = false;
+
+    Ok(exported_count)
+}
+
+/// 导入 XML 翻译并合并到当前内存字符串。
+///
+/// 返回匹配/未匹配数量及被更新的内部 ID 列表。
+#[tauri::command]
+pub async fn import_xml(
+    state: tauri::State<'_, Arc<AppState>>,
+    xml_path: String,
+) -> Result<XmlImportResponse, String> {
+    // 先解析 XML，再按三元组规则写回内存数据。
+    let (_, xml_entries) = parse_xml_file(std::path::Path::new(&xml_path))
+        .map_err(|e| format!("Failed to parse XML: {}", e))?;
+
+    let total = xml_entries.len() as u32;
+
+    let mut strings = state.strings.lock().map_err(|e| e.to_string())?;
+    let (matched, unmatched, updated_ids) = import_xml_to_sky_strings(&mut strings, &xml_entries);
+
+    // 导入修改了数据，标记为脏
+    *state.is_dirty.lock().map_err(|e| e.to_string())? = true;
+
+    Ok(XmlImportResponse {
+        matched,
+        unmatched,
+        total,
+        updated_ids,
+    })
+}
+
+/// 分块返回 DTO，避免触发 WebView2 的 IPC 负载大小限制。
+/// 一般每批约 1 万条（约 2MB JSON）。
+#[tauri::command]
+pub async fn get_strings_chunk(
+    state: tauri::State<'_, Arc<AppState>>,
+    offset: u32,
+    limit: u32,
+) -> Result<Vec<SkyStringDTO>, String> {
+    let data = state.strings.lock().map_err(|e| e.to_string())?;
+    let offset_usize = offset as usize;
+    let limit_usize = limit as usize;
+
+    let dtos: Vec<SkyStringDTO> = data
+        .iter()
+        .skip(offset_usize)
+        .take(limit_usize)
+        .map(sky_string_to_dto)
+        .collect();
+
+    Ok(dtos)
+}
+
+/// 返回总条数，供前端计算分块拉取批次。
+#[tauri::command]
+pub async fn get_strings_count(
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<u32, String> {
+    let data = state.strings.lock().map_err(|e| e.to_string())?;
+    Ok(data.len() as u32)
+}
+
+/// 查询当前是否有未保存的翻译修改
+#[tauri::command]
+pub async fn get_is_dirty(
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<bool, String> {
+    let dirty = state.is_dirty.lock().map_err(|e| e.to_string())?;
+    Ok(*dirty)
+}
+
+/// 一次性返回全部 DTO（用于前端全量虚拟滚动模式）。
+/// 大数据集优先使用 `get_strings_chunk`，避免 IPC 负载过大。
+#[tauri::command]
+pub async fn get_all_strings(
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<Vec<SkyStringDTO>, String> {
+    let data = state.strings.lock().map_err(|e| e.to_string())?;
+    let dtos: Vec<SkyStringDTO> = data.iter().map(sky_string_to_dto).collect();
+    Ok(dtos)
+}
+
+/// 将已翻译的字符串写入目标语言的 Strings 文件。
+///
+/// 策略（与 Delphi 原版一致）：
+/// 1. 加载源语言 Strings 文件作为基础（保留未翻译的原始条目）
+/// 2. 用已翻译条目覆盖对应 str_id 的文本
+/// 3. 按 list_index 分组写入 .STRINGS / .DLSTRINGS / .ILSTRINGS
+/// 4. ESP 文件本身不修改
+#[tauri::command]
+pub async fn save_strings(
+    state: tauri::State<'_, Arc<AppState>>,
+    request: SaveStringsRequest,
+) -> Result<SaveStringsResponse, String> {
+    let strings = state.strings.lock().map_err(|e| e.to_string())?;
+    let file_info = state.file_info.lock().map_err(|e| e.to_string())?;
+
+    let source_lang = file_info
+        .as_ref()
+        .map(|fi| fi.language.clone())
+        .unwrap_or_else(|| "english".to_string());
+    let strings_dir = file_info
+        .as_ref()
+        .and_then(|fi| fi.strings_dir.clone())
+        .unwrap_or_default();
+
+    // 收集翻译映射：按 list_index 和 str_id 分组
+    // 每个 SkyString 可能是源语言或目标语言的条目
+    let mut translated_map: std::collections::HashMap<(u8, i32), String> = std::collections::HashMap::new();
+    for sk in strings.iter() {
+        if !sk.translation.is_empty() {
+            translated_map.insert((sk.list_index, sk.esp_ptr.str_id), sk.translation.clone());
+        }
+    }
+
+    let output_dir = std::path::Path::new(&request.output_dir);
+    let base_name = &request.base_name;
+    let target_lang = &request.target_lang;
+
+    let mut strings_count = 0u32;
+    let mut dlstrings_count = 0u32;
+    let mut ilstrings_count = 0u32;
+    let mut translated_count = 0u32;
+
+    // 对每种 Strings 格式：加载源语言 → 覆盖翻译 → 写入目标语言
+    for (list_index, ext, count_ref) in [
+        (0u8, "STRINGS", &mut strings_count),
+        (1u8, "DLSTRINGS", &mut dlstrings_count),
+        (2u8, "ILSTRINGS", &mut ilstrings_count),
+    ] {
+        let source_path = std::path::Path::new(&strings_dir)
+            .join(format!("{}_{}.{}", base_name, source_lang, ext.to_lowercase()));
+
+        // 加载源语言文件作为基础（保留所有未翻译条目）
+        let mut strings_file = if source_path.exists() {
+            xt_core::strings::StringsFile::load_with_format(
+                &source_path,
+                xt_core::strings::StringsFile::detect_format(&source_path),
+            )
+            .unwrap_or_else(|_| xt_core::strings::StringsFile::new())
+        } else {
+            xt_core::strings::StringsFile::new()
+        };
+
+        // 覆盖已翻译的条目
+        for (&(li, str_id), translation) in &translated_map {
+            if li == list_index {
+                let id = str_id as u32;
+                // 只有当 str_id 在源文件中存在时才覆盖；否则添加新条目
+                strings_file.strings.insert(id, translation.clone());
+                translated_count += 1;
+            }
+        }
+
+        // 写入目标语言文件
+        let target_path = output_dir.join(format!("{}_{}.{}", base_name, target_lang, ext.to_lowercase()));
+
+        // 确保输出目录存在
+        if let Some(parent) = target_path.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| format!("Failed to create output dir: {}", e))?;
+        }
+
+        // 设置正确的格式
+        let format = xt_core::strings::StringsFile::detect_format(&target_path);
+        strings_file.format = format;
+
+        strings_file
+            .save_with_format(&target_path, format)
+            .map_err(|e| format!("Failed to write {}: {}", ext, e))?;
+
+        *count_ref = strings_file.strings.len() as u32;
+    }
+
+    // 保存成功后清除脏标记
+    *state.is_dirty.lock().map_err(|e| e.to_string())? = false;
+
+    Ok(SaveStringsResponse {
+        strings_count,
+        dlstrings_count,
+        ilstrings_count,
+        translated_count,
+    })
+}

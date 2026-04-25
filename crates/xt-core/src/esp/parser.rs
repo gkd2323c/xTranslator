@@ -1,0 +1,857 @@
+use crate::esp::header::{FieldHeader, GenericHeader, GrupHeader, RecordHeaderData};
+use crate::strings::{CodepageTable, StringsFile};
+use crate::types::esp_pointer::EspPointer;
+use crate::types::game_id::GameId;
+use crate::types::params::SkyStringParams;
+use crate::types::sky_string::SkyString;
+use std::io::{Cursor, Read, Result};
+use std::path::Path;
+
+/// 解压 Bethesda 压缩记录
+///
+/// Bethesda 特有的压缩格式（用于 Oblivion/Skyrim 等游戏）：
+/// - 前4字节：小端序的解压后大小（u32）
+/// - 剩余数据：zlib 压缩数据
+///
+/// 参考 Delphi 实现：DecompressToUserBuf(@b[4], header.dsize - sizeOf(cardinal), ...)
+///
+/// # 参数
+/// * `data` - 压缩记录数据（包含4字节大小头）
+///
+/// # 返回
+/// 解压后的数据，或错误
+fn decompress_bethesda_record(data: &[u8]) -> Result<Vec<u8>> {
+    use flate2::read::ZlibDecoder;
+
+    // 至少需要4字节的大小头
+    if data.len() < 4 {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "Compressed record data too short",
+        ));
+    }
+
+    // 读取解压后大小（小端序）
+    let decompressed_size = u32::from_le_bytes([data[0], data[1], data[2], data[3]]) as usize;
+
+    // 大小为0表示空记录
+    if decompressed_size == 0 {
+        return Ok(Vec::new());
+    }
+
+    // 合理性检查：防止异常声明大小导致内存膨胀（常见于损坏文件）。
+    if decompressed_size > 100_000_000 {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("Unreasonable decompressed size: {}", decompressed_size),
+        ));
+    }
+
+    // 压缩体从第 5 字节开始（前 4 字节是解压后大小）。
+    let compressed = &data[4..];
+    if compressed.is_empty() {
+        // 只有大小头，没有压缩数据，返回全0
+        return Ok(vec![0u8; decompressed_size]);
+    }
+
+    // Bethesda 记录压缩体使用 zlib。
+    let mut decoder = ZlibDecoder::new(compressed);
+    let mut decompressed = Vec::with_capacity(decompressed_size);
+    match decoder.read_to_end(&mut decompressed) {
+        Ok(_) => {
+            // 解压长度和头部声明可能不一致：记录告警但不直接失败，尽量继续解析。
+            if decompressed.len() != decompressed_size {
+                eprintln!(
+                    "Warning: decompressed size mismatch: expected {}, got {}",
+                    decompressed_size,
+                    decompressed.len()
+                );
+            }
+            Ok(decompressed)
+        }
+        Err(e) => Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("Zlib decompression failed: {}", e),
+        )),
+    }
+}
+
+/// 可翻译字段定义
+///
+/// 从 _recorddefs.txt 解析而来，描述哪些字段包含可翻译的字符串
+#[derive(Clone, Debug)]
+pub struct TranslatableField {
+    /// 记录类型签名（4字节 ASCII，如 "INFO", "QUST"）
+    pub record_sig: [u8; 4],
+    /// 字段签名（4字节 ASCII，如 "NAM1", "FULL"）
+    pub field_sig: [u8; 4],
+    /// Strings 文件类型索引：0=.STRINGS, 1=.DLSTRINGS, 2=.ILSTRINGS
+    pub list_index: u8,
+    /// Not-null 标记（*）：字符串不能为空
+    pub not_null: bool,
+    /// Ignored 标记（?）：此定义应被忽略
+    pub ignored: bool,
+}
+
+impl TranslatableField {
+    pub fn new(record_sig: [u8; 4], field_sig: [u8; 4], list_index: u8) -> Self {
+        Self {
+            record_sig,
+            field_sig,
+            list_index,
+            not_null: false,
+            ignored: false,
+        }
+    }
+}
+
+/// Strings 文件集合
+#[derive(Default)]
+pub struct StringsFiles {
+    pub strings: Option<StringsFile>,   // .STRINGS
+    pub dlstrings: Option<StringsFile>, // .DLSTRINGS
+    pub ilstrings: Option<StringsFile>, // .ILSTRINGS
+    pub codepage_table: Option<CodepageTable>,
+}
+
+impl StringsFiles {
+    /// 从目录加载所有 strings 文件（使用默认 UTF-8 编码）
+    pub fn load_from_dir<P: AsRef<Path>>(dir: P, base_name: &str) -> Self {
+        let dir = dir.as_ref();
+        let strings = Self::try_load(dir.join(format!("{}_english.STRINGS", base_name)));
+        let dlstrings = Self::try_load(dir.join(format!("{}_english.DLSTRINGS", base_name)));
+        let ilstrings = Self::try_load(dir.join(format!("{}_english.ILSTRINGS", base_name)));
+
+        StringsFiles {
+            strings,
+            dlstrings,
+            ilstrings,
+            codepage_table: None,
+        }
+    }
+
+    /// 从目录加载所有 strings 文件，使用 codepage 配置表
+    pub fn load_from_dir_with_codepage<P: AsRef<Path>>(
+        dir: P,
+        base_name: &str,
+        table: &CodepageTable,
+    ) -> Self {
+        let dir = dir.as_ref();
+
+        let strings =
+            Self::try_load_with_table(dir.join(format!("{}_english.STRINGS", base_name)), table);
+        let dlstrings =
+            Self::try_load_with_table(dir.join(format!("{}_english.DLSTRINGS", base_name)), table);
+        let ilstrings =
+            Self::try_load_with_table(dir.join(format!("{}_english.ILSTRINGS", base_name)), table);
+
+        StringsFiles {
+            strings,
+            dlstrings,
+            ilstrings,
+            codepage_table: Some(table.clone()),
+        }
+    }
+
+    /// 从目录加载 strings 文件，使用指定的语言和 codepage 配置
+    pub fn load_from_dir_with_language<P: AsRef<Path>>(
+        dir: P,
+        base_name: &str,
+        language: &str,
+        table: &CodepageTable,
+    ) -> Self {
+        let dir = dir.as_ref();
+
+        let strings = Self::try_load_with_table(
+            dir.join(format!("{}_{}.STRINGS", base_name, language)),
+            table,
+        );
+        let dlstrings = Self::try_load_with_table(
+            dir.join(format!("{}_{}.DLSTRINGS", base_name, language)),
+            table,
+        );
+        let ilstrings = Self::try_load_with_table(
+            dir.join(format!("{}_{}.ILSTRINGS", base_name, language)),
+            table,
+        );
+
+        StringsFiles {
+            strings,
+            dlstrings,
+            ilstrings,
+            codepage_table: Some(table.clone()),
+        }
+    }
+
+    fn try_load<P: AsRef<Path>>(path: P) -> Option<StringsFile> {
+        let path = path.as_ref();
+        let format = StringsFile::detect_format(path);
+        StringsFile::load_with_format(path, format).ok()
+    }
+
+    fn try_load_with_table<P: AsRef<Path>>(path: P, table: &CodepageTable) -> Option<StringsFile> {
+        let path = path.as_ref();
+        StringsFile::load_with_codepage_table(path, table).ok()
+    }
+
+    /// 根据 list_index 查找字符串
+    pub fn get(&self, list_index: u8, id: u32) -> Option<&String> {
+        match list_index {
+            0 => self.strings.as_ref()?.get(id),
+            1 => self.dlstrings.as_ref()?.get(id),
+            2 => self.ilstrings.as_ref()?.get(id),
+            _ => None,
+        }
+    }
+
+    /// 返回已加载的文件数量
+    pub fn loaded_count(&self) -> usize {
+        let mut count = 0;
+        if self.strings.is_some() {
+            count += 1;
+        }
+        if self.dlstrings.is_some() {
+            count += 1;
+        }
+        if self.ilstrings.is_some() {
+            count += 1;
+        }
+        count
+    }
+}
+
+/// 解析 _recorddefs.txt 格式的字段定义
+///
+/// 原始 Delphi xTranslator 使用的定义格式：
+/// `Def_:FIELD=RECORD=LIST[*|?][-procN]`
+///
+/// 各部分说明：
+/// - FIELD  : 字段签名（4字符，如 FULL, NAM1, DESC）
+/// - RECORD : 记录类型（4字符，如 ****=通配, INFO, QUST）
+/// - LIST   : Strings 文件索引（0,1,2）+ 可选标记
+/// - *      : not-null 标记（字符串不能为空）
+/// - ?      : ignored 标记（此定义应被忽略）
+/// - -procN : 内部处理程序标记（当前实现中忽略）
+///
+/// 示例：
+/// - `Def_:FULL=****=0`    → 所有记录的 FULL 字段，使用 .STRINGS
+/// - `Def_:NAM1=INFO=2*`   → INFO 记录的 NAM1 字段，使用 .ILSTRINGS，不能为空
+/// - `Def_:DATA=GMST=0-proc1` → GMST 记录的 DATA 字段（实际被过滤）
+///
+/// # 参数
+/// * `content` - _recorddefs.txt 文件内容
+///
+/// # 返回
+/// 可翻译字段定义列表
+pub fn parse_record_defs(content: &str) -> Vec<TranslatableField> {
+    let mut defs = Vec::new();
+    for line in content.lines() {
+        let line = line.trim();
+        // 只处理以 "Def_:" 开头的行
+        if !line.starts_with("Def_:") {
+            continue;
+        }
+        // 格式：Def_:FIELD=RECORD=LIST[*|?][-procN]
+        // 例如：Def_:FULL=****=0
+        let def_part = &line[5..]; // 移除 "Def_:"
+        let parts: Vec<&str> = def_part.split('=').collect();
+        if parts.len() < 3 {
+            continue; // 格式错误：跳过该行
+        }
+
+        // 解析字段签名（4字节 ASCII）
+        let field_sig = {
+            let mut sig = [0u8; 4];
+            let bytes = parts[0].as_bytes();
+            for (i, &b) in bytes.iter().take(4).enumerate() {
+                sig[i] = b;
+            }
+            sig
+        };
+        // 解析记录类型签名（4字节 ASCII）
+        let record_sig = {
+            let mut sig = [0u8; 4];
+            let bytes = parts[1].as_bytes();
+            for (i, &b) in bytes.iter().take(4).enumerate() {
+                sig[i] = b;
+            }
+            sig
+        };
+
+        // 解析 LIST 部分（可能包含 *、?、-proc 等标记）
+        let list_str = parts[2];
+        let mut not_null = false;
+        let mut ignored = false;
+
+        // 检查 ignored 标记（? 表示此定义应被忽略）
+        if list_str.find('?').is_some() {
+            ignored = true;
+        }
+        // 检查 not-null 标记（* 表示字符串不能为空）
+        if list_str.find('*').is_some() {
+            not_null = true;
+        }
+
+        // 提取 list_index：只看首个数字（0/1/2），忽略后续标记（如 -procN）。
+        let list_index = list_str
+            .chars()
+            .next()
+            .and_then(|c| c.to_digit(10))
+            .unwrap_or(0) as u8;
+
+        defs.push(TranslatableField {
+            record_sig,
+            field_sig,
+            list_index,
+            not_null,
+            ignored,
+        });
+    }
+    defs
+}
+
+/// 根据 GameId 获取 Data 目录下的游戏子目录名
+pub fn game_data_subdir(game: GameId) -> &'static str {
+    match game {
+        GameId::Skyrim => "Skyrim",
+        GameId::SkyrimSE => "SkyrimSE",
+        GameId::Fallout4 => "Fallout4",
+        GameId::FalloutNV => "FalloutNV",
+        GameId::Fallout76 => "Fallout76",
+        GameId::Starfield => "Starfield",
+    }
+}
+
+/// 从 Data 目录加载指定游戏的 record_defs
+pub fn load_game_record_defs(
+    data_dir: &Path,
+    game: GameId,
+) -> std::io::Result<Vec<TranslatableField>> {
+    let subdir = game_data_subdir(game);
+    let path = data_dir.join(subdir).join("_recorddefs.txt");
+    let content = std::fs::read_to_string(&path)?;
+    Ok(parse_record_defs(&content))
+}
+
+/// 简单的 ESP 解析器 PoC
+pub struct EspParser {
+    pub record_defs: Vec<TranslatableField>,
+    pub strings: Vec<SkyString>,
+    pub strings_files: StringsFiles,
+    progress_callback: Option<Box<dyn Fn(u64) + Send>>,
+}
+
+impl EspParser {
+    pub fn new() -> Self {
+        // 使用内置的默认定义（SkyrimSE 简化版）
+        let default_defs = include_str!("../esp_default_defs.txt");
+        Self {
+            record_defs: parse_record_defs(default_defs),
+            strings: Vec::new(),
+            strings_files: StringsFiles::default(),
+            progress_callback: None,
+        }
+    }
+
+    pub fn with_defs(defs: Vec<TranslatableField>) -> Self {
+        Self {
+            record_defs: defs,
+            strings: Vec::new(),
+            strings_files: StringsFiles::default(),
+            progress_callback: None,
+        }
+    }
+
+    /// 使用指定游戏的完整 record_defs 创建解析器
+    pub fn with_game(data_dir: &Path, game: GameId) -> std::io::Result<Self> {
+        let defs = load_game_record_defs(data_dir, game)?;
+        Ok(Self::with_defs(defs))
+    }
+
+    /// 设置进度回调函数
+    ///
+    /// 回调函数接收当前已处理的字节数
+    pub fn set_progress_callback<F>(&mut self, callback: F)
+    where
+        F: Fn(u64) + Send + 'static,
+    {
+        self.progress_callback = Some(Box::new(callback));
+    }
+
+    /// 报告进度
+    fn report_progress(&self, bytes_processed: u64) {
+        if let Some(ref cb) = self.progress_callback {
+            cb(bytes_processed);
+        }
+    }
+
+    /// 加载 Strings 文件（.STRINGS/.DLSTRINGS/.ILSTRINGS）
+    ///
+    /// 根据基础文件名自动加载三种格式的字符串文件：
+    /// - {base_name}_english.STRINGS
+    /// - {base_name}_english.DLSTRINGS
+    /// - {base_name}_english.ILSTRINGS
+    ///
+    /// # 参数
+    /// * `dir` - 字符串文件所在目录
+    /// * `base_name` - 基础文件名（如 "Skyrim" 会加载 Skyrim_english.STRINGS 等）
+    pub fn load_strings_files<P: AsRef<Path>>(&mut self, dir: P, base_name: &str) {
+        self.strings_files = StringsFiles::load_from_dir(dir, base_name);
+    }
+
+    /// 设置已加载的 Strings 文件集合
+    ///
+    /// 当外部已经加载好字符串文件时使用此方法
+    pub fn set_strings_files(&mut self, files: StringsFiles) {
+        self.strings_files = files;
+    }
+
+    /// 解析 ESP/ESM 文件
+    pub fn parse<R: Read>(&mut self, reader: &mut R) -> Result<()> {
+        self.strings.clear();
+
+        // 先读取 TES4 头记录（插件主头）。
+        let tes4_header = GenericHeader::read_from(reader)?;
+        if !tes4_header.is_tes4() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "Expected TES4 header",
+            ));
+        }
+
+        // 读取 TES4 RecordHeaderData（16 字节）。
+        let _tes4_record_header = RecordHeaderData::read_from(reader)?;
+
+        // 读取 TES4 字段体（注意：dsize 不包含 RecordHeaderData 本身）。
+        let mut tes4_data = vec![0u8; tes4_header.dsize as usize];
+        reader.read_exact(&mut tes4_data)?;
+
+        // 直接解析 TES4 字段；RecordHeaderData 已在上方消费。
+        self.parse_record_fields_direct(b"TES4", 0, &tes4_data)?;
+
+        // 读取后续全部记录/组数据并进入顶层遍历。
+        let mut buf = Vec::new();
+        reader.read_to_end(&mut buf)?;
+        let mut cursor = Cursor::new(&buf);
+
+        println!("  TES4 parsed, remaining data: {} bytes", buf.len());
+
+        let mut grup_count = 0u32;
+        let mut record_count = 0u32;
+        let total_bytes = buf.len() as u64;
+        let mut last_reported_percentage = 0u8;
+
+        while cursor.position() < buf.len() as u64 {
+            let pos = cursor.position();
+
+            // 每处理 1MB 或百分比变化时报告进度
+            let current_percentage = ((pos as f64 / total_bytes as f64) * 100.0) as u8;
+            if current_percentage != last_reported_percentage && current_percentage % 5 == 0 {
+                self.report_progress(pos);
+                last_reported_percentage = current_percentage;
+            }
+
+            match self.parse_top_level_debug(&mut cursor, &mut grup_count, &mut record_count) {
+                Ok(()) => {}
+                Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => break,
+                Err(e) => {
+                    eprintln!("Error at byte {}: {:?}", pos, e);
+                    return Err(e);
+                }
+            }
+        }
+
+        // 报告完成
+        self.report_progress(total_bytes);
+
+        println!("  Groups: {}, Records parsed: {}", grup_count, record_count);
+        println!(
+            "  Final cursor position: {}, buffer size: {}",
+            cursor.position(),
+            buf.len()
+        );
+
+        Ok(())
+    }
+
+    fn parse_top_level<R: Read>(&mut self, reader: &mut R) -> Result<()> {
+        self.parse_top_level_debug(reader, &mut 0, &mut 0)
+    }
+
+    fn parse_top_level_debug<R: Read>(
+        &mut self,
+        reader: &mut R,
+        grup_count: &mut u32,
+        record_count: &mut u32,
+    ) -> Result<()> {
+        let header = match GenericHeader::read_from(reader) {
+            Ok(h) => h,
+            Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => return Ok(()),
+            Err(e) => return Err(e),
+        };
+
+        if header.is_grup() {
+            *grup_count += 1;
+            // 读取 GRUP 专用头（16 字节）。
+            let _grup_header = GrupHeader::read_from(reader)?;
+            // GRUP 结构：GenericHeader(8) + GrupHeader(16) + payload
+            // 注意：GRUP 的 dsize 包含自身头部，因此 payload = dsize - 24。
+            let grup_data_size = if header.dsize >= 24 {
+                header.dsize as usize - 24
+            } else {
+                0
+            };
+
+            if grup_data_size > 0 {
+                let mut grup_data = vec![0u8; grup_data_size];
+                reader.read_exact(&mut grup_data)?;
+
+                let mut cursor = Cursor::new(&grup_data);
+                while cursor.position() < grup_data.len() as u64 {
+                    match self.parse_record_debug(&mut cursor, record_count) {
+                        Ok(()) => {}
+                        Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => break,
+                        Err(e) => {
+                            eprintln!(
+                                "Warning: error parsing nested record at byte {}: {:?}",
+                                cursor.position(),
+                                e
+                            );
+                            break;
+                        }
+                    }
+                }
+            }
+        } else {
+            // 顶层普通记录（非 GRUP）：这里只消费字节，不在此层提取字段。
+            let mut data = vec![0u8; header.dsize as usize];
+            reader.read_exact(&mut data)?;
+        }
+
+        Ok(())
+    }
+
+    fn parse_record<R: Read>(&mut self, reader: &mut R) -> Result<()> {
+        self.parse_record_debug(reader, &mut 0)
+    }
+
+    fn parse_record_debug<R: Read>(
+        &mut self,
+        reader: &mut R,
+        record_count: &mut u32,
+    ) -> Result<()> {
+        let header = match GenericHeader::read_from(reader) {
+            Ok(h) => h,
+            Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => return Ok(()),
+            Err(e) => return Err(e),
+        };
+
+        if header.is_grup() {
+            // 嵌套 GRUP：递归解析其中的子记录。
+            *record_count -= 1; // 不算作 record
+            let _grup_header = GrupHeader::read_from(reader)?;
+            // GRUP 结构：GenericHeader(8) + GrupHeader(16) + payload
+            // dsize 包含头部，因此 payload = dsize - 24。
+            let grup_data_size = if header.dsize >= 24 {
+                header.dsize as usize - 24
+            } else {
+                0
+            };
+
+            if grup_data_size > 0 {
+                let mut grup_data = vec![0u8; grup_data_size];
+                reader.read_exact(&mut grup_data)?;
+
+                let mut cursor = Cursor::new(&grup_data);
+                while cursor.position() < grup_data.len() as u64 {
+                    match self.parse_record_debug(&mut cursor, record_count) {
+                        Ok(()) => {}
+                        Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => break,
+                        Err(e) => {
+                            eprintln!("Warning: error parsing nested record: {:?}", e);
+                            break;
+                        }
+                    }
+                }
+            }
+            return Ok(());
+        }
+
+        *record_count += 1;
+
+        let record_header_data = RecordHeaderData::read_from(reader)?;
+        // 普通 Record：dsize 仅表示字段区大小，不包含 RecordHeaderData。
+        let data_size = header.dsize as usize;
+        let mut record_data = vec![0u8; data_size];
+        reader.read_exact(&mut record_data)?;
+
+        // 压缩记录：先解压再解析字段（否则字段偏移全部失效）。
+        if record_header_data.is_compressed() {
+            match decompress_bethesda_record(&record_data) {
+                Ok(decompressed) => {
+                    // 解压后数据与普通记录字段布局一致，走同一套字段解析逻辑。
+                    self.parse_record_fields_with_id(&header.name, record_header_data.form_id, &decompressed)?;
+                }
+                Err(e) => {
+                    eprintln!("Warning: failed to decompress record {:?}: {}", header.name, e);
+                }
+            }
+            return Ok(()); // 压缩记录处理完成
+        }
+
+        // 非压缩记录：直接按字段流解析并提取字符串。
+        self.parse_record_fields_with_id(&header.name, record_header_data.form_id, &record_data)?;
+
+        Ok(())
+    }
+
+    fn parse_record_fields(&mut self, record_sig: &[u8; 4], data: &[u8]) -> Result<()> {
+        self.parse_record_fields_with_id(record_sig, 0, data)
+    }
+
+    fn parse_record_fields_with_id(
+        &mut self,
+        record_sig: &[u8; 4],
+        form_id: u32,
+        data: &[u8],
+    ) -> Result<()> {
+        // RecordHeaderData 已在上层读取，这里直接进入字段解析。
+        self.parse_record_fields_direct(record_sig, form_id, data)
+    }
+
+    fn parse_record_fields_direct(
+        &mut self,
+        record_sig: &[u8; 4],
+        form_id: u32,
+        data: &[u8],
+    ) -> Result<()> {
+        if data.is_empty() {
+            return Ok(());
+        }
+
+        let mut cursor = Cursor::new(data);
+        let mut next_field_size: u32 = 0;
+        let mut field_index = 0u16;
+
+        while cursor.position() < data.len() as u64 {
+            let field_header = match FieldHeader::read_from(&mut cursor) {
+                Ok(h) => h,
+                Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => break,
+                Err(e) => return Err(e),
+            };
+
+            let data_size = if next_field_size > 0 {
+                let size = next_field_size as u16;
+                next_field_size = 0;
+                size
+            } else {
+                field_header.dsize
+            };
+
+            // 边界保护：字段声明大小超过剩余字节时，终止当前记录解析。
+            let remaining = data.len() as u64 - cursor.position();
+            if data_size as u64 > remaining {
+                // 记录体可能损坏：不再继续读取，避免产生级联误解析。
+                break;
+            }
+
+            let mut field_data = vec![0u8; data_size as usize];
+            cursor.read_exact(&mut field_data)?;
+
+            if field_header.is_xxxx() {
+                // XXXX 是 Bethesda 的“扩展长度标记”：
+                // 本字段内容携带“下一字段”的真实 32 位长度。
+                if field_data.len() >= 4 {
+                    next_field_size = u32::from_le_bytes([
+                        field_data[0],
+                        field_data[1],
+                        field_data[2],
+                        field_data[3],
+                    ]);
+                }
+                continue;
+            }
+
+            // 检查是否是可翻译字段（根据 record_defs.txt 定义）
+            if let Some(def) = self.find_def(record_sig, &field_header.name) {
+                // GMST:DATA 是数值字段（int/float），不是字符串 ID，必须跳过。
+                if record_sig == b"GMST" && &field_header.name == b"DATA" {
+                    continue;
+                }
+
+                // 可翻译字段约定：字段体前 4 字节是小端字符串 ID。
+                // 该 ID 用于到 STRINGS/DLSTRINGS/ILSTRINGS 中反查文本。
+                if field_data.len() >= 4 {
+                    let string_id = u32::from_le_bytes([
+                        field_data[0], field_data[1], field_data[2], field_data[3],
+                    ]);
+
+                    // 查表失败时保留占位文本，便于定位缺失映射。
+                    let source_text = self.strings_files.get(def.list_index, string_id)
+                        .cloned()
+                        .unwrap_or_else(|| format!("<ID:{}>", string_id));
+
+                    if !source_text.is_empty() {
+                        // 构建一条可编辑字符串记录。
+                        let mut sk = SkyString::new(
+                            self.strings.len() as u32,  // 内部 ID
+                            source_text,                // 源字符串
+                            String::new(),              // 翻译（初始为空）
+                        );
+                        
+                        // 填充 ESP 指针，用于后续 SST/XML 精确匹配与写回。
+                        sk.esp_ptr = EspPointer {
+                            str_id: string_id as i32,  // 实际的字符串 ID（关键：用于 XML 匹配）
+                            form_id,                    // 记录的 FormID
+                            record_sig: *record_sig,    // 记录类型
+                            field_sig: field_header.name, // 字段类型
+                            index: field_index,         // 字段索引
+                            index_max: 1,               // 字段总数
+                            edid_hash: 0,               // Editor ID 哈希（暂未计算）
+                        };
+                        
+                        // 初始状态：有源文、无译文 => 未完成翻译。
+                        sk.params.set(SkyStringParams::INCOMPLETE_TRANS, true);
+                        sk.list_index = def.list_index;
+                        
+                        self.strings.push(sk);
+                    }
+                }
+            }
+
+            field_index += 1;
+        }
+
+        Ok(())
+    }
+
+    fn find_def(&self, record_sig: &[u8; 4], field_sig: &[u8; 4]) -> Option<&TranslatableField> {
+        // 先查找精确匹配
+        for def in &self.record_defs {
+            if def.ignored {
+                continue;
+            }
+            if &def.field_sig == field_sig {
+                if &def.record_sig == record_sig || &def.record_sig == b"****" {
+                    return Some(def);
+                }
+            }
+        }
+        None
+    }
+}
+
+impl Default for EspParser {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_record_defs() {
+        let content = r#"
+Def_:FULL=****=0
+Def_:DESC=****=1
+Def_:NAM1=INFO=2
+Def_:CNAM=QUST=1
+"#;
+        let defs = parse_record_defs(content);
+        assert_eq!(defs.len(), 4);
+        assert_eq!(&defs[0].field_sig, b"FULL");
+        assert_eq!(&defs[0].record_sig, b"****");
+        assert_eq!(defs[0].list_index, 0);
+        assert!(!defs[0].not_null);
+        assert!(!defs[0].ignored);
+    }
+
+    #[test]
+    fn test_parse_record_defs_with_markers() {
+        let content = r#"
+Def_:NAM1=INFO=2*
+Def_:DATA=GMST=0-proc1
+Def_:FULL=IMAD=0?(ignored)
+Def_:CNAM=DOOR=0-proc5
+"#;
+        let defs = parse_record_defs(content);
+        assert_eq!(defs.len(), 4);
+
+        // NAM1=INFO=2* → not_null=true
+        assert_eq!(&defs[0].field_sig, b"NAM1");
+        assert_eq!(defs[0].list_index, 2);
+        assert!(defs[0].not_null);
+        assert!(!defs[0].ignored);
+
+        // DATA=GMST=0-proc1 → proc ignored, list=0
+        assert_eq!(&defs[1].field_sig, b"DATA");
+        assert_eq!(defs[1].list_index, 0);
+        assert!(!defs[1].not_null);
+        assert!(!defs[1].ignored);
+
+        // FULL=IMAD=0? → ignored=true
+        assert_eq!(&defs[2].field_sig, b"FULL");
+        assert_eq!(defs[2].list_index, 0);
+        assert!(!defs[2].not_null);
+        assert!(defs[2].ignored);
+
+        // CNAM=DOOR=0-proc5
+        assert_eq!(&defs[3].field_sig, b"CNAM");
+        assert_eq!(defs[3].list_index, 0);
+    }
+
+    #[test]
+    fn test_parse_skyrimse_record_defs() {
+        let content = include_str!("../esp_default_defs.txt");
+        let defs = parse_record_defs(content);
+        // 默认定义应包含至少 20 条
+        assert!(
+            defs.len() >= 20,
+            "Expected at least 20 defs, got {}",
+            defs.len()
+        );
+
+        // FULL=****=0 应存在
+        let full_wildcard = defs
+            .iter()
+            .find(|d| &d.field_sig == b"FULL" && &d.record_sig == b"****");
+        assert!(full_wildcard.is_some());
+        assert_eq!(full_wildcard.unwrap().list_index, 0);
+
+        // NAM1=INFO=2* 应有 not_null 标记
+        let nam1_info = defs
+            .iter()
+            .find(|d| &d.field_sig == b"NAM1" && &d.record_sig == b"INFO");
+        assert!(nam1_info.is_some());
+        assert!(nam1_info.unwrap().not_null);
+    }
+
+    #[test]
+    fn test_game_data_subdir() {
+        assert_eq!(game_data_subdir(GameId::Skyrim), "Skyrim");
+        assert_eq!(game_data_subdir(GameId::SkyrimSE), "SkyrimSE");
+        assert_eq!(game_data_subdir(GameId::Fallout4), "Fallout4");
+        assert_eq!(game_data_subdir(GameId::Starfield), "Starfield");
+    }
+
+    #[test]
+    fn test_find_def_ignores_ignored() {
+        let defs = vec![
+            TranslatableField::new(*b"TEST", *b"FULL", 0),
+            TranslatableField {
+                record_sig: *b"TEST",
+                field_sig: *b"DESC",
+                list_index: 1,
+                not_null: false,
+                ignored: true,
+            },
+        ];
+        let parser = EspParser::with_defs(defs);
+        // FULL 应该能找到
+        assert!(parser.find_def(b"TEST", b"FULL").is_some());
+        // DESC 被标记为 ignored，应该找不到
+        assert!(parser.find_def(b"TEST", b"DESC").is_none());
+    }
+}

@@ -1,0 +1,245 @@
+import { useAppStore } from "../stores/appStore";
+import { loadEsp, loadSst, saveSst, exportXml, importXml, saveStrings } from "../api/strings";
+import { open, save } from "@tauri-apps/plugin-dialog";
+import { listen } from "@tauri-apps/api/event";
+import { FolderOpen, FileUp, FileDown, FileCode, Save, RotateCcw } from "lucide-react";
+import toast from "react-hot-toast";
+
+export function MenuBar() {
+  const isParsing = useAppStore((s) => s.isParsing);
+  const isLoading = useAppStore((s) => s.isLoading);
+  const espPath = useAppStore((s) => s.espPath);
+  const language = useAppStore((s) => s.language);
+  const isDirty = useAppStore((s) => s.isDirty);
+  const targetLang = useAppStore((s) => s.targetLang);
+  const setParsing = useAppStore((s) => s.setParsing);
+  const setLoading = useAppStore((s) => s.setLoading);
+  const setError = useAppStore((s) => s.setError);
+  const setLoadProgress = useAppStore((s) => s.setLoadProgress);
+  const setEspLoaded = useAppStore((s) => s.setEspLoaded);
+  const setSstLoaded = useAppStore((s) => s.setSstLoaded);
+  const loadAllStrings = useAppStore((s) => s.loadAllStrings);
+  const setIsDirty = useAppStore((s) => s.setIsDirty);
+  const setTargetLang = useAppStore((s) => s.setTargetLang);
+  const reset = useAppStore((s) => s.reset);
+
+  const handleLoadEsp = async () => {
+    if (isDirty && !confirm("You have unsaved changes. Load a new file anyway?")) return;
+
+    const espPath = await open({
+      multiple: false,
+      directory: false,
+      filters: [
+        { name: "ESP/ESM", extensions: ["esp", "esm"] },
+        { name: "All", extensions: ["*"] },
+      ],
+    });
+    if (!espPath) return;
+
+    const espDir = espPath.replace(/\\/g, "/").split("/").slice(0, -1).join("/");
+    const stringsDir = `${espDir}/Strings`;
+
+    setParsing(true);
+    setError(null);
+    setLoadProgress(null);
+
+    try {
+      // 监听进度事件
+      const unlisten = await listen<any>("esp-load-progress", (event) => {
+        setLoadProgress(event.payload);
+      });
+
+      try {
+        const stats = await loadEsp(espPath, stringsDir, language);
+        setEspLoaded(espPath, stats, stringsDir);
+        await loadAllStrings();
+        setIsDirty(false);
+        toast.success(`Loaded ${stats.total.toLocaleString()} strings from ESP`);
+      } finally {
+        unlisten();
+      }
+    } catch (e: any) {
+      setError(e.toString());
+      toast.error(`Failed to load ESP: ${e}`);
+    } finally {
+      setParsing(false);
+      setLoadProgress(null);
+    }
+  };
+
+  const handleLoadSst = async () => {
+    const sstPath = await open({
+      multiple: false,
+      directory: false,
+      filters: [{ name: "SST Dictionary", extensions: ["sst"] }],
+    });
+    if (!sstPath) return;
+
+    setLoading(true);
+    try {
+      const stats = await loadSst(sstPath);
+      setSstLoaded(sstPath, stats);
+      toast.success(`SST loaded: ${stats.matched} matched, ${stats.unmatched} unmatched`);
+      await loadAllStrings();
+    } catch (e: any) {
+      toast.error(`Failed to load SST: ${e}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSaveSst = async () => {
+    const sstPath = await save({
+      filters: [{ name: "SST Dictionary", extensions: ["sst"] }],
+      defaultPath: espPath
+        ? espPath.replace(/\\/g, "/").replace(/\.es[mp]$/i, `_english_${targetLang}.sst`)
+        : "translation.sst",
+    });
+    if (!sstPath) return;
+
+    setLoading(true);
+    try {
+      await saveSst(sstPath);
+      setIsDirty(false);
+      toast.success(`SST saved to ${sstPath}`);
+    } catch (e: any) {
+      toast.error(`Failed to save SST: ${e}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleExportXml = async () => {
+    const xmlPath = await save({
+      filters: [{ name: "XML Export", extensions: ["xml"] }],
+      defaultPath: espPath
+        ? espPath.replace(/\\/g, "/").replace(/\.es[mp]$/i, `_english_${targetLang}.xml`)
+        : "translation.xml",
+    });
+    if (!xmlPath) return;
+
+    setLoading(true);
+    try {
+      const count = await exportXml({ path: xmlPath, dest_lang: targetLang });
+      setIsDirty(false);
+      toast.success(`XML exported: ${count} entries`);
+    } catch (e: any) {
+      toast.error(`Failed to export XML: ${e}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleImportXml = async () => {
+    const xmlPath = await open({
+      multiple: false,
+      directory: false,
+      filters: [{ name: "XML Import", extensions: ["xml"] }],
+    });
+    if (!xmlPath) return;
+
+    setLoading(true);
+    try {
+      const stats = await importXml(xmlPath);
+      toast.success(`XML imported: ${stats.matched} matched, ${stats.unmatched} unmatched of ${stats.total} entries`);
+      setIsDirty(true);
+      await loadAllStrings();
+    } catch (e: any) {
+      toast.error(`Failed to import XML: ${e}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSaveStrings = async () => {
+    const outputDir = await open({
+      multiple: false,
+      directory: true,
+    });
+    if (!outputDir) return;
+
+    const baseName = espPath
+      ? espPath.replace(/\\/g, "/").split("/").pop()?.replace(/\.es[mp]$/i, "") || "Skyrim"
+      : "Skyrim";
+
+    setLoading(true);
+    try {
+      const result = await saveStrings({
+        output_dir: outputDir,
+        target_lang: targetLang,
+        base_name: baseName,
+      });
+      setIsDirty(false);
+      toast.success(
+        `Strings saved: ${result.strings_count} + ${result.dlstrings_count} + ${result.ilstrings_count} entries (${result.translated_count} translated)`
+      );
+    } catch (e: any) {
+      toast.error(`Failed to save Strings: ${e}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="menubar">
+      <div className="menubar-brand">xTranslator</div>
+      <div className="menubar-actions">
+        <button onClick={handleLoadEsp} disabled={isParsing} className="btn btn-primary">
+          <FolderOpen size={16} />
+          <span>Load ESP</span>
+        </button>
+        <button onClick={handleLoadSst} disabled={isLoading || !espPath} className="btn">
+          <FileUp size={16} />
+          <span>Load SST</span>
+        </button>
+        <button onClick={handleSaveSst} disabled={isLoading || !espPath} className="btn">
+          <FileDown size={16} />
+          <span>Save SST</span>
+        </button>
+        <button onClick={handleSaveStrings} disabled={isLoading || !espPath} className="btn">
+          <Save size={16} />
+          <span>Save Strings</span>
+        </button>
+        <div className="menubar-sep" />
+        <button onClick={handleExportXml} disabled={isLoading || !espPath} className="btn">
+          <FileCode size={16} />
+          <span>Export XML</span>
+        </button>
+        <button onClick={handleImportXml} disabled={isLoading || !espPath} className="btn">
+          <FileCode size={16} />
+          <span>Import XML</span>
+        </button>
+        <div className="menubar-sep" />
+        <select
+          value={targetLang}
+          onChange={(e) => setTargetLang(e.target.value)}
+          className="lang-select"
+          title="Target language"
+        >
+          <option value="chinese">Chinese</option>
+          <option value="japanese">Japanese</option>
+          <option value="korean">Korean</option>
+          <option value="french">French</option>
+          <option value="german">German</option>
+          <option value="spanish">Spanish</option>
+          <option value="italian">Italian</option>
+          <option value="russian">Russian</option>
+          <option value="polish">Polish</option>
+          <option value="portuguese">Portuguese</option>
+          <option value="brazilian">Brazilian</option>
+          <option value="czech">Czech</option>
+          <option value="hungarian">Hungarian</option>
+        </select>
+        <button onClick={() => {
+          if (isDirty && !confirm("You have unsaved changes. Reset anyway?")) return;
+          reset();
+        }} className="btn btn-ghost">
+          <RotateCcw size={16} />
+        </button>
+      </div>
+      {isParsing && <span className="menubar-status parsing">Parsing ESP...</span>}
+      {isLoading && <span className="menubar-status loading">Loading...</span>}
+      {isDirty && <span className="menubar-status dirty" title="Unsaved changes">●</span>}
+    </div>
+  );
+}

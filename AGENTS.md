@@ -1,0 +1,167 @@
+# AGENTS.md — xTranslator Rust Rewrite
+
+Behavioral guidelines and project-specific context for OpenCode sessions.
+
+**Tradeoff:** These guidelines bias toward caution over speed. For trivial tasks, use judgment.
+
+## 1. Think Before Coding
+
+- State assumptions explicitly. If uncertain, ask.
+- If multiple interpretations exist, present them — don't pick silently.
+- If a simpler approach exists, say so. Push back when warranted.
+
+## 2. Simplicity First
+
+- Minimum code that solves the problem. Nothing speculative.
+- No abstractions for single-use code.
+- No error handling for impossible scenarios.
+- If you write 200 lines and it could be 50, rewrite it.
+
+## 3. Surgical Changes
+
+- Don't "improve" adjacent code, comments, or formatting.
+- Don't refactor things that aren't broken.
+- Match existing style, even if you'd do it differently.
+- Remove imports/variables/functions that **your** changes made unused.
+- Don't remove pre-existing dead code unless asked.
+
+## 4. Goal-Driven Execution
+
+- Transform tasks into verifiable goals (e.g., "Add validation" → "Write tests for invalid inputs, then make them pass").
+- For multi-step tasks, state a brief plan with verification checks.
+
+---
+
+## Workspace Structure
+
+Cargo workspace with 4 members:
+
+| Member | Role | Key Entrypoints |
+|--------|------|-----------------|
+| `crates/xt-core` | Core library: ESP parser, strings, SST, XML, heuristic search, translation API | `src/lib.rs` |
+| `crates/xt-shared` | IPC DTOs shared between backend and frontend | `src/dto.rs` |
+| `crates/xt-cli` | CLI tool (legacy, mostly superseded by Tauri UI) | `src/main.rs` |
+| `src-tauri` | Tauri 2.x desktop app backend | `src/main.rs`, `src/commands.rs` |
+| `ui/` | React + Vite frontend (NOT a workspace member) | `src/main.tsx` |
+
+## Build & Test Commands
+
+```bash
+# Full backend build
+cargo build -p xtranslator-tauri
+
+# Core library tests (no external deps)
+cargo test -p xt-core --lib
+
+# Run a single test
+cargo test -p xt-core --lib test_name_here
+
+# E2E tests (requires real Skyrim.esm at D:\SteamLibrary\...)
+cargo test -p xt-core --test e2e_real_data
+
+# TypeScript check
+cd ui && npx tsc --noEmit
+
+# Frontend dev server (run separately — see Tauri Dev Gotcha below)
+cd ui && npm run dev
+
+# Full Tauri app (after cd ui && npm run dev in another terminal)
+cargo run -p xtranslator-tauri
+```
+
+## Tauri Dev Startup
+
+`tauri.conf.json` sets `beforeDevCommand: "echo ok"` because `cd ui && npm run dev` fails in Windows PowerShell.
+
+### Recommended: One-Click Script
+
+```powershell
+# From project root — starts Vite + Tauri automatically
+.\dev.ps1
+```
+
+This script:
+1. Kills any stale `node` / `xtranslator-tauri` processes
+2. Starts Vite dev server (`:5173`) in a background job
+3. Waits for port 5173 to be ready (max 30s)
+4. Launches `cargo run -p xtranslator-tauri`
+5. Cleans up the background job when Tauri exits
+
+### Manual (if script fails)
+
+1. Terminal 1: `cd ui && npm run dev` (starts Vite on :5173)
+2. Terminal 2: `cargo run -p xtranslator-tauri` (Tauri connects to :5173)
+
+For production builds, `beforeBuildCommand` runs `cd ui && npm run build` correctly.
+
+## Critical Architecture Rules
+
+### Backend-Frontend IPC
+
+- **DTO source of truth**: `crates/xt-shared/src/dto.rs` defines Rust structs; `ui/src/api/strings.ts` mirrors them in TypeScript. **Keep both in sync** when adding fields.
+- **Data strategy**: ESP 加载后前端通过 `get_strings_chunk` 分块拉取全量数据（每批 10K 条 ~2MB JSON，76K 条约 8 批），之后筛选/排序/滚动全部在客户端完成（零延迟）。`query_strings_command` 保留作为降级方案。
+- **Frontend state pipeline**: `appStore.allItems` (全量 DTO) → 客户端 filter/sort → `appStore.items` (显示用) → react-window `List` 虚拟渲染。SidePanel 统计基于 `allItems` 而非 `items`。
+- **Update by ID, not index**: `update_translation` takes a `u32 id` and looks up the string in the Vec. Frontend uses `selectedId` (not array index) — indices become invalid after filtering/sorting. Store 方法: `setSelectedById()`, `updateItemTranslation(id, text)`.
+- **Data refresh after mutation**: SST 加载 / XML 导入 → 后端 mutate `AppState.strings` → 前端重新 `loadAllStrings()` 分块刷新全量数据。单条翻译更新 → 前端本地 `updateItemTranslation(id, text)`（零 IPC）。
+
+### Data Formats (Bethesda)
+
+- **Strings files**: `.STRINGS` = null-terminated; `.DLSTRINGS` / `.ILSTRINGS` = 4-byte length prefix.
+- **ESP compressed records**: `[4-byte decompressedSize LE] + [zlib data]`. Decompress before parsing subrecords.
+- **ESP dsize semantics**: Record `dsize` **excludes** the 16B record header; GRUP `dsize` **includes** its own 24B header (GenericHeader 8B + GrupHeader 16B).
+- **Codepage fallback**: UTF-8 primary; on decode failure, fall back to Windows codepage via `CodepageTable` (932/936/949/950/1250-1257).
+
+### Status Values
+
+SkyString status strings used in DTOs and frontend:
+- `"translated"` — has non-empty translation
+- `"incomplete"` — partial/work-in-progress
+- `"locked"` — non-translatable (e.g., GMST numeric DATA fields)
+
+### GMST:DATA Filtering
+
+GMST records contain a `DATA` field that is often a numeric float (not a string). These are **filtered out** during ESP parsing and do not appear in the UI. First visible item after filtering is typically `CLAS:FULL`.
+
+### Heuristic Search
+
+- Only searches strings already marked `translated`.
+- Uses Levenshtein distance + LCS + LCP.
+- Default threshold: 0.5 similarity, max 5 results.
+- Backend: `xt-core/src/heuristic/mod.rs`; IPC: `heuristic_search` command.
+
+### XML Import/Export
+
+- Export: `export_xml` command → `write_xml_export()` → Delphi-compatible UTF-8 XML with entity escaping.
+- Import: `import_xml` command → `parse_xml_file()` → `import_xml_to_sky_strings()` — matches by `(str_id, record_sig, field_sig)` triple. Returns `XmlImportResponse { matched, unmatched, total, updated_ids }`.
+
+### Record Types Filtering
+
+- SidePanel Record Types 列表点击即可过滤表格内容（如只显示 INFO 记录）。
+- 再次点击同一个类型或点击 "Clear filter" 取消过滤。
+- 过滤逻辑在 `applyFilterAndSort` 中按 `record_sig === recordFilter` 匹配。
+- 与 `statusFilter` 和 `filter`（文本搜索）是 AND 关系，可叠加使用。
+
+## Adding a New IPC Command
+
+1. Add DTOs to `crates/xt-shared/src/dto.rs` (derive `Serialize, Deserialize`).
+2. Add TypeScript interfaces to `ui/src/api/strings.ts`.
+3. Implement command in `src-tauri/src/commands.rs`.
+4. Register in `src-tauri/src/main.rs` via `generate_handler!`.
+5. Export frontend wrapper from `ui/src/api/strings.ts`.
+6. Build and run `cargo test -p xt-core --lib` + `npx tsc --noEmit`.
+
+**Note**: Large payload commands (>1MB) may hit WebView2 IPC limits. For bulk data, consider chunking or compression.
+
+## Style & Conventions
+
+- Rust: `snake_case`, 2021 edition, `anyhow` for errors, `thiserror` for custom error enums.
+- Frontend: React functional components, Zustand for state (`ui/src/stores/appStore.ts`), react-hot-toast for notifications, lucide-react for icons.
+- **Zustand selectors**: Use `useAppStore((s) => s.field)` instead of `const store = useAppStore()`. This prevents re-renders on unrelated state changes. Only select the fields the component actually needs.
+- **react-window v2 API**: Package `react-window@2.x` uses `rowComponent`/`rowCount`/`rowHeight`/`rowProps` (NOT v1's `children`/`itemCount`/`itemSize`). Row component receives `{ ariaAttributes, index, style, ...rowProps }`. Do NOT install `@types/react-window` — v2 ships its own types.
+- Comments: Mix of English and Chinese (legacy from original authors). Add new comments in English.
+
+## Known Limitations
+
+- Strings write-back does **not** deduplicate — files are ~17% larger than Delphi originals but functionally correct.
+- E2E tests require Skyrim SE installed at `D:\SteamLibrary\steamapps\common\Skyrim Special Edition\Data\Skyrim.esm`.
+- `record_defs` loading is best-effort; if `Data/<Game>/record_defs` is missing, parser falls back to generic parsing.

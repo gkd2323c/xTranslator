@@ -1,0 +1,16 @@
+[package]
+name = "xt-cli"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "xt-cli"
+path = "src/main.rs"
+
+[dependencies]
+xt-core = { path = "../xt-core" }
+anyhow = { workspace = true }
+
+[dev-dependencies]
