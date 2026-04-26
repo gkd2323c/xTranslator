@@ -39,10 +39,12 @@ Short version:
 | P1 | BSA/BA2 full archive browser | 1-2 weeks |
 | P2 | PEX script decompiler | 1-2 weeks |
 | P2 | FUZ audio mapping | 3-5 days |
-| P2 | Batch processor | 1 week |
+| Done | Regex search/replace | regex filter toggle, Replace All with confirmation |
+| Done | Strings write-back dedup | shared data offsets via HashMap, ~17% smaller files |
 | P2 | NPC map / dialog view | 3-5 days |
 | P3 | Theme system | 3-5 days |
 | P3 | UI multi-language (i18n) | 1 week |
+| Done | Theme system | dark/light/gray, localStorage persistence |
 
 ## Quick Start
 

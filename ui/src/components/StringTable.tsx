@@ -1,7 +1,7 @@
 import { useEffect, useCallback, ReactElement } from "react";
 import { List } from "react-window";
 import { useAppStore } from "../stores/appStore";
-import { Search, ArrowUpDown, Loader2 } from "lucide-react";
+import { Search, ArrowUpDown, Loader2, Code2, Replace } from "lucide-react";
 import type { SkyStringDTO } from "../api/strings";
 
 const ROW_HEIGHT = 32;
@@ -100,6 +100,8 @@ export function StringTable() {
   const items = useAppStore((s) => s.items);
   const isLoading = useAppStore((s) => s.isLoading);
   const filter = useAppStore((s) => s.filter);
+  const useRegex = useAppStore((s) => s.useRegex);
+  const replaceText = useAppStore((s) => s.replaceText);
   const statusFilter = useAppStore((s) => s.statusFilter);
   const selectedId = useAppStore((s) => s.selectedId);
   const total = useAppStore((s) => s.total);
@@ -107,11 +109,14 @@ export function StringTable() {
 
   const loadAllStrings = useAppStore((s) => s.loadAllStrings);
   const setFilter = useAppStore((s) => s.setFilter);
+  const setUseRegex = useAppStore((s) => s.setUseRegex);
+  const setReplaceText = useAppStore((s) => s.setReplaceText);
   const setSort = useAppStore((s) => s.setSort);
   const setStatusFilter = useAppStore((s) => s.setStatusFilter);
   const setSelectedById = useAppStore((s) => s.setSelectedById);
   const selectNextRow = useAppStore((s) => s.selectNextRow);
   const selectPrevRow = useAppStore((s) => s.selectPrevRow);
+  const replaceAll = useAppStore((s) => s.replaceAll);
 
   // Keyboard navigation: arrow keys to move selection
   const handleKeyDown = useCallback(
@@ -162,43 +167,84 @@ export function StringTable() {
   return (
     <div className="string-table-wrapper">
       {/* Toolbar */}
-      <div className="table-toolbar">
-        <div className="search-box">
-          <Search size={14} />
-          <input
-            type="text"
-            placeholder="Filter strings..."
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-            className="filter-input"
-          />
-        </div>
-        <div className="status-filters">
-          {[
-            { key: null, label: "All" },
-            { key: "incomplete", label: "Incomplete" },
-            { key: "translated", label: "Translated" },
-            { key: "locked", label: "Locked" },
-          ].map((s) => (
+      <div className="table-toolbar" style={{ flexDirection: "column", alignItems: "stretch", gap: 6 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+          <div className="search-box">
+            <Search size={14} />
+            <input
+              type="text"
+              placeholder={useRegex ? "Regex filter..." : "Filter strings..."}
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+            />
             <button
-              key={s.label}
-              className={`status-filter-btn ${statusFilter === s.key ? "active" : ""}`}
-              onClick={() =>
-                setStatusFilter(
-                  statusFilter === s.key ? null : (s.key as string)
-                )
-              }
+              onClick={() => setUseRegex(!useRegex)}
+              className="btn btn-ghost btn-sm"
+              title={useRegex ? "Switch to plain text" : "Switch to regex"}
+              style={{ padding: "2px 6px", marginLeft: 4, opacity: useRegex ? 1 : 0.4 }}
             >
-              {s.label}
+              <Code2 size={14} />
             </button>
-          ))}
+          </div>
+          <div className="status-filters">
+            {[
+              { key: null, label: "All" },
+              { key: "incomplete", label: "Incomplete" },
+              { key: "translated", label: "Translated" },
+              { key: "locked", label: "Locked" },
+            ].map((s) => (
+              <button
+                key={s.label}
+                className={`status-filter-btn ${statusFilter === s.key ? "active" : ""}`}
+                onClick={() =>
+                  setStatusFilter(
+                    statusFilter === s.key ? null : (s.key as string)
+                  )
+                }
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
+          <div className="table-info">
+            {filtered.toLocaleString()} / {total.toLocaleString()}
+            {allItems.length === 0 && !isLoading && (
+              <span style={{ color: "var(--error)", marginLeft: 8 }}>(No data loaded)</span>
+            )}
+          </div>
         </div>
-        <div className="table-info">
-          {filtered.toLocaleString()} / {total.toLocaleString()}
-          {allItems.length === 0 && !isLoading && (
-            <span style={{ color: "var(--error)", marginLeft: 8 }}>(No data loaded)</span>
-          )}
-        </div>
+        {filter && (
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <Replace size={14} style={{ color: "var(--text-secondary)", flexShrink: 0 }} />
+            <input
+              type="text"
+              placeholder="Replacement text (use $1, $2 for groups)..."
+              value={replaceText}
+              onChange={(e) => setReplaceText(e.target.value)}
+              style={{
+                flex: 1,
+                padding: "4px 10px",
+                background: "var(--bg-primary)",
+                border: "1px solid var(--border-subtle)",
+                borderRadius: 6,
+                color: "var(--text-primary)",
+                fontSize: 12,
+                outline: "none",
+                fontFamily: "inherit",
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && replaceText) replaceAll();
+              }}
+            />
+            <button
+              className="btn btn-sm"
+              onClick={replaceAll}
+              disabled={!replaceText}
+            >
+              Replace All
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Header */}

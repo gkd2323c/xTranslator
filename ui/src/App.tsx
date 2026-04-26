@@ -13,6 +13,7 @@ function App() {
   const isLoading = useAppStore((s) => s.isLoading);
   const isParsing = useAppStore((s) => s.isParsing);
   const loadProgress = useAppStore((s) => s.loadProgress);
+  const theme = useAppStore((s) => s.theme);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -23,6 +24,10 @@ function App() {
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [setSelectedById]);
+
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+  }, [theme]);
 
   const isLocked = isLoading || isParsing;
 

@@ -1,7 +1,11 @@
 import { create } from "zustand";
 import type { SkyStringDTO, LoadEspResponse, LoadSstResponse } from "../api/strings";
-import { getAllStrings, getStringsChunk, getStringsCount, queryStrings } from "../api/strings";
+import { getAllStrings, getStringsChunk, getStringsCount, queryStrings, updateTranslation } from "../api/strings";
 import toast from "react-hot-toast";
+
+export type Theme = "dark" | "light" | "gray";
+
+const THEME_STORAGE_KEY = "xtranslator-theme";
 
 interface LoadProgress {
   stage: string;
@@ -38,6 +42,8 @@ interface AppState {
 
   // Filter / sort
   filter: string;
+  useRegex: boolean;
+  replaceText: string;
   statusFilter: string | null;
   recordFilter: string | null;
   sortField: string;
@@ -46,6 +52,10 @@ interface AppState {
   // Selection (by item id, not array index)
   selectedId: number | null;
   selectedItem: SkyStringDTO | null;
+
+  // Theme
+  theme: Theme;
+  themeLabel: string;
 
   // Dirty state (unsaved translation changes)
   isDirty: boolean;
@@ -60,22 +70,39 @@ interface AppState {
   setSstLoaded: (path: string, stats: LoadSstResponse) => void;
   setTargetLang: (lang: string) => void;
   setFilter: (filter: string) => void;
+  setUseRegex: (use: boolean) => void;
+  setReplaceText: (text: string) => void;
   setStatusFilter: (status: string | null) => void;
   setRecordFilter: (record: string | null) => void;
   setSort: (field: string, dir?: "asc" | "desc") => void;
+  replaceAll: () => Promise<void>;
   setSelectedById: (id: number | null) => void;
   updateItemTranslation: (id: number, translation: string) => void;
   applyIncrementalUpdate: (updatedIds: number[]) => void;
   setIsDirty: (dirty: boolean) => void;
+  setTheme: (theme: Theme) => void;
+  cycleTheme: () => void;
   selectNextRow: () => void;
   selectPrevRow: () => void;
   loadAllStrings: () => Promise<void>;
   reset: () => void;
 }
 
+function getInitialTheme(): Theme {
+  try {
+    const stored = localStorage.getItem(THEME_STORAGE_KEY);
+    if (stored === "light" || stored === "gray" || stored === "dark") return stored;
+  } catch { /* localStorage unavailable */ }
+  return "dark";
+}
+
+const THEME_LABELS: Record<Theme, string> = { dark: "Dark", light: "Light", gray: "Gray" };
+const THEME_NEXT: Record<Theme, Theme> = { dark: "light", light: "gray", gray: "dark" };
+
 function applyFilterAndSort(
   allItems: SkyStringDTO[],
   filter: string,
+  useRegex: boolean,
   statusFilter: string | null,
   recordFilter: string | null,
   sortField: string,
@@ -95,13 +122,28 @@ function applyFilterAndSort(
 
   // Text filter
   if (filter) {
-    const ft = filter.toLowerCase();
-    result = result.filter(
-      (item) =>
-        item.source.toLowerCase().includes(ft) ||
-        item.translation.toLowerCase().includes(ft) ||
-        item.record_sig.toLowerCase().includes(ft)
-    );
+    if (useRegex) {
+      try {
+        const regex = new RegExp(filter, "i");
+        result = result.filter(
+          (item) =>
+            regex.test(item.source) ||
+            regex.test(item.translation) ||
+            regex.test(item.record_sig)
+        );
+      } catch {
+        // Invalid regex — treat as no match
+        return [];
+      }
+    } else {
+      const ft = filter.toLowerCase();
+      result = result.filter(
+        (item) =>
+          item.source.toLowerCase().includes(ft) ||
+          item.translation.toLowerCase().includes(ft) ||
+          item.record_sig.toLowerCase().includes(ft)
+      );
+    }
   }
 
   // Sort
@@ -144,12 +186,16 @@ export const useAppStore = create<AppState>((set, get) => ({
   espStats: null,
   sstStats: null,
   filter: "",
+  useRegex: false,
+  replaceText: "",
   statusFilter: null,
   recordFilter: null,
   sortField: "id",
   sortDir: "asc",
   selectedId: null,
   selectedItem: null,
+  theme: getInitialTheme(),
+  themeLabel: THEME_LABELS[getInitialTheme()],
   isDirty: false,
 
   setAllItems: (allItems) => {
@@ -157,6 +203,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const items = applyFilterAndSort(
       allItems,
       state.filter,
+      state.useRegex,
       state.statusFilter,
       state.recordFilter,
       state.sortField,
@@ -187,6 +234,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const items = applyFilterAndSort(
       state.allItems,
       filter,
+      state.useRegex,
       state.statusFilter,
       state.recordFilter,
       state.sortField,
@@ -195,11 +243,90 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ filter, items, filtered: items.length });
   },
 
+  setUseRegex: (useRegex) => {
+    const state = get();
+    const items = applyFilterAndSort(
+      state.allItems,
+      state.filter,
+      useRegex,
+      state.statusFilter,
+      state.recordFilter,
+      state.sortField,
+      state.sortDir
+    );
+    set({ useRegex, items, filtered: items.length });
+  },
+
+  setReplaceText: (replaceText) => set({ replaceText }),
+
+  replaceAll: async () => {
+    const state = get();
+    if (!state.filter || !state.replaceText) {
+      toast.error("Both search pattern and replacement text are required");
+      return;
+    }
+
+    let regex: RegExp;
+    try {
+      regex = new RegExp(state.filter, state.useRegex ? "gi" : "gi");
+    } catch {
+      toast.error(`Invalid regex: ${state.filter}`);
+      return;
+    }
+
+    const candidates = applyFilterAndSort(
+      state.allItems,
+      state.filter,
+      state.useRegex,
+      state.statusFilter,
+      state.recordFilter,
+      state.sortField,
+      state.sortDir
+    );
+
+    if (candidates.length === 0) {
+      toast("No matching strings found");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Replace "${state.filter}" → "${state.replaceText}" in ${candidates.length} strings?`
+    );
+    if (!confirmed) return;
+
+    const toastId = toast.loading(`Replacing in ${candidates.length} strings...`);
+
+    let changed = 0;
+    for (const item of candidates) {
+      const target = item.translation || item.source;
+      const replaced = target.replace(regex, state.replaceText);
+      if (replaced !== target) {
+        try {
+          await updateTranslation(item.id, replaced);
+          changed++;
+        } catch (e: any) {
+          console.error(`Replace failed for id=${item.id}:`, e);
+        }
+      }
+    }
+
+    // Reload all strings to sync with backend state
+    await get().loadAllStrings();
+
+    toast.dismiss(toastId);
+    if (changed > 0) {
+      toast.success(`Replaced ${changed.toLocaleString()} strings`);
+    } else {
+      toast("No strings were changed");
+    }
+  },
+
   setStatusFilter: (statusFilter) => {
     const state = get();
     const items = applyFilterAndSort(
       state.allItems,
       state.filter,
+      state.useRegex,
       statusFilter,
       state.recordFilter,
       state.sortField,
@@ -213,6 +340,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const items = applyFilterAndSort(
       state.allItems,
       state.filter,
+      state.useRegex,
       state.statusFilter,
       recordFilter,
       state.sortField,
@@ -228,6 +356,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const items = applyFilterAndSort(
       state.allItems,
       state.filter,
+      state.useRegex,
       state.statusFilter,
       state.recordFilter,
       sortField,
@@ -256,6 +385,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const items = applyFilterAndSort(
       newAllItems,
       state.filter,
+      state.useRegex,
       state.statusFilter,
       state.recordFilter,
       state.sortField,
@@ -277,6 +407,20 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   setIsDirty: (isDirty) => set({ isDirty }),
+
+  setTheme: (theme) => {
+    try { localStorage.setItem(THEME_STORAGE_KEY, theme); } catch { /* ok */ }
+    document.documentElement.setAttribute("data-theme", theme);
+    set({ theme, themeLabel: THEME_LABELS[theme] });
+  },
+
+  cycleTheme: () => {
+    const current = get().theme;
+    const next = THEME_NEXT[current];
+    try { localStorage.setItem(THEME_STORAGE_KEY, next); } catch { /* ok */ }
+    document.documentElement.setAttribute("data-theme", next);
+    set({ theme: next, themeLabel: THEME_LABELS[next] });
+  },
 
   selectNextRow: () => {
     const state = get();
@@ -369,6 +513,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       espStats: null,
       sstStats: null,
       filter: "",
+      useRegex: false,
+      replaceText: "",
       statusFilter: null,
       recordFilter: null,
       selectedId: null,

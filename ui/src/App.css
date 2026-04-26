@@ -1,6 +1,7 @@
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap');
 
-:root {
+/* ===== Theme: Dark (default) ===== */
+:root, :root[data-theme="dark"] {
   --bg-deep: #0a0a0f;
   --bg-primary: #0d0d14;
   --bg-secondary: #12121a;
@@ -23,10 +24,60 @@
   --editor-height: 200px;
 }
 
+/* ===== Theme: Light ===== */
+:root[data-theme="light"] {
+  --bg-deep: #f0f2f5;
+  --bg-primary: #ffffff;
+  --bg-secondary: #f8f9fa;
+  --bg-tertiary: #e9ecef;
+  --bg-hover: #dee2e6;
+  --accent-cyan: #0891b2;
+  --accent-magenta: #c026d3;
+  --accent-gold: #b45309;
+  --accent-green: #059669;
+  --text-primary: #111827;
+  --text-secondary: #6b7280;
+  --text-muted: #9ca3af;
+  --border-glow: rgba(8, 145, 178, 0.25);
+  --border-subtle: rgba(0, 0, 0, 0.08);
+  --success: #059669;
+  --warning: #d97706;
+  --error: #dc2626;
+}
+
+/* ===== Theme: Gray ===== */
+:root[data-theme="gray"] {
+  --bg-deep: #1e1e2e;
+  --bg-primary: #2d2d3f;
+  --bg-secondary: #252536;
+  --bg-tertiary: #313145;
+  --bg-hover: #3a3a50;
+  --accent-cyan: #7dcfff;
+  --accent-magenta: #c4a7e7;
+  --accent-gold: #e6b450;
+  --accent-green: #9cce7a;
+  --text-primary: #cdd6f4;
+  --text-secondary: #9399b2;
+  --text-muted: #6c7086;
+  --border-glow: rgba(125, 207, 255, 0.2);
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --success: #a6e3a1;
+  --warning: #f9e2af;
+  --error: #f38ba8;
+}
+
 * {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
+}
+
+html {
+  transition: background 0.3s ease;
+}
+
+body {
+  transition: background 0.3s ease, color 0.3s ease;
 }
 
 html, body, #root {
@@ -38,6 +89,7 @@ html, body, #root {
   overflow: hidden;
 }
 
+/* Decorative background effects — only on dark/gray themes */
 body::before {
   content: '';
   position: fixed;
@@ -46,8 +98,9 @@ body::before {
   right: 0;
   bottom: 0;
   background:
-    radial-gradient(ellipse at 10% 10%, rgba(0, 245, 255, 0.03) 0%, transparent 50%),
-    radial-gradient(ellipse at 90% 90%, rgba(255, 0, 255, 0.02) 0%, transparent 50%);
+    radial-gradient(ellipse at 10% 10%, var(--accent-cyan) 0%, transparent 50%),
+    radial-gradient(ellipse at 90% 90%, var(--accent-magenta) 0%, transparent 50%);
+  opacity: 0.03;
   pointer-events: none;
   z-index: 0;
 }
@@ -67,6 +120,11 @@ body::after {
   pointer-events: none;
   z-index: 1;
   opacity: 0.3;
+}
+
+[data-theme="light"] body::before,
+[data-theme="light"] body::after {
+  display: none;
 }
 
 /* === App Layout === */

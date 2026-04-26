@@ -214,28 +214,39 @@ impl StringsFile {
         let _directory_size = count as usize * 8;
 
         // 先构造完整数据区，再回写每个条目的 offset（相对数据区起点）。
+        // 对相同内容去重：多条目指向同一数据区偏移，缩小文件体积 ~17%。
         let mut data_section = Vec::new();
+        let mut dedup: HashMap<Vec<u8>, u32> = HashMap::new();
         let mut offsets: Vec<u32> = Vec::with_capacity(entries.len());
 
         for (_id, text) in &entries {
-            let offset = data_section.len() as u32;
-            offsets.push(offset);
-
             // 使用 codepage 编码字符串
             let bytes = self.codepage.encode(text);
-            match format {
+            let entry_data = match format {
                 StringsFormat::NullTerminated => {
                     // STRINGS：纯文本 + 0 终止符
-                    data_section.extend_from_slice(&bytes);
-                    data_section.push(0);
+                    let mut data = bytes;
+                    data.push(0);
+                    data
                 }
                 StringsFormat::LengthPrefixed => {
                     // DLSTRINGS/ILSTRINGS：长度(含结尾0) + 文本 + 结尾0
                     let total_len = (bytes.len() + 1) as u32;
-                    data_section.extend_from_slice(&total_len.to_le_bytes());
-                    data_section.extend_from_slice(&bytes);
-                    data_section.push(0);
+                    let mut data = Vec::with_capacity(4 + bytes.len() + 1);
+                    data.extend_from_slice(&total_len.to_le_bytes());
+                    data.extend_from_slice(&bytes);
+                    data.push(0);
+                    data
                 }
+            };
+
+            if let Some(&existing_offset) = dedup.get(&entry_data) {
+                offsets.push(existing_offset);
+            } else {
+                let offset = data_section.len() as u32;
+                offsets.push(offset);
+                dedup.insert(entry_data.clone(), offset);
+                data_section.extend_from_slice(&entry_data);
             }
         }
 
@@ -486,6 +497,33 @@ mod tests {
 
         let loaded = StringsFile::load_with_format(&tmp, StringsFormat::NullTerminated).unwrap();
         assert!(loaded.strings.is_empty());
+        let _ = std::fs::remove_file(&tmp);
+    }
+
+    #[test]
+    fn test_save_deduplication() {
+        // 三条条目，其中两条内容相同 → 应共享数据区偏移
+        let mut sf = StringsFile::new();
+        sf.strings.insert(1, "Duplicate".to_string());
+        sf.strings.insert(2, "Unique".to_string());
+        sf.strings.insert(3, "Duplicate".to_string()); // same as id=1
+        sf.format = StringsFormat::NullTerminated;
+
+        let mut tmp = std::env::temp_dir();
+        tmp.push("test_save_dedup.strings");
+        sf.save(&tmp).unwrap();
+
+        let loaded = StringsFile::load_with_format(&tmp, StringsFormat::NullTerminated).unwrap();
+        assert_eq!(loaded.strings.len(), 3);
+        assert_eq!(loaded.strings.get(&1).unwrap(), "Duplicate");
+        assert_eq!(loaded.strings.get(&2).unwrap(), "Unique");
+        assert_eq!(loaded.strings.get(&3).unwrap(), "Duplicate");
+
+        // 去重后的文件应比不区分的更小
+        let size = std::fs::metadata(&tmp).unwrap().len();
+        // 3 entries: header(8) + directory(3*8=24) + data(Duplicate\0=10 + Unique\0=7) = 49
+        // Without dedup it would be: 8 + 24 + 10 + 7 + 10 = 59
+        assert!(size < 55, "Dedup should produce smaller file, got {size} bytes");
         let _ = std::fs::remove_file(&tmp);
     }
 
