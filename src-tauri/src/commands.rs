@@ -4,7 +4,7 @@ use tauri::Emitter;
 use xt_core::esp::parser::{EspParser, StringsFiles};
 use xt_core::strings::CodepageTable;
 use xt_core::sst::v8::SstDictionary;
-use xt_core::translation_api::{OpenAIProvider, TranslationProvider};
+use xt_core::translation_api::{DeepLProvider, OpenAIProvider, ProviderType, TranslationProvider};
 use xt_core::types::game_id::GameId;
 use xt_core::types::params::SkyStringParams;
 use xt_core::types::sky_string::SkyString;
@@ -26,8 +26,12 @@ pub struct EspFileInfo {
 pub struct AppState {
     pub strings: Mutex<Vec<SkyString>>,
     pub file_info: Mutex<Option<EspFileInfo>>,
-    /// 翻译 API Key（内存存储，不持久化）
-    pub api_key: Mutex<Option<String>>,
+    /// OpenAI 兼容 API Key（内存存储，不持久化）
+    pub openai_api_key: Mutex<Option<String>>,
+    /// DeepL API Key（内存存储，不持久化）
+    pub deepl_api_key: Mutex<Option<String>>,
+    /// 当前选中的翻译提供方
+    pub current_provider: Mutex<ProviderType>,
     /// 是否有未保存的翻译修改
     pub is_dirty: Mutex<bool>,
 }
@@ -35,11 +39,24 @@ pub struct AppState {
 impl AppState {
     pub fn new() -> Self {
         // 尝试从环境变量读取 API Key
-        let env_key = std::env::var("XT_TRANSLATE_API_KEY").ok();
+        let openai_env_key = std::env::var("XT_TRANSLATE_API_KEY").ok();
+        let deepl_env_key = std::env::var("XT_DEEPL_API_KEY").ok();
+
+        // 默认为 OpenAI，或根据有哪个 key 自动选择
+        let default_provider = if openai_env_key.is_some() {
+            ProviderType::OpenAI
+        } else if deepl_env_key.is_some() {
+            ProviderType::DeepL
+        } else {
+            ProviderType::OpenAI
+        };
+
         Self {
             strings: Mutex::new(Vec::new()),
             file_info: Mutex::new(None),
-            api_key: Mutex::new(env_key),
+            openai_api_key: Mutex::new(openai_env_key),
+            deepl_api_key: Mutex::new(deepl_env_key),
+            current_provider: Mutex::new(default_provider),
             is_dirty: Mutex::new(false),
         }
     }
@@ -272,8 +289,8 @@ pub async fn load_esp(
             *record_counts.entry(sig).or_insert(0) += 1;
         }
 
-        // 压缩记录数量当前未暴露在解析结果中，先保留占位值。
-        let compressed_records = 0u32;
+        // 从解析器获取压缩记录数量
+        let compressed_records = parser.compressed_records;
 
         let _ = window.emit("esp-load-progress", EspLoadProgress {
             stage: "finalizing".to_string(),
@@ -587,53 +604,117 @@ pub async fn heuristic_search(
     Ok(dtos)
 }
 
-/// 调用翻译提供方（当前为 OpenAI）翻译单条文本。
+/// 调用翻译提供方翻译单条文本。
 ///
-/// API Key 来自 `set_api_key` 或进程环境变量 `XT_TRANSLATE_API_KEY`。
+/// 支持 OpenAI 兼容 API 和 DeepL API。
+/// API Key 来自 `set_openai_api_key`/`set_deepl_api_key` 或环境变量。
 #[tauri::command]
 pub async fn translate_string(
     state: tauri::State<'_, Arc<AppState>>,
     request: TranslateRequest,
 ) -> Result<String, String> {
-    // 从内存状态读取 API Key；来源是 set_api_key 或启动时的环境变量。
-    let api_key = {
-        let key = state.api_key.lock().map_err(|e| e.to_string())?;
-        key.clone()
+    // 确定使用哪个 provider（请求参数优先，否则用当前默认）
+    let provider_type = request.provider
+        .map(|p| ProviderType::from_str(&p))
+        .unwrap_or_else(|| {
+            *state.current_provider.lock().unwrap_or_else(|e| e.into_inner())
+        });
+
+    // 获取对应 API Key
+    let api_key = match provider_type {
+        ProviderType::OpenAI => {
+            let key = state.openai_api_key.lock().map_err(|e| e.to_string())?;
+            key.clone().ok_or_else(||
+                "OpenAI API key not set. Please set via Settings or XT_TRANSLATE_API_KEY env var".to_string()
+            )?
+        }
+        ProviderType::DeepL => {
+            let key = state.deepl_api_key.lock().map_err(|e| e.to_string())?;
+            key.clone().ok_or_else(||
+                "DeepL API key not set. Please set via Settings or XT_DEEPL_API_KEY env var".to_string()
+            )?
+        }
     };
 
-    let api_key = api_key
-        .ok_or_else(|| "API key not set. Please set via Settings or XT_TRANSLATE_API_KEY env var".to_string())?;
-
     // 保持默认语言兜底，避免前端漏传参数导致请求失败。
-    let source_lang = request.source_lang.unwrap_or_else(|| "english".to_string());
-    let target_lang = request.target_lang.unwrap_or_else(|| "chinese".to_string());
+    let source_lang = request.source_lang.unwrap_or_else(|| "EN".to_string());
+    let target_lang = request.target_lang.unwrap_or_else(|| "ZH".to_string());
     let text = request.text;
 
-    // 网络请求放到阻塞线程池中执行，避免命令 future 长时间占用执行线程。
-    let result = tokio::task::spawn_blocking(move || -> Result<String, String> {
-        let provider = OpenAIProvider::from_key(api_key);
-        provider
-            .translate(&text, &source_lang, &target_lang)
-            .map_err(|e| e.to_string())
-    })
-    .await
-    .map_err(|e| format!("Task join error: {}", e))?
-    .map_err(|e| e)?;
+    // 异步执行翻译
+    let result = match provider_type {
+        ProviderType::OpenAI => {
+            let provider = OpenAIProvider::from_key(api_key);
+            provider
+                .translate(&text, &source_lang, &target_lang)
+                .await
+                .map_err(|e| e.to_string())?
+        }
+        ProviderType::DeepL => {
+            let provider = DeepLProvider::new(api_key);
+            provider
+                .translate(&text, &source_lang, &target_lang)
+                .await
+                .map_err(|e| e.to_string())?
+        }
+    };
 
     Ok(result)
 }
 
-/// 设置（或清空）运行期 API Key。
+/// 设置（或清空）运行期 OpenAI API Key。
 ///
 /// 仅写入内存，不做磁盘持久化。
 #[tauri::command]
-pub async fn set_api_key(
+pub async fn set_openai_api_key(
     state: tauri::State<'_, Arc<AppState>>,
     api_key: String,
 ) -> Result<(), String> {
-    let mut key = state.api_key.lock().map_err(|e| e.to_string())?;
+    let mut key = state.openai_api_key.lock().map_err(|e| e.to_string())?;
     *key = if api_key.is_empty() { None } else { Some(api_key) };
     Ok(())
+}
+
+/// 设置（或清空）运行期 DeepL API Key。
+///
+/// 仅写入内存，不做磁盘持久化。
+/// 自动根据 key 是否以 `:fx` 结尾切换免费/专业版端点。
+#[tauri::command]
+pub async fn set_deepl_api_key(
+    state: tauri::State<'_, Arc<AppState>>,
+    api_key: String,
+) -> Result<(), String> {
+    let mut key = state.deepl_api_key.lock().map_err(|e| e.to_string())?;
+    *key = if api_key.is_empty() { None } else { Some(api_key) };
+    Ok(())
+}
+
+/// 设置当前默认翻译提供方。
+#[tauri::command]
+pub async fn set_translation_provider(
+    state: tauri::State<'_, Arc<AppState>>,
+    provider: String,
+) -> Result<(), String> {
+    let mut current = state.current_provider.lock().map_err(|e| e.to_string())?;
+    *current = ProviderType::from_str(&provider);
+    Ok(())
+}
+
+/// 获取当前翻译提供方和可用列表。
+#[tauri::command]
+pub async fn get_translation_providers(
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<(String, Vec<String>, bool, bool), String> {
+    let current = state.current_provider.lock().map_err(|e| e.to_string())?;
+    let openai_set = state.openai_api_key.lock().map_err(|e| e.to_string())?.is_some();
+    let deepl_set = state.deepl_api_key.lock().map_err(|e| e.to_string())?.is_some();
+
+    Ok((
+        current.to_string(),
+        ProviderType::all().into_iter().map(|s| s.to_string()).collect(),
+        openai_set,
+        deepl_set,
+    ))
 }
 
 /// 将当前已翻译内容导出为 Delphi 兼容 XML。

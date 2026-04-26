@@ -142,6 +142,9 @@ pub struct TranslateRequest {
     /// 目标语言（默认 "chinese"，由后端兜底）
     #[serde(default)]
     pub target_lang: Option<String>,
+    /// 翻译提供方（"openai" 或 "deepl"，默认 "openai"）
+    #[serde(default)]
+    pub provider: Option<String>,
 }
 
 /// XML 导出请求

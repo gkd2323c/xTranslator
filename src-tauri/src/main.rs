@@ -5,7 +5,7 @@
 
 mod commands;
 
-use commands::{export_xml, get_all_strings, get_is_dirty, get_stats, get_strings_chunk, get_strings_count, heuristic_search, import_xml, load_esp, load_sst, query_strings_command, save_strings, save_sst, set_api_key, translate_string, update_translation, AppState};
+use commands::{export_xml, get_all_strings, get_is_dirty, get_stats, get_strings_chunk, get_strings_count, get_translation_providers, heuristic_search, import_xml, load_esp, load_sst, query_strings_command, save_strings, save_sst, set_deepl_api_key, set_openai_api_key, set_translation_provider, translate_string, update_translation, AppState};
 use std::sync::Arc;
 
 fn main() {
@@ -25,7 +25,10 @@ fn main() {
             update_translation,
             heuristic_search,
             translate_string,
-            set_api_key,
+            set_openai_api_key,
+            set_deepl_api_key,
+            set_translation_provider,
+            get_translation_providers,
             export_xml,
             import_xml,
             get_is_dirty,

@@ -1,14 +1,50 @@
 //! 翻译 API 抽象层
 //!
-//! 支持多种翻译 provider，当前实现 OpenAI 兼容 API（OpenAI / DeepSeek / 等）
+//! 支持多种翻译 provider：
+//! - OpenAI 兼容 API（OpenAI / DeepSeek / 通义千问 / 等）
+//! - DeepL API（免费版 / 专业版）
 
-use anyhow::{anyhow, Result};
-use serde::{Deserialize, Serialize};
+use anyhow::Result;
+use std::fmt;
+
+/// 翻译 Provider 类型
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProviderType {
+    /// OpenAI 兼容 API（默认）
+    OpenAI,
+    /// DeepL API（自动检测免费版/专业版）
+    DeepL,
+}
+
+impl fmt::Display for ProviderType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ProviderType::OpenAI => write!(f, "openai"),
+            ProviderType::DeepL => write!(f, "deepl"),
+        }
+    }
+}
+
+impl ProviderType {
+    /// 从字符串解析 Provider 类型
+    pub fn from_str(s: &str) -> Self {
+        match s.to_lowercase().as_str() {
+            "deepl" => ProviderType::DeepL,
+            _ => ProviderType::OpenAI,
+        }
+    }
+
+    /// 获取所有可用 Provider 列表
+    pub fn all() -> Vec<&'static str> {
+        vec!["openai", "deepl"]
+    }
+}
 
 /// 翻译 Provider trait
+#[async_trait::async_trait]
 pub trait TranslationProvider: Send + Sync {
-    /// 翻译文本
-    fn translate(
+    /// 翻译文本（异步）
+    async fn translate(
         &self,
         text: &str,
         source_lang: &str,
@@ -17,181 +53,9 @@ pub trait TranslationProvider: Send + Sync {
 }
 
 /// OpenAI 兼容翻译 Provider
-///
-/// 支持 OpenAI、DeepSeek、任何兼容 Chat Completions API 的服务
-pub struct OpenAIProvider {
-    api_key: String,
-    base_url: String,
-    model: String,
-}
+pub mod openai;
+pub use openai::OpenAIProvider;
 
-impl OpenAIProvider {
-    pub fn new(api_key: String) -> Self {
-        Self {
-            api_key,
-            base_url: "https://api.openai.com/v1".to_string(),
-            model: "gpt-4o-mini".to_string(),
-        }
-    }
-
-    pub fn with_base_url(mut self, url: String) -> Self {
-        self.base_url = url;
-        self
-    }
-
-    pub fn with_model(mut self, model: String) -> Self {
-        self.model = model;
-        self
-    }
-
-    /// 从环境变量创建，同时读取可选的 base_url 和 model
-    pub fn from_env() -> Result<Self> {
-        let api_key = std::env::var("XT_TRANSLATE_API_KEY")
-            .map_err(|_| anyhow!("XT_TRANSLATE_API_KEY environment variable not set"))?;
-
-        let mut provider = Self::new(api_key);
-
-        if let Ok(url) = std::env::var("XT_TRANSLATE_API_BASE") {
-            provider = provider.with_base_url(url);
-        }
-
-        if let Ok(model) = std::env::var("XT_TRANSLATE_API_MODEL") {
-            provider = provider.with_model(model);
-        }
-
-        Ok(provider)
-    }
-
-    /// 从 API key 字符串创建（前端传入），使用默认 base_url 和 model
-    pub fn from_key(api_key: String) -> Self {
-        let mut provider = Self::new(api_key);
-
-        // 仍然读取可选的环境变量覆盖
-        if let Ok(url) = std::env::var("XT_TRANSLATE_API_BASE") {
-            provider = provider.with_base_url(url);
-        }
-
-        if let Ok(model) = std::env::var("XT_TRANSLATE_API_MODEL") {
-            provider = provider.with_model(model);
-        }
-
-        provider
-    }
-}
-
-/// OpenAI Chat Completions 请求体
-#[derive(Serialize)]
-struct ChatRequest {
-    model: String,
-    messages: Vec<ChatMessage>,
-    temperature: f32,
-}
-
-#[derive(Serialize, Deserialize)]
-struct ChatMessage {
-    role: String,
-    content: String,
-}
-
-/// OpenAI Chat Completions 响应体
-#[derive(Deserialize)]
-struct ChatResponse {
-    choices: Vec<ChatChoice>,
-}
-
-#[derive(Deserialize)]
-struct ChatChoice {
-    message: ChatMessage,
-}
-
-impl TranslationProvider for OpenAIProvider {
-    fn translate(
-        &self,
-        text: &str,
-        source_lang: &str,
-        target_lang: &str,
-    ) -> Result<String> {
-        // 构建系统提示
-        let system_prompt = format!(
-            "You are a professional game translator. Translate the following game text from {} to {}. \
-             Only output the translation, nothing else. Preserve any special formatting tokens like {{}} or {{}} exactly as they appear.",
-            source_lang, target_lang
-        );
-
-        let request = ChatRequest {
-            model: self.model.clone(),
-            messages: vec![
-                ChatMessage {
-                    role: "system".to_string(),
-                    content: system_prompt,
-                },
-                ChatMessage {
-                    role: "user".to_string(),
-                    content: text.to_string(),
-                },
-            ],
-            temperature: 0.3,
-        };
-
-        // 同步 HTTP 请求（在 spawn_blocking 中调用）
-        let client = reqwest::blocking::Client::new();
-        let url = format!("{}/chat/completions", self.base_url);
-
-        let response = client
-            .post(&url)
-            .header("Authorization", format!("Bearer {}", self.api_key))
-            .header("Content-Type", "application/json")
-            .json(&request)
-            .send()
-            .map_err(|e| anyhow!("HTTP request failed: {}", e))?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response.text().unwrap_or_default();
-            return Err(anyhow!("API error ({}): {}", status, body));
-        }
-
-        let chat_response: ChatResponse = response
-            .json()
-            .map_err(|e| anyhow!("Failed to parse API response: {}", e))?;
-
-        chat_response
-            .choices
-            .first()
-            .map(|c| c.message.content.trim().to_string())
-            .ok_or_else(|| anyhow!("No translation in API response"))
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_openai_provider_from_env_fails_without_key() {
-        // 确保环境变量未设置
-        std::env::remove_var("XT_TRANSLATE_API_KEY");
-        assert!(OpenAIProvider::from_env().is_err());
-    }
-
-    #[test]
-    fn test_openai_provider_from_key() {
-        let provider = OpenAIProvider::from_key("test-key".to_string());
-        assert_eq!(provider.api_key, "test-key");
-        assert_eq!(provider.base_url, "https://api.openai.com/v1");
-        assert_eq!(provider.model, "gpt-4o-mini");
-    }
-
-    #[test]
-    fn test_openai_provider_custom_url_and_model() {
-        std::env::set_var("XT_TRANSLATE_API_BASE", "https://api.deepseek.com/v1");
-        std::env::set_var("XT_TRANSLATE_API_MODEL", "deepseek-chat");
-
-        let provider = OpenAIProvider::from_key("test-key".to_string());
-        assert_eq!(provider.base_url, "https://api.deepseek.com/v1");
-        assert_eq!(provider.model, "deepseek-chat");
-
-        std::env::remove_var("XT_TRANSLATE_API_BASE");
-        std::env::remove_var("XT_TRANSLATE_API_MODEL");
-    }
-}
+/// DeepL 翻译 Provider
+pub mod deepl;
+pub use deepl::DeepLProvider;

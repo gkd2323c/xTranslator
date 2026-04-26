@@ -61,6 +61,14 @@ export interface TranslateRequest {
   text: string;
   source_lang?: string;
   target_lang?: string;
+  provider?: string;
+}
+
+export interface TranslationProvidersResponse {
+  current: string;
+  available: string[];
+  openaiConfigured: boolean;
+  deeplConfigured: boolean;
 }
 
 export async function queryStrings(request: QueryRequest): Promise<QueryResponse> {
@@ -110,8 +118,26 @@ export async function translateString(
   return invoke("translate_string", { request });
 }
 
+export async function setOpenAiApiKey(apiKey: string): Promise<void> {
+  return invoke("set_openai_api_key", { apiKey });
+}
+
+export async function setDeeplApiKey(apiKey: string): Promise<void> {
+  return invoke("set_deepl_api_key", { apiKey });
+}
+
+export async function setTranslationProvider(provider: string): Promise<void> {
+  return invoke("set_translation_provider", { provider });
+}
+
+export async function getTranslationProviders(): Promise<TranslationProvidersResponse> {
+  const [current, available, openaiConfigured, deeplConfigured] = await invoke<[string, string[], boolean, boolean]>("get_translation_providers");
+  return { current, available, openaiConfigured, deeplConfigured };
+}
+
+/** @deprecated Use setOpenAiApiKey instead */
 export async function setApiKey(apiKey: string): Promise<void> {
-  return invoke("set_api_key", { apiKey });
+  return setOpenAiApiKey(apiKey);
 }
 
 export interface XmlExportRequest {
