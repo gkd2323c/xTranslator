@@ -1,6 +1,6 @@
 use crate::esp::header::{FieldHeader, GenericHeader, GrupHeader, RecordHeaderData};
 use crate::strings::{CodepageTable, StringsFile, StringsFormat};
-use crate::types::esp_pointer::EspPointer;
+use crate::types::esp_pointer::{string_hash, EspPointer};
 use crate::types::game_id::GameId;
 use crate::types::params::SkyStringParams;
 use crate::types::sky_string::SkyString;
@@ -398,6 +398,7 @@ pub struct EspParser {
     pub record_defs: Vec<TranslatableField>,
     pub strings: Vec<SkyString>,
     pub strings_files: StringsFiles,
+    pub compressed_records: u32,
     progress_callback: Option<Box<dyn Fn(u64) + Send>>,
 }
 
@@ -409,6 +410,7 @@ impl EspParser {
             record_defs: parse_record_defs(default_defs),
             strings: Vec::new(),
             strings_files: StringsFiles::default(),
+            compressed_records: 0,
             progress_callback: None,
         }
     }
@@ -418,6 +420,7 @@ impl EspParser {
             record_defs: defs,
             strings: Vec::new(),
             strings_files: StringsFiles::default(),
+            compressed_records: 0,
             progress_callback: None,
         }
     }
@@ -647,6 +650,7 @@ impl EspParser {
 
         // 压缩记录：先解压再解析字段(否则字段偏移全部失效)。
         if record_header_data.is_compressed() {
+            self.compressed_records += 1;
             match decompress_bethesda_record(&record_data) {
                 Ok(decompressed) => {
                     // 解压后数据与普通记录字段布局一致，走同一套字段解析逻辑。
@@ -762,12 +766,14 @@ impl EspParser {
                         .unwrap_or_else(|| format!("<ID:{}>", string_id));
 
                     if !source_text.is_empty() {
-                        // 构建一条可编辑字符串记录。
-                        let mut sk = SkyString::new(
-                            self.strings.len() as u32,  // 内部 ID
-                            source_text,                // 源字符串
-                            String::new(),              // 翻译(初始为空)
-                        );
+                         // 构建一条可编辑字符串记录。
+                         let mut sk = SkyString::new(
+                             self.strings.len() as u32,  // 内部 ID
+                             source_text,                // 源字符串
+                             String::new(),              // 翻译(初始为空)
+                             *record_sig,                // 记录类型
+                             field_header.name,          // 字段类型
+                         );
                         
                         // 填充 ESP 指针，用于后续 SST/XML 精确匹配与写回。
                         sk.esp_ptr = EspPointer {
@@ -777,7 +783,7 @@ impl EspParser {
                             field_sig: field_header.name, // 字段类型
                             index: field_index,         // 字段索引
                             index_max: 1,               // 字段总数
-                            edid_hash: 0,               // Editor ID 哈希(暂未计算)
+                             edid_hash: edid.as_ref().map_or(0, |s| string_hash(s)), // Editor ID 的 FNV-1a 哈希
                         };
                         
                         // 初始状态：有源文、无译文 => 未完成翻译。

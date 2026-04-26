@@ -21,6 +21,8 @@ pub fn generate_test_sst(output: &str) -> Result<()> {
             i as u32,
             format!("Iron Sword {}", i),
             format!("Épée de fer {}", i),
+            *b"WEAP",
+            *b"FULL",
         );
         sk.esp_ptr = EspPointer {
             str_id: i as i32,
@@ -41,6 +43,8 @@ pub fn generate_test_sst(output: &str) -> Result<()> {
         100,
         "铁剑".to_string(),
         "Iron Sword".to_string(),
+        *b"WEAP",
+        *b"FULL",
     );
     sk_cn.esp_ptr = EspPointer {
         str_id: 100,
@@ -58,6 +62,8 @@ pub fn generate_test_sst(output: &str) -> Result<()> {
         101,
         "Steel Armor".to_string(),
         "".to_string(),
+        *b"ARMO",
+        *b"FULL",
     );
     sk_empty.esp_ptr = EspPointer {
         str_id: 101,

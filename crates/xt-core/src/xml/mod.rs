@@ -55,7 +55,7 @@ pub struct XmlStringEntry {
 impl XmlStringEntry {
     /// 转换为 SkyString（仅填充最小必要的 EspPointer 信息）
     pub fn to_sky_string(&self, id: u32) -> SkyString {
-        let mut sk = SkyString::new(id, self.source.clone(), self.translation.clone());
+         let mut sk = SkyString::new(id, self.source.clone(), self.translation.clone(), self.record_sig, self.field_sig);
         sk.esp_ptr = EspPointer {
             str_id: self.str_id,
             form_id: 0,
@@ -711,10 +711,10 @@ mod tests {
 
     #[test]
     fn test_import_xml_to_sky_strings() {
-        let mut strings = vec![
-            SkyString::new(0, "Hello".to_string(), String::new()),
-            SkyString::new(1, "World".to_string(), String::new()),
-        ];
+         let mut strings = vec![
+             SkyString::new(0, "Hello".to_string(), String::new(), *b"HELO", *b"TXT "),
+             SkyString::new(1, "World".to_string(), String::new(), *b"WORL", *b"TXT "),
+         ];
         strings[0].esp_ptr.str_id = 1;
         strings[0].esp_ptr.record_sig = *b"LCTN";
         strings[0].esp_ptr.field_sig = *b"FULL";
@@ -758,10 +758,10 @@ mod tests {
 
     #[test]
     fn test_sky_strings_to_xml_entries_filters_empty() {
-        let mut strings = vec![
-            SkyString::new(0, "Hello".to_string(), "你好".to_string()),
-            SkyString::new(1, "World".to_string(), String::new()), // empty translation
-        ];
+         let mut strings = vec![
+             SkyString::new(0, "Hello".to_string(), "你好".to_string(), *b"HELO", *b"TXT "),
+             SkyString::new(1, "World".to_string(), String::new(), *b"WORL", *b"TXT "), // empty translation
+         ];
         strings[0].esp_ptr.str_id = 1;
         strings[0].esp_ptr.record_sig = *b"LCTN";
         strings[0].esp_ptr.field_sig = *b"FULL";

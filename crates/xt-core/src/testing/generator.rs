@@ -51,7 +51,9 @@ pub fn generate_test_data(count: usize) -> Vec<SkyString> {
         let rec_idx = i % record_types.len();
         let field_idx = i % field_types.len();
 
-        let mut sk = SkyString::new(id, source, translation);
+          let record_sig_str = std::str::from_utf8(&record_types[rec_idx]).unwrap_or("UNKN");
+          let field_sig_str = std::str::from_utf8(&field_types[field_idx]).unwrap_or("UNKN");
+           let mut sk = SkyString::new(id, source, translation, record_sig_str.as_bytes().try_into().unwrap_or(*b"UNKN"), field_sig_str.as_bytes().try_into().unwrap_or(*b"UNKN"));
         sk.esp_ptr.record_sig = record_types[rec_idx];
         sk.esp_ptr.field_sig = field_types[field_idx];
         sk.esp_ptr.form_id = (0x01000000u32 + i as u32) & 0x00FFFFFF;
