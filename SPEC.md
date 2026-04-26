@@ -7,7 +7,7 @@ G2: Load/write Bethesda .STRINGS/.DLSTRINGS/.ILSTRINGS with codepage fallback (9
 G3: Full SST v8 bidirectional compatibility with Delphi xTranslator (UTF-16LE, FNV-1a, 24B EspPointer)
 G4: Delphi-compatible XML import/export (entity escape, trim, REC:FIELD sigs)
 G5: Heuristic similarity search (Levenshtein + LCS + LCP) on translated corpus
-G6: Translation API provider trait; OpenAI-compatible implementation (env key or runtime set)
+G6: Translation API provider trait; OpenAI + DeepL implementations (env key or runtime set)
 G7: Tauri 2.x desktop app; React frontend with client-side virtual scroll (react-window v2)
 G8: BSA v0x68/v0x69 fallback for strings when standalone files missing
 
@@ -15,7 +15,7 @@ G8: BSA v0x68/v0x69 fallback for strings when standalone files missing
 
 C1: DTO source of truth = `crates/xt-shared/src/dto.rs`; TypeScript mirror = `ui/src/api/strings.ts`. Both must sync on field changes.
 C2: IPC payload >1MB risks WebView2 `postMessage` limits. Bulk data must use chunking (`get_strings_chunk`, ~10K items / ~2MB per batch).
-C3: Strings write-back does not deduplicate. Output files ~17% larger than Delphi originals but functionally correct.
+C3: Strings write-back uses HashMap dedup (V16); shared data offsets for identical content → ~17% size reduction vs undeduplicated output.
 C4: E2E tests require Skyrim SE at `D:\SteamLibrary\steamapps\common\Skyrim Special Edition\Data\Skyrim.esm`.
 C5: `record_defs` loading best-effort; missing `Data/<Game>/record_defs` → fallback to built-in default defs.
 C6: Tauri dev: `beforeDevCommand: "echo ok"` in `tauri.conf.json` because `cd ui && npm run dev` fails in PowerShell. Use `dev.ps1` or two terminals.
@@ -55,7 +55,7 @@ evt: `xml-progress` → `XmlProgress { stage, current, total, percentage, messag
 
 ### Core Types
 
-type: `SkyString` → `{ id: u32, source: String, translation: String, source_normalized, normalized_hash, hash, hash_trans, word_hashes, rec_refs, esp_ptr: EspPointer, params: SkyStringParams, internal_params: SkyStringInternalParams, list_index: u8, colab_id: u8, ld_result: f32, ld_found: i32, min_word: i32, tag_hash: u32 }`
+type: `SkyString` → `{ id: u32, source: String, translation: String, record_sig: [u8;4], field_sig: [u8;4], source_normalized: Option<String>, normalized_hash: Option<u32>, hash: u32, hash_trans: u32, word_hashes: Vec<u32>, rec_refs: Vec<u64>, esp_ptr: EspPointer, params: SkyStringParams, internal_params: SkyStringInternalParams, list_index: u8, colab_id: u8, ld_result: f32, ld_found: i32, min_word: i32, tag_hash: u32 }`
 type: `EspPointer` → 24B LE: `{ str_id: i32, form_id: u32, record_sig: [u8;4], field_sig: [u8;4], index: u16, index_max: u16, edid_hash: u32 }`
 type: `SkyStringParams` → `u8` bitflags: TRANSLATED=0x01, LOCKED_TRANS=0x02, INCOMPLETE_TRANS=0x04, VALIDATED=0x08, OLD_DATA=0x40, PENDING=0x80
 type: `SkyStringInternalParams` → `u64` runtime-only flags (not persisted to SST)
@@ -94,6 +94,11 @@ V11: ∀ BSA fallback → scan `.bsa` in ESP dir; extract from `strings/<filenam
 V12: ∀ frontend state → `allItems` (full DTO) → filter/sort → `items` (display). SidePanel stats from `allItems`.
 V13: ∀ Zustand selectors → `useAppStore((s) => s.field)` (not `const store = useAppStore()`)
 V14: ∀ react-window v2 → props: `rowComponent`, `rowCount`, `rowHeight`, `rowProps`
+V15: ∀ SkyString::new → source_normalized = normalize(source) (case-fold, punct→space, whitespace compress, trim); normalized_hash = FNV1a_low_byte(source_normalized) if non-empty else None
+V16: ∀ save_with_format → HashMap dedup by encoded entry bytes; identical content share data offset → ~17% file size reduction
+V17: ∀ theme change → localStorage `xtranslator-theme` updated + `data-theme` attr set on documentElement
+V18: ∀ replaceAll → confirmation dialog required; batch-update each candidate via update_translation; reload all strings after; progress toast shown
+V19: ∀ loadAllStrings → get_strings_chunk primary (10K/batch); get_all_strings fallback (small datasets); query_strings last resort (paginated, no full store)
 
 ## §T Tasks
 
@@ -116,7 +121,7 @@ T15|x|DeepL translation provider|G6
 T16|.|BSA/BA2 full archive browser|G8
 T17|.|PEX script decompiler|G1
 T18|.|FUZ audio mapping|G2
-T19|.|Batch processor|G7
+T19|x|Batch processor|G7
 T20|.|NPC map / dialog view|G7
 T21|x|Theme system (dark/light/gray, CSS variables, Zustand + localStorage)|G7
 T22|.|UI multi-language (i18n)|G7

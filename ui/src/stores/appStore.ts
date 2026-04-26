@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { SkyStringDTO, LoadEspResponse, LoadSstResponse } from "../api/strings";
+import type { SkyStringDTO, LoadEspResponse, LoadSstResponse, BatchEntry, BatchStatus } from "../api/strings";
 import { getAllStrings, getStringsChunk, getStringsCount, queryStrings, updateTranslation } from "../api/strings";
 import toast from "react-hot-toast";
 
@@ -60,6 +60,11 @@ interface AppState {
   // Dirty state (unsaved translation changes)
   isDirty: boolean;
 
+  // Batch processor
+  showBatchPanel: boolean;
+  batchEntries: BatchEntry[];
+  batchStatus: BatchStatus | null;
+
   // Actions
   setAllItems: (items: SkyStringDTO[]) => void;
   setLoading: (loading: boolean) => void;
@@ -85,6 +90,12 @@ interface AppState {
   selectNextRow: () => void;
   selectPrevRow: () => void;
   loadAllStrings: () => Promise<void>;
+  setShowBatchPanel: (show: boolean) => void;
+  setBatchEntries: (entries: BatchEntry[]) => void;
+  addBatchEntries: (entries: BatchEntry[]) => void;
+  removeBatchEntry: (index: number) => void;
+  clearBatchEntries: () => void;
+  setBatchStatus: (status: BatchStatus | null) => void;
   reset: () => void;
 }
 
@@ -197,6 +208,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   theme: getInitialTheme(),
   themeLabel: THEME_LABELS[getInitialTheme()],
   isDirty: false,
+  showBatchPanel: false,
+  batchEntries: [],
+  batchStatus: null,
 
   setAllItems: (allItems) => {
     const state = get();
@@ -407,6 +421,47 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   setIsDirty: (isDirty) => set({ isDirty }),
+
+  setShowBatchPanel: (showBatchPanel) => set({ showBatchPanel }),
+
+  setBatchEntries: (batchEntries) => set({ batchEntries }),
+
+  addBatchEntries: (entries) => {
+    const state = get();
+    const existingPaths = new Set(state.batchEntries.map((e) => e.esp_path.toLowerCase().replace(/\\/g, "/")));
+    const newEntries = entries.filter(
+      (e) => !existingPaths.has(e.esp_path.toLowerCase().replace(/\\/g, "/"))
+    );
+
+    // Conflict check: warn if batch entry matches currently loaded ESP
+    if (state.espPath) {
+      const loadedEspNorm = state.espPath.replace(/\\/g, "/").toLowerCase();
+      const hasConflict = newEntries.some(
+        (e) => e.esp_path.replace(/\\/g, "/").toLowerCase() === loadedEspNorm
+      );
+      if (hasConflict) {
+        setTimeout(
+          () =>
+            toast(
+              "Batch includes the currently loaded ESP. Changes from one will not reflect in the other.",
+              { icon: "⚠️", duration: 4000 }
+            ),
+          100
+        );
+      }
+    }
+
+    set({ batchEntries: [...state.batchEntries, ...newEntries] });
+  },
+
+  removeBatchEntry: (index) => {
+    const entries = get().batchEntries.filter((_, i) => i !== index);
+    set({ batchEntries: entries });
+  },
+
+  clearBatchEntries: () => set({ batchEntries: [], batchStatus: null }),
+
+  setBatchStatus: (batchStatus) => set({ batchStatus }),
 
   setTheme: (theme) => {
     try { localStorage.setItem(THEME_STORAGE_KEY, theme); } catch { /* ok */ }

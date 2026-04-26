@@ -192,3 +192,101 @@ export interface SaveStringsResponse {
 export async function saveStrings(request: SaveStringsRequest): Promise<SaveStringsResponse> {
   return invoke("save_strings", { request });
 }
+
+// ── Batch Processor Types ──────────────────────────────────────────
+
+export interface BatchEntry {
+  esp_path: string;
+  strings_dir?: string;
+  language?: string;
+  game?: string;
+  sst_path?: string;
+}
+
+export interface BatchConfig {
+  entries: BatchEntry[];
+  provider?: string;
+  target_lang?: string;
+  skip_translated?: boolean;
+}
+
+export interface BatchStatus {
+  job_id: string;
+  job_type: string;
+  total_files: number;
+  completed_files: number;
+  failed_files: number;
+  current_file?: string;
+  current_file_progress: number;
+  total_strings: number;
+  translated_strings: number;
+  is_running: boolean;
+  is_cancelled: boolean;
+  is_completed: boolean;
+  is_failed: boolean;
+  errors: string[];
+  elapsed_ms: number;
+}
+
+export interface BatchProgress {
+  job_id: string;
+  file_path: string;
+  stage: string;
+  current_file: number;
+  total_files: number;
+  strings_translated: number;
+  total_strings: number;
+  message: string;
+}
+
+export interface BatchFileComplete {
+  job_id: string;
+  file_path: string;
+  translated: number;
+  skipped: number;
+  errors: number;
+  duration_ms: number;
+}
+
+export interface BatchFileError {
+  file_path: string;
+  message: string;
+}
+
+export interface BatchComplete {
+  job_id: string;
+  total_files: number;
+  success: number;
+  failed: number;
+  total_translated: number;
+  total_errors: number;
+  duration_ms: number;
+  is_cancelled: boolean;
+  errors: BatchFileError[];
+}
+
+// ── Batch Processor API Wrappers ───────────────────────────────────
+
+export async function startBatchTranslate(config: BatchConfig): Promise<string> {
+  return invoke("start_batch_translate", { config });
+}
+
+export async function startBatchExport(
+  entries: BatchEntry[],
+  outputDir: string,
+  exportFormat: string,
+): Promise<string> {
+  return invoke("start_batch_export", { entries, outputDir, exportFormat });
+}
+
+export async function getBatchStatus(): Promise<BatchStatus | null> {
+  return invoke("get_batch_status");
+}
+
+export async function cancelBatchJob(): Promise<void> {
+  return invoke("cancel_batch_job");
+}
+
+export async function listEspFiles(dir: string): Promise<string[]> {
+  return invoke("list_esp_files", { dir });
+}

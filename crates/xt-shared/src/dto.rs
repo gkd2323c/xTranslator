@@ -196,6 +196,117 @@ pub struct XmlProgress {
     pub message: String,
 }
 
+// ── Batch Processor DTOs ──────────────────────────────────────────
+
+/// 批处理中单文件的条目信息
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct BatchEntry {
+    /// ESP 文件路径
+    pub esp_path: String,
+    /// Strings 目录，默认 ESP 所在目录
+    #[serde(default)]
+    pub strings_dir: Option<String>,
+    /// 源语言（如 "english"），默认 "english"
+    #[serde(default)]
+    pub language: Option<String>,
+    /// 游戏类型（如 "SkyrimSE"），自动探测
+    #[serde(default)]
+    pub game: Option<String>,
+    /// 可选 SST 字典路径，用于预合并现有翻译
+    #[serde(default)]
+    pub sst_path: Option<String>,
+}
+
+/// 批处理配置
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct BatchConfig {
+    /// 要处理的文件列表
+    pub entries: Vec<BatchEntry>,
+    /// 翻译提供方 "openai" | "deepl"
+    #[serde(default)]
+    pub provider: Option<String>,
+    /// 目标语言（如 "chinese"）
+    pub target_lang: Option<String>,
+    /// 是否跳过已有翻译的字符串
+    #[serde(default)]
+    pub skip_translated: Option<bool>,
+}
+
+/// 批处理状态（给前端轮询或一次性返回）
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct BatchStatus {
+    /// 当前 Job ID
+    pub job_id: String,
+    /// 任务类型 "translate" | "export"
+    pub job_type: String,
+    pub total_files: u32,
+    pub completed_files: u32,
+    pub failed_files: u32,
+    /// 当前正在处理的文件名
+    #[serde(default)]
+    pub current_file: Option<String>,
+    /// 当前文件的进度 0.0~1.0
+    pub current_file_progress: f32,
+    pub total_strings: u32,
+    pub translated_strings: u32,
+    pub is_running: bool,
+    pub is_cancelled: bool,
+    pub is_completed: bool,
+    pub is_failed: bool,
+    #[serde(default)]
+    pub errors: Vec<String>,
+    /// 已消耗的毫秒数
+    pub elapsed_ms: u64,
+}
+
+/// 批处理进度事件载荷（实时下发）
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct BatchProgress {
+    pub job_id: String,
+    pub file_path: String,
+    /// 当前阶段："parsing", "translating", "saving"
+    pub stage: String,
+    pub current_file: u32,
+    pub total_files: u32,
+    pub strings_translated: u32,
+    pub total_strings: u32,
+    #[serde(default)]
+    pub message: String,
+}
+
+/// 单文件完成事件
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct BatchFileComplete {
+    pub job_id: String,
+    pub file_path: String,
+    pub translated: u32,
+    pub skipped: u32,
+    pub errors: u32,
+    pub duration_ms: u64,
+}
+
+/// 批次完成事件
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct BatchComplete {
+    pub job_id: String,
+    pub total_files: u32,
+    pub success: u32,
+    pub failed: u32,
+    pub total_translated: u32,
+    pub total_errors: u32,
+    pub duration_ms: u64,
+    pub is_cancelled: bool,
+    #[serde(default)]
+    pub errors: Vec<BatchFileError>,
+}
+
+/// 批处理中出错的文件信息
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct BatchFileError {
+    pub file_path: String,
+    pub message: String,
+}
+
 /// 保存 Strings 文件响应
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SaveStringsResponse {

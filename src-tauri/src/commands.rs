@@ -10,10 +10,13 @@ use xt_core::types::params::SkyStringParams;
 use xt_core::types::sky_string::SkyString;
 use xt_core::xml::{import_xml_to_sky_strings, parse_xml_file, sky_strings_to_xml_entries, write_xml_file, XmlExportParams};
 use xt_shared::dto::{
+    BatchConfig, BatchEntry, BatchStatus,
     EspLoadProgress, HeuristicMatchDTO, HeuristicSearchRequest, LoadEspResponse, LoadSstResponse, QueryRequest,
     QueryResponse, SaveStringsRequest, SaveStringsResponse, SkyStringDTO, TranslateRequest, XmlExportRequest, XmlImportResponse,
     XmlProgress,
 };
+
+use crate::batch::BatchExecutor;
 
 /// 已加载的 ESP 文件信息
 pub struct EspFileInfo {
@@ -977,4 +980,77 @@ pub async fn save_strings(
         ilstrings_count,
         translated_count,
     })
+}
+
+// ── 批处理 IPC 命令 ──────────────────────────────────────────
+
+/// 启动批处理翻译
+#[tauri::command]
+pub async fn start_batch_translate(
+    window: tauri::Window,
+    executor: tauri::State<'_, Arc<BatchExecutor>>,
+    config: BatchConfig,
+) -> Result<String, String> {
+    let entries = config.entries.clone();
+    let provider = config.provider
+        .as_deref()
+        .map(ProviderType::from_str)
+        .unwrap_or(ProviderType::OpenAI);
+    let target_lang = config.target_lang.unwrap_or_else(|| "chinese".to_string());
+    let skip_translated = config.skip_translated.unwrap_or(true);
+
+    executor.start_translate(window, entries, provider, target_lang, skip_translated)
+}
+
+/// 启动批处理导出
+#[tauri::command]
+pub async fn start_batch_export(
+    window: tauri::Window,
+    executor: tauri::State<'_, Arc<BatchExecutor>>,
+    entries: Vec<BatchEntry>,
+    output_dir: String,
+    export_format: String,
+) -> Result<String, String> {
+    executor.start_export(window, entries, output_dir, export_format)
+}
+
+/// 获取当前批处理状态
+#[tauri::command]
+pub async fn get_batch_status(
+    executor: tauri::State<'_, Arc<BatchExecutor>>,
+) -> Result<Option<BatchStatus>, String> {
+    Ok(executor.get_status())
+}
+
+/// 取消当前批处理
+#[tauri::command]
+pub async fn cancel_batch_job(
+    executor: tauri::State<'_, Arc<BatchExecutor>>,
+) -> Result<(), String> {
+    executor.cancel();
+    Ok(())
+}
+
+/// 扫描目录中的 ESP/ESM 文件
+#[tauri::command]
+pub async fn list_esp_files(dir: String) -> Result<Vec<String>, String> {
+    let mut entries = Vec::new();
+    let mut read_dir =
+        std::fs::read_dir(&dir).map_err(|e| format!("Failed to read directory: {}", e))?;
+    while let Some(entry) = read_dir
+        .next()
+        .transpose()
+        .map_err(|e| format!("Read error: {}", e))?
+    {
+        let path = entry.path();
+        if let Some(ext) = path.extension() {
+            if ext == "esp" || ext == "esm" {
+                if let Some(s) = path.to_str() {
+                    entries.push(s.to_string());
+                }
+            }
+        }
+    }
+    entries.sort();
+    Ok(entries)
 }

@@ -2,7 +2,7 @@ import { useAppStore } from "../stores/appStore";
 import { loadEsp, loadSst, saveSst, exportXml, importXml, saveStrings } from "../api/strings";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { listen } from "@tauri-apps/api/event";
-import { FolderOpen, FileUp, FileDown, FileCode, Save, RotateCcw, Sun, Moon, Cloud } from "lucide-react";
+import { FolderOpen, FileUp, FileDown, FileCode, Save, RotateCcw, Sun, Moon, Cloud, RefreshCw } from "lucide-react";
 import toast from "react-hot-toast";
 
 export function MenuBar() {
@@ -24,6 +24,9 @@ export function MenuBar() {
   const reset = useAppStore((s) => s.reset);
   const theme = useAppStore((s) => s.theme);
   const cycleTheme = useAppStore((s) => s.cycleTheme);
+  const showBatchPanel = useAppStore((s) => s.showBatchPanel);
+  const setShowBatchPanel = useAppStore((s) => s.setShowBatchPanel);
+  const batchEntries = useAppStore((s) => s.batchEntries);
 
   const ThemeIcon = theme === "dark" ? Moon : theme === "light" ? Sun : Cloud;
 
@@ -39,6 +42,18 @@ export function MenuBar() {
       ],
     });
     if (!espPath) return;
+
+    // Conflict check: warn if selected file is also in batch queue
+    const normalizedPath = espPath.replace(/\\/g, "/").toLowerCase();
+    const isBatchFile = batchEntries.some(
+      (e) => e.esp_path.replace(/\\/g, "/").toLowerCase() === normalizedPath
+    );
+    if (isBatchFile && !showBatchPanel) {
+      toast(
+        "This file is also in the batch queue. Changes may be overwritten when the batch runs.",
+        { icon: "⚠️", duration: 4000 }
+      );
+    }
 
     const espDir = espPath.replace(/\\/g, "/").split("/").slice(0, -1).join("/");
     const stringsDir = `${espDir}/Strings`;
@@ -256,6 +271,13 @@ export function MenuBar() {
           <option value="czech">Czech</option>
           <option value="hungarian">Hungarian</option>
         </select>
+        <button
+          onClick={() => setShowBatchPanel(!showBatchPanel)}
+          className={`btn btn-ghost ${showBatchPanel ? "active" : ""}`}
+          title={showBatchPanel ? "Close Batch Panel" : "Open Batch Panel"}
+        >
+          <RefreshCw size={16} />
+        </button>
         <button
           onClick={cycleTheme}
           className="btn btn-ghost"

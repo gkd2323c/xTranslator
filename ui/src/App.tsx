@@ -4,6 +4,7 @@ import { Loader } from "lucide-react";
 import { useAppStore } from "./stores/appStore";
 import { MenuBar } from "./components/MenuBar";
 import { SidePanel } from "./components/SidePanel";
+import { BatchPanel } from "./components/BatchPanel";
 import { StringTable } from "./components/StringTable";
 import { EditorPanel } from "./components/EditorPanel";
 import "./App.css";
@@ -14,6 +15,7 @@ function App() {
   const isParsing = useAppStore((s) => s.isParsing);
   const loadProgress = useAppStore((s) => s.loadProgress);
   const theme = useAppStore((s) => s.theme);
+  const showBatchPanel = useAppStore((s) => s.showBatchPanel);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -37,7 +39,7 @@ function App() {
       <MenuBar />
       <div className="app-body">
         <aside className="app-sidebar">
-          <SidePanel />
+          {showBatchPanel ? <BatchPanel /> : <SidePanel />}
         </aside>
         <main className="app-main">
           <div className="app-table-area">
