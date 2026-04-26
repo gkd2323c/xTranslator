@@ -61,7 +61,7 @@
 |------|------|----------|--------|------|
 | **字典应用 (apply)** | ✅ ID+EDID+词汇匹配 | ⚠️ 基础 strId+record+field | ~40% | 缺少 EDID 匹配、词汇匹配、参数匹配 |
 | **启发式搜索** | ✅ Levenshtein/LCS | ✅ | ~80% | xt-core heuristic 模块，Levenshtein+LCS+LCP，IPC+UI 已集成 |
-| **翻译 API** | ✅ DeepL/MS/Google/OpenAI/Youdao/Baidu | ⚠️ OpenAI 已实现 | ~50% | OpenAIProvider 已就绪，DeepL/其他待扩展 |
+| **翻译 API** | ✅ DeepL/MS/Google/OpenAI/Youdao/Baidu | ✅ OpenAI + DeepL 已实现 | ~60% | OpenAIProvider + DeepLProvider 已就绪，支持运行时切换 |
 | **字符串编辑** | ✅ 行内+窗口编辑 | ⚠️ 基础编辑 | ~65% | EditorPanel：文本编辑、Ctrl+Enter 保存、状态切换、API Key 弹窗 |
 | **正则搜索/替换** | ✅ PCRE+批量 | ❌ | 0% | - |
 | **直接搜索** | ✅ | ✅ 实时筛选 | ~70% | 客户端 filter+sort：文本/状态/排序，零延迟，虚拟滚动 76K+ 条 |
@@ -148,7 +148,7 @@
 | 差距 | 说明 | 预估工作量 |
 |------|------|-----------|
 | 启发式搜索 | TESVT_HeuristicSearch.pas 分析+实现 | 1-2 周 |
-| 翻译 API 集成 | 至少支持 DeepL + OpenAI | 1 周 |
+| 翻译 API 集成 | ~~至少支持 DeepL + OpenAI~~ | ✅ 已完成 |
 | XML 导出 | 闭环 XML 交换格式 | 2-3 天 |
 | 正则搜索/替换 | 基于 regex crate | 3-5 天 |
 

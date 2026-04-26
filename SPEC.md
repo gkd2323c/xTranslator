@@ -38,8 +38,11 @@ api: `get_all_strings` → `Vec<SkyStringDTO>` (fallback, small datasets only)
 api: `query_strings_command` → `QueryResponse` (backend filter/sort/paginate, deprecated for virtual scroll)
 api: `get_stats` → `String` (human-readable counts + memory estimate)
 api: `heuristic_search` → `Vec<HeuristicMatchDTO>` (candidates from translated strings only)
-api: `translate_string` → `String` (OpenAI provider, `spawn_blocking`)
-api: `set_api_key` → `()` (memory only, no disk persistence)
+api: `translate_string` → `String` (current provider, `spawn_blocking`)
+api: `set_openai_api_key` → `()` (memory only, no disk persistence)
+api: `set_deepl_api_key` → `()` (memory only, no disk persistence)
+api: `set_translation_provider` → `()` (switch between openai/deepl)
+api: `get_translation_providers` → `Vec<String>` (available provider list)
 api: `export_xml` → `u32` (exported count, emits `xml-progress` events)
 api: `import_xml` → `XmlImportResponse { matched, unmatched, total, updated_ids }`
 api: `get_is_dirty` → `bool`
@@ -70,7 +73,8 @@ fmt: XML export → `SSTXMLRessources/Params/Content/String` with `List`, `sID`,
 
 ### Environment
 
-env: `XT_TRANSLATE_API_KEY` ? set → provider auth
+env: `XT_TRANSLATE_API_KEY` ? set → OpenAI provider auth (env fallback)
+env: `XT_DEEPL_API_KEY` ? set → DeepL provider auth (env fallback, auto-detects free/pro)
 env: `XT_TRANSLATE_API_BASE` ? override default OpenAI base URL
 env: `XT_TRANSLATE_API_MODEL` ? override default model (default `gpt-4o-mini`)
 
@@ -108,7 +112,7 @@ T11|x|Record type filtering (SidePanel click-to-filter)|G7
 T12|x|Update by ID (not index) across filter/sort|C7
 T13|x|Full-load + client-side filter/sort (<10ms)|C2
 T14|x|XML progress events during import/export|G4
-T15|~|DeepL translation provider|G6
+T15|x|DeepL translation provider|G6
 T16|.|BSA/BA2 full archive browser|G8
 T17|.|PEX script decompiler|G1
 T18|.|FUZ audio mapping|G2

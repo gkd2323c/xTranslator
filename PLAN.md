@@ -19,12 +19,14 @@ Parses ESP/ESM files (Skyrim SE, Fallout 4, Starfield, etc.), extracts translata
 | SST v8 dictionary | Done | Full read/write, Delphi-compatible UTF-16LE, roundtrip verified |
 | XML import/export | Done | Delphi-compatible format with entity escaping |
 | Heuristic search | Done | Levenshtein + LCS + LCP for translation suggestions |
-| Translation API | Done | OpenAI provider (API key via env or runtime setting) |
+| Translation API | Done | OpenAI + DeepL providers, runtime key setting, provider switching |
 | Virtual scrolling | Done | react-window, 76K items smooth, client-side filter/sort |
 | Record type filtering | Done | SidePanel click-to-filter by record signature |
 | Codepage fallback | Done | 932/936/949/950/1250-1257 |
 | UI locking overlay | Done | Blocks interaction during load/import/export |
 | XML progress bar | Done | Shows stage + percentage during import/export |
+| DeepL translation | Done | Free/Pro auto-detection, env key or runtime setting |
+| String normalization | Done | NFKC normalization + tokenization for search/matching |
 
 ### Known Gaps (vs Delphi original)
 
@@ -34,7 +36,6 @@ Short version:
 
 | Priority | Missing Feature | Effort |
 |----------|----------------|--------|
-| P1 | DeepL translation provider | 2-3 days |
 | P1 | BSA/BA2 full archive browser | 1-2 weeks |
 | P2 | PEX script decompiler | 1-2 weeks |
 | P2 | FUZ audio mapping | 3-5 days |

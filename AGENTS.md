@@ -133,6 +133,20 @@ Filtering logic: during ESP parsing, if a GMST record's `EDID` field starts with
 - Default threshold: 0.5 similarity, max 5 results.
 - Backend: `xt-core/src/heuristic/mod.rs`; IPC: `heuristic_search` command.
 
+### Translation Provider
+
+- Two providers: `OpenAI` (OpenAI/DeepSeek/Qwen etc.) and `DeepL` (auto-detects free/pro).
+- `AppState` holds separate API keys for each provider in `Mutex<Option<String>>` (memory only).
+- `current_provider: Mutex<ProviderType>` controls which provider `translate_string` uses.
+- IPC commands: `set_openai_api_key`, `set_deepl_api_key`, `set_translation_provider`, `get_translation_providers`.
+- Provider trait in `xt-core/src/translation_api/mod.rs`; implementations in `openai.rs` / `deepl.rs`.
+
+### String Normalization
+
+- Normalizes source text for heuristic search and dictionary matching (case-fold, strip punctuation, compress whitespace).
+- Module: `xt-core/src/normalization.rs`.
+- `SkyString.source_normalized` and `normalized_hash` computed in `SkyString::new()`.
+
 ### XML Import/Export
 
 - Export: `export_xml` command → `write_xml_export()` → Delphi-compatible UTF-8 XML with entity escaping.

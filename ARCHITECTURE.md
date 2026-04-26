@@ -71,9 +71,9 @@ User selects ESP → MenuBar.tsx
 
 ```
 ESP loaded → StringTable.tsx useEffect
-  → invoke("get_all_strings")
-  → src-tauri/src/commands.rs::get_all_strings()
-    → Map all SkyString → SkyStringDTO (Vec of 76K items)
+  → invoke("get_strings_chunk") × N batches (~10K items/batch, ~2MB JSON)
+  → src-tauri/src/commands.rs::get_strings_chunk()
+    → Map SkyString → SkyStringDTO chunks
   → appStore.setAllItems(allItems) → client-side filter + sort
   → react-window List renders visible rows only
 
@@ -155,7 +155,8 @@ Production builds use `beforeBuildCommand: "cd ui && npm run build"` which works
 | `sst::v8` | SST v8 dictionary format: read/write with Delphi-compatible UTF-16LE encoding, FNV-1a hashing, bidirectional roundtrip |
 | `xml` | Delphi xTranslator XML export/import: `parse_xml_export`, `write_xml_export`, `import_xml_to_sky_strings` |
 | `heuristic` | Similarity search for translation suggestions: Levenshtein distance, longest common substring (LCS), longest common prefix (LCP) |
-| `translation_api` | Translation provider trait + OpenAI provider implementation. Supports API key via env var or runtime setting |
+| `normalization` | String normalization (case-folding, punctuation stripping, whitespace compression) for heuristic search and dictionary matching |
+| `translation_api` | Translation provider trait; OpenAI + DeepL implementations. Supports API key via env var or runtime, provider switching |
 | `types` | Core types: `SkyString`, `EspPointer`, `SkyStringParams`, `GameId` |
 
 ### src-tauri
