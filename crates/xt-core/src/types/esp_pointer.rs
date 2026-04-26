@@ -37,6 +37,19 @@ pub struct EspPointer {
 impl EspPointer {
     pub const SIZE: usize = 24;
 
+    /// 创建空的 ESP 指针（所有字段为零）
+    pub const fn null() -> Self {
+        Self {
+            str_id: -1,
+            form_id: 0,
+            record_sig: [0; 4],
+            field_sig: [0; 4],
+            index: 0,
+            index_max: 0,
+            edid_hash: 0,
+        }
+    }
+
     /// 从 SST v8 读取（小端序）
     pub fn read_from<R: Read>(reader: &mut R) -> Result<Self> {
         // 读取顺序必须与 Delphi/SST v8 二进制布局完全一致。

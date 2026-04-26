@@ -1,14 +1,15 @@
 use super::esp_pointer::{string_hash, EspPointer};
 use super::params::{SkyStringInternalParams, SkyStringParams};
+use crate::normalization;
 
 /// SkyString - 核心字符串数据结构
 ///
-/// 对应 Delphi 的 `tSkyStr` 记录，存储单个可翻译字符串的完整信息
-/// 字段命名和用途与 Delphi 原版保持一致，确保 SST 字典兼容性
+// 对应 Delphi 的 `tSkyStr` 记录，存储单个可翻译字符串的完整信息
+// 字段命名和用途与 Delphi 原版保持一致，确保 SST 字典兼容性
 ///
-/// 使用约束：
-/// - `id`：仅运行时稳定，不可作为跨会话持久化主键。
-/// - 持久化匹配应优先依赖 `esp_ptr` 三元组（str_id/record_sig/field_sig）。
+// 使用约束：
+// - `id`：仅运行时稳定，不可作为跨会话持久化主键。
+// - 持久化匹配应优先依赖 `esp_ptr` 三元组（str_id/record_sig/field_sig）。
 #[derive(Clone, Debug)]
 pub struct SkyString {
     /// 内部唯一 ID（运行时分配，不持久化到 SST）
@@ -19,6 +20,11 @@ pub struct SkyString {
     /// 翻译字符串（译文，对应 Delphi 的 gTrans 字段）
     pub translation: String,
 
+    /// 所属记录签名 (如 "INFO")
+    pub record_sig: [u8; 4],
+    /// 所属字段签名 (如 "DESC")
+    pub field_sig: [u8; 4],
+
     /// 规范化后的源字符串（用于模糊匹配，对应 Delphi 的 gSNormalized）
     pub source_normalized: Option<String>,
     /// 规范化字符串的哈希值（对应 Delphi 的 fNormalizedHash）
@@ -26,7 +32,7 @@ pub struct SkyString {
 
     /// 源字符串的 FNV-1a 哈希值（用于快速比对）
     pub hash: u32,
-    /// 翻译字符串的 FNV-1a 哈希值（用于检测翻译变更）
+    /// 翻译字符串的 FNV-1a 哈希值（用于检测翻译变化）
     pub hash_trans: u32,
 
     /// 分词哈希列表 - 启发式搜索的核心数据（对应 Delphi 的 aWords 数组）
@@ -73,38 +79,64 @@ pub struct SkyString {
 }
 
 impl SkyString {
-    /// 创建新的 SkyString，自动计算 hash
-    pub fn new(id: u32, source: String, translation: String) -> Self {
+    /// 创建新的 SkyString 实例
+    ///
+    /// # 参数
+    /// * `id` - 字符串 ID
+    /// * `source` - 源文本
+    /// * `translation` - 译文
+    /// * `record_sig` - 所属记录签名 (如 "INFO")
+    /// * `field_sig` - 所属字段签名 (如 "DESC")
+    pub fn new(
+        id: u32,
+        source: String,
+        translation: String,
+        record_sig: [u8; 4],
+        field_sig: [u8; 4],
+    ) -> Self {
+        // 计算哈希
         let hash = string_hash(&source);
         let hash_trans = string_hash(&translation);
+        // 计算分词哈希列表（简单按非字母数字分割）
+        let word_hashes = source
+            .split(|c: char| !c.is_alphanumeric())
+            .filter(|s| !s.is_empty())
+            .map(string_hash)
+            .collect();
+
+        // 计算源文本的规范化版本及其哈希
+        let source_normalized = normalization::normalize(&source);
+        let normalized_hash = if !source_normalized.is_empty() {
+            Some(string_hash(&source_normalized))
+        } else {
+            None
+        };
+
         Self {
             id,
             source,
             translation,
-            source_normalized: None,
-            normalized_hash: None,
+            record_sig,
+            field_sig,
             hash,
             hash_trans,
-            word_hashes: Vec::new(),
-            rec_refs: Vec::new(),
-            // 默认指针为“未绑定”状态，后续由 ESP 解析阶段回填。
-            esp_ptr: EspPointer {
-                str_id: -1,
-                form_id: 0,
-                record_sig: [0; 4],
-                field_sig: [0; 4],
-                index: 0,
-                index_max: 0,
-                edid_hash: 0,
+            word_hashes,
+            source_normalized: if source_normalized.is_empty() {
+                None
+            } else {
+                Some(source_normalized)
             },
-            params: SkyStringParams::new(),
-            internal_params: SkyStringInternalParams::new(),
+            normalized_hash,
+            esp_ptr: EspPointer::null(),
+            params: SkyStringParams::default(),
+            internal_params: SkyStringInternalParams::default(),
             list_index: 0,
             colab_id: 0,
             ld_result: 0.0,
             ld_found: 0,
             min_word: 0,
             tag_hash: 0,
+            rec_refs: Vec::new(),
         }
     }
 
@@ -129,10 +161,12 @@ mod tests {
 
     #[test]
     fn test_sky_string_creation() {
-        let sk = SkyString::new(1, "Hello".to_string(), "Bonjour".to_string());
+        let sk = SkyString::new(1, "Hello".to_string(), "Bonjour".to_string(), *b"INFO", *b"DESC");
         assert_eq!(sk.id, 1);
         assert_eq!(sk.source, "Hello");
         assert_eq!(sk.translation, "Bonjour");
+        assert_eq!(sk.record_sig, *b"INFO");
+        assert_eq!(sk.field_sig, *b"DESC");
         assert_ne!(sk.hash, 0);
         assert_ne!(sk.hash_trans, 0);
         assert_eq!(sk.colab_id, 0);
@@ -140,7 +174,7 @@ mod tests {
 
     #[test]
     fn test_set_source_updates_hash() {
-        let mut sk = SkyString::new(1, "Hello".to_string(), "".to_string());
+        let mut sk = SkyString::new(1, "Hello".to_string(), "".to_string(), *b"INFO", *b"DESC");
         let old_hash = sk.hash;
         sk.set_source("World".to_string());
         assert_ne!(sk.hash, old_hash);

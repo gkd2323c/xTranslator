@@ -26,6 +26,17 @@ tests/fixtures/*.sst
 *~
 .claude/
 .codebuddy/
+.github/
+.gemini/
+.cursor/
+.kilocode/
+.kiro/
+.opencode/
+.qoder/
+.qwen/
+.trae/
+.codex/
+
 # OS
 .DS_Store
 Thumbs.db
@@ -36,3 +47,5 @@ test_output*.txt
 
 # 测试数据（大文件）
 skyrim_strings.txt
+test_output.txt
+test_output2.txt

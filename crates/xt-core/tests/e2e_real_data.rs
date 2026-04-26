@@ -201,9 +201,9 @@ fn e2e_load_sst_and_match() {
 
     // 1. 创建测试 SST
     let mut test_strings = vec![
-        SkyString::new(0, "Hello".to_string(), "你好".to_string()),
-        SkyString::new(1, "World".to_string(), "世界".to_string()),
-        SkyString::new(2, "Test".to_string(), "".to_string()),
+        SkyString::new(0, "Hello".to_string(), "你好".to_string(), *b"INFO", *b"DESC"),
+        SkyString::new(1, "World".to_string(), "世界".to_string(), *b"INFO", *b"FULL"),
+        SkyString::new(2, "Test".to_string(), "".to_string(), *b"BOOK", *b"NAME"),
     ];
     test_strings[0].params.set(SkyStringParams::TRANSLATED, true);
     test_strings[1].params.set(SkyStringParams::TRANSLATED, true);

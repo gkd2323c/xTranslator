@@ -48,5 +48,8 @@ encoding_rs = "0.8"
 # HTTP 客户端
 reqwest = { version = "0.12", features = ["json", "rustls-tls", "blocking"], default-features = false }
 
+# 异步 trait
+async-trait = "0.1"
+
 # 注意：tauri / tauri-build 不在此声明
 # 由 src-tauri/Cargo.toml 单独管理
