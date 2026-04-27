@@ -1,8 +1,8 @@
 # xTranslator 功能对比：Delphi 原版 vs Rust 重写
 
-> **更新日期**：2025-04-23
+> **更新日期**：2026-04-27
 > **原版版本**：xTranslator 1.6.0（Delphi 12.1 CE，~6.7 万行代码，10+ 年迭代）
-> **重写版本**：Phase 2 核心功能完成（60 个 lib 测试 + E2E 测试通过）
+> **重写版本**：MVP 完成 + 批量处理器 + 主题系统 + 正则替换 + 撤销重做 + 自动备份（77 测试通过，0 警告）
 
 ---
 
@@ -63,12 +63,12 @@
 | **启发式搜索** | ✅ Levenshtein/LCS | ✅ | ~80% | xt-core heuristic 模块，Levenshtein+LCS+LCP，IPC+UI 已集成 |
 | **翻译 API** | ✅ DeepL/MS/Google/OpenAI/Youdao/Baidu | ✅ OpenAI + DeepL 已实现 | ~60% | OpenAIProvider + DeepLProvider 已就绪，支持运行时切换 |
 | **字符串编辑** | ✅ 行内+窗口编辑 | ⚠️ 基础编辑 | ~65% | EditorPanel：文本编辑、Ctrl+Enter 保存、状态切换、API Key 弹窗 |
-| **正则搜索/替换** | ✅ PCRE+批量 | ❌ | 0% | - |
+| **正则搜索/替换** | ✅ PCRE+批量 | ✅ Regex filter toggle + Replace All | ~80% | Regex toggle + Replace All with confirmation + capture groups ($1/$2) |
 | **直接搜索** | ✅ | ✅ 实时筛选 | ~70% | 客户端 filter+sort：文本/状态/排序，零延迟，虚拟滚动 76K+ 条 |
-| **撤销/重做** | ✅ | ❌ | 0% | - |
+| **撤销/重做** | ✅ | ✅ Stack-based (max 100) | ~80% | Ctrl+Z/Y + Ctrl+Shift+Z, IPC-synced, session-only |
 | **ESP 写入（Strings 回写）** | ✅ | ⚠️ Strings 保存已有 | ~30% | ESP 本身不修改（原版策略），但需要整合写入流程 |
 | **最终化 (finalize)** | ✅ 导出翻译结果 | ⚠️ XML 导出可用 | ~40% | XML 导出已就绪，Strings 最终化待整合 |
-| **批量处理器** | ✅ 命令式批处理 | ❌ | 0% | - |
+| **批量处理器** | ✅ 命令式批处理 | ✅ BatchExecutor + BatchPanel | ~70% | Multi-file translate/export, progress events, cancel, error recovery |
 | **RTL 支持 (阿拉伯语)** | ✅ RTL 标签+字符串反向 | ❌ | 0% | `TESVT_TranslateFunc.pas` 中的 RTL 处理 |
 | **中文繁简转换** | ✅ SC↔TC 字符映射 | ❌ | 0% | `buildTCSCList`/`doConvertTCSC` |
 
@@ -113,7 +113,7 @@
 | **对话列表视图** | ✅ DIAL/INFO/QUST | ❌ | 0% | - |
 | **翻译进度条** | ✅ | ❌ | 0% | - |
 | **筛选/搜索栏** | ✅ 多维度筛选 | ✅ 实时筛选 | ~65% | 文本搜索 + 状态筛选 + 排序，客户端零延迟，虚拟滚动 |
-| **主题支持** | ✅ 默认/亮/灰/暗 | ❌ | 0% | - |
+| **主题支持** | ✅ 默认/亮/灰/暗 | ✅ Dark/Light/Gray/Auto | ~90% | CSS variables + Zustand + localStorage, system follow via matchMedia |
 | **UI 多语言** | ✅ 10+ 语言 | ❌ | 0% | - |
 | **高分辨率 DPI** | ✅ DPI 感知 | ❌ | 0% | - |
 | **拖放加载** | ✅ XML 拖放 | ❌ | 0% | - |
@@ -139,18 +139,18 @@
 
 | 差距 | 说明 | 预估工作量 |
 |------|------|-----------|
-| Tauri UI 基础框架 | 字符串列表+编辑器+筛选，这是从 CLI 工具变成可用产品的关键 | 2 周 |
-| 字符串编辑+保存流程 | 编辑翻译 → 保存 SST → 写回 Strings 的完整闭环 | 1 周 |
+| ~~Tauri UI 基础框架~~ | ✅ 已完成 — MenuBar + SidePanel + StringTable + EditorPanel + BatchPanel | Done |
+| ~~字符串编辑+保存流程~~ | ✅ 已完成 — 编辑 → SST/XML → Strings 完整闭环 | Done |
 | 字典应用增强 | EDID 匹配、词汇匹配、参数匹配 | 1 周 |
 
 ### P1 - 核心功能补全
 
 | 差距 | 说明 | 预估工作量 |
 |------|------|-----------|
-| 启发式搜索 | TESVT_HeuristicSearch.pas 分析+实现 | 1-2 周 |
-| 翻译 API 集成 | ~~至少支持 DeepL + OpenAI~~ | ✅ 已完成 |
-| XML 导出 | 闭环 XML 交换格式 | 2-3 天 |
-| 正则搜索/替换 | 基于 regex crate | 3-5 天 |
+| ~~启发式搜索~~ | ✅ Levenshtein+LCS+LCP 已实现 | Done |
+| ~~翻译 API 集成~~ | ✅ OpenAI + DeepL 已实现 | Done |
+| ~~XML 导出~~ | ✅ Delphi 兼容格式已实现 | Done |
+| ~~正则搜索/替换~~ | ✅ Regex filter + Replace All + capture groups | Done |
 
 ### P2 - 功能完善
 
