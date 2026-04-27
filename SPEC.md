@@ -122,9 +122,9 @@ T16|.|BSA/BA2 full archive browser|G8
 T17|.|PEX script decompiler|G1
 T18|.|FUZ audio mapping|G2
 T19|x|Batch processor|G7
-T20|.|NPC map / dialog view|G7
-T21|x|Theme system (dark/light/gray, CSS variables, Zustand + localStorage)|G7
-T22|.|UI multi-language (i18n)|G7
+T20|x|NPC map / dialog view (parent_form_id tracking via GRUP s_type, grouping)|G7
+T21|x|Theme system (dark/light/gray/auto, CSS variables, Zustand + localStorage + matchMedia)|G7
+T22|x|UI multi-language i18n (react-i18next, 10 languages, Zh-CN default)|G7
 T23|x|Regex search/replace with capture groups (replaceAll across filtered items)|G7
 T24|x|Strings write-back deduplication (shared data offsets, ~17% size reduction)|G2
 T25|x|Auto-backup (5-min timer, SST snapshots, rotate last 10)|G3

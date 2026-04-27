@@ -41,11 +41,12 @@ Short version:
 
 | Priority | Missing Feature | Effort |
 |----------|----------------|--------|
-| P1 | BSA/BA2 full archive browser | 1-2 weeks |
-| P2 | PEX script decompiler | 1-2 weeks |
-| P2 | FUZ audio mapping | 3-5 days |
-| P2 | NPC map / dialog view | 3-5 days |
-| P3 | UI multi-language (i18n) | 1 week |
+| Done | BSA/BA2 full archive browser | list_all_files + BsaBrowser component |
+| Done | PEX script string extraction | parser + string extraction, write-back v2 |
+| Done | FUZ audio mapping | FuzFile parse + scan + WAV playback |
+| Done | NPC map / dialog view | parent_form_id tracking via GRUP s_type, dialog grouping |
+| Done | UI multi-language i18n | react-i18next, 10 languages, zh-CN default |
+| Done | UI multi-language i18n | react-i18next, 10 languages, zh-CN default
 
 ## Quick Start
 
