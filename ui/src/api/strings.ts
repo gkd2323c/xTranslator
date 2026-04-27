@@ -48,6 +48,10 @@ export interface LoadSstResponse {
   tier_normalized: number;
   tier_vocab: number;
   ambiguous: number;
+  pending_skipped: number;
+  old_data_preserved: number;
+  warning: number;
+  big_warning: number;
 }
 
 export interface HeuristicSearchRequest {
@@ -162,6 +166,10 @@ export interface XmlImportResponse {
   tier_vocab: number;
   tier_normalized: number;
   ambiguous: number;
+  pending_skipped: number;
+  old_data_preserved: number;
+  warning: number;
+  big_warning: number;
 }
 
 export async function exportXml(request: XmlExportRequest): Promise<number> {

@@ -47,7 +47,7 @@
 | **EDID 提取** | ✅ | ✅ Option<String> | 100% | 按 FormID 后备 |
 | **VMAD 脚本字段** | ✅ 脚本属性字符串提取 | ❌ | 0% | 需要 Skyrim Script Extender 知识 |
 | **XXXX 超大字段** | ✅ 4字节扩展大小 | ✅ | 100% | 已处理 next_field_size 逻辑 |
-| **XML 导入** | ✅ | ✅ 解析+匹配+更新 | ~95% | `import_xml_to_sky_strings` 三元组匹配，状态同步 |
+| **XML 导入** | ✅ | ✅ 解析+匹配+更新 | ~95% | 共享 matcher：exact / EDID / normalized / vocab，歧义不自动应用 |
 | **XML 导出** | ✅ | ✅ 写入+实体转义 | ~95% | `write_xml_export` Delphi 兼容格式，只导出有翻译的条目 |
 | **BSA/BA2 归档** | ✅ 提取+浏览 | ✅ 提取+浏览 | ~60% | `BsaArchive` 支持 v0x68/v0x69，`list_all_files` + `extract_file`，BsaBrowser 组件；BA2 未实现 |
 | **PEX 脚本解析** | ✅ 反编译+编辑 | ⚠️ 字符串提取 | ~40% | PEX parser 完成（Header+StringTable+ObjectInfo），可翻译字符串提取 + PexPanel；写回 PEX 留 v2 |
@@ -59,7 +59,7 @@
 
 | 功能 | 原版 | Rust 重写 | 覆盖度 | 说明 |
 |------|------|----------|--------|------|
-| **字典应用 (apply)** | ✅ ID+EDID+词汇匹配 | ⚠️ 基础 strId+record+field | ~40% | 缺少 EDID 匹配、词汇匹配、参数匹配 |
+| **字典应用 (apply)** | ✅ ID+EDID+词汇匹配+状态语义 | ✅ 共享 matcher + Delphi 状态语义进行中 | ~70% | exact/EDID/normalized/vocab 已实现；pending、oldData、warning、tagOnly、stringID 语义已纳入当前 OpenSpec 变更 |
 | **启发式搜索** | ✅ Levenshtein/LCS | ✅ | ~80% | xt-core heuristic 模块，Levenshtein+LCS+LCP，IPC+UI 已集成 |
 | **翻译 API** | ✅ DeepL/MS/Google/OpenAI/Youdao/Baidu | ✅ OpenAI + DeepL 已实现，其他 provider 仅作为原版对比 | ~60% | OpenAIProvider + DeepLProvider 已就绪，支持运行时切换 |
 | **字符串编辑** | ✅ 行内+窗口编辑 | ⚠️ 基础编辑 | ~70% | EditorPanel：文本编辑、Ctrl+Enter 保存、状态切换、启发式搜索、翻译 API |
@@ -141,7 +141,7 @@
 |------|------|-----------|
 | ~~Tauri UI 基础框架~~ | ✅ 已完成 — MenuBar + SidePanel + StringTable + EditorPanel + BatchPanel | Done |
 | ~~字符串编辑+保存流程~~ | ✅ 已完成 — 编辑 → SST/XML → Strings 完整闭环 | Done |
-| 字典应用增强 | EDID 匹配、词汇匹配、参数匹配 | 1 周 |
+| 字典应用语义补齐 | pending/oldData/tagOnly/stringID/indexMax warning 等 Delphi 行为 | 当前变更：`delphi-apply-semantics-parity` |
 
 ### P1 - 核心功能补全
 
@@ -181,7 +181,7 @@
 |------|------|------|
 | 嵌套 GRUP 验证 | CELL/WRLD 内的子 GRUP 可能跳过部分字符串 | 需真实数据验证 diff 一致性 |
 | Delphi 交叉验证 | 无法确认 99% 一致率 | 需 Delphi 环境生成对照文件 |
-| SST 旧版本兼容 | 无法读取 v1-v7 SST | 低优先级，v8 是主流格式 |
+| SST 旧版本兼容 | 无法读取 v1-v7 SST | 低优先级，v8 是主流格式；当前重点是 v8 apply 语义 |
 
 ---
 
@@ -198,8 +198,8 @@
 | TESVT_Utils.pas | ✅ 已分析 | ✅ StringHash 复刻完成 |
 | TESVT_HeuristicSearch.pas | ⚠️ 已分析 | ✅ 已实现 |
 | TESVT_scriptPex.pas | ⚠️ 已分析 | ✅ PEX 解析器完成 |
-| TESVT_TranslateFunc.pas | ❌ 待分析 | ❌ 未实现 |
-| TESVT_MainLoader.pas | ❌ 待分析 | ❌ 未实现 |
+| TESVT_TranslateFunc.pas | ✅ 已分析 apply 核心路径 | ✅ matcher 已实现，apply 状态语义补齐中 |
+| TESVT_MainLoader.pas | ✅ 已分析 SST/XML/PEX/缓存关键路径 | ⚠️ Rust 以 Tauri commands + AppState 分拆实现 |
 | TESVT_TranslatorApi.pas | ⚠️ 已分析 | ✅ OpenAI + DeepL 已实现 |
 
 ---

@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex};
 use tauri::Emitter;
 use xt_core::cache::EsmCache;
 use xt_core::esp::parser::{EspParser, StringsFiles};
-use xt_core::matching::{apply_dictionary_entries, DictionaryApplyEntry};
+use xt_core::matching::{apply_dictionary_entries_with_policy, ApplyPolicy, DictionaryApplyEntry};
 use xt_core::sst::v8::SstDictionary;
 use xt_core::strings::CodepageTable;
 use xt_core::translation_api::{DeepLProvider, OpenAIProvider, ProviderType, TranslationProvider};
@@ -35,6 +35,7 @@ pub struct EspFileInfo {
 /// 应用状态：持有所有加载的文件数据
 pub struct AppState {
     pub strings: Mutex<Vec<SkyString>>,
+    pub sst_old_data: Mutex<Vec<SkyString>>,
     pub file_info: Mutex<Option<EspFileInfo>>,
     /// OpenAI 兼容 API Key（内存存储，不持久化）
     pub openai_api_key: Mutex<Option<String>>,
@@ -63,6 +64,7 @@ impl AppState {
 
         Self {
             strings: Mutex::new(Vec::new()),
+            sst_old_data: Mutex::new(Vec::new()),
             file_info: Mutex::new(None),
             openai_api_key: Mutex::new(openai_env_key),
             deepl_api_key: Mutex::new(deepl_env_key),
@@ -124,6 +126,14 @@ fn sky_string_to_dto(sk: &SkyString) -> SkyStringDTO {
         status: status_string(sk),
         list_index: sk.list_index,
         str_id: sk.esp_ptr.str_id,
+    }
+}
+
+fn append_old_data_entries(entries: &mut Vec<SkyString>, old_data: &[SkyString]) {
+    for old in old_data {
+        let mut sk = old.clone();
+        sk.params.set(SkyStringParams::OLD_DATA, true);
+        entries.push(sk);
     }
 }
 
@@ -404,6 +414,10 @@ pub async fn load_esp(
 
     let mut strings = state.strings.lock().map_err(|e| e.to_string())?;
     *strings = result.0;
+    drop(strings);
+
+    let mut old_data = state.sst_old_data.lock().map_err(|e| e.to_string())?;
+    old_data.clear();
 
     let mut file_info = state.file_info.lock().map_err(|e| e.to_string())?;
     *file_info = Some(EspFileInfo {
@@ -436,7 +450,16 @@ pub async fn load_sst(
         .iter()
         .map(DictionaryApplyEntry::from_sst_entry)
         .collect();
-    let result = apply_dictionary_entries(&mut strings, &apply_entries);
+    let result =
+        apply_dictionary_entries_with_policy(&mut strings, &apply_entries, ApplyPolicy::sst_load());
+
+    let old_data_entries: Vec<SkyString> = result
+        .old_data_entries
+        .iter()
+        .map(DictionaryApplyEntry::to_old_data_sky_string)
+        .collect();
+    let mut old_data = state.sst_old_data.lock().map_err(|e| e.to_string())?;
+    *old_data = old_data_entries;
 
     *state.is_dirty.lock().map_err(|e| e.to_string())? = true;
 
@@ -449,6 +472,10 @@ pub async fn load_sst(
         tier_normalized: result.tier_normalized,
         tier_vocab: result.tier_vocab,
         ambiguous: result.ambiguous,
+        pending_skipped: result.pending_skipped,
+        old_data_preserved: result.old_data_preserved,
+        warning: result.warning,
+        big_warning: result.big_warning,
     })
 }
 
@@ -462,11 +489,14 @@ pub async fn save_sst(
     masters: Option<Vec<String>>,
 ) -> Result<(), String> {
     let strings = state.strings.lock().map_err(|e| e.to_string())?;
+    let old_data = state.sst_old_data.lock().map_err(|e| e.to_string())?;
+    let mut entries = strings.clone();
+    append_old_data_entries(&mut entries, &old_data);
 
     let dict = if let Some(masters) = masters {
-        SstDictionary::from_entries_with_masters(strings.clone(), masters)
+        SstDictionary::from_entries_with_masters(entries, masters)
     } else {
-        SstDictionary::from_entries(strings.clone())
+        SstDictionary::from_entries(entries)
     };
 
     dict.save_to_file(&sst_path)
@@ -936,6 +966,10 @@ pub async fn import_xml(
         tier_vocab: result.tier_vocab,
         tier_normalized: result.tier_normalized,
         ambiguous: result.ambiguous,
+        pending_skipped: result.pending_skipped,
+        old_data_preserved: result.old_data_preserved,
+        warning: result.warning,
+        big_warning: result.big_warning,
     })
 }
 
@@ -1208,7 +1242,10 @@ pub async fn auto_backup_sst(
 
     // Build SST from current strings
     let strings = state.strings.lock().map_err(|e| e.to_string())?;
-    let sst = xt_core::sst::v8::SstDictionary::from_entries(strings.clone());
+    let old_data = state.sst_old_data.lock().map_err(|e| e.to_string())?;
+    let mut entries = strings.clone();
+    append_old_data_entries(&mut entries, &old_data);
+    let sst = xt_core::sst::v8::SstDictionary::from_entries(entries);
     sst.save_to_file(backup_path.to_str().ok_or("Invalid backup path")?)
         .map_err(|e| format!("Failed to save backup: {}", e))?;
 

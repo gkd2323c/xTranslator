@@ -122,6 +122,18 @@ pub struct LoadSstResponse {
     /// 歧义但未自动应用的条目数
     #[serde(default)]
     pub ambiguous: u32,
+    /// 因 pending 状态跳过文本应用的条目数
+    #[serde(default)]
+    pub pending_skipped: u32,
+    /// 保留为 oldData 的 SST 条目数
+    #[serde(default)]
+    pub old_data_preserved: u32,
+    /// 因 index/indexMax 可疑而标记 warning 的条目数
+    #[serde(default)]
+    pub warning: u32,
+    /// 因 index/indexMax 不一致而标记 bigWarning 的条目数
+    #[serde(default)]
+    pub big_warning: u32,
 }
 
 /// 启发式搜索请求
@@ -204,6 +216,18 @@ pub struct XmlImportResponse {
     /// 歧义但未自动应用的条目数
     #[serde(default)]
     pub ambiguous: u32,
+    /// 因 pending 状态跳过文本应用的条目数
+    #[serde(default)]
+    pub pending_skipped: u32,
+    /// 保留为 oldData 的 SST 条目数（XML 导入通常为 0）
+    #[serde(default)]
+    pub old_data_preserved: u32,
+    /// 因 index/indexMax 可疑而标记 warning 的条目数
+    #[serde(default)]
+    pub warning: u32,
+    /// 因 index/indexMax 不一致而标记 bigWarning 的条目数
+    #[serde(default)]
+    pub big_warning: u32,
 }
 
 /// 保存 Strings 文件请求

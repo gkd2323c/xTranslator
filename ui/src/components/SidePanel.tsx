@@ -164,6 +164,18 @@ export function SidePanel() {
             <span className="sidepanel-value">{sstStats.ambiguous}</span>
           </div>
           <div className="sidepanel-row">
+            <span className="sidepanel-label">Pending</span>
+            <span className="sidepanel-value">{sstStats.pending_skipped}</span>
+          </div>
+          <div className="sidepanel-row">
+            <span className="sidepanel-label">OldData</span>
+            <span className="sidepanel-value">{sstStats.old_data_preserved}</span>
+          </div>
+          <div className="sidepanel-row">
+            <span className="sidepanel-label">Warnings</span>
+            <span className="sidepanel-value">{sstStats.warning}/{sstStats.big_warning}</span>
+          </div>
+          <div className="sidepanel-row">
             <span className="sidepanel-label">Updated</span>
             <span className="sidepanel-value">{sstStats.updated_ids.length}</span>
           </div>

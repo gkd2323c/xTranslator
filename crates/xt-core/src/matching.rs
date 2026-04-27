@@ -15,7 +15,7 @@ use std::collections::HashSet;
 
 use crate::normalization;
 use crate::types::esp_pointer::{string_hash, HeaderSig};
-use crate::types::params::SkyStringParams;
+use crate::types::params::{SkyStringInternalParams, SkyStringParams};
 use crate::types::sky_string::SkyString;
 use crate::xml::XmlStringEntry;
 
@@ -48,6 +48,7 @@ pub struct DictionaryApplyEntry {
     pub edid: Option<String>,
     pub edid_hash: Option<u32>,
     pub params: Option<SkyStringParams>,
+    pub colab_id: u8,
 }
 
 impl DictionaryApplyEntry {
@@ -65,6 +66,7 @@ impl DictionaryApplyEntry {
             edid: entry.edid.clone(),
             edid_hash: entry.edid.as_ref().map(|edid| string_hash(edid)),
             params: None,
+            colab_id: 0,
         }
     }
 
@@ -86,6 +88,58 @@ impl DictionaryApplyEntry {
                 Some(entry.esp_ptr.edid_hash)
             },
             params: Some(entry.params),
+            colab_id: entry.colab_id,
+        }
+    }
+
+    pub fn to_old_data_sky_string(&self) -> SkyString {
+        let mut sk = SkyString::new(
+            0,
+            self.source.clone(),
+            self.translation.clone(),
+            self.record_sig,
+            self.field_sig,
+        );
+        sk.list_index = self.list_index;
+        sk.colab_id = self.colab_id;
+        sk.esp_ptr.str_id = self.str_id;
+        sk.esp_ptr.record_sig = self.record_sig;
+        sk.esp_ptr.field_sig = self.field_sig;
+        sk.esp_ptr.index = self.index;
+        sk.esp_ptr.index_max = self.index_max;
+        sk.esp_ptr.edid_hash = self.edid_hash.unwrap_or(0);
+        sk.params = self.params.unwrap_or_default();
+        sk.params.set(SkyStringParams::OLD_DATA, true);
+        sk.internal_params
+            .set(SkyStringInternalParams::UNUSED_IN_SST, true);
+        sk
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ApplyPolicy {
+    pub same_language: bool,
+    pub tag_only: bool,
+    pub replace_string_id: bool,
+    pub preserve_old_data: bool,
+}
+
+impl ApplyPolicy {
+    pub fn sst_load() -> Self {
+        Self {
+            preserve_old_data: true,
+            ..Self::default()
+        }
+    }
+}
+
+impl Default for ApplyPolicy {
+    fn default() -> Self {
+        Self {
+            same_language: false,
+            tag_only: false,
+            replace_string_id: false,
+            preserve_old_data: false,
         }
     }
 }
@@ -118,8 +172,18 @@ pub struct MatchResult {
     pub ambiguous: u32,
     /// Unmatched entries.
     pub unmatched: u32,
+    /// Matched entries skipped because they are pending.
+    pub pending_skipped: u32,
+    /// SST entries preserved as old data for future saves.
+    pub old_data_preserved: u32,
+    /// Targets marked with warning because index cardinality was suspicious.
+    pub warning: u32,
+    /// Targets marked with bigWarning because index cardinality differed.
+    pub big_warning: u32,
     /// Updated SkyString IDs.
     pub updated_ids: Vec<u32>,
+    /// Unapplied SST entries retained for later save.
+    pub old_data_entries: Vec<DictionaryApplyEntry>,
 }
 
 impl MatchResult {
@@ -138,9 +202,15 @@ enum TierMatch {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum EntryOutcome {
-    Applied(MatchTier, usize),
+    Matched(MatchTier, usize),
     Ambiguous,
     Unmatched,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ApplyEffect {
+    Applied,
+    PendingSkipped,
 }
 
 /// Apply dictionary entries through the shared matcher.
@@ -148,28 +218,42 @@ pub fn apply_dictionary_entries(
     strings: &mut [SkyString],
     entries: &[DictionaryApplyEntry],
 ) -> MatchResult {
+    apply_dictionary_entries_with_policy(strings, entries, ApplyPolicy::default())
+}
+
+pub fn apply_dictionary_entries_with_policy(
+    strings: &mut [SkyString],
+    entries: &[DictionaryApplyEntry],
+    policy: ApplyPolicy,
+) -> MatchResult {
     let mut result = MatchResult::default();
     let mut matched_ids: HashSet<u32> = HashSet::new();
 
     for entry in entries {
         match match_entry(strings, entry, &matched_ids) {
-            EntryOutcome::Applied(tier, idx) => {
-                apply_match(
-                    strings,
-                    idx,
-                    entry,
-                    &mut result.updated_ids,
-                    &mut matched_ids,
-                );
-                match tier {
-                    MatchTier::Exact => result.tier_exact += 1,
-                    MatchTier::Edid => result.tier_edid += 1,
-                    MatchTier::Normalized => result.tier_normalized += 1,
-                    MatchTier::Vocab => result.tier_vocab += 1,
+            EntryOutcome::Matched(tier, idx) => {
+                let effect = apply_match(strings, idx, entry, tier, policy, &mut result);
+                let matched_id = strings[idx].id;
+                matched_ids.insert(matched_id);
+                if effect == ApplyEffect::Applied {
+                    match tier {
+                        MatchTier::Exact => result.tier_exact += 1,
+                        MatchTier::Edid => result.tier_edid += 1,
+                        MatchTier::Normalized => result.tier_normalized += 1,
+                        MatchTier::Vocab => result.tier_vocab += 1,
+                    }
+                } else {
+                    result.pending_skipped += 1;
                 }
             }
-            EntryOutcome::Ambiguous => result.ambiguous += 1,
-            EntryOutcome::Unmatched => result.unmatched += 1,
+            EntryOutcome::Ambiguous => {
+                result.ambiguous += 1;
+                preserve_old_data(entry, policy, &mut result);
+            }
+            EntryOutcome::Unmatched => {
+                result.unmatched += 1;
+                preserve_old_data(entry, policy, &mut result);
+            }
         }
     }
 
@@ -204,25 +288,25 @@ fn match_entry(
     matched_ids: &HashSet<u32>,
 ) -> EntryOutcome {
     match find_tier1(strings, entry, matched_ids) {
-        TierMatch::Unique(idx) => return EntryOutcome::Applied(MatchTier::Exact, idx),
+        TierMatch::Unique(idx) => return EntryOutcome::Matched(MatchTier::Exact, idx),
         TierMatch::Ambiguous => return EntryOutcome::Ambiguous,
         TierMatch::None => {}
     }
 
     match find_tier2(strings, entry, matched_ids) {
-        TierMatch::Unique(idx) => return EntryOutcome::Applied(MatchTier::Edid, idx),
+        TierMatch::Unique(idx) => return EntryOutcome::Matched(MatchTier::Edid, idx),
         TierMatch::Ambiguous => return EntryOutcome::Ambiguous,
         TierMatch::None => {}
     }
 
     match find_tier3(strings, entry, matched_ids) {
-        TierMatch::Unique(idx) => return EntryOutcome::Applied(MatchTier::Normalized, idx),
+        TierMatch::Unique(idx) => return EntryOutcome::Matched(MatchTier::Normalized, idx),
         TierMatch::Ambiguous => return EntryOutcome::Ambiguous,
         TierMatch::None => {}
     }
 
     match find_tier4(strings, entry, matched_ids) {
-        TierMatch::Unique(idx) => EntryOutcome::Applied(MatchTier::Vocab, idx),
+        TierMatch::Unique(idx) => EntryOutcome::Matched(MatchTier::Vocab, idx),
         TierMatch::Ambiguous => EntryOutcome::Ambiguous,
         TierMatch::None => EntryOutcome::Unmatched,
     }
@@ -382,27 +466,114 @@ fn apply_match(
     strings: &mut [SkyString],
     idx: usize,
     entry: &DictionaryApplyEntry,
-    updated_ids: &mut Vec<u32>,
-    matched_ids: &mut HashSet<u32>,
-) {
+    tier: MatchTier,
+    policy: ApplyPolicy,
+    result: &mut MatchResult,
+) -> ApplyEffect {
     let sk = &mut strings[idx];
+    let mut changed = false;
+
+    if policy.replace_string_id && sk.esp_ptr.str_id != entry.str_id {
+        sk.esp_ptr.str_id = entry.str_id;
+        sk.internal_params
+            .set(SkyStringInternalParams::STRING_ID_CHANGED, true);
+        changed = true;
+    }
+
+    if policy.tag_only {
+        if sk.colab_id != entry.colab_id {
+            sk.colab_id = entry.colab_id;
+            changed = true;
+        }
+        if changed {
+            result.updated_ids.push(sk.id);
+        }
+        return ApplyEffect::Applied;
+    }
+
+    if entry.params.map(|p| p.is_pending()).unwrap_or(false) {
+        if changed {
+            result.updated_ids.push(sk.id);
+        }
+        return ApplyEffect::PendingSkipped;
+    }
 
     if !entry.translation.is_empty() {
         sk.set_translation(entry.translation.clone());
+        changed = true;
     }
 
-    if let Some(params) = entry.params {
-        sk.params = params;
-        if !sk.translation.is_empty() && !sk.params.is_translated() {
-            sk.params.set(SkyStringParams::INCOMPLETE_TRANS, true);
-        }
-    } else {
+    clear_warning_flags(&mut sk.internal_params);
+    apply_status(sk, entry, policy);
+    apply_index_warning(sk, entry, tier, result);
+
+    if changed {
+        result.updated_ids.push(sk.id);
+    }
+
+    ApplyEffect::Applied
+}
+
+fn preserve_old_data(entry: &DictionaryApplyEntry, policy: ApplyPolicy, result: &mut MatchResult) {
+    if policy.preserve_old_data && entry.source_format == DictionarySourceFormat::Sst {
+        result.old_data_preserved += 1;
+        result.old_data_entries.push(entry.clone());
+    }
+}
+
+fn apply_status(sk: &mut SkyString, entry: &DictionaryApplyEntry, policy: ApplyPolicy) {
+    clear_translation_status(&mut sk.params);
+    let params = entry.params.unwrap_or_default();
+
+    if params.is_locked() {
+        sk.params.set(SkyStringParams::LOCKED_TRANS, true);
+    } else if params.is_incomplete() {
+        sk.params.set(SkyStringParams::INCOMPLETE_TRANS, true);
+    } else if policy.same_language {
+        sk.params.set(SkyStringParams::VALIDATED, true);
+    } else if !sk.translation.is_empty() {
         sk.params.set(SkyStringParams::TRANSLATED, true);
-        sk.params.set(SkyStringParams::INCOMPLETE_TRANS, false);
+    } else {
+        sk.params.set(SkyStringParams::INCOMPLETE_TRANS, true);
+    }
+}
+
+fn apply_index_warning(
+    sk: &mut SkyString,
+    entry: &DictionaryApplyEntry,
+    tier: MatchTier,
+    result: &mut MatchResult,
+) {
+    if tier == MatchTier::Exact || (entry.index_max == 0 && sk.esp_ptr.index_max == 0) {
+        return;
     }
 
-    updated_ids.push(sk.id);
-    matched_ids.insert(sk.id);
+    clear_translation_status(&mut sk.params);
+    sk.params.set(SkyStringParams::INCOMPLETE_TRANS, true);
+
+    if entry.index_max != sk.esp_ptr.index_max {
+        sk.internal_params
+            .set(SkyStringInternalParams::BIG_WARNING, true);
+        result.big_warning += 1;
+    } else {
+        sk.internal_params
+            .set(SkyStringInternalParams::WARNING, true);
+        result.warning += 1;
+    }
+}
+
+fn clear_translation_status(params: &mut SkyStringParams) {
+    params.set(SkyStringParams::TRANSLATED, false);
+    params.set(SkyStringParams::LOCKED_TRANS, false);
+    params.set(SkyStringParams::INCOMPLETE_TRANS, false);
+    params.set(SkyStringParams::VALIDATED, false);
+}
+
+fn clear_warning_flags(params: &mut SkyStringInternalParams) {
+    params.set(SkyStringInternalParams::LOW_WARNING, false);
+    params.set(SkyStringInternalParams::WARNING, false);
+    params.set(SkyStringInternalParams::BIG_WARNING, false);
+    params.set(SkyStringInternalParams::N_TRANS, false);
 }
 
 /// Disambiguate EDID candidates using normalized source.
@@ -492,6 +663,22 @@ mod tests {
             source: source.to_string(),
             translation: translation.to_string(),
         }
+    }
+
+    fn make_sst_entry(
+        str_id: i32,
+        rec: [u8; 4],
+        field: [u8; 4],
+        source: &str,
+        translation: &str,
+        params: SkyStringParams,
+    ) -> DictionaryApplyEntry {
+        let mut sk = SkyString::new(99, source.to_string(), translation.to_string(), rec, field);
+        sk.esp_ptr.str_id = str_id;
+        sk.esp_ptr.record_sig = rec;
+        sk.esp_ptr.field_sig = field;
+        sk.params = params;
+        DictionaryApplyEntry::from_sst_entry(&sk)
     }
 
     #[test]
@@ -775,8 +962,236 @@ mod tests {
         assert_eq!(result.total_matched(), 1);
         assert_eq!(strings[0].translation, "你好世界");
         assert!(strings[0].params.is_translated());
-        assert!(strings[0].params.is_validated());
-        assert_eq!(strings[0].params, sst_entry.params);
+        assert!(!strings[0].params.is_validated());
+    }
+
+    #[test]
+    fn test_pending_sst_entry_does_not_overwrite_translation() {
+        let mut strings = vec![make_sk(0, "Hello", 1, *b"LCTN", *b"FULL", 0)];
+        strings[0].set_translation("old".to_string());
+        strings[0].params.set(SkyStringParams::TRANSLATED, true);
+
+        let mut params = SkyStringParams::new();
+        params.set(SkyStringParams::PENDING, true);
+        let entries = vec![make_sst_entry(
+            1, *b"LCTN", *b"FULL", "Hello", "new", params,
+        )];
+
+        let result = apply_dictionary_entries(&mut strings, &entries);
+
+        assert_eq!(result.pending_skipped, 1);
+        assert_eq!(result.total_matched(), 0);
+        assert_eq!(strings[0].translation, "old");
+        assert!(strings[0].params.is_translated());
+    }
+
+    #[test]
+    fn test_locked_and_incomplete_sst_params_take_precedence() {
+        let mut locked_strings = vec![make_sk(0, "Hello", 1, *b"LCTN", *b"FULL", 0)];
+        let mut locked_params = SkyStringParams::new();
+        locked_params.set(SkyStringParams::LOCKED_TRANS, true);
+        locked_params.set(SkyStringParams::TRANSLATED, true);
+        locked_params.set(SkyStringParams::VALIDATED, true);
+        let locked_entries = vec![make_sst_entry(
+            1,
+            *b"LCTN",
+            *b"FULL",
+            "Hello",
+            "locked",
+            locked_params,
+        )];
+
+        let locked_result = apply_dictionary_entries(&mut locked_strings, &locked_entries);
+
+        assert_eq!(locked_result.total_matched(), 1);
+        assert_eq!(locked_strings[0].translation, "locked");
+        assert!(locked_strings[0].params.is_locked());
+        assert!(!locked_strings[0].params.is_translated());
+        assert!(!locked_strings[0].params.is_incomplete());
+        assert!(!locked_strings[0].params.is_validated());
+
+        let mut incomplete_strings = vec![make_sk(0, "World", 2, *b"LCTN", *b"FULL", 0)];
+        let mut incomplete_params = SkyStringParams::new();
+        incomplete_params.set(SkyStringParams::INCOMPLETE_TRANS, true);
+        incomplete_params.set(SkyStringParams::TRANSLATED, true);
+        let incomplete_entries = vec![make_sst_entry(
+            2,
+            *b"LCTN",
+            *b"FULL",
+            "World",
+            "partial",
+            incomplete_params,
+        )];
+
+        let incomplete_result =
+            apply_dictionary_entries(&mut incomplete_strings, &incomplete_entries);
+
+        assert_eq!(incomplete_result.total_matched(), 1);
+        assert_eq!(incomplete_strings[0].translation, "partial");
+        assert!(incomplete_strings[0].params.is_incomplete());
+        assert!(!incomplete_strings[0].params.is_translated());
+        assert!(!incomplete_strings[0].params.is_locked());
+        assert!(!incomplete_strings[0].params.is_validated());
+    }
+
+    #[test]
+    fn test_language_policy_controls_translated_vs_validated() {
+        let mut params = SkyStringParams::new();
+        params.set(SkyStringParams::TRANSLATED, true);
+        let entries = vec![make_sst_entry(
+            1, *b"LCTN", *b"FULL", "Hello", "你好", params,
+        )];
+
+        let mut different_language = vec![make_sk(0, "Hello", 1, *b"LCTN", *b"FULL", 0)];
+        let diff_result = apply_dictionary_entries_with_policy(
+            &mut different_language,
+            &entries,
+            ApplyPolicy::default(),
+        );
+        assert_eq!(diff_result.total_matched(), 1);
+        assert!(different_language[0].params.is_translated());
+        assert!(!different_language[0].params.is_validated());
+
+        let mut same_language = vec![make_sk(0, "Hello", 1, *b"LCTN", *b"FULL", 0)];
+        let same_result = apply_dictionary_entries_with_policy(
+            &mut same_language,
+            &entries,
+            ApplyPolicy {
+                same_language: true,
+                ..ApplyPolicy::default()
+            },
+        );
+        assert_eq!(same_result.total_matched(), 1);
+        assert!(same_language[0].params.is_validated());
+        assert!(!same_language[0].params.is_translated());
+    }
+
+    #[test]
+    fn test_tag_only_and_string_id_replacement_policies() {
+        let mut tag_strings = vec![make_sk(0, "Hello", 1, *b"LCTN", *b"FULL", 0)];
+        tag_strings[0].set_translation("old".to_string());
+        tag_strings[0].params.set(SkyStringParams::TRANSLATED, true);
+
+        let mut tag_entry = make_sst_entry(
+            7,
+            *b"LCTN",
+            *b"FULL",
+            "Hello",
+            "new",
+            SkyStringParams::new(),
+        );
+        tag_entry.colab_id = 42;
+
+        let tag_result = apply_dictionary_entries_with_policy(
+            &mut tag_strings,
+            &[tag_entry.clone()],
+            ApplyPolicy {
+                tag_only: true,
+                ..ApplyPolicy::default()
+            },
+        );
+
+        assert_eq!(tag_result.total_matched(), 1);
+        assert_eq!(tag_strings[0].translation, "old");
+        assert!(tag_strings[0].params.is_translated());
+        assert_eq!(tag_strings[0].colab_id, 42);
+        assert_eq!(tag_strings[0].esp_ptr.str_id, 1);
+
+        let mut id_strings = vec![make_sk(0, "Hello", 1, *b"LCTN", *b"FULL", 0)];
+        let id_result = apply_dictionary_entries_with_policy(
+            &mut id_strings,
+            &[tag_entry],
+            ApplyPolicy {
+                replace_string_id: true,
+                ..ApplyPolicy::default()
+            },
+        );
+
+        assert_eq!(id_result.total_matched(), 1);
+        assert_eq!(id_strings[0].esp_ptr.str_id, 7);
+        assert!(id_strings[0]
+            .internal_params
+            .is_set(SkyStringInternalParams::STRING_ID_CHANGED));
+    }
+
+    #[test]
+    fn test_index_max_warnings_for_fallback_matches() {
+        let edid_hash = string_hash("TestQuest");
+        let mut big_warning_strings = vec![make_sk(0, "Hello", 999, *b"INFO", *b"NAM1", edid_hash)];
+        big_warning_strings[0].esp_ptr.index_max = 3;
+
+        let mut big_entry = make_entry(1, Some("TestQuest"), *b"INFO", *b"NAM1", "Hello", "你好");
+        big_entry.index_max = 2;
+
+        let big_result = enhanced_import_match(&mut big_warning_strings, &[big_entry]);
+
+        assert_eq!(big_result.tier_edid, 1);
+        assert_eq!(big_result.big_warning, 1);
+        assert!(big_warning_strings[0].params.is_incomplete());
+        assert!(big_warning_strings[0]
+            .internal_params
+            .is_set(SkyStringInternalParams::BIG_WARNING));
+
+        let mut warning_strings = vec![make_sk(0, "World", 999, *b"INFO", *b"NAM1", edid_hash)];
+        warning_strings[0].esp_ptr.index_max = 2;
+        let mut warning_entry =
+            make_entry(1, Some("TestQuest"), *b"INFO", *b"NAM1", "World", "世界");
+        warning_entry.index_max = 2;
+
+        let warning_result = enhanced_import_match(&mut warning_strings, &[warning_entry]);
+
+        assert_eq!(warning_result.tier_edid, 1);
+        assert_eq!(warning_result.warning, 1);
+        assert!(warning_strings[0].params.is_incomplete());
+        assert!(warning_strings[0]
+            .internal_params
+            .is_set(SkyStringInternalParams::WARNING));
+    }
+
+    #[test]
+    fn test_unmatched_and_ambiguous_sst_entries_are_preserved_as_old_data() {
+        let entries = vec![make_sst_entry(
+            1,
+            *b"LCTN",
+            *b"FULL",
+            "Missing",
+            "旧译文",
+            SkyStringParams::new(),
+        )];
+        let mut strings = vec![make_sk(0, "Different", 2, *b"LCTN", *b"FULL", 0)];
+
+        let result =
+            apply_dictionary_entries_with_policy(&mut strings, &entries, ApplyPolicy::sst_load());
+
+        assert_eq!(result.unmatched, 1);
+        assert_eq!(result.old_data_preserved, 1);
+        assert_eq!(result.old_data_entries.len(), 1);
+        let old_data = result.old_data_entries[0].to_old_data_sky_string();
+        assert!(old_data.params.is_old_data());
+
+        let ambiguous_entries = vec![make_sst_entry(
+            3,
+            *b"INFO",
+            *b"NAM1",
+            "Shared",
+            "旧共享译文",
+            SkyStringParams::new(),
+        )];
+        let mut ambiguous_strings = vec![
+            make_sk(0, "Shared A", 3, *b"INFO", *b"NAM1", 0),
+            make_sk(1, "Shared B", 3, *b"INFO", *b"NAM1", 0),
+        ];
+
+        let ambiguous_result = apply_dictionary_entries_with_policy(
+            &mut ambiguous_strings,
+            &ambiguous_entries,
+            ApplyPolicy::sst_load(),
+        );
+
+        assert_eq!(ambiguous_result.ambiguous, 1);
+        assert_eq!(ambiguous_result.old_data_preserved, 1);
+        assert_eq!(ambiguous_result.old_data_entries.len(), 1);
+        assert!(ambiguous_strings.iter().all(|sk| sk.translation.is_empty()));
     }
 
     #[test]
