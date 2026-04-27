@@ -44,12 +44,7 @@ impl ProviderType {
 #[async_trait::async_trait]
 pub trait TranslationProvider: Send + Sync {
     /// 翻译文本（异步）
-    async fn translate(
-        &self,
-        text: &str,
-        source_lang: &str,
-        target_lang: &str,
-    ) -> Result<String>;
+    async fn translate(&self, text: &str, source_lang: &str, target_lang: &str) -> Result<String>;
 }
 
 /// OpenAI 兼容翻译 Provider

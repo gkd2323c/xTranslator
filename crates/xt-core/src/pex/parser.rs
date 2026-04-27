@@ -21,7 +21,12 @@ pub fn parse_pex<R: Read>(reader: &mut R) -> Result<PexScript> {
     let game_id = reader.read_u16::<LittleEndian>()?;
     let compile_time = reader.read_u64::<LittleEndian>()?;
 
-    let header = PexHeader { major_version, minor_version, game_id, compile_time };
+    let header = PexHeader {
+        major_version,
+        minor_version,
+        game_id,
+        compile_time,
+    };
 
     // String table
     let st_count = reader.read_u16::<LittleEndian>()? as usize;
@@ -30,7 +35,10 @@ pub fn parse_pex<R: Read>(reader: &mut R) -> Result<PexScript> {
         let len = reader.read_u16::<LittleEndian>()? as usize;
         let mut bytes = vec![0u8; len];
         reader.read_exact(&mut bytes)?;
-        string_table.push(PexStringEntry { index: i as u16, text: String::from_utf8_lossy(&bytes).into_owned() });
+        string_table.push(PexStringEntry {
+            index: i as u16,
+            text: String::from_utf8_lossy(&bytes).into_owned(),
+        });
     }
 
     // Debug info
@@ -70,7 +78,11 @@ pub fn parse_pex<R: Read>(reader: &mut R) -> Result<PexScript> {
         parse_object_body(&mut cur, &obj_name, st, &mut translatable)?;
     }
 
-    Ok(PexScript { header, string_table, translatable })
+    Ok(PexScript {
+        header,
+        string_table,
+        translatable,
+    })
 }
 
 type StrTab = Vec<PexStringEntry>;
@@ -259,11 +271,21 @@ fn skip_var_value(cur: &mut Cursor<&[u8]>, st: &StrTab) -> Result<()> {
     let val_type = cur.read_u8()?;
     match val_type {
         0 => {}
-        1 => { let _ = cur.read_u8()?; }
-        2 => { let _ = cur.read_u32::<LittleEndian>()?; }
-        3 => { let _ = cur.read_f32::<LittleEndian>()?; }
-        4 => { let _ = cur.read_u8()?; }
-        5 => { let _idx = cur.read_u16::<LittleEndian>()?; }
+        1 => {
+            let _ = cur.read_u8()?;
+        }
+        2 => {
+            let _ = cur.read_u32::<LittleEndian>()?;
+        }
+        3 => {
+            let _ = cur.read_f32::<LittleEndian>()?;
+        }
+        4 => {
+            let _ = cur.read_u8()?;
+        }
+        5 => {
+            let _idx = cur.read_u16::<LittleEndian>()?;
+        }
         6 | 7 | 8 => {
             let count = cur.read_u16::<LittleEndian>()? as usize;
             for _ in 0..count {
@@ -302,8 +324,20 @@ fn skip_var_value(cur: &mut Cursor<&[u8]>, st: &StrTab) -> Result<()> {
 fn skip_instruction(cur: &mut Cursor<&[u8]>) -> Result<()> {
     let opcode = cur.read_u8()?;
     let args: usize = match opcode {
-        0x00..=0x0D | 0x0F | 0x12 | 0x16 | 0x1B | 0x1E | 0x22 | 0x23 | 0x24 | 0x26 | 0x28..=0x2A | 0x2C => 0,
-        0x0E | 0x10 | 0x11 | 0x13 | 0x14 | 0x1A | 0x1C | 0x1D | 0x1F | 0x20 | 0x21 | 0x25 | 0x27 => 1,
+        0x00..=0x0D
+        | 0x0F
+        | 0x12
+        | 0x16
+        | 0x1B
+        | 0x1E
+        | 0x22
+        | 0x23
+        | 0x24
+        | 0x26
+        | 0x28..=0x2A
+        | 0x2C => 0,
+        0x0E | 0x10 | 0x11 | 0x13 | 0x14 | 0x1A | 0x1C | 0x1D | 0x1F | 0x20 | 0x21 | 0x25
+        | 0x27 => 1,
         0x15 | 0x17 | 0x18 | 0x19 | 0x2B | 0x2D => 2,
         _ => 1,
     };
@@ -365,7 +399,10 @@ mod tests {
         assert_eq!(script.string_table.len(), 3);
         assert_eq!(script.translatable.len(), 1);
         assert_eq!(script.translatable[0].object_name, "TestObject");
-        assert_eq!(script.translatable[0].source_text, "A doc string for translation");
+        assert_eq!(
+            script.translatable[0].source_text,
+            "A doc string for translation"
+        );
     }
 
     #[test]

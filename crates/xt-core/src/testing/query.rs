@@ -120,6 +120,10 @@ mod tests {
         assert_eq!(result.total, 100_000);
         println!("Filter 'Dragon' on 100k items: {}ms", result.elapsed_ms);
         // 宽松标准：阶段 0 允许 < 500ms，后续优化到 < 100ms
-        assert!(result.elapsed_ms < 500, "Filter too slow: {}ms", result.elapsed_ms);
+        assert!(
+            result.elapsed_ms < 500,
+            "Filter too slow: {}ms",
+            result.elapsed_ms
+        );
     }
 }

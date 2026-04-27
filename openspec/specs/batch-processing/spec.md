@@ -1,6 +1,8 @@
-# Requirements — Batch Processing
+## Purpose
 
-## ADDED
+Define how batch translation and export jobs operate across multiple ESP files, including progress reporting, isolation from the interactive editor, and the backend reference used by batch IPC commands.
+
+## Requirements
 
 ### Requirement: Batch translation across multiple ESP files
 System SHALL accept list of ESP file entries and run AI translation sequentially across all, saving translated strings files per file.
@@ -76,11 +78,9 @@ Batch processing SHALL operate independently of the interactive editor session, 
 - **THEN** interactive session remains unchanged
 - **THEN** batch completes without affecting file A's AppState
 
-## MODIFIED
-
 ### Requirement: AppState gains BatchExecutor reference
 AppState SHALL hold an `Arc<BatchExecutor>` to manage batch job lifecycle, accessible from batch IPC commands.
 
-## REMOVED
-
-None.
+#### Scenario: Batch executor available to commands
+- **WHEN** batch translate or export IPC commands are invoked
+- **THEN** the commands SHALL access the shared `BatchExecutor` from AppState

@@ -264,7 +264,7 @@ end;
 | Windows codepage fallback | ✅ | 932/936/949/950/1250-1257 (encoding_rs) |
 | Codepage 自动推断 | ✅ | 从文件名提取语言名，查询 codepage 配置表 |
 | Strings 写入 | ✅ | 使用 codepage 编码写入 |
-| 写入去重 | ⚠️ | 未实现 (相同翻译共享偏移) |
+| 写入去重 | ✅ | 已实现 (相同翻译共享偏移) |
 
 ---
 

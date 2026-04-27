@@ -27,7 +27,7 @@ pub struct BsaFolder {
     pub hash: u64,
     pub files: Vec<BsaFileRecord>,
     pub file_map: HashMap<u64, usize>, // hash -> index in files
-    pub offset: u64, // 文件记录位置（仅用于解析阶段）
+    pub offset: u64,                   // 文件记录位置（仅用于解析阶段）
 }
 
 /// BSA 目录结构
@@ -113,11 +113,18 @@ impl BsaDirectory {
             }
         }
 
-        Ok(BsaDirectory { folders, folder_map })
+        Ok(BsaDirectory {
+            folders,
+            folder_map,
+        })
     }
 
     /// 查找文件（先按文件夹哈希，再按文件哈希）
-    pub fn find_file(&self, folder_hash: u64, file_hash: u64) -> Option<(&BsaFolder, &BsaFileRecord)> {
+    pub fn find_file(
+        &self,
+        folder_hash: u64,
+        file_hash: u64,
+    ) -> Option<(&BsaFolder, &BsaFileRecord)> {
         let folder_idx = self.folder_map.get(&folder_hash)?;
         let folder = &self.folders[*folder_idx];
         let file_idx = folder.file_map.get(&file_hash)?;
@@ -219,11 +226,12 @@ mod tests {
         assert_eq!(bsa_hash64("test", ".ext"), bsa_hash64("test", ".ext"));
     }
 
-
-
     #[test]
     fn test_str_to_num() {
         assert_eq!(str_to_num(b"a"), 97);
-        assert_eq!(str_to_num(b"ab"), 97u64.wrapping_mul(0x1003F).wrapping_add(98));
+        assert_eq!(
+            str_to_num(b"ab"),
+            97u64.wrapping_mul(0x1003F).wrapping_add(98)
+        );
     }
 }

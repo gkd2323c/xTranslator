@@ -17,10 +17,14 @@ fn print_usage() {
     println!("  sst roundtrip <input.sst> <output.sst>   Read+write+verify SST roundtrip");
     println!("  apply <input.esp/esm> <sst> [output.txt] Parse ESP and apply SST translation");
     println!("  apply-xml <input.esp/esm> <sst> <output.xml> Parse ESP, apply SST, export XML");
-    println!("  diff <esp/esm> <xml>                     Compare ESP parsing with Delphi XML export");
+    println!(
+        "  diff <esp/esm> <xml>                     Compare ESP parsing with Delphi XML export"
+    );
     println!("  diff-xml <xml1> <xml2>                   Compare two XML exports");
     println!("  strings load <file>                      Load and display strings file");
-    println!("  strings save <source> <dest>             Save strings to file (auto-detect format)");
+    println!(
+        "  strings save <source> <dest>             Save strings to file (auto-detect format)"
+    );
     println!("  strings modify <file> <id> <text>        Modify a string entry in-place");
     println!();
     println!("Examples:");

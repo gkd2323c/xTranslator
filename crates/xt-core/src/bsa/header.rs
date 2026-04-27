@@ -15,8 +15,8 @@ pub struct BsaHeader {
 }
 
 /// BSA 版本常量
-pub const BSAHEADER_VERSION_OB: u32 = 0x67;  // Oblivion
-pub const BSAHEADER_VERSION_SK: u32 = 0x68;  // Skyrim/Fallout3
+pub const BSAHEADER_VERSION_OB: u32 = 0x67; // Oblivion
+pub const BSAHEADER_VERSION_SK: u32 = 0x68; // Skyrim/Fallout3
 pub const BSAHEADER_VERSION_SSE: u32 = 0x69; // Skyrim Special Edition
 
 /// ArchiveFlags 关键位

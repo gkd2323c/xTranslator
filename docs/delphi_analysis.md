@@ -35,7 +35,7 @@
 - [ ] 翻译匹配流程 (TESVT_TranslateFunc.pas)
 - [ ] 文件加载流程 (TESVT_MainLoader.pas)
 - [ ] SST 字典应用逻辑 (id 匹配, 词汇匹配)
-- [ ] 翻译保存流程 (checkForNullTrans, hash 去重)
+- [x] 翻译保存流程 (checkForNullTrans, hash 去重)
 - [ ] BSA/BA2 归档读取
 - [ ] PEX 脚本解析
 - [ ] FUZ 音频匹配
@@ -55,7 +55,7 @@
 ### Strings 文件写入
 - **Delphi**: `TESVT_StringsFunc.pas:326-430` (`saveStringFile`)
 - **关键逻辑**: 按 hash_trans+trans 去重, 按 strId 排序, codepage.f 函数指针编码
-- **Rust**: ✅ 已实现 `StringsFile::save()`，支持 null-终止和长度前缀两种格式 + codepage 编码。去重优化（hash_trans+trans 共享偏移）未实现。
+- **Rust**: ✅ 已实现 `StringsFile::save()`，支持 null-终止和长度前缀两种格式 + codepage 编码 + 去重（hash_trans+trans 共享偏移）。
 
 ### Codepage 系统
 - **Delphi**: `TESVT_fstreamSave.pas:189-364` (`getcodepage`)

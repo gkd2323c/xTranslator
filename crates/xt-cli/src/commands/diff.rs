@@ -131,7 +131,8 @@ fn parse_esp_strings(esp_path: &str) -> Result<Vec<xt_core::types::sky_string::S
     if let Some(parent) = path.parent() {
         let strings_dir = parent.join("Strings");
         if strings_dir.exists() {
-            let base_name = path.file_stem()
+            let base_name = path
+                .file_stem()
                 .and_then(|s| s.to_str())
                 .unwrap_or("Skyrim");
             parser.load_strings_files(&strings_dir, base_name);
@@ -154,8 +155,10 @@ pub fn diff_xml_with_xml(xml1_path: &str, xml2_path: &str) -> Result<()> {
     println!("XML2 entries: {}", entries2.len());
 
     // Build key maps
-    let mut map1: std::collections::HashMap<String, &XmlStringEntry> = std::collections::HashMap::new();
-    let mut map2: std::collections::HashMap<String, &XmlStringEntry> = std::collections::HashMap::new();
+    let mut map1: std::collections::HashMap<String, &XmlStringEntry> =
+        std::collections::HashMap::new();
+    let mut map2: std::collections::HashMap<String, &XmlStringEntry> =
+        std::collections::HashMap::new();
 
     for e in &entries1 {
         let key = format!(
@@ -203,9 +206,18 @@ pub fn diff_xml_with_xml(xml1_path: &str, xml2_path: &str) -> Result<()> {
         println!("\n--- Translation Diff (first 20) ---");
         for diff in translation_diffs.iter().take(20) {
             println!("  {}", diff.key);
-            println!("    Source: {}", diff.source.chars().take(50).collect::<String>());
-            println!("    XML1:   {}", diff.trans1.chars().take(50).collect::<String>());
-            println!("    XML2:   {}", diff.trans2.chars().take(50).collect::<String>());
+            println!(
+                "    Source: {}",
+                diff.source.chars().take(50).collect::<String>()
+            );
+            println!(
+                "    XML1:   {}",
+                diff.trans1.chars().take(50).collect::<String>()
+            );
+            println!(
+                "    XML2:   {}",
+                diff.trans2.chars().take(50).collect::<String>()
+            );
         }
     }
 

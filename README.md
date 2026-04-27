@@ -19,9 +19,7 @@ A modern Rust-based translator for Bethesda game mods (Skyrim, Skyrim SE, Fallou
 ### Translation APIs
 - **DeepL**: Free and Pro API support (auto-detected from API key)
 - **OpenAI Compatible**: OpenAI, DeepSeek, and other Chat Completions API providers (supports prompt templates)
-- **Google Translate**: Free web endpoint
-- **Microsoft Translator**: Azure Cognitive Services
-- **Youdao & Baidu**: Chinese translation services
+- Other translation providers from the Delphi original are not yet implemented here.
 
 ### Advanced Features
 - **GMST:DATA Filtering**: Automatic detection of translatable vs numeric GMST records
@@ -157,13 +155,9 @@ Original xTranslator by McGuffin and contributors. This Rust rewrite preserves t
 - PCRE Regex: http://www.regular-expressions.info/delphi.html
 - Hunspell: https://github.com/hunspell/hunspell
 
-### Translation APIs
+### Translation API References
 - DeepL: https://www.deepl.com/translator
-- Microsoft Translator: https://azure.microsoft.com/
 - OpenAI: https://api.openai.com/
-- Google Translate: https://translate.google.com/
-- Youdao: https://translate.youdao.com/
-- Baidu: https://fanyi.baidu.com/
 
 ## License
 

@@ -83,7 +83,8 @@ fn parse_wav_header(data: &[u8]) -> (f32, u32, u16) {
     if let Some(dp) = data[pos..].windows(4).position(|w| w == b"data") {
         let ds = pos + dp + 4;
         if ds + 4 <= data.len() {
-            data_size = u32::from_le_bytes([data[ds], data[ds+1], data[ds+2], data[ds+3]]) as usize;
+            data_size =
+                u32::from_le_bytes([data[ds], data[ds + 1], data[ds + 2], data[ds + 3]]) as usize;
         }
     }
 

@@ -59,7 +59,8 @@ impl EsmCache {
         }
 
         // 尝试触摸缓存文件（更新访问时间为解析替用时间）
-        let _ = std::fs::File::open(&cache_path).and_then(|f| f.set_modified(std::time::SystemTime::now()));
+        let _ = std::fs::File::open(&cache_path)
+            .and_then(|f| f.set_modified(std::time::SystemTime::now()));
 
         let data = std::fs::read(&cache_path).ok()?;
         let payload: CachePayload = bincode::deserialize(&data).ok()?;
@@ -289,7 +290,10 @@ mod tests {
 
         // Create 3 different ESP files to generate 3 cache entries
         for i in 0..3 {
-            let esp_path = temp_file(&format!("prune{}.esp", i), format!("content {}", i).as_bytes());
+            let esp_path = temp_file(
+                &format!("prune{}.esp", i),
+                format!("content {}", i).as_bytes(),
+            );
             let payload = CachePayload {
                 version: CACHE_VERSION,
                 strings: vec![make_sk(0, &format!("S{}", i), *b"LCTN", *b"FULL")],

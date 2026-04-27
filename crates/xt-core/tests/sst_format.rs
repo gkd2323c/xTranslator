@@ -14,7 +14,13 @@ fn test_sst_byte_level_structure() {
     dict.master_list = vec!["Skyrim.esm".to_string()];
     dict.colab_labels = vec![(1, "TeamA".to_string())];
 
-    let mut sk = SkyString::new(0, "Hello".to_string(), "Bonjour".to_string(), *b"INFO", *b"DESC");
+    let mut sk = SkyString::new(
+        0,
+        "Hello".to_string(),
+        "Bonjour".to_string(),
+        *b"INFO",
+        *b"DESC",
+    );
     sk.esp_ptr = EspPointer {
         str_id: 42,
         form_id: 0xDEADBEEF,
@@ -94,8 +100,14 @@ fn test_sst_byte_level_structure() {
     // 11. EspPointerLite (24 bytes)
     let mut esp_bytes = [0u8; 24];
     cursor.read_exact(&mut esp_bytes).unwrap();
-    assert_eq!(i32::from_le_bytes([esp_bytes[0], esp_bytes[1], esp_bytes[2], esp_bytes[3]]), 42);
-    assert_eq!(u32::from_le_bytes([esp_bytes[4], esp_bytes[5], esp_bytes[6], esp_bytes[7]]), 0xDEADBEEF);
+    assert_eq!(
+        i32::from_le_bytes([esp_bytes[0], esp_bytes[1], esp_bytes[2], esp_bytes[3]]),
+        42
+    );
+    assert_eq!(
+        u32::from_le_bytes([esp_bytes[4], esp_bytes[5], esp_bytes[6], esp_bytes[7]]),
+        0xDEADBEEF
+    );
 
     // 12. colabId
     let mut colab_id_byte = [0u8; 1];
@@ -139,7 +151,13 @@ fn test_sst_various_characters() {
 
     for (name, source, translation) in test_cases {
         let mut dict = SstDictionary::new();
-        let sk = SkyString::new(0, source.to_string(), translation.to_string(), *b"INFO", *b"NAME");
+        let sk = SkyString::new(
+            0,
+            source.to_string(),
+            translation.to_string(),
+            *b"INFO",
+            *b"NAME",
+        );
         dict.entries.push(sk);
 
         let mut buf = Vec::new();
@@ -148,11 +166,13 @@ fn test_sst_various_characters() {
         let dict2 = SstDictionary::read_from(&mut buf.as_slice()).unwrap();
         assert_eq!(
             dict2.entries[0].source, source,
-            "Source mismatch for '{}'", name
+            "Source mismatch for '{}'",
+            name
         );
         assert_eq!(
             dict2.entries[0].translation, translation,
-            "Translation mismatch for '{}'", name
+            "Translation mismatch for '{}'",
+            name
         );
     }
 }

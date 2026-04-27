@@ -100,6 +100,8 @@ V17: ∀ theme change → localStorage `xtranslator-theme` updated + `data-theme
 V18: ∀ replaceAll → confirmation dialog required; batch-update each candidate via update_translation; reload all strings after; progress toast shown
 V19: ∀ loadAllStrings → get_strings_chunk primary (10K/batch); get_all_strings fallback (small datasets); query_strings last resort (paginated, no full store)
 V20: ∀ load_esp → before parsing, check EsmCache via SHA-256 of ESP file in `%LOCALAPPDATA%/xTranslator/cache/`; on hit return cached bincode blob; on miss parse then store
+V21: ∀ tests that mutate/read `XT_TRANSLATE_API_*` → isolate env changes under shared lock and restore prior values; assertions must not depend on the caller's ambient env
+V22: ∀ parse_record_debug on GRUP → decrement record_count saturatingly; nested/empty GRUPs must never underflow the unsigned counter
 
 ## §T Tasks
 
@@ -139,3 +141,5 @@ B1|2026-04-20|compressed_records stat always 0 in LoadEspResponse|Fixed: track c
 B2|2026-04-20|edid_hash always 0 in EspPointer (EDID hashing not implemented)|Fixed: compute FNV-1a hash from EDID string
 B3|2026-04-20|source_normalized & normalized_hash always None/None (normalization not implemented)|Fixed: add normalization and hash computation in SkyString::new
 B4|2026-04-20|SkyString.word_hashes always empty (tokenization not implemented)|Fixed: tokenize source and compute hashes in SkyString::new
+B5|2026-04-27|OpenAI provider tests read ambient XT_TRANSLATE_API_BASE/MODEL, so local env changed default assertions|Fixed: isolate and restore XT_TRANSLATE_API_* under shared test env lock (V21)
+B6|2026-04-27|parse_record_debug decremented record_count unconditionally for GRUPs, underflowing on empty/leading groups in real Skyrim data|Fixed: saturating_sub on GRUP traversal + regression test (V22)

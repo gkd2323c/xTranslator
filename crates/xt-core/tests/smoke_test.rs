@@ -5,12 +5,11 @@
 
 use std::path::PathBuf;
 use xt_core::esp::parser::EspParser;
-use xt_core::strings::StringsFile;
 use xt_core::sst::v8::SstDictionary;
+use xt_core::strings::StringsFile;
 use xt_core::types::params::SkyStringParams;
 
-const SKYRIM_ESM: &str =
-    r"D:\SteamLibrary\steamapps\common\Skyrim Special Edition\Data\Skyrim.esm";
+const SKYRIM_ESM: &str = r"D:\SteamLibrary\steamapps\common\Skyrim Special Edition\Data\Skyrim.esm";
 const DATA_DIR: &str = r"D:\SteamLibrary\steamapps\common\Skyrim Special Edition\Data";
 
 fn skyrim_data_available() -> bool {
@@ -28,8 +27,15 @@ fn smoke_parse_esp() {
     let mut file = std::fs::File::open(SKYRIM_ESM).unwrap();
     parser.parse(&mut file).unwrap();
 
-    assert!(parser.strings.len() > 70000, "Too few strings: {}", parser.strings.len());
-    assert!(!parser.strings[0].source.is_empty(), "First string source empty");
+    assert!(
+        parser.strings.len() > 70000,
+        "Too few strings: {}",
+        parser.strings.len()
+    );
+    assert!(
+        !parser.strings[0].source.is_empty(),
+        "First string source empty"
+    );
 }
 
 /// 2. Parse -> edit a string -> save Strings -> reload -> verify
@@ -45,7 +51,9 @@ fn smoke_edit_save_reload() {
 
     let test_text = "SMOKE_TEST_ROUNDTRIP_42";
     parser.strings[0].translation = test_text.to_string();
-    parser.strings[0].params.set(SkyStringParams::TRANSLATED, true);
+    parser.strings[0]
+        .params
+        .set(SkyStringParams::TRANSLATED, true);
 
     // Save translations to temp Strings file
     let tmp = std::env::temp_dir().join("xt_smoke_strings");
@@ -56,7 +64,8 @@ fn smoke_edit_save_reload() {
     sf.format = xt_core::strings::StringsFormat::NullTerminated;
     for s in &parser.strings {
         if s.params.is_translated() && !s.translation.is_empty() {
-            sf.strings.insert(s.esp_ptr.str_id as u32, s.translation.clone());
+            sf.strings
+                .insert(s.esp_ptr.str_id as u32, s.translation.clone());
         }
     }
     sf.save(&output).unwrap();
@@ -88,7 +97,9 @@ fn smoke_sst_roundtrip() {
 
     let test_text = "SMOKE_SST_TEST_99";
     parser.strings[0].translation = test_text.to_string();
-    parser.strings[0].params.set(SkyStringParams::TRANSLATED, true);
+    parser.strings[0]
+        .params
+        .set(SkyStringParams::TRANSLATED, true);
 
     let sst = SstDictionary::from_entries(parser.strings.clone());
     let tmp = std::env::temp_dir().join("smoke_roundtrip.sst");

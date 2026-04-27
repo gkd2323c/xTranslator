@@ -51,7 +51,8 @@ pub fn modify_strings(path: &str, id: u32, text: &str) -> Result<()> {
     let old = sf.strings.get(&id).cloned();
     sf.strings.insert(id, text.to_string());
 
-    sf.save(path).with_context(|| format!("Failed to save: {}", path))?;
+    sf.save(path)
+        .with_context(|| format!("Failed to save: {}", path))?;
 
     match old {
         Some(old_text) => println!("[{}] '{}' -> '{}'", id, old_text, text),

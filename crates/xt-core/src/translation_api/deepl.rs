@@ -2,7 +2,7 @@
 //!
 //! Implements the DeepL API for text translation.
 //! Supports both free and pro API endpoints.
-//! 
+//!
 //! The DeepL API expects:
 //! - POST https://api-free.deepl.com/v2/translate (free) or https://api.deepl.com/v2/translate (pro)
 //! - Headers: "Authorization: DeepL-Auth-Key <key>"
@@ -74,20 +74,12 @@ impl DeepLProvider {
 
 #[async_trait::async_trait]
 impl super::TranslationProvider for DeepLProvider {
-    async fn translate(
-        &self,
-        text: &str,
-        source_lang: &str,
-        target_lang: &str,
-    ) -> Result<String> {
+    async fn translate(&self, text: &str, source_lang: &str, target_lang: &str) -> Result<String> {
         let client = reqwest::Client::new();
         let url = self.get_endpoint();
 
         // Build request parameters
-        let mut params = vec![
-            ("text", text),
-            ("target_lang", target_lang),
-        ];
+        let mut params = vec![("text", text), ("target_lang", target_lang)];
 
         // Add source language if specified and not empty
         if !source_lang.is_empty() {
@@ -152,7 +144,10 @@ mod tests {
         let provider = DeepLProvider::new("test-key:fx".to_string());
         assert_eq!(provider.api_key, "test-key:fx");
         assert!(provider.use_free_api);
-        assert_eq!(provider.get_endpoint(), "https://api-free.deepl.com/v2/translate");
+        assert_eq!(
+            provider.get_endpoint(),
+            "https://api-free.deepl.com/v2/translate"
+        );
     }
 
     #[test]
@@ -160,7 +155,10 @@ mod tests {
         let provider = DeepLProvider::new("test-key".to_string());
         assert_eq!(provider.api_key, "test-key");
         assert!(!provider.use_free_api);
-        assert_eq!(provider.get_endpoint(), "https://api.deepl.com/v2/translate");
+        assert_eq!(
+            provider.get_endpoint(),
+            "https://api.deepl.com/v2/translate"
+        );
     }
 
     #[test]

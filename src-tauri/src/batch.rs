@@ -46,7 +46,9 @@ impl BatchExecutor {
     /// 检查是否空闲
     #[allow(dead_code)]
     pub fn is_idle(&self) -> bool {
-        self.state.lock().map_or(false, |s| matches!(&*s, BatchJobState::Idle))
+        self.state
+            .lock()
+            .map_or(false, |s| matches!(&*s, BatchJobState::Idle))
     }
 
     /// 获取当前批处理状态摘要
@@ -54,25 +56,31 @@ impl BatchExecutor {
         let state = self.state.lock().ok()?;
         match &*state {
             BatchJobState::Idle => None,
-            BatchJobState::Running { job_id, job_type, started_at, entries, provider: _, target_lang: _, skip_translated: _ } => {
-                Some(BatchStatus {
-                    job_id: job_id.clone(),
-                    job_type: job_type.clone(),
-                    total_files: entries.len() as u32,
-                    completed_files: 0,
-                    failed_files: 0,
-                    current_file: None,
-                    current_file_progress: 0.0,
-                    total_strings: 0,
-                    translated_strings: 0,
-                    is_running: true,
-                    is_cancelled: false,
-                    is_completed: false,
-                    is_failed: false,
-                    errors: Vec::new(),
-                    elapsed_ms: started_at.elapsed().as_millis() as u64,
-                })
-            }
+            BatchJobState::Running {
+                job_id,
+                job_type,
+                started_at,
+                entries,
+                provider: _,
+                target_lang: _,
+                skip_translated: _,
+            } => Some(BatchStatus {
+                job_id: job_id.clone(),
+                job_type: job_type.clone(),
+                total_files: entries.len() as u32,
+                completed_files: 0,
+                failed_files: 0,
+                current_file: None,
+                current_file_progress: 0.0,
+                total_strings: 0,
+                translated_strings: 0,
+                is_running: true,
+                is_cancelled: false,
+                is_completed: false,
+                is_failed: false,
+                errors: Vec::new(),
+                elapsed_ms: started_at.elapsed().as_millis() as u64,
+            }),
             BatchJobState::Done { result } => Some(BatchStatus {
                 job_id: result.job_id.clone(),
                 job_type: String::new(),
@@ -87,7 +95,11 @@ impl BatchExecutor {
                 is_cancelled: result.is_cancelled,
                 is_completed: !result.is_cancelled,
                 is_failed: result.failed == result.total_files && result.total_files > 0,
-                errors: result.errors.iter().map(|e| format!("{}: {}", e.file_path, e.message)).collect(),
+                errors: result
+                    .errors
+                    .iter()
+                    .map(|e| format!("{}: {}", e.file_path, e.message))
+                    .collect(),
                 elapsed_ms: result.duration_ms,
             }),
         }
@@ -115,10 +127,13 @@ impl BatchExecutor {
             if matches!(&*s, BatchJobState::Running { .. }) {
                 return Err("A batch job is already running".to_string());
             }
-            let job_id = format!("batch_{}", std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|d| d.as_millis())
-                .unwrap_or(0));
+            let job_id = format!(
+                "batch_{}",
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_millis())
+                    .unwrap_or(0)
+            );
             *s = BatchJobState::Running {
                 job_id: job_id.clone(),
                 job_type: "translate".to_string(),
@@ -137,7 +152,15 @@ impl BatchExecutor {
         let window_clone = window.clone();
 
         tokio::spawn(async move {
-            run_batch_translate(executor, window_clone, entries, provider, target_lang, skip_translated).await;
+            run_batch_translate(
+                executor,
+                window_clone,
+                entries,
+                provider,
+                target_lang,
+                skip_translated,
+            )
+            .await;
         });
 
         // 返回 job_id
@@ -164,10 +187,13 @@ impl BatchExecutor {
             if matches!(&*s, BatchJobState::Running { .. }) {
                 return Err("A batch job is already running".to_string());
             }
-            let job_id = format!("batch_{}", std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|d| d.as_millis())
-                .unwrap_or(0));
+            let job_id = format!(
+                "batch_{}",
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_millis())
+                    .unwrap_or(0)
+            );
             *s = BatchJobState::Running {
                 job_id: job_id.clone(),
                 job_type: "export".to_string(),
@@ -175,7 +201,7 @@ impl BatchExecutor {
                 entries: entries.clone(),
                 provider: ProviderType::OpenAI, // unused for export
                 target_lang: "english".to_string(), // unused for export
-                skip_translated: false, // unused for export
+                skip_translated: false,         // unused for export
             };
         }
 
@@ -291,8 +317,7 @@ fn parse_esp_for_batch(
         .unwrap_or_else(|| detect_game_from_path(esp_path));
 
     let data_dir = std::path::Path::new("Data");
-    let mut parser = EspParser::with_game(data_dir, game_id)
-        .unwrap_or_else(|_| EspParser::new());
+    let mut parser = EspParser::with_game(data_dir, game_id).unwrap_or_else(|_| EspParser::new());
 
     let lang = language;
     let base_name = std::path::Path::new(esp_path)
@@ -301,14 +326,16 @@ fn parse_esp_for_batch(
         .unwrap_or("skyrim");
 
     // Codepage
-    let codepage_path = data_dir.join(match game_id {
-        GameId::Skyrim => "Skyrim",
-        GameId::SkyrimSE => "SkyrimSE",
-        GameId::Fallout4 => "Fallout4",
-        GameId::FalloutNV => "FalloutNV",
-        GameId::Fallout76 => "Fallout76",
-        GameId::Starfield => "Starfield",
-    }).join("codepage.txt");
+    let codepage_path = data_dir
+        .join(match game_id {
+            GameId::Skyrim => "Skyrim",
+            GameId::SkyrimSE => "SkyrimSE",
+            GameId::Fallout4 => "Fallout4",
+            GameId::FalloutNV => "FalloutNV",
+            GameId::Fallout76 => "Fallout76",
+            GameId::Starfield => "Starfield",
+        })
+        .join("codepage.txt");
 
     let codepage_table = if codepage_path.exists() {
         CodepageTable::load_from_file(&codepage_path).ok()
@@ -325,9 +352,8 @@ fn parse_esp_for_batch(
     let strings_loaded = if let Some(dir) = strings_dir {
         let dir_path = std::path::Path::new(dir);
         if let Some(ref table) = codepage_table {
-            parser.strings_files = StringsFiles::load_from_dir_with_language(
-                dir_path, base_name, lang, table,
-            );
+            parser.strings_files =
+                StringsFiles::load_from_dir_with_language(dir_path, base_name, lang, table);
         } else {
             parser.load_strings_files(dir_path, base_name);
         }
@@ -338,9 +364,8 @@ fn parse_esp_for_batch(
 
     if strings_loaded == 0 {
         if let Some(ref table) = codepage_table {
-            parser.strings_files = StringsFiles::load_from_dir_with_language(
-                esp_dir, base_name, lang, table,
-            );
+            parser.strings_files =
+                StringsFiles::load_from_dir_with_language(esp_dir, base_name, lang, table);
         } else {
             parser.load_strings_files(esp_dir, base_name);
         }
@@ -350,7 +375,8 @@ fn parse_esp_for_batch(
     let mut file = std::fs::File::open(esp_path)
         .map_err(|e| format!("Failed to open ESP {}: {}", esp_path, e))?;
 
-    parser.parse(&mut file)
+    parser
+        .parse(&mut file)
         .map_err(|e| format!("Failed to parse ESP {}: {}", esp_path, e))?;
 
     let total = parser.strings.len() as u32;
@@ -377,12 +403,8 @@ async fn run_batch_translate(
 
     // 读取 API key（环境变量）
     let api_key = match provider {
-        ProviderType::OpenAI => {
-            std::env::var("XT_TRANSLATE_API_KEY").unwrap_or_default()
-        }
-        ProviderType::DeepL => {
-            std::env::var("XT_DEEPL_API_KEY").unwrap_or_default()
-        }
+        ProviderType::OpenAI => std::env::var("XT_TRANSLATE_API_KEY").unwrap_or_default(),
+        ProviderType::DeepL => std::env::var("XT_DEEPL_API_KEY").unwrap_or_default(),
     };
 
     let source_api_code = "EN";
@@ -391,9 +413,15 @@ async fn run_batch_translate(
     for (i, entry) in entries.iter().enumerate() {
         // 取消检查
         if executor.cancel_flag.load(Ordering::SeqCst) {
-            let _ = window.emit("batch-progress", make_progress(
-                "batch-progress", "", "", &format!("Cancelled after {}/{} files", completed_files, total_files),
-            ));
+            let _ = window.emit(
+                "batch-progress",
+                make_progress(
+                    "batch-progress",
+                    "",
+                    "",
+                    &format!("Cancelled after {}/{} files", completed_files, total_files),
+                ),
+            );
             break;
         }
 
@@ -403,53 +431,78 @@ async fn run_batch_translate(
             .unwrap_or(&entry.esp_path)
             .to_string();
 
-        let language = entry.language.clone().unwrap_or_else(|| "english".to_string());
+        let language = entry
+            .language
+            .clone()
+            .unwrap_or_else(|| "english".to_string());
 
         // 阶段1: 解析 ESP
-        let _ = window.emit("batch-progress", BatchProgress {
-            job_id: String::new(),
-            file_path: entry.esp_path.clone(),
-            stage: "parsing".to_string(),
-            current_file: (i as u32) + 1,
-            total_files,
-            strings_translated: total_translated,
-            total_strings: 0,
-            message: format!("[{}/{}] Parsing {}...", i + 1, total_files, file_name),
-        });
+        let _ = window.emit(
+            "batch-progress",
+            BatchProgress {
+                job_id: String::new(),
+                file_path: entry.esp_path.clone(),
+                stage: "parsing".to_string(),
+                current_file: (i as u32) + 1,
+                total_files,
+                strings_translated: total_translated,
+                total_strings: 0,
+                message: format!("[{}/{}] Parsing {}...", i + 1, total_files, file_name),
+            },
+        );
 
         let parse_result = tokio::task::spawn_blocking({
             let esp_path = entry.esp_path.clone();
             let strings_dir = entry.strings_dir.clone();
             let game_override = entry.game.clone();
             let lang = language.clone();
-            move || parse_esp_for_batch(&esp_path, strings_dir.as_deref(), &lang, game_override.as_deref())
-        }).await;
+            move || {
+                parse_esp_for_batch(
+                    &esp_path,
+                    strings_dir.as_deref(),
+                    &lang,
+                    game_override.as_deref(),
+                )
+            }
+        })
+        .await;
 
         let (mut strings, _total_count) = match parse_result {
             Ok(Ok(r)) => r,
             Ok(Err(e)) => {
                 failed_files += 1;
-                batch_errors.push(BatchFileError { file_path: entry.esp_path.clone(), message: e.clone() });
-                let _ = window.emit("batch-file-complete", BatchFileComplete {
-                    job_id: String::new(),
+                batch_errors.push(BatchFileError {
                     file_path: entry.esp_path.clone(),
-                    translated: 0,
-                    skipped: 0,
-                    errors: 1,
-                    duration_ms: started_at.elapsed().as_millis() as u64,
+                    message: e.clone(),
                 });
+                let _ = window.emit(
+                    "batch-file-complete",
+                    BatchFileComplete {
+                        job_id: String::new(),
+                        file_path: entry.esp_path.clone(),
+                        translated: 0,
+                        skipped: 0,
+                        errors: 1,
+                        duration_ms: started_at.elapsed().as_millis() as u64,
+                    },
+                );
                 continue;
             }
             Err(e) => {
                 failed_files += 1;
-                batch_errors.push(BatchFileError { file_path: entry.esp_path.clone(), message: format!("Task error: {}", e) });
+                batch_errors.push(BatchFileError {
+                    file_path: entry.esp_path.clone(),
+                    message: format!("Task error: {}", e),
+                });
                 continue;
             }
         };
 
         // 阶段2: 翻译
         // 筛选需要翻译的字符串
-        let to_translate: Vec<(usize, String)> = strings.iter().enumerate()
+        let to_translate: Vec<(usize, String)> = strings
+            .iter()
+            .enumerate()
             .filter(|(_, sk)| {
                 if skip_translated && sk.params.is_translated() {
                     return false;
@@ -463,16 +516,26 @@ async fn run_batch_translate(
         let mut file_translated = 0u32;
         let mut file_errors = 0u32;
 
-        let _ = window.emit("batch-progress", BatchProgress {
-            job_id: String::new(),
-            file_path: entry.esp_path.clone(),
-            stage: "translating".to_string(),
-            current_file: (i as u32) + 1,
-            total_files,
-            strings_translated: total_translated,
-            total_strings: total_to_translate,
-            message: format!("[{}/{}] Translating {} ({}/{})", i + 1, total_files, file_name, 0, total_to_translate),
-        });
+        let _ = window.emit(
+            "batch-progress",
+            BatchProgress {
+                job_id: String::new(),
+                file_path: entry.esp_path.clone(),
+                stage: "translating".to_string(),
+                current_file: (i as u32) + 1,
+                total_files,
+                strings_translated: total_translated,
+                total_strings: total_to_translate,
+                message: format!(
+                    "[{}/{}] Translating {} ({}/{})",
+                    i + 1,
+                    total_files,
+                    file_name,
+                    0,
+                    total_to_translate
+                ),
+            },
+        );
 
         for (j, (idx, source_text)) in to_translate.iter().enumerate() {
             // 取消检查
@@ -486,7 +549,9 @@ async fn run_batch_translate(
                         Err("OpenAI API key not set".to_string())
                     } else {
                         let provider = OpenAIProvider::from_key(api_key.clone());
-                        provider.translate(source_text, source_api_code, target_api_code).await
+                        provider
+                            .translate(source_text, source_api_code, target_api_code)
+                            .await
                             .map_err(|e| e.to_string())
                     }
                 }
@@ -495,7 +560,9 @@ async fn run_batch_translate(
                         Err("DeepL API key not set".to_string())
                     } else {
                         let provider = DeepLProvider::new(api_key.clone());
-                        provider.translate(source_text, source_api_code, target_api_code).await
+                        provider
+                            .translate(source_text, source_api_code, target_api_code)
+                            .await
                             .map_err(|e| e.to_string())
                     }
                 }
@@ -505,7 +572,9 @@ async fn run_batch_translate(
                 Ok(translated) => {
                     strings[*idx].set_translation(translated);
                     strings[*idx].params.set(SkyStringParams::TRANSLATED, true);
-                    strings[*idx].params.set(SkyStringParams::INCOMPLETE_TRANS, false);
+                    strings[*idx]
+                        .params
+                        .set(SkyStringParams::INCOMPLETE_TRANS, false);
                     file_translated += 1;
                     total_translated += 1;
                 }
@@ -517,42 +586,58 @@ async fn run_batch_translate(
 
             // 每10条或最后一条发送进度
             if j % 10 == 0 || j == total_to_translate as usize - 1 {
-                let _ = window.emit("batch-progress", BatchProgress {
-                    job_id: String::new(),
-                    file_path: entry.esp_path.clone(),
-                    stage: "translating".to_string(),
-                    current_file: (i as u32) + 1,
-                    total_files,
-                    strings_translated: total_translated,
-                    total_strings: total_to_translate,
-                    message: format!("[{}/{}] Translating {} ({}/{})", i + 1, total_files, file_name, j + 1, total_to_translate),
-                });
+                let _ = window.emit(
+                    "batch-progress",
+                    BatchProgress {
+                        job_id: String::new(),
+                        file_path: entry.esp_path.clone(),
+                        stage: "translating".to_string(),
+                        current_file: (i as u32) + 1,
+                        total_files,
+                        strings_translated: total_translated,
+                        total_strings: total_to_translate,
+                        message: format!(
+                            "[{}/{}] Translating {} ({}/{})",
+                            i + 1,
+                            total_files,
+                            file_name,
+                            j + 1,
+                            total_to_translate
+                        ),
+                    },
+                );
             }
         }
 
         if executor.cancel_flag.load(Ordering::SeqCst) {
-            let _ = window.emit("batch-file-complete", BatchFileComplete {
-                job_id: String::new(),
-                file_path: entry.esp_path.clone(),
-                translated: file_translated,
-                skipped: total_to_translate - file_translated - file_errors,
-                errors: file_errors,
-                duration_ms: started_at.elapsed().as_millis() as u64,
-            });
+            let _ = window.emit(
+                "batch-file-complete",
+                BatchFileComplete {
+                    job_id: String::new(),
+                    file_path: entry.esp_path.clone(),
+                    translated: file_translated,
+                    skipped: total_to_translate - file_translated - file_errors,
+                    errors: file_errors,
+                    duration_ms: started_at.elapsed().as_millis() as u64,
+                },
+            );
             break;
         }
 
         // 阶段3: 保存 strings 文件
-        let _ = window.emit("batch-progress", BatchProgress {
-            job_id: String::new(),
-            file_path: entry.esp_path.clone(),
-            stage: "saving".to_string(),
-            current_file: (i as u32) + 1,
-            total_files,
-            strings_translated: total_translated,
-            total_strings: total_to_translate,
-            message: format!("[{}/{}] Saving {}...", i + 1, total_files, file_name),
-        });
+        let _ = window.emit(
+            "batch-progress",
+            BatchProgress {
+                job_id: String::new(),
+                file_path: entry.esp_path.clone(),
+                stage: "saving".to_string(),
+                current_file: (i as u32) + 1,
+                total_files,
+                strings_translated: total_translated,
+                total_strings: total_to_translate,
+                message: format!("[{}/{}] Saving {}...", i + 1, total_files, file_name),
+            },
+        );
 
         let save_result = tokio::task::spawn_blocking({
             let esp_path = entry.esp_path.clone();
@@ -560,36 +645,57 @@ async fn run_batch_translate(
             let lang = language.to_string();
             let target = target_lang.clone();
             let strings_snapshot = strings.clone();
-            move || save_strings_for_batch(&esp_path, strings_dir.as_deref(), &lang, &target, &strings_snapshot)
-        }).await;
+            move || {
+                save_strings_for_batch(
+                    &esp_path,
+                    strings_dir.as_deref(),
+                    &lang,
+                    &target,
+                    &strings_snapshot,
+                )
+            }
+        })
+        .await;
 
         match save_result {
             Ok(Ok(_)) => {
                 completed_files += 1;
-                let _ = window.emit("batch-file-complete", BatchFileComplete {
-                    job_id: String::new(),
-                    file_path: entry.esp_path.clone(),
-                    translated: file_translated,
-                    skipped: total_to_translate - file_translated - file_errors,
-                    errors: file_errors,
-                    duration_ms: started_at.elapsed().as_millis() as u64,
-                });
+                let _ = window.emit(
+                    "batch-file-complete",
+                    BatchFileComplete {
+                        job_id: String::new(),
+                        file_path: entry.esp_path.clone(),
+                        translated: file_translated,
+                        skipped: total_to_translate - file_translated - file_errors,
+                        errors: file_errors,
+                        duration_ms: started_at.elapsed().as_millis() as u64,
+                    },
+                );
             }
             Ok(Err(e)) => {
                 failed_files += 1;
-                batch_errors.push(BatchFileError { file_path: entry.esp_path.clone(), message: e });
-                let _ = window.emit("batch-file-complete", BatchFileComplete {
-                    job_id: String::new(),
+                batch_errors.push(BatchFileError {
                     file_path: entry.esp_path.clone(),
-                    translated: file_translated,
-                    skipped: total_to_translate - file_translated - file_errors,
-                    errors: file_errors + 1,
-                    duration_ms: started_at.elapsed().as_millis() as u64,
+                    message: e,
                 });
+                let _ = window.emit(
+                    "batch-file-complete",
+                    BatchFileComplete {
+                        job_id: String::new(),
+                        file_path: entry.esp_path.clone(),
+                        translated: file_translated,
+                        skipped: total_to_translate - file_translated - file_errors,
+                        errors: file_errors + 1,
+                        duration_ms: started_at.elapsed().as_millis() as u64,
+                    },
+                );
             }
             Err(e) => {
                 failed_files += 1;
-                batch_errors.push(BatchFileError { file_path: entry.esp_path.clone(), message: format!("Save task error: {}", e) });
+                batch_errors.push(BatchFileError {
+                    file_path: entry.esp_path.clone(),
+                    message: format!("Save task error: {}", e),
+                });
             }
         }
     }
@@ -647,37 +753,57 @@ async fn run_batch_export(
             .unwrap_or(&entry.esp_path)
             .to_string();
 
-        let language = entry.language.clone().unwrap_or_else(|| "english".to_string());
+        let language = entry
+            .language
+            .clone()
+            .unwrap_or_else(|| "english".to_string());
 
-        let _ = window.emit("batch-progress", BatchProgress {
-            job_id: String::new(),
-            file_path: entry.esp_path.clone(),
-            stage: "parsing".to_string(),
-            current_file: (i as u32) + 1,
-            total_files,
-            strings_translated: total_exported,
-            total_strings: 0,
-            message: format!("[{}/{}] Parsing {}...", i + 1, total_files, file_name),
-        });
+        let _ = window.emit(
+            "batch-progress",
+            BatchProgress {
+                job_id: String::new(),
+                file_path: entry.esp_path.clone(),
+                stage: "parsing".to_string(),
+                current_file: (i as u32) + 1,
+                total_files,
+                strings_translated: total_exported,
+                total_strings: 0,
+                message: format!("[{}/{}] Parsing {}...", i + 1, total_files, file_name),
+            },
+        );
 
         let parse_result = tokio::task::spawn_blocking({
             let esp_path = entry.esp_path.clone();
             let strings_dir = entry.strings_dir.clone();
             let game_override = entry.game.clone();
             let lang = language.clone();
-            move || parse_esp_for_batch(&esp_path, strings_dir.as_deref(), &lang, game_override.as_deref())
-        }).await;
+            move || {
+                parse_esp_for_batch(
+                    &esp_path,
+                    strings_dir.as_deref(),
+                    &lang,
+                    game_override.as_deref(),
+                )
+            }
+        })
+        .await;
 
         let (strings, _total_count) = match parse_result {
             Ok(Ok(r)) => r,
             Ok(Err(e)) => {
                 failed_files += 1;
-                batch_errors.push(BatchFileError { file_path: entry.esp_path.clone(), message: e });
+                batch_errors.push(BatchFileError {
+                    file_path: entry.esp_path.clone(),
+                    message: e,
+                });
                 continue;
             }
             Err(e) => {
                 failed_files += 1;
-                batch_errors.push(BatchFileError { file_path: entry.esp_path.clone(), message: format!("Task error: {}", e) });
+                batch_errors.push(BatchFileError {
+                    file_path: entry.esp_path.clone(),
+                    message: format!("Task error: {}", e),
+                });
                 continue;
             }
         };
@@ -689,12 +815,15 @@ async fn run_batch_export(
                     .and_then(|s| s.to_str())
                     .unwrap_or("export")
                     .to_string();
-                let sst_path = std::path::Path::new(&output_dir).join(format!("{}.sst", &base_name_sst));
+                let sst_path =
+                    std::path::Path::new(&output_dir).join(format!("{}.sst", &base_name_sst));
 
                 let save_result = tokio::task::spawn_blocking(move || {
                     let dict = xt_core::sst::v8::SstDictionary::from_entries(strings);
-                    dict.save_to_file(&sst_path).map_err(|e| format!("Failed to save SST: {}", e))
-                }).await;
+                    dict.save_to_file(&sst_path)
+                        .map_err(|e| format!("Failed to save SST: {}", e))
+                })
+                .await;
 
                 match save_result {
                     Ok(Ok(())) => {
@@ -704,11 +833,17 @@ async fn run_batch_export(
                     Ok(Err(e)) => {
                         failed_files += 1;
                         total_errors += 1;
-                        batch_errors.push(BatchFileError { file_path: entry.esp_path.clone(), message: e });
+                        batch_errors.push(BatchFileError {
+                            file_path: entry.esp_path.clone(),
+                            message: e,
+                        });
                     }
                     Err(e) => {
                         failed_files += 1;
-                        batch_errors.push(BatchFileError { file_path: entry.esp_path.clone(), message: format!("SST task error: {}", e) });
+                        batch_errors.push(BatchFileError {
+                            file_path: entry.esp_path.clone(),
+                            message: format!("SST task error: {}", e),
+                        });
                     }
                 }
             }
@@ -719,7 +854,8 @@ async fn run_batch_export(
                     .and_then(|s| s.to_str())
                     .unwrap_or("export")
                     .to_string();
-                let xml_path = std::path::Path::new(&output_dir).join(format!("{}.xml", &base_name_owned));
+                let xml_path =
+                    std::path::Path::new(&output_dir).join(format!("{}.xml", &base_name_owned));
 
                 let save_result = tokio::task::spawn_blocking(move || {
                     let xml_entries = xt_core::xml::sky_strings_to_xml_entries(&strings);
@@ -732,7 +868,8 @@ async fn run_batch_export(
                     xt_core::xml::write_xml_file(&xml_path, &params, &xml_entries)
                         .map_err(|e| format!("Failed to write XML: {}", e))?;
                     Ok(xml_entries.len())
-                }).await;
+                })
+                .await;
 
                 match save_result {
                     Ok(Ok(count)) => {
@@ -742,24 +879,33 @@ async fn run_batch_export(
                     Ok(Err(e)) => {
                         failed_files += 1;
                         total_errors += 1;
-                        batch_errors.push(BatchFileError { file_path: entry.esp_path.clone(), message: e });
+                        batch_errors.push(BatchFileError {
+                            file_path: entry.esp_path.clone(),
+                            message: e,
+                        });
                     }
                     Err(e) => {
                         failed_files += 1;
-                        batch_errors.push(BatchFileError { file_path: entry.esp_path.clone(), message: format!("XML task error: {}", e) });
+                        batch_errors.push(BatchFileError {
+                            file_path: entry.esp_path.clone(),
+                            message: format!("XML task error: {}", e),
+                        });
                     }
                 }
             }
         }
 
-        let _ = window.emit("batch-file-complete", BatchFileComplete {
-            job_id: String::new(),
-            file_path: entry.esp_path.clone(),
-            translated: 0,
-            skipped: 0,
-            errors: 0,
-            duration_ms: started_at.elapsed().as_millis() as u64,
-        });
+        let _ = window.emit(
+            "batch-file-complete",
+            BatchFileComplete {
+                job_id: String::new(),
+                file_path: entry.esp_path.clone(),
+                translated: 0,
+                skipped: 0,
+                errors: 0,
+                duration_ms: started_at.elapsed().as_millis() as u64,
+            },
+        );
     }
 
     let is_cancelled = executor.cancel_flag.load(Ordering::SeqCst);
@@ -807,7 +953,8 @@ fn save_strings_for_batch(
         .unwrap_or("skyrim");
 
     // 收集翻译映射
-    let mut translated_map: std::collections::HashMap<(u8, i32), String> = std::collections::HashMap::new();
+    let mut translated_map: std::collections::HashMap<(u8, i32), String> =
+        std::collections::HashMap::new();
     for sk in strings.iter() {
         if !sk.translation.is_empty() {
             translated_map.insert((sk.list_index, sk.esp_ptr.str_id), sk.translation.clone());
@@ -815,7 +962,8 @@ fn save_strings_for_batch(
     }
 
     for (list_index, ext) in [(0u8, "STRINGS"), (1u8, "DLSTRINGS"), (2u8, "ILSTRINGS")] {
-        let source_path = strings_dir.join(format!("{}_{}.{}", base_name, language, ext.to_lowercase()));
+        let source_path =
+            strings_dir.join(format!("{}_{}.{}", base_name, language, ext.to_lowercase()));
 
         let mut strings_file = if source_path.exists() {
             xt_core::strings::StringsFile::load_with_format(
@@ -834,7 +982,12 @@ fn save_strings_for_batch(
             }
         }
 
-        let target_path = strings_dir.join(format!("{}_{}.{}", base_name, target_lang, ext.to_lowercase()));
+        let target_path = strings_dir.join(format!(
+            "{}_{}.{}",
+            base_name,
+            target_lang,
+            ext.to_lowercase()
+        ));
 
         if let Some(parent) = target_path.parent() {
             std::fs::create_dir_all(parent).map_err(|e| format!("Failed to create dir: {}", e))?;
@@ -842,7 +995,8 @@ fn save_strings_for_batch(
 
         let format = xt_core::strings::StringsFile::detect_format(&target_path);
         strings_file.format = format;
-        strings_file.save_with_format(&target_path, format)
+        strings_file
+            .save_with_format(&target_path, format)
             .map_err(|e| format!("Failed to write {}: {}", ext, e))?;
     }
 

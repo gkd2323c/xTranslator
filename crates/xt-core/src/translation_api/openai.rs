@@ -3,8 +3,8 @@
 //! 支持 OpenAI、DeepSeek、任何兼容 Chat Completions API 的服务
 
 use anyhow::{anyhow, Result};
-use serde::{Deserialize, Serialize};
 use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
 
 /// OpenAI 兼容翻译 Provider
 ///
@@ -96,12 +96,7 @@ struct ChatChoice {
 
 #[async_trait]
 impl super::TranslationProvider for OpenAIProvider {
-    async fn translate(
-        &self,
-        text: &str,
-        source_lang: &str,
-        target_lang: &str,
-    ) -> Result<String> {
+    async fn translate(&self, text: &str, source_lang: &str, target_lang: &str) -> Result<String> {
         // 构建系统提示
         let system_prompt = format!(
             "You are a professional game translator. Translate the following game text from {} to {}. \
@@ -159,32 +154,74 @@ impl super::TranslationProvider for OpenAIProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    fn with_env_vars<T>(vars: &[(&str, Option<&str>)], f: impl FnOnce() -> T) -> T {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let previous: Vec<_> = vars
+            .iter()
+            .map(|(name, _)| (*name, std::env::var(name).ok()))
+            .collect();
+
+        for (name, value) in vars {
+            match value {
+                Some(value) => std::env::set_var(name, value),
+                None => std::env::remove_var(name),
+            }
+        }
+
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(f));
+
+        for (name, value) in previous {
+            match value {
+                Some(value) => std::env::set_var(name, value),
+                None => std::env::remove_var(name),
+            }
+        }
+
+        match result {
+            Ok(value) => value,
+            Err(payload) => std::panic::resume_unwind(payload),
+        }
+    }
 
     #[test]
     fn test_openai_provider_from_env_fails_without_key() {
-        // 确保环境变量未设置
-        std::env::remove_var("XT_TRANSLATE_API_KEY");
-        assert!(OpenAIProvider::from_env().is_err());
+        with_env_vars(&[("XT_TRANSLATE_API_KEY", None)], || {
+            assert!(OpenAIProvider::from_env().is_err());
+        });
     }
 
     #[test]
     fn test_openai_provider_from_key() {
-        let provider = OpenAIProvider::from_key("test-key".to_string());
-        assert_eq!(provider.api_key, "test-key");
-        assert_eq!(provider.base_url, "https://api.openai.com/v1");
-        assert_eq!(provider.model, "gpt-4o-mini");
+        with_env_vars(
+            &[
+                ("XT_TRANSLATE_API_BASE", None),
+                ("XT_TRANSLATE_API_MODEL", None),
+            ],
+            || {
+                let provider = OpenAIProvider::from_key("test-key".to_string());
+                assert_eq!(provider.api_key, "test-key");
+                assert_eq!(provider.base_url, "https://api.openai.com/v1");
+                assert_eq!(provider.model, "gpt-4o-mini");
+            },
+        );
     }
 
     #[test]
     fn test_openai_provider_custom_url_and_model() {
-        std::env::set_var("XT_TRANSLATE_API_BASE", "https://api.deepseek.com/v1");
-        std::env::set_var("XT_TRANSLATE_API_MODEL", "deepseek-chat");
-
-        let provider = OpenAIProvider::from_key("test-key".to_string());
-        assert_eq!(provider.base_url, "https://api.deepseek.com/v1");
-        assert_eq!(provider.model, "deepseek-chat");
-
-        std::env::remove_var("XT_TRANSLATE_API_BASE");
-        std::env::remove_var("XT_TRANSLATE_API_MODEL");
+        with_env_vars(
+            &[
+                ("XT_TRANSLATE_API_BASE", Some("https://api.deepseek.com/v1")),
+                ("XT_TRANSLATE_API_MODEL", Some("deepseek-chat")),
+            ],
+            || {
+                let provider = OpenAIProvider::from_key("test-key".to_string());
+                assert_eq!(provider.base_url, "https://api.deepseek.com/v1");
+                assert_eq!(provider.model, "deepseek-chat");
+            },
+        );
     }
 }

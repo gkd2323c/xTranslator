@@ -52,23 +52,15 @@ impl BsaArchive {
     ///
     /// 路径格式：`folder/filename.ext`（如 `strings/skyrim_english.strings`）
     pub fn extract_file(&self, path: &str) -> std::io::Result<Vec<u8>> {
-        let (_folder, file) = self
-            .directory
-            .find_by_path(path)
-            .ok_or_else(|| {
-                std::io::Error::new(
-                    std::io::ErrorKind::NotFound,
-                    format!("File not found in BSA: {}", path),
-                )
-            })?;
+        let (_folder, file) = self.directory.find_by_path(path).ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                format!("File not found in BSA: {}", path),
+            )
+        })?;
 
         let mut file_handle = File::open(&self.path)?;
-        extract_file_data(
-            &mut file_handle,
-            &self.header,
-            file.offset,
-            file.raw_size,
-        )
+        extract_file_data(&mut file_handle, &self.header, file.offset, file.raw_size)
     }
 
     /// 检查文件是否存在
@@ -125,8 +117,7 @@ impl BsaArchive {
         let mut entries = Vec::new();
         for folder in &self.directory.folders {
             for file in &folder.files {
-                let is_compressed = (self.header.archive_flags & 0x0004) != 0
-                    && file.raw_size > 0;
+                let is_compressed = (self.header.archive_flags & 0x0004) != 0 && file.raw_size > 0;
                 entries.push(BsaFileEntry {
                     path: if folder.name.is_empty() {
                         file.name.clone()
@@ -177,28 +168,48 @@ mod tests {
     fn test_hash_against_known_bsa_values() {
         use crate::bsa::directory::bsa_hash64;
         // Known hashes from Skyrim - Interface.bsa
-        assert_eq!(bsa_hash64("strings", ""), 0x4DA2984373076773,
-            "folder hash mismatch for 'strings'");
+        assert_eq!(
+            bsa_hash64("strings", ""),
+            0x4DA2984373076773,
+            "folder hash mismatch for 'strings'"
+        );
         // Verify skyrim_english files (all share lower 32 bits 0x730E7368)
-        assert_eq!(bsa_hash64("skyrim_english", ".strings"), 0x195E35F8730E7368,
-            "file hash mismatch for 'skyrim_english.strings'");
-        assert_eq!(bsa_hash64("skyrim_english", ".ilstrings"), 0x0ACD17F5730E7368,
-            "file hash mismatch for 'skyrim_english.ilstrings'");
-        assert_eq!(bsa_hash64("skyrim_english", ".dlstrings"), 0xEB4C61F0730E7368,
-            "file hash mismatch for 'skyrim_english.dlstrings'");
+        assert_eq!(
+            bsa_hash64("skyrim_english", ".strings"),
+            0x195E35F8730E7368,
+            "file hash mismatch for 'skyrim_english.strings'"
+        );
+        assert_eq!(
+            bsa_hash64("skyrim_english", ".ilstrings"),
+            0x0ACD17F5730E7368,
+            "file hash mismatch for 'skyrim_english.ilstrings'"
+        );
+        assert_eq!(
+            bsa_hash64("skyrim_english", ".dlstrings"),
+            0xEB4C61F0730E7368,
+            "file hash mismatch for 'skyrim_english.dlstrings'"
+        );
         // Verify skyrim_german.strings
-        assert_eq!(bsa_hash64("skyrim_german", ".strings"), 0x05A6AE04730D616E,
-            "file hash mismatch for 'skyrim_german.strings'");
+        assert_eq!(
+            bsa_hash64("skyrim_german", ".strings"),
+            0x05A6AE04730D616E,
+            "file hash mismatch for 'skyrim_german.strings'"
+        );
     }
 
     #[test]
     fn test_find_strings_in_interface_bsa() {
-        let path = r"D:\SteamLibrary\steamapps\common\Skyrim Special Edition\Data\Skyrim - Interface.bsa";
+        let path =
+            r"D:\SteamLibrary\steamapps\common\Skyrim Special Edition\Data\Skyrim - Interface.bsa";
         if let Ok(bsa) = BsaArchive::open(path) {
-            assert!(bsa.contains_file("strings/skyrim_english.strings"),
-                "should find skyrim_english.strings in Interface.bsa");
-            assert!(bsa.contains_file("strings/skyrim_english.ilstrings"),
-                "should find skyrim_english.ilstrings in Interface.bsa");
+            assert!(
+                bsa.contains_file("strings/skyrim_english.strings"),
+                "should find skyrim_english.strings in Interface.bsa"
+            );
+            assert!(
+                bsa.contains_file("strings/skyrim_english.ilstrings"),
+                "should find skyrim_english.ilstrings in Interface.bsa"
+            );
         }
     }
 
@@ -279,7 +290,10 @@ mod tests {
             let bsa = BsaArchive::open(&path).unwrap();
             let folders = bsa.folder_names();
             assert!(!folders.is_empty());
-            assert!(folders.contains(&"strings"), "should contain 'strings' folder");
+            assert!(
+                folders.contains(&"strings"),
+                "should contain 'strings' folder"
+            );
         }
     }
 

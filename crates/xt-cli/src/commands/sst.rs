@@ -170,7 +170,9 @@ pub fn apply_sst(strings: &mut Vec<SkyString>, sst_path: &str) -> Result<usize> 
                 if !sst_entry.translation.is_empty() {
                     string_entry.translation = sst_entry.translation.clone();
                     string_entry.params.set(SkyStringParams::TRANSLATED, true);
-                    string_entry.params.set(SkyStringParams::INCOMPLETE_TRANS, false);
+                    string_entry
+                        .params
+                        .set(SkyStringParams::INCOMPLETE_TRANS, false);
                     applied_count += 1;
                 }
             }
@@ -210,8 +212,12 @@ pub fn save_sst(esp_path: &str, output: &str, masters: Option<Vec<String>>) -> R
 pub fn roundtrip_sst(input: &str, output: &str) -> Result<()> {
     // 1. 读取
     let dict1 = SstDictionary::load_from_file(input)?;
-    println!("Read SST: {} entries, {} masters, {} labels",
-        dict1.entries.len(), dict1.master_list.len(), dict1.colab_labels.len());
+    println!(
+        "Read SST: {} entries, {} masters, {} labels",
+        dict1.entries.len(),
+        dict1.master_list.len(),
+        dict1.colab_labels.len()
+    );
 
     // 2. 写入
     dict1.save_to_file(output)?;
@@ -227,18 +233,32 @@ pub fn roundtrip_sst(input: &str, output: &str) -> Result<()> {
         println!("ERROR: master_list mismatch");
         errors += 1;
     } else {
-        println!("✓ master_list matches ({} entries)", dict1.master_list.len());
+        println!(
+            "✓ master_list matches ({} entries)",
+            dict1.master_list.len()
+        );
     }
 
     if dict1.colab_labels.len() != dict2.colab_labels.len() {
-        println!("ERROR: colab_labels count mismatch: {} vs {}", dict1.colab_labels.len(), dict2.colab_labels.len());
+        println!(
+            "ERROR: colab_labels count mismatch: {} vs {}",
+            dict1.colab_labels.len(),
+            dict2.colab_labels.len()
+        );
         errors += 1;
     } else {
-        println!("✓ colab_labels count matches ({})", dict1.colab_labels.len());
+        println!(
+            "✓ colab_labels count matches ({})",
+            dict1.colab_labels.len()
+        );
     }
 
     if dict1.entries.len() != dict2.entries.len() {
-        println!("ERROR: entries count mismatch: {} vs {}", dict1.entries.len(), dict2.entries.len());
+        println!(
+            "ERROR: entries count mismatch: {} vs {}",
+            dict1.entries.len(),
+            dict2.entries.len()
+        );
         errors += 1;
     } else {
         let mut entry_errors = 0;
@@ -253,7 +273,11 @@ pub fn roundtrip_sst(input: &str, output: &str) -> Result<()> {
             }
         }
         if entry_errors > 0 {
-            println!("ERROR: {} / {} entries mismatch", entry_errors, dict1.entries.len());
+            println!(
+                "ERROR: {} / {} entries mismatch",
+                entry_errors,
+                dict1.entries.len()
+            );
             errors += 1;
         } else {
             println!("✓ All {} entries match", dict1.entries.len());

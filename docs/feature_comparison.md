@@ -61,7 +61,7 @@
 |------|------|----------|--------|------|
 | **字典应用 (apply)** | ✅ ID+EDID+词汇匹配 | ⚠️ 基础 strId+record+field | ~40% | 缺少 EDID 匹配、词汇匹配、参数匹配 |
 | **启发式搜索** | ✅ Levenshtein/LCS | ✅ | ~80% | xt-core heuristic 模块，Levenshtein+LCS+LCP，IPC+UI 已集成 |
-| **翻译 API** | ✅ DeepL/MS/Google/OpenAI/Youdao/Baidu | ✅ OpenAI + DeepL 已实现 | ~60% | OpenAIProvider + DeepLProvider 已就绪，支持运行时切换 |
+| **翻译 API** | ✅ DeepL/MS/Google/OpenAI/Youdao/Baidu | ✅ OpenAI + DeepL 已实现，其他 provider 仅作为原版对比 | ~60% | OpenAIProvider + DeepLProvider 已就绪，支持运行时切换 |
 | **字符串编辑** | ✅ 行内+窗口编辑 | ⚠️ 基础编辑 | ~70% | EditorPanel：文本编辑、Ctrl+Enter 保存、状态切换、启发式搜索、翻译 API |
 | **正则搜索/替换** | ✅ PCRE+批量 | ✅ Regex filter toggle + Replace All | ~80% | Regex toggle + Replace All with confirmation + capture groups ($1/$2) |
 | **直接搜索** | ✅ | ✅ 实时筛选 | ~80% | 客户端 filter+sort：文本/Regex/状态/Record 类型/排序，零延迟，76K+ 条 |

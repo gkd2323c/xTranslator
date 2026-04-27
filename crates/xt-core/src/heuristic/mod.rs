@@ -31,15 +31,15 @@ pub fn levenshtein_distance(s: &str, t: &str) -> usize {
 
     // 边界情况：空字符串
     if n == 0 {
-        return m;  // 需要插入 m 个字符
+        return m; // 需要插入 m 个字符
     }
     if m == 0 {
-        return n;  // 需要删除 n 个字符
+        return n; // 需要删除 n 个字符
     }
 
     // 滚动数组优化：只保留前一行和当前行
-    let mut prev = vec![0usize; m + 1];  // 前一行
-    let mut curr = vec![0usize; m + 1];  // 当前行
+    let mut prev = vec![0usize; m + 1]; // 前一行
+    let mut curr = vec![0usize; m + 1]; // 当前行
 
     // 初始化第一行：空字符串到 t[0..j] 的编辑距离
     for j in 0..=m {
@@ -48,7 +48,7 @@ pub fn levenshtein_distance(s: &str, t: &str) -> usize {
 
     // 动态规划填充
     for i in 1..=n {
-        curr[0] = i;  // s[0..i] 到空字符串的编辑距离
+        curr[0] = i; // s[0..i] 到空字符串的编辑距离
         for j in 1..=m {
             // 如果字符相同，无需编辑；否则需要替换（成本为1）
             let cost = if s_chars[i - 1] == t_chars[j - 1] {
@@ -56,14 +56,14 @@ pub fn levenshtein_distance(s: &str, t: &str) -> usize {
             } else {
                 1
             };
-            curr[j] = (prev[j] + 1)        // 删除操作：从 s 删除一个字符
-                .min(curr[j - 1] + 1)      // 插入操作：在 s 插入一个字符
-                .min(prev[j - 1] + cost);  // 替换操作（或匹配）
+            curr[j] = (prev[j] + 1) // 删除操作：从 s 删除一个字符
+                .min(curr[j - 1] + 1) // 插入操作：在 s 插入一个字符
+                .min(prev[j - 1] + cost); // 替换操作（或匹配）
         }
-        std::mem::swap(&mut prev, &mut curr);  // 滚动：当前行变为前一行
+        std::mem::swap(&mut prev, &mut curr); // 滚动：当前行变为前一行
     }
 
-    prev[m]  // 右下角即为最终编辑距离
+    prev[m] // 右下角即为最终编辑距离
 }
 
 /// 归一化相似度（0.0 ~ 1.0，1.0 表示完全相同）

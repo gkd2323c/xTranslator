@@ -69,7 +69,10 @@ impl SstDictionary {
         if magic != SST_V8_MAGIC {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
-                format!("Invalid SST magic: expected {:08X}, got {:08X}", SST_V8_MAGIC, magic),
+                format!(
+                    "Invalid SST magic: expected {:08X}, got {:08X}",
+                    SST_V8_MAGIC, magic
+                ),
             ));
         }
 
@@ -138,7 +141,7 @@ impl SstDictionary {
             // translation string
             let translation = read_delphi_string(reader)?;
 
-              let mut sk = SkyString::new(0, source, translation, *b"UNKN", *b"UNKN");
+            let mut sk = SkyString::new(0, source, translation, *b"UNKN", *b"UNKN");
             sk.esp_ptr = esp_ptr;
             sk.params = params;
             sk.colab_id = colab_id;
@@ -211,16 +214,19 @@ mod tests {
     fn test_sst_roundtrip() {
         let mut dict = SstDictionary::new();
         dict.master_list = vec!["Skyrim.esm".to_string(), "Update.esm".to_string()];
-        dict.colab_labels = vec![(1, "TranslatorA".to_string()), (2, "TranslatorB".to_string())];
+        dict.colab_labels = vec![
+            (1, "TranslatorA".to_string()),
+            (2, "TranslatorB".to_string()),
+        ];
 
-         for i in 0..10 {
-              let mut sk = SkyString::new(
-                  i,
-                  format!("Source {}", i),
-                  format!("Translation {}", i),
-                  *b"INFO",
-                  *b"DESC",
-              );
+        for i in 0..10 {
+            let mut sk = SkyString::new(
+                i,
+                format!("Source {}", i),
+                format!("Translation {}", i),
+                *b"INFO",
+                *b"DESC",
+            );
             sk.esp_ptr.record_sig = *b"INFO";
             sk.esp_ptr.field_sig = *b"NAM1";
             sk.esp_ptr.form_id = 0x01000000 + i as u32;
@@ -255,7 +261,13 @@ mod tests {
     #[test]
     fn test_sst_unicode_roundtrip() {
         let mut dict = SstDictionary::new();
-         let mut sk = SkyString::new(0, "你好世界".to_string(), "Hello World".to_string(), *b"BOOK", *b"DESC");
+        let mut sk = SkyString::new(
+            0,
+            "你好世界".to_string(),
+            "Hello World".to_string(),
+            *b"BOOK",
+            *b"DESC",
+        );
         sk.esp_ptr.record_sig = *b"BOOK";
         sk.esp_ptr.field_sig = *b"DESC";
         dict.entries.push(sk);

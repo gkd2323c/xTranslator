@@ -219,7 +219,12 @@ impl StringsFiles {
                 if path.extension().and_then(OsStr::to_str) == Some("bsa") {
                     if let Ok(bsa) = BsaArchive::open(&path) {
                         if let Ok(data) = bsa.extract_file(&bsa_path_in_archive) {
-                            return StringsFile::load_from_bytes(&data, format, crate::strings::CodepageConfig::utf8()).ok();
+                            return StringsFile::load_from_bytes(
+                                &data,
+                                format,
+                                crate::strings::CodepageConfig::utf8(),
+                            )
+                            .ok();
                         }
                     }
                 }
@@ -616,7 +621,8 @@ impl EspParser {
 
         if header.is_grup() {
             // 嵌套 GRUP：递归解析其中的子记录。
-            *record_count -= 1; // 不算作 record
+            // GRUP 本身不计入 record；空计数时避免 unsigned underflow。
+            *record_count = record_count.saturating_sub(1);
             let grup_header = GrupHeader::read_from(reader)?;
             // s_type contains the parent FormID for child GRUPs or record type for type GRUPs
             let saved_parent = self.current_parent_form_id;
@@ -663,10 +669,17 @@ impl EspParser {
             match decompress_bethesda_record(&record_data) {
                 Ok(decompressed) => {
                     // 解压后数据与普通记录字段布局一致，走同一套字段解析逻辑。
-                    self.parse_record_fields_with_id(&header.name, record_header_data.form_id, &decompressed)?;
+                    self.parse_record_fields_with_id(
+                        &header.name,
+                        record_header_data.form_id,
+                        &decompressed,
+                    )?;
                 }
                 Err(e) => {
-                    eprintln!("Warning: failed to decompress record {:?}: {}", header.name, e);
+                    eprintln!(
+                        "Warning: failed to decompress record {:?}: {}",
+                        header.name, e
+                    );
                 }
             }
             return Ok(()); // 压缩记录处理完成
@@ -749,7 +762,10 @@ impl EspParser {
 
             // 提取 EDID(null-terminated ASCII)，供后续 GMST:DATA 类型判断使用。
             if &field_header.name == b"EDID" && !field_data.is_empty() {
-                let len = field_data.iter().position(|&b| b == 0).unwrap_or(field_data.len());
+                let len = field_data
+                    .iter()
+                    .position(|&b| b == 0)
+                    .unwrap_or(field_data.len());
                 edid = Some(String::from_utf8_lossy(&field_data[..len]).to_string());
             }
 
@@ -767,35 +783,40 @@ impl EspParser {
                 // 该 ID 用于到 STRINGS/DLSTRINGS/ILSTRINGS 中反查文本。
                 if field_data.len() >= 4 {
                     let string_id = u32::from_le_bytes([
-                        field_data[0], field_data[1], field_data[2], field_data[3],
+                        field_data[0],
+                        field_data[1],
+                        field_data[2],
+                        field_data[3],
                     ]);
 
                     // 查表失败时保留占位文本，便于定位缺失映射。
-                    let source_text = self.strings_files.get(def.list_index, string_id)
+                    let source_text = self
+                        .strings_files
+                        .get(def.list_index, string_id)
                         .cloned()
                         .unwrap_or_else(|| format!("<ID:{}>", string_id));
 
                     if !source_text.is_empty() {
-                         // 构建一条可编辑字符串记录。
-                         let mut sk = SkyString::new(
-                             self.strings.len() as u32,  // 内部 ID
-                             source_text,                // 源字符串
-                             String::new(),              // 翻译(初始为空)
-                             *record_sig,                // 记录类型
-                             field_header.name,          // 字段类型
-                         );
-                        
+                        // 构建一条可编辑字符串记录。
+                        let mut sk = SkyString::new(
+                            self.strings.len() as u32, // 内部 ID
+                            source_text,               // 源字符串
+                            String::new(),             // 翻译(初始为空)
+                            *record_sig,               // 记录类型
+                            field_header.name,         // 字段类型
+                        );
+
                         // 填充 ESP 指针，用于后续 SST/XML 精确匹配与写回。
                         sk.esp_ptr = EspPointer {
-                            str_id: string_id as i32,  // 实际的字符串 ID(关键：用于 XML 匹配)
-                            form_id,                    // 记录的 FormID
-                            record_sig: *record_sig,    // 记录类型
+                            str_id: string_id as i32,     // 实际的字符串 ID(关键：用于 XML 匹配)
+                            form_id,                      // 记录的 FormID
+                            record_sig: *record_sig,      // 记录类型
                             field_sig: field_header.name, // 字段类型
-                            index: field_index,         // 字段索引
-                            index_max: 1,               // 字段总数
-                             edid_hash: edid.as_ref().map_or(0, |s| string_hash(s)), // Editor ID 的 FNV-1a 哈希
+                            index: field_index,           // 字段索引
+                            index_max: 1,                 // 字段总数
+                            edid_hash: edid.as_ref().map_or(0, |s| string_hash(s)), // Editor ID 的 FNV-1a 哈希
                         };
-                        
+
                         // 初始状态：有源文、无译文 => 未完成翻译。
                         sk.params.set(SkyStringParams::INCOMPLETE_TRANS, true);
                         sk.list_index = def.list_index;
@@ -913,6 +934,28 @@ Def_:CNAM=DOOR=0-proc5
             .find(|d| &d.field_sig == b"NAM1" && &d.record_sig == b"INFO");
         assert!(nam1_info.is_some());
         assert!(nam1_info.unwrap().not_null);
+    }
+
+    #[test]
+    fn test_parse_record_debug_empty_grup_does_not_underflow() {
+        let mut parser = EspParser::new();
+        let mut record_count = 0u32;
+        let data = [
+            b'G', b'R', b'U', b'P', 24, 0, 0, 0, // GenericHeader
+            b'T', b'E', b'S', b'4', // GrupHeader s_ident
+            0, 0, 0, 0, // s_type
+            0, 0, // s_tstamp
+            0, 0, // param1
+            0, 0, // param2
+            0, 0, // param3
+        ];
+        let mut cursor = Cursor::new(data);
+
+        parser
+            .parse_record_debug(&mut cursor, &mut record_count)
+            .expect("empty GRUP should not underflow");
+
+        assert_eq!(record_count, 0);
     }
 
     #[test]

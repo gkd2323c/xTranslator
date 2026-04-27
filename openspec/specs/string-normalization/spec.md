@@ -1,4 +1,8 @@
-## ADDED Requirements
+## Purpose
+
+Define canonical string normalization, auto-populated normalization fields, and parser bookkeeping that support fuzzy matching and translation consistency.
+
+## Requirements
 
 ### Requirement: String normalization function
 The system SHALL provide a `normalize` function that converts source strings into a canonical form for fuzzy matching.

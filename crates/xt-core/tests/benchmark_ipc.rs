@@ -80,7 +80,10 @@ fn benchmark_full_ipc_pipeline() {
     println!("JSON deserialize:  {} μs", parse_ms);
     println!("JSON payload size: {} bytes", json.len());
     println!("-----------------------------------");
-    println!("Total simulated:   {} ms", query_ms + (dto_ms + json_ms + parse_ms) / 1000);
+    println!(
+        "Total simulated:   {} ms",
+        query_ms + (dto_ms + json_ms + parse_ms) / 1000
+    );
     println!("===================================\n");
 
     // 验收标准：后端查询 < 100ms（当前目标），JSON 序列化 < 5ms
@@ -107,9 +110,7 @@ fn benchmark_pagination_scenarios() {
         let ms = t.elapsed().as_micros() as f64 / 1000.0;
         println!(
             "{:30} | filtered: {:6} | time: {:6.2} ms",
-            name,
-            result.filtered,
-            ms
+            name, result.filtered, ms
         );
     }
     println!("==========================================\n");

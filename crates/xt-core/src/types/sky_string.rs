@@ -166,7 +166,13 @@ mod tests {
 
     #[test]
     fn test_sky_string_creation() {
-        let sk = SkyString::new(1, "Hello".to_string(), "Bonjour".to_string(), *b"INFO", *b"DESC");
+        let sk = SkyString::new(
+            1,
+            "Hello".to_string(),
+            "Bonjour".to_string(),
+            *b"INFO",
+            *b"DESC",
+        );
         assert_eq!(sk.id, 1);
         assert_eq!(sk.source, "Hello");
         assert_eq!(sk.translation, "Bonjour");

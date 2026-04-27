@@ -523,7 +523,10 @@ mod tests {
         let size = std::fs::metadata(&tmp).unwrap().len();
         // 3 entries: header(8) + directory(3*8=24) + data(Duplicate\0=10 + Unique\0=7) = 49
         // Without dedup it would be: 8 + 24 + 10 + 7 + 10 = 59
-        assert!(size < 55, "Dedup should produce smaller file, got {size} bytes");
+        assert!(
+            size < 55,
+            "Dedup should produce smaller file, got {size} bytes"
+        );
         let _ = std::fs::remove_file(&tmp);
     }
 
