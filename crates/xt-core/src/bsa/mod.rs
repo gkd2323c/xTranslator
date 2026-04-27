@@ -245,4 +245,52 @@ mod tests {
             println!("Strings folder files: {:?}", files);
         }
     }
+
+    #[test]
+    fn test_list_all_files() {
+        if let Some(path) = get_test_bsa_path() {
+            let bsa = BsaArchive::open(&path).unwrap();
+            let entries = bsa.list_all_files();
+            assert!(!entries.is_empty(), "list_all_files should return entries");
+            assert!(entries.len() as u32 == bsa.file_count(), "count mismatch");
+            // Verify entries are sorted by path
+            for i in 1..entries.len() {
+                assert!(
+                    entries[i - 1].path <= entries[i].path,
+                    "Entries not sorted: {} > {}",
+                    entries[i - 1].path,
+                    entries[i].path
+                );
+            }
+            // Check that known file exists and has metadata
+            let strings_file = entries
+                .iter()
+                .find(|e| e.path == "strings/skyrim_english.strings");
+            assert!(strings_file.is_some(), "skyrim_english.strings not in list");
+            let sf = strings_file.unwrap();
+            assert!(sf.size > 0, "string file size should be > 0");
+            assert_eq!(sf.folder, "strings");
+        }
+    }
+
+    #[test]
+    fn test_folder_names() {
+        if let Some(path) = get_test_bsa_path() {
+            let bsa = BsaArchive::open(&path).unwrap();
+            let folders = bsa.folder_names();
+            assert!(!folders.is_empty());
+            assert!(folders.contains(&"strings"), "should contain 'strings' folder");
+        }
+    }
+
+    #[test]
+    fn test_archive_name() {
+        if let Some(path) = get_test_bsa_path() {
+            let bsa = BsaArchive::open(&path).unwrap();
+            let name = bsa.archive_name().unwrap();
+            assert!(name.ends_with(".bsa") || name.ends_with(".ba2"));
+            assert!(!name.contains('/'));
+            assert!(!name.contains('\\'));
+        }
+    }
 }
