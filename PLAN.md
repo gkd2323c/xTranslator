@@ -8,7 +8,7 @@ Parses ESP/ESM files (Skyrim SE, Fallout 4, Starfield, etc.), extracts translata
 
 ## Current Status
 
-**MVP complete.** The app can load ESP+Strings, display 76K+ strings in a virtual-scrolled table, edit translations, and save/export results.
+**All 26 spec tasks complete — v1.0.** The app can load ESP+Strings, display 76K+ strings in a virtual-scrolled table, edit translations, translate via API, browse BSA archives, extract PEX strings, map FUZ audio, view NPC dialogs, and switch between 10 UI languages.
 
 ### Implemented
 
@@ -29,24 +29,19 @@ Parses ESP/ESM files (Skyrim SE, Fallout 4, Starfield, etc.), extracts translata
 | String normalization | Done | NFKC normalization + tokenization for search/matching |
 | Regex search/replace | Done | Regex filter toggle + Replace All with confirmation + capture groups |
 | Strings write-back dedup | Done | Shared data offsets via HashMap, ~17% smaller files |
-| Theme system | Done | Dark/light/gray, CSS variables + localStorage persistence |
+| Theme system | Done | Dark/light/gray/auto, CSS variables + localStorage + matchMedia |
 | Auto-backup | Done | 5-min SST snapshots, rotate last 10, silent fail |
 | Undo/Redo | Done | Stack-based (max 100), Ctrl+Z/Y, IPC sync |
+| BSA/BA2 archive browser | Done | list_all_files + BsaBrowser component + unit tests |
+| PEX script string extraction | Done | parser + string extraction + PexPanel, write-back v2 |
+| FUZ audio mapping | Done | FuzFile parse + scan + WAV playback |
+| NPC map / dialog view | Done | parent_form_id tracking via GRUP s_type, DialogView grouping |
+| UI multi-language i18n | Done | react-i18next, 10 languages, zh-CN default |
+| Batch processor | Done | BatchExecutor + BatchPanel, multi-file translate/export |
 
-### Known Gaps (vs Delphi original)
+### All Spec Tasks Complete
 
-See [`docs/feature_comparison.md`](docs/feature_comparison.md) for the full list.
-
-Short version:
-
-| Priority | Missing Feature | Effort |
-|----------|----------------|--------|
-| Done | BSA/BA2 full archive browser | list_all_files + BsaBrowser component |
-| Done | PEX script string extraction | parser + string extraction, write-back v2 |
-| Done | FUZ audio mapping | FuzFile parse + scan + WAV playback |
-| Done | NPC map / dialog view | parent_form_id tracking via GRUP s_type, dialog grouping |
-| Done | UI multi-language i18n | react-i18next, 10 languages, zh-CN default |
-| Done | UI multi-language i18n | react-i18next, 10 languages, zh-CN default
+All 26 SPEC.md tasks (§T) now marked `x`. See [`docs/feature_comparison.md`](docs/feature_comparison.md) for remaining gap analysis vs Delphi original (MCM, ESPCompare, ESM cache, etc.).
 
 ## Quick Start
 
@@ -103,6 +98,12 @@ xTranslator/
 - [`docs/esp_format.md`](docs/esp_format.md) — ESP/ESM binary format
 - [`docs/sst_v8_format.md`](docs/sst_v8_format.md) — SST v8 dictionary binary format
 - [`docs/feature_comparison.md`](docs/feature_comparison.md) — Full gap analysis vs Delphi original
+- [`docs/pex_format.md`](docs/pex_format.md) — PEX binary format (layout, opcodes, value types)
+- [`docs/fuz_format.md`](docs/fuz_format.md) — FUZ audio container format
+- [`docs/bsa_findings.md`](docs/bsa_findings.md) — BSA archive analysis (compression, isolation, performance)
+- [`docs/esp_grup_tracking.md`](docs/esp_grup_tracking.md) — ESP GRUP hierarchy and parent FormID tracking
+- [`docs/i18n_architecture.md`](docs/i18n_architecture.md) — Multi-language architecture and translation workflow
+- [`docs/toolchain_and_roadmap.md`](docs/toolchain_and_roadmap.md) — Dependencies, warnings cleanup, v2 roadmap
 
 ## License
 

@@ -28,7 +28,7 @@
 | **Strings 模式** | ✅ 翻译 STRINGS 文件（已弃用） | ✅ 三格式读写 | 等价实现 | .STRINGS/.DLSTRINGS/.ILSTRINGS 均支持 |
 | **Hybrid 模式** | ✅ 推荐模式：ESP 结构+编辑 Strings | ⚠️ 后端就绪 | 部分实现 | 解析+Strings 读写已有，UI 编辑器未实现 |
 | **MCM/Translate** | ✅ MCM 菜单翻译文件 | ❌ | 未实现 | 自定义 txt 导入解析未开始 |
-| **Papyrus Pex** | ✅ PEX 反编译+翻译 | ❌ | 未实现 | PEX 脚本解析器未开始 |
+| **Papyrus Pex** | ✅ PEX 反编译+翻译 | ⚠️ 字符串提取 + 编辑 | 部分实现 | PEX 解析器完成（Header+StringTable+ObjectInfo），可翻译字符串提取，写回 PEX 留 v2 |
 
 ---
 
@@ -49,9 +49,9 @@
 | **XXXX 超大字段** | ✅ 4字节扩展大小 | ✅ | 100% | 已处理 next_field_size 逻辑 |
 | **XML 导入** | ✅ | ✅ 解析+匹配+更新 | ~95% | `import_xml_to_sky_strings` 三元组匹配，状态同步 |
 | **XML 导出** | ✅ | ✅ 写入+实体转义 | ~95% | `write_xml_export` Delphi 兼容格式，只导出有翻译的条目 |
-| **BSA/BA2 归档** | ✅ 提取+浏览 | ✅ Strings 自动提取 | ~30% | `BsaArchive` 支持 v0x68/v0x69，哈希查找，zlib/LZ4 解压；Strings 加载时自动 fallback |
-| **PEX 脚本解析** | ✅ 反编译+编辑 | ❌ | 未实现 | - |
-| **FUZ 音频映射** | ✅ 映射+播放 | ❌ | 未实现 | - |
+| **BSA/BA2 归档** | ✅ 提取+浏览 | ✅ 提取+浏览 | ~60% | `BsaArchive` 支持 v0x68/v0x69，`list_all_files` + `extract_file`，BsaBrowser 组件；BA2 未实现 |
+| **PEX 脚本解析** | ✅ 反编译+编辑 | ⚠️ 字符串提取 | ~40% | PEX parser 完成（Header+StringTable+ObjectInfo），可翻译字符串提取 + PexPanel；写回 PEX 留 v2 |
+| **FUZ 音频映射** | ✅ 映射+播放 | ✅ FuzFile parse + WAV 播放 | ~50% | FuzHeader 解析 + Sound/Voice/ 扫描 + RESP/INFO 关联 + FuzPanel；LIP 唇形数据未处理 |
 
 ---
 
@@ -110,11 +110,11 @@
 | **主窗口布局** | ✅ 菜单栏+文件树+编辑区 | ⚠️ 基础布局 | ~45% | MenuBar + SidePanel + StringTable + EditorPanel |
 | **虚拟字符串表格** | ✅ VirtualTreeView | ✅ react-window | ~70% | 76K+ 条虚拟滚动，客户端筛选/排序零延迟，ResizeObserver 自适应 |
 | **字符串编辑器** | ✅ SynEdit 高亮+行内编辑 | ⚠️ 基础编辑 | ~55% | textarea 编辑、Ctrl+Enter 保存、状态显示、启发式搜索、翻译 API |
-| **对话列表视图** | ✅ DIAL/INFO/QUST | ❌ | 0% | - |
+| **对话列表视图** | ✅ DIAL/INFO/QUST | ✅ DialogView 组件 | ~60% | QUST→DIAL→INFO 分组 + NPC_ 关联，parent_form_id 跟踪 |
 | **翻译进度条** | ✅ | ❌ | 0% | - |
 | **筛选/搜索栏** | ✅ 多维度筛选 | ✅ 实时筛选 | ~65% | 文本搜索 + 状态筛选 + 排序，客户端零延迟，虚拟滚动 |
 | **主题支持** | ✅ 默认/亮/灰/暗 | ✅ Dark/Light/Gray/Auto | ~90% | CSS variables + Zustand + localStorage, system follow via matchMedia |
-| **UI 多语言** | ✅ 10+ 语言 | ❌ | 0% | - |
+| **UI 多语言** | ✅ 10+ 语言 | ✅ react-i18next 10 语言 | ~80% | zh-CN/en/de/es/fr/ja/ko/pl/pt/ru locales，MenuBar 切换 + localStorage 持久化 |
 | **高分辨率 DPI** | ✅ DPI 感知 | ❌ | 0% | - |
 | **拖放加载** | ✅ XML 拖放 | ❌ | 0% | - |
 
@@ -156,9 +156,9 @@
 
 | 差距 | 说明 | 预估工作量 |
 |------|------|-----------|
-| BSA/BA2 归档 | 文件提取+浏览 | 1-2 周 |
-| PEX 脚本解析 | 字符串提取+编辑（T17） | 2 周 |
-| FUZ 音频映射 | NPC 地图+音频播放 | 1 周 |
+| ~~BSA/BA2 归档~~ | ✅ BsaBrowser + list_all_files + unit tests | Done |
+| ~~PEX 脚本解析~~ | ✅ PEX parser + string extraction + PexPanel | Done |
+| ~~FUZ 音频映射~~ | ✅ FuzFile parse + scan + FuzPanel | Done |
 | MCM 翻译 | 自定义 txt 导入 | 3-5 天 |
 | ESPCompare | 两 ESP 对比建字符串对 | 1 周 |
 | ESM 缓存 | SQLite 缓存加速重载 | 3-5 天 |
@@ -171,7 +171,7 @@
 | ~~批量处理器~~ | ✅ BatchExecutor + BatchPanel | Done |
 | Header 处理器 | ESP 头部修改 | 1 周 |
 | ~~主题系统~~ | ✅ Dark/Light/Gray/Auto | Done |
-| UI 多语言 | i18n 框架（T22） | 1 周 |
+| ~~UI 多语言~~ | ✅ react-i18next 10 languages | Done |
 | ~~自动备份~~ | ✅ 5-min SST snapshots | Done |
 | 高 DPI 支持 | Tauri 原生处理 | 1-2 天 |
 

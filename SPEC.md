@@ -118,9 +118,9 @@ T12|x|Update by ID (not index) across filter/sort|C7
 T13|x|Full-load + client-side filter/sort (<10ms)|C2
 T14|x|XML progress events during import/export|G4
 T15|x|DeepL translation provider|G6
-T16|.|BSA/BA2 full archive browser|G8
-T17|.|PEX script decompiler|G1
-T18|.|FUZ audio mapping|G2
+T16|x|BSA/BA2 full archive browser|G8
+T17|x|PEX script string extraction|G1
+T18|x|FUZ audio mapping|G2
 T19|x|Batch processor|G7
 T20|x|NPC map / dialog view (parent_form_id tracking via GRUP s_type, grouping)|G7
 T21|x|Theme system (dark/light/gray/auto, CSS variables, Zustand + localStorage + matchMedia)|G7
