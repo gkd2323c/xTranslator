@@ -528,8 +528,8 @@ pub fn sky_strings_to_xml_entries(strings: &[SkyString]) -> Vec<XmlStringEntry> 
 /// 使用增强多层级匹配策略：
 /// 1. 精确三元组 (str_id, record_sig, field_sig)
 /// 2. EDID 哈希匹配（跨版本稳定）
-/// 3. 词汇重叠匹配（Jaccard 相似度）
-/// 4. 规范化文本哈希匹配
+/// 3. 规范化文本哈希匹配
+/// 4. 词汇重叠匹配（Jaccard 相似度）
 ///
 /// # 参数
 /// * `strings` - 可变的 SkyString 切片（通常来自 AppState.strings）

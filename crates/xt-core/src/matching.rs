@@ -11,7 +11,7 @@
 //!
 //! Ambiguous matches are not auto-applied.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use crate::normalization;
 use crate::types::esp_pointer::{string_hash, HeaderSig};
@@ -213,6 +213,89 @@ enum ApplyEffect {
     PendingSkipped,
 }
 
+type ExactKey = (i32, HeaderSig, HeaderSig);
+type HashMatchKey = (u32, HeaderSig, HeaderSig);
+type RecFieldKey = (HeaderSig, HeaderSig);
+
+#[derive(Debug)]
+struct MatchIndex {
+    exact: HashMap<ExactKey, Vec<usize>>,
+    edid: HashMap<HashMatchKey, Vec<usize>>,
+    normalized: HashMap<HashMatchKey, Vec<usize>>,
+    record_field: HashMap<RecFieldKey, Vec<usize>>,
+    word_sets: Vec<HashSet<u32>>,
+}
+
+impl MatchIndex {
+    fn build(strings: &[SkyString]) -> Self {
+        let mut exact = HashMap::with_capacity(strings.len());
+        let mut edid = HashMap::with_capacity(strings.len());
+        let mut normalized = HashMap::with_capacity(strings.len());
+        let mut record_field = HashMap::new();
+        let mut word_sets = Vec::with_capacity(strings.len());
+
+        for (idx, sk) in strings.iter().enumerate() {
+            exact
+                .entry((
+                    sk.esp_ptr.str_id,
+                    sk.esp_ptr.record_sig,
+                    sk.esp_ptr.field_sig,
+                ))
+                .or_insert_with(Vec::new)
+                .push(idx);
+
+            edid.entry((
+                sk.esp_ptr.edid_hash,
+                sk.esp_ptr.record_sig,
+                sk.esp_ptr.field_sig,
+            ))
+            .or_insert_with(Vec::new)
+            .push(idx);
+
+            if let Some(norm_hash) = sk.normalized_hash {
+                normalized
+                    .entry((norm_hash, sk.esp_ptr.record_sig, sk.esp_ptr.field_sig))
+                    .or_insert_with(Vec::new)
+                    .push(idx);
+            }
+
+            record_field
+                .entry((sk.esp_ptr.record_sig, sk.esp_ptr.field_sig))
+                .or_insert_with(Vec::new)
+                .push(idx);
+
+            word_sets.push(sk.word_hashes.iter().copied().collect());
+        }
+
+        Self {
+            exact,
+            edid,
+            normalized,
+            record_field,
+            word_sets,
+        }
+    }
+
+    fn exact_candidates(&self, key: ExactKey) -> &[usize] {
+        self.exact.get(&key).map(Vec::as_slice).unwrap_or(&[])
+    }
+
+    fn edid_candidates(&self, key: HashMatchKey) -> &[usize] {
+        self.edid.get(&key).map(Vec::as_slice).unwrap_or(&[])
+    }
+
+    fn normalized_candidates(&self, key: HashMatchKey) -> &[usize] {
+        self.normalized.get(&key).map(Vec::as_slice).unwrap_or(&[])
+    }
+
+    fn record_field_candidates(&self, key: RecFieldKey) -> &[usize] {
+        self.record_field
+            .get(&key)
+            .map(Vec::as_slice)
+            .unwrap_or(&[])
+    }
+}
+
 /// Apply dictionary entries through the shared matcher.
 pub fn apply_dictionary_entries(
     strings: &mut [SkyString],
@@ -228,9 +311,10 @@ pub fn apply_dictionary_entries_with_policy(
 ) -> MatchResult {
     let mut result = MatchResult::default();
     let mut matched_ids: HashSet<u32> = HashSet::new();
+    let index = MatchIndex::build(strings);
 
     for entry in entries {
-        match match_entry(strings, entry, &matched_ids) {
+        match match_entry(strings, &index, entry, &matched_ids) {
             EntryOutcome::Matched(tier, idx) => {
                 let effect = apply_match(strings, idx, entry, tier, policy, &mut result);
                 let matched_id = strings[idx].id;
@@ -284,28 +368,29 @@ pub fn enhanced_import_match(
 
 fn match_entry(
     strings: &[SkyString],
+    index: &MatchIndex,
     entry: &DictionaryApplyEntry,
     matched_ids: &HashSet<u32>,
 ) -> EntryOutcome {
-    match find_tier1(strings, entry, matched_ids) {
+    match find_tier1(strings, index, entry, matched_ids) {
         TierMatch::Unique(idx) => return EntryOutcome::Matched(MatchTier::Exact, idx),
         TierMatch::Ambiguous => return EntryOutcome::Ambiguous,
         TierMatch::None => {}
     }
 
-    match find_tier2(strings, entry, matched_ids) {
+    match find_tier2(strings, index, entry, matched_ids) {
         TierMatch::Unique(idx) => return EntryOutcome::Matched(MatchTier::Edid, idx),
         TierMatch::Ambiguous => return EntryOutcome::Ambiguous,
         TierMatch::None => {}
     }
 
-    match find_tier3(strings, entry, matched_ids) {
+    match find_tier3(strings, index, entry, matched_ids) {
         TierMatch::Unique(idx) => return EntryOutcome::Matched(MatchTier::Normalized, idx),
         TierMatch::Ambiguous => return EntryOutcome::Ambiguous,
         TierMatch::None => {}
     }
 
-    match find_tier4(strings, entry, matched_ids) {
+    match find_tier4(strings, index, entry, matched_ids) {
         TierMatch::Unique(idx) => EntryOutcome::Matched(MatchTier::Vocab, idx),
         TierMatch::Ambiguous => EntryOutcome::Ambiguous,
         TierMatch::None => EntryOutcome::Unmatched,
@@ -315,31 +400,21 @@ fn match_entry(
 /// Tier 1: exact triple match.
 fn find_tier1(
     strings: &[SkyString],
+    index: &MatchIndex,
     entry: &DictionaryApplyEntry,
     matched_ids: &HashSet<u32>,
 ) -> TierMatch {
-    let candidates: Vec<usize> = strings
-        .iter()
-        .enumerate()
-        .filter(|(_, sk)| {
-            !matched_ids.contains(&sk.id)
-                && sk.esp_ptr.str_id == entry.str_id
-                && sk.esp_ptr.record_sig == entry.record_sig
-                && sk.esp_ptr.field_sig == entry.field_sig
-        })
-        .map(|(i, _)| i)
-        .collect();
-
-    match candidates.len() {
-        0 => TierMatch::None,
-        1 => TierMatch::Unique(candidates[0]),
-        _ => TierMatch::Ambiguous,
-    }
+    single_unmatched_candidate(
+        strings,
+        index.exact_candidates((entry.str_id, entry.record_sig, entry.field_sig)),
+        matched_ids,
+    )
 }
 
 /// Tier 2: EDID hash match.
 fn find_tier2(
     strings: &[SkyString],
+    index: &MatchIndex,
     entry: &DictionaryApplyEntry,
     matched_ids: &HashSet<u32>,
 ) -> TierMatch {
@@ -351,16 +426,11 @@ fn find_tier2(
         },
     };
 
-    let candidates: Vec<usize> = strings
+    let candidates: Vec<usize> = index
+        .edid_candidates((edid_hash, entry.record_sig, entry.field_sig))
         .iter()
-        .enumerate()
-        .filter(|(_, sk)| {
-            !matched_ids.contains(&sk.id)
-                && sk.esp_ptr.edid_hash == edid_hash
-                && sk.esp_ptr.record_sig == entry.record_sig
-                && sk.esp_ptr.field_sig == entry.field_sig
-        })
-        .map(|(i, _)| i)
+        .copied()
+        .filter(|&idx| !matched_ids.contains(&strings[idx].id))
         .collect();
 
     match candidates.len() {
@@ -373,6 +443,7 @@ fn find_tier2(
 /// Tier 3: normalized source match.
 fn find_tier3(
     strings: &[SkyString],
+    index: &MatchIndex,
     entry: &DictionaryApplyEntry,
     matched_ids: &HashSet<u32>,
 ) -> TierMatch {
@@ -382,28 +453,17 @@ fn find_tier3(
     }
     let norm_hash = string_hash(&norm);
 
-    let candidates: Vec<usize> = strings
-        .iter()
-        .enumerate()
-        .filter(|(_, sk)| {
-            !matched_ids.contains(&sk.id)
-                && sk.esp_ptr.record_sig == entry.record_sig
-                && sk.esp_ptr.field_sig == entry.field_sig
-                && sk.normalized_hash == Some(norm_hash)
-        })
-        .map(|(i, _)| i)
-        .collect();
-
-    match candidates.len() {
-        0 => TierMatch::None,
-        1 => TierMatch::Unique(candidates[0]),
-        _ => TierMatch::Ambiguous,
-    }
+    single_unmatched_candidate(
+        strings,
+        index.normalized_candidates((norm_hash, entry.record_sig, entry.field_sig)),
+        matched_ids,
+    )
 }
 
 /// Tier 4: vocabulary overlap.
 fn find_tier4(
     strings: &[SkyString],
+    index: &MatchIndex,
     entry: &DictionaryApplyEntry,
     matched_ids: &HashSet<u32>,
 ) -> TierMatch {
@@ -424,21 +484,17 @@ fn find_tier4(
     let mut best_score = 0.0f64;
     let mut best_score_count = 0u32;
 
-    for (i, sk) in strings.iter().enumerate() {
+    for &i in index.record_field_candidates((entry.record_sig, entry.field_sig)) {
+        let sk = &strings[i];
         if matched_ids.contains(&sk.id) {
             continue;
         }
-        if sk.esp_ptr.record_sig != entry.record_sig {
-            continue;
-        }
-        if sk.esp_ptr.field_sig != entry.field_sig {
-            continue;
-        }
-        if sk.word_hashes.is_empty() {
+        let sk_words = &index.word_sets[i];
+        if sk_words.is_empty() {
             continue;
         }
 
-        let score = jaccard(&entry_set, &sk.word_hashes);
+        let score = jaccard_sets(&entry_set, sk_words);
         if score < MIN_JACCARD {
             continue;
         }
@@ -460,6 +516,29 @@ fn find_tier4(
 }
 
 // ── 辅助函数 ──
+
+fn single_unmatched_candidate(
+    strings: &[SkyString],
+    candidates: &[usize],
+    matched_ids: &HashSet<u32>,
+) -> TierMatch {
+    let mut found = None;
+
+    for &idx in candidates {
+        if matched_ids.contains(&strings[idx].id) {
+            continue;
+        }
+        if found.is_some() {
+            return TierMatch::Ambiguous;
+        }
+        found = Some(idx);
+    }
+
+    match found {
+        Some(idx) => TierMatch::Unique(idx),
+        None => TierMatch::None,
+    }
+}
 
 /// Apply a match to the target string.
 fn apply_match(
@@ -605,10 +684,8 @@ fn disambiguate_by_normalized(
 /// Jaccard(A, B) = |A ∩ B| / |A ∪ B|
 ///
 /// 参数 `entry_set` 预构建为 HashSet 以避免每次比较都重新构建。
-fn jaccard(entry_set: &HashSet<u32>, sk_words: &[u32]) -> f64 {
-    let sk_set: HashSet<u32> = sk_words.iter().copied().collect();
-
-    let intersection = entry_set.intersection(&sk_set).count();
+fn jaccard_sets(entry_set: &HashSet<u32>, sk_set: &HashSet<u32>) -> f64 {
+    let intersection = entry_set.intersection(sk_set).count();
     let union = entry_set.len() + sk_set.len() - intersection;
 
     if union == 0 {
@@ -616,6 +693,13 @@ fn jaccard(entry_set: &HashSet<u32>, sk_words: &[u32]) -> f64 {
     }
 
     intersection as f64 / union as f64
+}
+
+#[cfg(test)]
+fn jaccard(entry_set: &HashSet<u32>, sk_words: &[u32]) -> f64 {
+    let sk_set: HashSet<u32> = sk_words.iter().copied().collect();
+
+    jaccard_sets(entry_set, &sk_set)
 }
 
 #[cfg(test)]
