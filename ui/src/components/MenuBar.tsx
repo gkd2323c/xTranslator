@@ -5,12 +5,7 @@ import { listen } from "@tauri-apps/api/event";
 import { FolderOpen, FileUp, FileDown, FileCode, Save, RotateCcw, RefreshCw, FileArchive, Braces, Volume2, MessagesSquare } from "lucide-react";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
-import { setI18nLanguage } from "../i18n";
-
-const LANGS: Record<string, string> = {
-  "zh-CN": "中文",
-  en: "English",
-};
+import { setI18nLanguage, SUPPORTED_LANGS } from "../i18n";
 
 export function MenuBar() {
   const { t, i18n } = useTranslation();
@@ -337,7 +332,7 @@ export function MenuBar() {
           className="lang-select"
           title={t("common.language")}
         >
-          {Object.entries(LANGS).map(([code, label]) => (
+          {Object.entries(SUPPORTED_LANGS).map(([code, label]) => (
             <option key={code} value={code}>{label}</option>
           ))}
         </select>
