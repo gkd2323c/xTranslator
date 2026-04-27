@@ -29,6 +29,16 @@ A modern Rust-based translator for Bethesda game mods (Skyrim, Skyrim SE, Fallou
 - **Status Filtering**: Filter by translation status (translated/incomplete/locked)
 - **Virtual Rendering**: Efficient handling of large string lists (76K+ items)
 - **Chunked Loading**: Batch data loading (~10K items per batch, ~2MB JSON)
+- **Regex Search/Replace**: Full regex with capture groups ($1/$2), replace-all across filtered items
+- **Theme System**: Dark/Light/Gray/Auto themes with CSS variables + localStorage persistence
+- **Undo/Redo**: Stack-based (max 100), Ctrl+Z/Y, IPC-synced
+- **Auto-Backup**: 5-min SST snapshots, rotate last 10
+- **Batch Processor**: Multi-file sequential ESP translate/export with progress events and cancellation
+- **BSA Archive Browser**: Browse, preview, and extract files from BSA v0x68/v0x69 archives
+- **PEX Script String Extraction**: Parse Papyrus scripts and extract translatable strings
+- **FUZ Audio Mapping**: Map dialog strings to WAV audio with playback
+- **NPC/Dialog View**: Dialog tree grouped by QUST→DIAL→INFO with NPC association
+- **Multi-Language UI**: 10 languages (zh-CN, en, de, es, fr, ja, ko, pl, pt, ru)
 
 ## Project Structure
 
@@ -127,9 +137,10 @@ Filtering logic: during ESP parsing, if a GMST record's `EDID` field starts with
 
 ## Known Limitations
 
-- **Strings Write-back**: Does **not** deduplicate — files are ~17% larger than Delphi originals but functionally correct
+- **PEX Write-back**: String extraction only; writing translations back to PEX files is a v2 feature
 - **E2E Tests**: Require Skyrim SE installed at `D:\SteamLibrary\steamapps\common\Skyrim Special Edition\Data\Skyrim.esm`
 - **Record Defs Loading**: Best-effort; if `Data/<Game>/record_defs` is missing, parser falls back to generic parsing
+- **BA2 Archives**: Not yet supported (BSA v0x68/v0x69 only)
 
 ## Credits
 

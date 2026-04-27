@@ -180,6 +180,5 @@ Filtering logic: during ESP parsing, if a GMST record's `EDID` field starts with
 
 ## Known Limitations
 
-- Strings write-back does **not** deduplicate — files are ~17% larger than Delphi originals but functionally correct.
 - E2E tests require Skyrim SE installed at `D:\SteamLibrary\steamapps\common\Skyrim Special Edition\Data\Skyrim.esm`.
 - `record_defs` loading is best-effort; if `Data/<Game>/record_defs` is missing, parser falls back to generic parsing.

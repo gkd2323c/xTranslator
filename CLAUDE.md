@@ -159,14 +159,17 @@ Commands are registered in `src-tauri/src/main.rs` and implemented in `commands.
 
 **Key Commands:**
 - `load_esp(espPath, stringsDir, language, game)` - Load and parse ESP file
-- `load_sst(path)` - Load SST dictionary
-- `save_sst(path, masters?)` - Save current state
+- `load_sst(path)` / `save_sst(path, masters?)` - SST dictionary management
 - `update_translation(id, translation)` - Update single string
-- `get_all_strings()` - Fetch all strings for client-side virtual scroll
+- `get_strings_chunk(offset, limit)` - Paginated string fetch for virtual scroll
 - `heuristic_search(source, minSimilarity, maxResults)` - Find similar translations
 - `translate_string(source, provider, apiKey?)` - AI translation
-- `export_xml(filePath, addon, sourceLang, destLang, version)`
-- `import_xml(filePath)` - Import XML translations
+- `export_xml(filePath, ...)` / `import_xml(filePath)` - XML exchange
+- `list_bsa_files(path)` / `extract_bsa_file(path, file, out)` - BSA browser
+- `parse_pex_strings(path)` - PEX string extraction
+- `load_fuz_mapping(espDir)` - FUZ audio mapping
+- `build_dialog_tree()` - Dialog/NPC view
+- `start_batch_translate(files)` / `start_batch_export(files)` - Batch processing
 
 ### State Management
 - **Backend**: `AppState` in `src-tauri/src/main.rs` holds `Vec<SkyString>`
@@ -225,8 +228,15 @@ Commands are registered in `src-tauri/src/main.rs` and implemented in `commands.
 - `docs/sst_v8_format.md` - SST v8 binary format specification
 - `docs/esp_format.md` - ESP/ESM file format analysis
 - `docs/strings_format.md` - Strings file format analysis
-- `docs/delphi_analysis.md` - Delphi codebase analysis
-- `REWRITE_EXECUTION_GUIDE.md` - Current rewrite status and roadmap
+- `docs/pex_format.md` - PEX binary format (layout, opcodes, value types)
+- `docs/fuz_format.md` - FUZ audio container format
+- `docs/bsa_format.md` - BSA v0x68/v0x69 format analysis
+- `docs/bsa_findings.md` - BSA archive analysis (compression, isolation, performance)
+- `docs/esp_grup_tracking.md` - ESP GRUP hierarchy and parent FormID tracking
+- `docs/i18n_architecture.md` - Multi-language architecture and translation workflow
+- `docs/feature_comparison.md` - Full gap analysis vs Delphi original
+- `docs/execution_plan.md` - Execution plan for remaining tasks
+- `docs/toolchain_and_roadmap.md` - Dependencies, warnings cleanup, v2 roadmap
 
 ## Gotchas & Edge Cases
 
@@ -261,6 +271,10 @@ Commands are registered in `src-tauri/src/main.rs` and implemented in `commands.
 | ESP Parsing | ✅ 76k+ strings from Skyrim.esm |
 | XML Import/Export | ✅ Delphi-compatible |
 | Heuristic Search | ✅ Levenshtein + LCS + LCP |
-| Translation API | ✅ OpenAI implemented |
-| VMAD/Pex Support | ⏳ Planned |
-| BSA/BA2 Support | ⏳ Planned |
+| Translation API | ✅ OpenAI + DeepL |
+| PEX String Extraction | ✅ Parser + PexPanel, write-back v2 |
+| BSA/BA2 Archive Browser | ✅ BsaBrowser + list_all_files + extract |
+| FUZ Audio Mapping | ✅ FuzFile parse + WAV playback |
+| Dialog/NPC View | ✅ DialogView component |
+| UI i18n | ✅ 10 languages (react-i18next) |
+| Batch Processor | ✅ BatchExecutor + BatchPanel |

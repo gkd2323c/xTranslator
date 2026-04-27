@@ -60,7 +60,7 @@ cargo build -p xtranslator-tauri --release
 ## Test
 
 ```bash
-# Rust unit tests (80 tests)
+# Rust unit tests (84 tests)
 cargo test -p xt-core
 
 # E2E tests (requires Skyrim SE at D:\SteamLibrary\...)
@@ -75,10 +75,10 @@ cd ui && npx tsc --noEmit
 ```
 xTranslator/
 ├── crates/
-│   ├── xt-core/        # Core library: ESP parser, strings, SST, XML, heuristic, translation API
+│   ├── xt-core/        # Core library: ESP parser, strings, SST, XML, BSA, PEX, FUZ, heuristic, translation API
 │   ├── xt-shared/      # IPC DTOs (Rust ↔ TypeScript)
 │   └── xt-cli/         # CLI testing tool
-├── src-tauri/          # Tauri 2.x backend
+├── src-tauri/          # Tauri 2.x backend (main.rs, commands.rs, batch.rs)
 ├── ui/                 # React + Vite frontend
 └── docs/               # Format specs and analysis docs
 ```

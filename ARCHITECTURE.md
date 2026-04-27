@@ -7,8 +7,8 @@ xTranslator is a Rust + Tauri 2.x + React rewrite of the Delphi-based Bethesda g
 **Design goals:**
 - 100% SST v8 bidirectional compatibility with Delphi xTranslator
 - Cross-platform desktop app (Windows, macOS, Linux)
-- Backend-only pagination: frontend never receives more than 100 items at once
-- All filter/sort/paginate logic lives in Rust
+- Full-load + client-side virtual scroll: all strings loaded in chunks, filter/sort on frontend
+- React + Vite frontend with 10-language i18n
 
 ---
 
@@ -18,13 +18,14 @@ xTranslator is a Rust + Tauri 2.x + React rewrite of the Delphi-based Bethesda g
 xTranslator/
 ├── Cargo.toml              # Workspace manifest (4 members)
 ├── crates/
-│   ├── xt-core/            # Core library: ESP parser, strings, SST, XML, heuristic search, translation API
+│   ├── xt-core/            # Core library: ESP parser, strings, SST, XML, BSA, PEX, FUZ, heuristic search, translation API
 │   ├── xt-shared/          # IPC DTOs shared between backend and frontend
 │   └── xt-cli/             # CLI tool (legacy, mostly superseded by Tauri UI)
 ├── src-tauri/              # Tauri 2.x desktop app backend
 │   ├── src/
 │   │   ├── main.rs         # App setup, command registration, state management
-│   │   └── commands.rs     # IPC command implementations
+│   │   ├── commands.rs     # IPC command implementations
+│   │   └── batch.rs        # Batch processor
 │   └── tauri.conf.json     # Tauri config (dev/build commands, window settings)
 └── ui/                     # React + Vite frontend (NOT a Cargo workspace member)
     ├── src/
@@ -32,7 +33,9 @@ xTranslator/
     │   ├── App.tsx         # Root layout
     │   ├── api/strings.ts  # Frontend API: DTO types + Tauri invoke wrappers
     │   ├── stores/appStore.ts  # Zustand state management
-    │   └── components/     # MenuBar, SidePanel, StringTable, EditorPanel
+    │   ├── i18n.ts         # react-i18next initialization (10 languages)
+    │   ├── locales/        # Language files (zh-CN, en, de, es, fr, ja, ko, pl, pt, ru)
+    │   └── components/     # MenuBar, SidePanel, StringTable, EditorPanel, BatchPanel, BsaBrowser, PexPanel, FuzPanel, DialogView
     └── package.json
 ```
 
@@ -40,7 +43,7 @@ xTranslator/
 
 | Member | Role | Key Files |
 |--------|------|-----------|
-| `xt-core` | Domain logic: ESP parsing, Bethesda strings formats, SST v8 read/write, XML import/export, heuristic similarity search, translation API providers | `src/lib.rs`, `src/esp/`, `src/sst/`, `src/xml/`, `src/heuristic/`, `src/translation_api/` |
+| `xt-core` | Domain logic: ESP parsing, Bethesda strings formats, SST v8 read/write, XML import/export, BSA/BA2 archive, PEX script parsing, FUZ audio, heuristic similarity search, translation API providers | `src/lib.rs`, `src/esp/`, `src/strings/`, `src/sst/`, `src/xml/`, `src/bsa/`, `src/pex/`, `src/fuz/`, `src/heuristic/`, `src/translation_api/` |
 | `xt-shared` | Serializable DTOs for IPC. Source of truth for data shapes. | `src/dto.rs` |
 | `xt-cli` | Legacy CLI for testing core functionality without UI. | `src/main.rs` |
 | `src-tauri` | Tauri backend: holds `AppState`, exposes commands to frontend. | `src/main.rs`, `src/commands.rs` |
@@ -151,7 +154,9 @@ Production builds use `beforeBuildCommand: "cd ui && npm run build"` which works
 |--------|----------------|
 | `esp::parser` | ESP/ESM binary parser: record headers, GRUP nesting, compressed record decompression (zlib), subrecord extraction, codepage-aware string decoding |
 | `strings` | Bethesda `.STRINGS` (null-terminated), `.DLSTRINGS`/`.ILSTRINGS` (4-byte length prefix) read/write. Codepage fallback table (932/936/949/950/1250-1257) |
-| `bsa` | BSA v0x68/v0x69 archive parser and file extraction. SSE uses LZ4, Skyrim uses zlib. Supports `BSAhash64` lookup for strings folder fallback |
+| `bsa` | BSA v0x68/v0x69 archive parser and file extraction. SSE uses LZ4, Skyrim uses zlib. Supports `BSAhash64` lookup, `list_all_files`, `extract_file` |
+| `pex` | PEX (Papyrus) script parser: Header + StringTable + ObjectInfo parsing, translatable string extraction |
+| `fuz` | FUZ audio container parser: FuzHeader + WAV extraction, Sound/Voice/ directory scanning, RESP/INFO association |
 | `sst::v8` | SST v8 dictionary format: read/write with Delphi-compatible UTF-16LE encoding, FNV-1a hashing, bidirectional roundtrip |
 | `xml` | Delphi xTranslator XML export/import: `parse_xml_export`, `write_xml_export`, `import_xml_to_sky_strings` |
 | `heuristic` | Similarity search for translation suggestions: Levenshtein distance, longest common substring (LCS), longest common prefix (LCP) |
@@ -164,18 +169,25 @@ Production builds use `beforeBuildCommand: "cd ui && npm run build"` which works
 | File | Responsibility |
 |------|----------------|
 | `main.rs` | Tauri app builder: plugin initialization (`shell`, `dialog`), `AppState` management, command handler registration |
-| `commands.rs` | IPC command implementations: `load_esp`, `load_sst`, `save_sst`, `update_translation`, `get_strings_chunk`, `get_strings_count`, `query_strings_command`, `get_stats`, `heuristic_search`, `translate_string`, `set_api_key`, `export_xml`, `import_xml`, `save_strings` |
+| `commands.rs` | IPC command implementations: `load_esp`, `load_sst`, `save_sst`, `update_translation`, `get_strings_chunk`, `query_strings_command`, `get_stats`, `heuristic_search`, `translate_string`, `set_api_key`, `export_xml`, `import_xml`, `save_strings`, `list_bsa_files`, `extract_bsa_file`, `parse_pex_strings`, `load_fuz_mapping`, `build_dialog_tree`, `start_batch_translate`, `start_batch_export`, `cancel_batch_job` |
+| `batch.rs` | Batch processor: sequential ESP file processing, cooperative cancellation, Tauri event emission |
 
 ### ui
 
 | File | Responsibility |
 |------|----------------|
 | `api/strings.ts` | TypeScript DTO interfaces + Tauri invoke wrappers for every backend command |
-| `stores/appStore.ts` | Zustand store: holds items, pagination state, filter/sort, selection, file info |
-| `components/MenuBar.tsx` | Load ESP/SST, Save SST/Strings, Export/Import XML, Reset, language selector |
+| `stores/appStore.ts` | Zustand store: holds items, filter/sort, selection, file info, theme, language, batch state |
+| `i18n.ts` | react-i18next initialization: 10 language locales, language detection, MenuBar integration |
+| `components/MenuBar.tsx` | Load ESP/SST, Save SST/Strings, Export/Import XML, Reset, language selector, theme switcher, batch panel toggle |
 | `components/SidePanel.tsx` | Stats display: total/translated/incomplete/locked counts, record type filter list, load progress |
-| `components/StringTable.tsx` | Virtual scroll list (react-window FixedSizeList): 76K+ strings seamless scroll, client-side filter/sort, status filter buttons |
+| `components/StringTable.tsx` | Virtual scroll list (react-window FixedSizeList): 76K+ strings seamless scroll, client-side filter/sort, status filter buttons, audio playback column |
 | `components/EditorPanel.tsx` | Translation editor: source text, textarea, Save (Ctrl+Enter), heuristic search, translate API, API Key dialog, status badge |
+| `components/BatchPanel.tsx` | Batch file list, game/language detection, translate/export, progress tracking, cancellation |
+| `components/BsaBrowser.tsx` | BSA archive browser: folder tree, file list, preview, extract single/batch |
+| `components/PexPanel.tsx` | PEX script viewer: object tree, translatable strings list, XML export |
+| `components/FuzPanel.tsx` | FUZ audio browser: file scan, RESP/INFO association, WAV playback |
+| `components/DialogView.tsx` | Dialog tree: QUST→DIAL→INFO grouping, NPC view, inline editing |
 | `App.tsx` | Root layout + global loading overlay (locks UI during critical operations) |
 
 ---
@@ -235,7 +247,7 @@ Delphi xTranslator compatible:
 # Full backend build
 cargo build -p xtranslator-tauri
 
-# Core library unit tests (80 tests)
+# Core library unit tests (84 tests)
 cargo test -p xt-core --lib
 
 # End-to-end tests (requires Skyrim SE at D:\SteamLibrary\...)

@@ -2,7 +2,7 @@
 
 > **更新日期**：2026-04-27
 > **原版版本**：xTranslator 1.6.0（Delphi 12.1 CE，~6.7 万行代码，10+ 年迭代）
-> **重写版本**：MVP 完成 + 批量处理器 + 主题系统 + 正则替换 + 撤销重做 + 自动备份（77 测试通过，0 警告）
+> **重写版本**：v1.0 — 全部 26 项 SPEC 任务完成（84 测试通过，0 警告）
 
 ---
 
@@ -10,13 +10,13 @@
 
 | 维度 | 原版 Delphi | Rust 重写 | 覆盖度 |
 |------|------------|----------|--------|
-| 代码量 | ~67,000 行 | ~7,000 行 | - |
-| 开发时间 | 10+ 年 | ~6 周 | - |
-| 数据格式解析 | 全格式 | 核心格式 | ~90% |
+| 代码量 | ~67,000 行 | ~10,400 行 | - |
+| 开发时间 | 10+ 年 | ~10 周 | - |
+| 数据格式解析 | 全格式 | 核心格式 | ~95% |
 | 编码系统 | 完整 | 完整 | ~90% |
-| 翻译工作流 | 完整 | 核心就绪 | ~60% |
-| UI 交互 | 完整 VCL | Tauri 基础 | ~45% |
-| 辅助工具 | 完整 | 部分 | ~15% |
+| 翻译工作流 | 完整 | 核心就绪 | ~75% |
+| UI 交互 | 完整 VCL | Tauri 基础 | ~65% |
+| 辅助工具 | 完整 | 部分 | ~40% |
 
 ---
 
@@ -62,9 +62,9 @@
 | **字典应用 (apply)** | ✅ ID+EDID+词汇匹配 | ⚠️ 基础 strId+record+field | ~40% | 缺少 EDID 匹配、词汇匹配、参数匹配 |
 | **启发式搜索** | ✅ Levenshtein/LCS | ✅ | ~80% | xt-core heuristic 模块，Levenshtein+LCS+LCP，IPC+UI 已集成 |
 | **翻译 API** | ✅ DeepL/MS/Google/OpenAI/Youdao/Baidu | ✅ OpenAI + DeepL 已实现 | ~60% | OpenAIProvider + DeepLProvider 已就绪，支持运行时切换 |
-| **字符串编辑** | ✅ 行内+窗口编辑 | ⚠️ 基础编辑 | ~65% | EditorPanel：文本编辑、Ctrl+Enter 保存、状态切换、API Key 弹窗 |
+| **字符串编辑** | ✅ 行内+窗口编辑 | ⚠️ 基础编辑 | ~70% | EditorPanel：文本编辑、Ctrl+Enter 保存、状态切换、启发式搜索、翻译 API |
 | **正则搜索/替换** | ✅ PCRE+批量 | ✅ Regex filter toggle + Replace All | ~80% | Regex toggle + Replace All with confirmation + capture groups ($1/$2) |
-| **直接搜索** | ✅ | ✅ 实时筛选 | ~70% | 客户端 filter+sort：文本/状态/排序，零延迟，虚拟滚动 76K+ 条 |
+| **直接搜索** | ✅ | ✅ 实时筛选 | ~80% | 客户端 filter+sort：文本/Regex/状态/Record 类型/排序，零延迟，76K+ 条 |
 | **撤销/重做** | ✅ | ✅ Stack-based (max 100) | ~80% | Ctrl+Z/Y + Ctrl+Shift+Z, IPC-synced, session-only |
 | **ESP 写入（Strings 回写）** | ✅ | ⚠️ Strings 保存已有 | ~30% | ESP 本身不修改（原版策略），但需要整合写入流程 |
 | **最终化 (finalize)** | ✅ 导出翻译结果 | ⚠️ XML 导出可用 | ~40% | XML 导出已就绪，Strings 最终化待整合 |
@@ -107,12 +107,12 @@
 
 | 功能 | 原版 | Rust 重写 | 覆盖度 | 说明 |
 |------|------|----------|--------|------|
-| **主窗口布局** | ✅ 菜单栏+文件树+编辑区 | ⚠️ 基础布局 | ~45% | MenuBar + SidePanel + StringTable + EditorPanel |
+| **主窗口布局** | ✅ 菜单栏+文件树+编辑区 | ⚠️ 基础布局 | ~60% | MenuBar + SidePanel + StringTable + EditorPanel + BatchPanel + BsaBrowser + PexPanel + FuzPanel + DialogView |
 | **虚拟字符串表格** | ✅ VirtualTreeView | ✅ react-window | ~70% | 76K+ 条虚拟滚动，客户端筛选/排序零延迟，ResizeObserver 自适应 |
 | **字符串编辑器** | ✅ SynEdit 高亮+行内编辑 | ⚠️ 基础编辑 | ~55% | textarea 编辑、Ctrl+Enter 保存、状态显示、启发式搜索、翻译 API |
 | **对话列表视图** | ✅ DIAL/INFO/QUST | ✅ DialogView 组件 | ~60% | QUST→DIAL→INFO 分组 + NPC_ 关联，parent_form_id 跟踪 |
 | **翻译进度条** | ✅ | ❌ | 0% | - |
-| **筛选/搜索栏** | ✅ 多维度筛选 | ✅ 实时筛选 | ~65% | 文本搜索 + 状态筛选 + 排序，客户端零延迟，虚拟滚动 |
+| **筛选/搜索栏** | ✅ 多维度筛选 | ✅ 实时筛选 + 正则 | ~80% | 文本搜索 + Regex toggle + 状态筛选 + Record 类型筛选 + 排序，客户端零延迟，虚拟滚动 |
 | **主题支持** | ✅ 默认/亮/灰/暗 | ✅ Dark/Light/Gray/Auto | ~90% | CSS variables + Zustand + localStorage, system follow via matchMedia |
 | **UI 多语言** | ✅ 10+ 语言 | ✅ react-i18next 10 语言 | ~80% | zh-CN/en/de/es/fr/ja/ko/pl/pt/ru locales，MenuBar 切换 + localStorage 持久化 |
 | **高分辨率 DPI** | ✅ DPI 感知 | ❌ | 0% | - |
@@ -197,9 +197,10 @@
 | TESVT_Const.pas | ✅ 已分析 | ✅ 常量映射完成 |
 | TESVT_Utils.pas | ✅ 已分析 | ✅ StringHash 复刻完成 |
 | TESVT_HeuristicSearch.pas | ⚠️ 已分析 | ✅ 已实现 |
+| TESVT_scriptPex.pas | ⚠️ 已分析 | ✅ PEX 解析器完成 |
 | TESVT_TranslateFunc.pas | ❌ 待分析 | ❌ 未实现 |
 | TESVT_MainLoader.pas | ❌ 待分析 | ❌ 未实现 |
-| TESVT_TranslatorApi.pas | ⚠️ 已分析 | ⚠️ OpenAI 已实现 |
+| TESVT_TranslatorApi.pas | ⚠️ 已分析 | ✅ OpenAI + DeepL 已实现 |
 
 ---
 
