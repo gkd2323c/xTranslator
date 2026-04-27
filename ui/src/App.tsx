@@ -7,6 +7,7 @@ import { MenuBar } from "./components/MenuBar";
 import { SidePanel } from "./components/SidePanel";
 import { BatchPanel } from "./components/BatchPanel";
 import { BsaBrowser } from "./components/BsaBrowser";
+import { PexPanel } from "./components/PexPanel";
 import { StringTable } from "./components/StringTable";
 import { EditorPanel } from "./components/EditorPanel";
 import { autoBackupSst } from "./api/strings";
@@ -22,6 +23,7 @@ function App() {
   const theme = useAppStore((s) => s.theme);
   const showBatchPanel = useAppStore((s) => s.showBatchPanel);
   const showBsaBrowser = useAppStore((s) => s.showBsaBrowser);
+  const showPexPanel = useAppStore((s) => s.showPexPanel);
   const isDirty = useAppStore((s) => s.isDirty);
   const sstPath = useAppStore((s) => s.sstPath);
   const undo = useAppStore((s) => s.undo);
@@ -92,7 +94,7 @@ function App() {
       <MenuBar />
       <div className="app-body">
         <aside className="app-sidebar">
-          {showBsaBrowser ? <BsaBrowser /> : showBatchPanel ? <BatchPanel /> : <SidePanel />}
+          {showBsaBrowser ? <BsaBrowser /> : showPexPanel ? <PexPanel /> : showBatchPanel ? <BatchPanel /> : <SidePanel />}
         </aside>
         <main className="app-main">
           <div className="app-table-area">

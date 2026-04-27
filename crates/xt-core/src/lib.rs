@@ -2,6 +2,7 @@ pub mod bsa;
 pub mod esp;
 pub mod heuristic;
 pub mod normalization;
+pub mod pex;
 pub mod sst;
 pub mod strings;
 pub mod testing;

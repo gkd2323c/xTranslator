@@ -335,3 +335,26 @@ export async function extractBsaFile(bsaPath: string, filePath: string, outputDi
 export async function extractBsaFolder(bsaPath: string, folder: string, outputDir: string): Promise<string[]> {
   return invoke("extract_bsa_folder", { bsaPath, folder, outputDir });
 }
+
+// ── PEX Types ───────────────────────────────────────────────────────
+
+export interface PexTranslatableDto {
+  object_name: string;
+  state_name: string;
+  function_name: string;
+  string_type: string;
+  source_text: string;
+}
+
+export interface PexScriptDto {
+  script_name: string;
+  game_id: number;
+  major_version: number;
+  minor_version: number;
+  string_count: number;
+  translatable: PexTranslatableDto[];
+}
+
+export async function parsePexStrings(pexPath: string): Promise<PexScriptDto> {
+  return invoke("parse_pex_strings", { pexPath });
+}

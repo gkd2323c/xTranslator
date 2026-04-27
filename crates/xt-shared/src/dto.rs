@@ -356,3 +356,24 @@ pub struct BsaFileListDto {
     pub folders: Vec<String>,
     pub files: Vec<BsaFileEntryDto>,
 }
+
+// ── PEX DTOs ────────────────────────────────────────────────────────
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct PexTranslatableDto {
+    pub object_name: String,
+    pub state_name: String,
+    pub function_name: String,
+    pub string_type: String,
+    pub source_text: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct PexScriptDto {
+    pub script_name: String,
+    pub game_id: u16,
+    pub major_version: u8,
+    pub minor_version: u8,
+    pub string_count: u32,
+    pub translatable: Vec<PexTranslatableDto>,
+}

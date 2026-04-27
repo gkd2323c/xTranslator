@@ -12,9 +12,10 @@ use xt_core::xml::{import_xml_to_sky_strings, parse_xml_file, sky_strings_to_xml
 use xt_shared::dto::{
     AutoBackupRequest, AutoBackupResponse, BatchConfig, BatchEntry, BatchStatus,
     BsaFileEntryDto, BsaFileListDto,
-    EspLoadProgress, HeuristicMatchDTO, HeuristicSearchRequest, LoadEspResponse, LoadSstResponse, QueryRequest,
-    QueryResponse, SaveStringsRequest, SaveStringsResponse, SkyStringDTO, TranslateRequest, XmlExportRequest, XmlImportResponse,
-    XmlProgress,
+    EspLoadProgress, HeuristicMatchDTO, HeuristicSearchRequest, LoadEspResponse, LoadSstResponse,
+    PexScriptDto, PexTranslatableDto, QueryRequest,
+    QueryResponse, SaveStringsRequest, SaveStringsResponse, SkyStringDTO, TranslateRequest,
+    XmlExportRequest, XmlImportResponse, XmlProgress,
 };
 
 use crate::batch::BatchExecutor;
@@ -1235,4 +1236,42 @@ pub async fn extract_bsa_folder(
     }
 
     Ok(extracted)
+}
+
+// ── PEX Commands ────────────────────────────────────────────────────
+
+#[tauri::command]
+pub async fn parse_pex_strings(pex_path: String) -> Result<PexScriptDto, String> {
+    let mut file = std::fs::File::open(&pex_path)
+        .map_err(|e| format!("Failed to open PEX: {}", e))?;
+
+    let script = xt_core::pex::parser::parse_pex(&mut file)
+        .map_err(|e| format!("Failed to parse PEX: {}", e))?;
+
+    let script_name = std::path::Path::new(&pex_path)
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("unknown")
+        .to_string();
+
+    let translatable: Vec<PexTranslatableDto> = script
+        .translatable
+        .iter()
+        .map(|t| PexTranslatableDto {
+            object_name: t.object_name.clone(),
+            state_name: t.state_name.clone(),
+            function_name: t.function_name.clone(),
+            string_type: t.string_type.clone(),
+            source_text: t.source_text.clone(),
+        })
+        .collect();
+
+    Ok(PexScriptDto {
+        script_name,
+        game_id: script.header.game_id,
+        major_version: script.header.major_version,
+        minor_version: script.header.minor_version,
+        string_count: script.string_table.len() as u32,
+        translatable,
+    })
 }
