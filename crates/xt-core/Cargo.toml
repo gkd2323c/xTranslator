@@ -18,6 +18,8 @@ quick-xml = "0.39"
 reqwest = { workspace = true }
 lz4 = "1.24"
 async-trait = "0.1"
+bincode = { workspace = true }
+sha2 = { workspace = true }
 
 [dev-dependencies]
 xt-shared = { path = "../xt-shared" }

@@ -10,7 +10,7 @@ use crate::normalization;
 // 使用约束：
 // - `id`：仅运行时稳定，不可作为跨会话持久化主键。
 // - 持久化匹配应优先依赖 `esp_ptr` 三元组（str_id/record_sig/field_sig）。
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct SkyString {
     /// 内部唯一 ID（运行时分配，不持久化到 SST）
     pub id: u32,

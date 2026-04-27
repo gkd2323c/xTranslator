@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tauri::Emitter;
+use xt_core::cache::EsmCache;
 use xt_core::esp::parser::{EspParser, StringsFiles};
 use xt_core::strings::CodepageTable;
 use xt_core::sst::v8::SstDictionary;
@@ -76,6 +77,21 @@ impl AppState {
 /// - locked：不可编辑/锁定
 ///
 /// 兜底策略：未知状态统一映射为 `locked`，避免前端出现未定义分支。
+fn cache_dir() -> std::path::PathBuf {
+    if cfg!(windows) {
+        std::env::var("LOCALAPPDATA")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|_| std::path::PathBuf::from("."))
+            .join("xTranslator")
+            .join("cache")
+    } else {
+        std::env::var("HOME")
+            .map(|h| std::path::PathBuf::from(h).join(".cache"))
+            .unwrap_or_else(|_| std::path::PathBuf::from("."))
+            .join("xTranslator")
+    }
+}
+
 fn status_string(sk: &SkyString) -> String {
     if sk.params.is_translated() {
         "translated"
@@ -114,6 +130,7 @@ fn sky_string_to_dto(sk: &SkyString) -> SkyStringDTO {
 /// - 解析会覆盖当前 `AppState.strings`（相当于重新打开文件）。
 /// - 若提供 `strings_dir`，会尝试加载对应语言的 STRINGS 文件。
 /// - 返回值中的统计信息用于前端侧边栏和加载反馈。
+/// - 先检查本地缓存（基于 ESP 文件 SHA-256 哈希），命中则直接返回。
 #[tauri::command]
 pub async fn load_esp(
     window: tauri::Window,
@@ -128,10 +145,42 @@ pub async fn load_esp(
     let language_clone = language.clone();
     let game_clone = game.clone();
 
+    let c_dir = cache_dir();
+
     // ESP 解析是 CPU 密集型任务，放到阻塞线程池里执行，避免卡住异步运行时。
-    // 这里返回 (Vec<SkyString>, LoadEspResponse) 二元组，前者写入状态，后者回传前端。
     let result = tokio::task::spawn_blocking(move || -> Result<(Vec<SkyString>, LoadEspResponse), String> {
         let start = std::time::Instant::now();
+
+        // ── 缓存检查阶段 ──
+        let cache = EsmCache::new(c_dir, 50);
+        let esp_path_ref = std::path::Path::new(&esp_path_clone);
+
+        if let Some(cached) = cache.lookup(esp_path_ref) {
+            let _ = window.emit("esp-load-progress", EspLoadProgress {
+                stage: "cached".to_string(),
+                current: 100,
+                total: 100,
+                percentage: 100,
+                message: format!("Loaded from cache ({} strings)", cached.strings.len()),
+            });
+
+            let total = cached.strings.len() as u32;
+            let record_counts = EsmCache::compute_record_counts(&cached.strings);
+
+            return Ok((
+                cached.strings,
+                LoadEspResponse {
+                    total,
+                    compressed_records: cached.compressed_records,
+                    strings_loaded: cached.strings_loaded,
+                    parse_time_ms: 0,
+                    record_counts,
+                    cached: true,
+                },
+            ));
+        }
+
+        // ── 缓存未命中，完整解析 ──
 
         // 阶段 1：加载 record_defs
         let _ = window.emit("esp-load-progress", EspLoadProgress {
@@ -178,16 +227,12 @@ pub async fn load_esp(
             message: "Loading strings files...".to_string(),
         });
 
-        // 加载配套 strings 文件。
-        // 策略：优先从指定的 strings 目录加载独立文件；
-        // 若未指定或加载不到，回退到 ESP 所在目录扫描 BSA 归档。
         let lang = language_clone.as_deref().unwrap_or("english");
         let base_name = std::path::Path::new(&esp_path_clone)
             .file_stem()
             .and_then(|s| s.to_str())
             .unwrap_or("skyrim");
 
-        // 若存在 codepage 配置，优先使用它来提升非 UTF-8 文本解码准确性。
         let codepage_path = data_dir
             .join(match game_id {
                 GameId::Skyrim => "Skyrim",
@@ -206,7 +251,6 @@ pub async fn load_esp(
 
         let mut strings_loaded = 0u8;
 
-        // 1. 若前端提供了 strings 目录，先尝试加载
         if let Some(ref dir) = strings_dir_clone {
             let dir_path = std::path::Path::new(dir);
             if let Some(ref table) = codepage_table {
@@ -219,7 +263,6 @@ pub async fn load_esp(
             strings_loaded = parser.strings_files.loaded_count() as u8;
         }
 
-        // 2. 如果指定的目录没加载到任何文件，回退到 ESP 所在目录扫描 BSA
         if strings_loaded == 0 {
             let esp_dir = std::path::Path::new(&esp_path_clone)
                 .parent()
@@ -254,12 +297,10 @@ pub async fn load_esp(
         let mut file = std::fs::File::open(&esp_path_clone)
             .map_err(|e| format!("Failed to open ESP: {}", e))?;
 
-        // 获取文件大小用于进度计算
         let file_size = file.metadata()
             .map(|m| m.len())
             .unwrap_or(1);
 
-        // 创建进度回调闭包
         let window_clone = window.clone();
         let file_size_for_callback = file_size;
         parser.set_progress_callback(move |current_bytes| {
@@ -282,21 +323,28 @@ pub async fn load_esp(
             current: 100,
             total: 100,
             percentage: 95,
-            message: "Finalizing...".to_string(),
+            message: "Storing cache...".to_string(),
         });
 
         let parse_time_ms = start.elapsed().as_millis() as u64;
         let total = parser.strings.len() as u32;
 
-        // 统计各 record_sig 的数量，供侧边栏展示使用。
         let mut record_counts: HashMap<String, usize> = HashMap::new();
         for sk in &parser.strings {
             let sig = String::from_utf8_lossy(&sk.esp_ptr.record_sig).to_string();
             *record_counts.entry(sig).or_insert(0) += 1;
         }
 
-        // 从解析器获取压缩记录数量
         let compressed_records = parser.compressed_records;
+
+        // 存储解析结果到缓存（静默失败，不影响主流程）
+        let cache_payload = xt_core::cache::CachePayload {
+            version: 1,
+            strings: parser.strings.clone(),
+            compressed_records,
+            strings_loaded,
+        };
+        let _ = cache.store(esp_path_ref, &cache_payload);
 
         let _ = window.emit("esp-load-progress", EspLoadProgress {
             stage: "finalizing".to_string(),
@@ -314,6 +362,7 @@ pub async fn load_esp(
                 strings_loaded,
                 parse_time_ms,
                 record_counts,
+                cached: false,
             },
         ))
     })
@@ -321,11 +370,9 @@ pub async fn load_esp(
     .map_err(|e| format!("Task join error: {}", e))?
     .map_err(|e| e)?;
 
-    // 写回全量字符串状态（覆盖旧数据）。
     let mut strings = state.strings.lock().map_err(|e| e.to_string())?;
     *strings = result.0;
 
-    // 同步记录当前文件上下文（用于导出 XML 时回填 addon/source_lang 等信息）。
     let mut file_info = state.file_info.lock().map_err(|e| e.to_string())?;
     *file_info = Some(EspFileInfo {
         esp_path,
@@ -333,7 +380,6 @@ pub async fn load_esp(
         language: language.unwrap_or_else(|| "english".to_string()),
     });
 
-    // 重新加载文件时重置脏标记
     *state.is_dirty.lock().map_err(|e| e.to_string())? = false;
 
     Ok(result.1)

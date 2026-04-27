@@ -36,6 +36,7 @@ export interface LoadEspResponse {
   strings_loaded: number;
   parse_time_ms: number;
   record_counts: Record<string, number>;
+  cached: boolean;
 }
 
 export interface LoadSstResponse {

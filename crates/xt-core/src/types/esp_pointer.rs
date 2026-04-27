@@ -16,7 +16,7 @@ pub type HeaderSig = [u8; 4];
 /// - index_max: u16 (2字节)  - 记录中字段总数
 /// - edid_hash: u32 (4字节)  - Editor ID 的哈希值
 /// = 24 字节
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct EspPointer {
     /// Strings 文件中的字符串 ID（-1 表示未设置）
     pub str_id: i32,

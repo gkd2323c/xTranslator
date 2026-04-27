@@ -43,7 +43,7 @@ xTranslator/
 
 | Member | Role | Key Files |
 |--------|------|-----------|
-| `xt-core` | Domain logic: ESP parsing, Bethesda strings formats, SST v8 read/write, XML import/export, BSA/BA2 archive, PEX script parsing, FUZ audio, heuristic similarity search, translation API providers | `src/lib.rs`, `src/esp/`, `src/strings/`, `src/sst/`, `src/xml/`, `src/bsa/`, `src/pex/`, `src/fuz/`, `src/heuristic/`, `src/translation_api/` |
+| `xt-core` | Domain logic: ESP parsing, Bethesda strings formats, SST v8 read/write, XML import/export, BSA/BA2 archive, PEX script parsing, FUZ audio, heuristic similarity search, translation API providers, ESP cache | `src/lib.rs`, `src/esp/`, `src/strings/`, `src/sst/`, `src/xml/`, `src/bsa/`, `src/pex/`, `src/fuz/`, `src/heuristic/`, `src/translation_api/`, `src/cache.rs` |
 | `xt-shared` | Serializable DTOs for IPC. Source of truth for data shapes. | `src/dto.rs` |
 | `xt-cli` | Legacy CLI for testing core functionality without UI. | `src/main.rs` |
 | `src-tauri` | Tauri backend: holds `AppState`, exposes commands to frontend. | `src/main.rs`, `src/commands.rs` |
@@ -60,13 +60,17 @@ User selects ESP → MenuBar.tsx
   → invoke("load_esp", { espPath, stringsDir, language, game })
   → src-tauri/src/commands.rs::load_esp()
     → spawn_blocking: CPU-intensive ESP parsing
-      → xt-core::EspParser::with_game() → parse() → decompress records → extract strings
-      → xt-core::StringsFiles::load_from_dir_with_language()
-        → First: try standalone .STRINGS/.DLSTRINGS/.ILSTRINGS files
-        → Fallback: scan .bsa archives in ESP directory, extract strings/ folder via BSAhash64
+      → Check EsmCache (SHA-256 of ESP → {hash}.cache in %LOCALAPPDATA%/xTranslator/cache/)
+      → Cache hit: deserialize bincode blob → return instantly (cached=true, parse_time_ms=0)
+      → Cache miss: full parse
+        → xt-core::EspParser::with_game() → parse() → decompress records → extract strings
+        → xt-core::StringsFiles::load_from_dir_with_language()
+          → First: try standalone .STRINGS/.DLSTRINGS/.ILSTRINGS files
+          → Fallback: scan .bsa archives in ESP directory, extract strings/ folder via BSAhash64
+        → Store result in cache (bincode serialized, max 50 entries, prune oldest)
     → Store Vec<SkyString> in AppState.strings
-  → Emit "esp-load-progress" events (stage: loading_strings / parsing / finalizing)
-  → Return LoadEspResponse { total, compressed_records, strings_loaded, parse_time_ms, record_counts }
+  → Emit "esp-load-progress" events (stage: parsing / finalizing / cached for cache hits)
+  → Return LoadEspResponse { total, compressed_records, strings_loaded, parse_time_ms, record_counts, cached }
   → appStore.setEspLoaded() → SidePanel shows stats
 ```
 
@@ -144,6 +148,12 @@ If standalone Strings files are not found in `Data/Strings/`, the loader scans a
 
 Production builds use `beforeBuildCommand: "cd ui && npm run build"` which works correctly.
 
+### 7. ESP Parse Result Caching
+
+ESP 解析结果通过基于文件 SHA-256 的内容寻址缓存到本地磁盘（`%LOCALAPPDATA%/xTranslator/cache/`）。同一文件的后续加载直接反序列化 bincode blob，跳过 STRINGS 加载和 ESP 解析，实现秒开。缓存文件以 `{sha256}.cache` 命名，自动清理超出 50 条上限的最旧条目。
+
+Format: `CachePayload { version: u32, strings: Vec<SkyString>, compressed_records: u32, strings_loaded: u8 }` — versioned for forward compatibility.
+
 ---
 
 ## Module Details
@@ -161,6 +171,7 @@ Production builds use `beforeBuildCommand: "cd ui && npm run build"` which works
 | `xml` | Delphi xTranslator XML export/import: `parse_xml_export`, `write_xml_export`, `import_xml_to_sky_strings` |
 | `heuristic` | Similarity search for translation suggestions: Levenshtein distance, longest common substring (LCS), longest common prefix (LCP) |
 | `normalization` | String normalization (case-folding, punctuation stripping, whitespace compression) for heuristic search and dictionary matching |
+| `cache` | ESP parse result cache (SHA-256 keyed, bincode blob, auto-prune oldest) |
 | `translation_api` | Translation provider trait; OpenAI + DeepL implementations. Supports API key via env var or runtime, provider switching |
 | `types` | Core types: `SkyString`, `EspPointer`, `SkyStringParams`, `GameId` |
 
@@ -247,7 +258,7 @@ Delphi xTranslator compatible:
 # Full backend build
 cargo build -p xtranslator-tauri
 
-# Core library unit tests (84 tests)
+# Core library unit tests (103 tests)
 cargo test -p xt-core --lib
 
 # End-to-end tests (requires Skyrim SE at D:\SteamLibrary\...)

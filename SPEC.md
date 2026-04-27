@@ -28,7 +28,7 @@ C10: EspPointer SIZE = 24 bytes LE; SST magic = `0x39555353`.
 
 ### IPC Commands (Tauri invoke)
 
-api: `load_esp` → `LoadEspResponse { total, compressed_records, strings_loaded, parse_time_ms, record_counts }`
+api: `load_esp` → `LoadEspResponse { total, compressed_records, strings_loaded, parse_time_ms, record_counts, cached }`
 api: `load_sst` → `LoadSstResponse { matched, unmatched }`
 api: `save_sst` → `()`
 api: `update_translation` → `()` (takes `u32 id`, not index)
@@ -50,7 +50,7 @@ api: `save_strings` → `SaveStringsResponse { strings_count, dlstrings_count, i
 
 ### Events
 
-evt: `esp-load-progress` → `EspLoadProgress { stage, current, total, percentage, message }`
+evt: `esp-load-progress` → `EspLoadProgress { stage, current, total, percentage, message }` (stage may be "cached" on cache hit)
 evt: `xml-progress` → `XmlProgress { stage, current, total, percentage, message }`
 
 ### Core Types
@@ -99,6 +99,7 @@ V16: ∀ save_with_format → HashMap dedup by encoded entry bytes; identical co
 V17: ∀ theme change → localStorage `xtranslator-theme` updated + `data-theme` attr set on documentElement
 V18: ∀ replaceAll → confirmation dialog required; batch-update each candidate via update_translation; reload all strings after; progress toast shown
 V19: ∀ loadAllStrings → get_strings_chunk primary (10K/batch); get_all_strings fallback (small datasets); query_strings last resort (paginated, no full store)
+V20: ∀ load_esp → before parsing, check EsmCache via SHA-256 of ESP file in `%LOCALAPPDATA%/xTranslator/cache/`; on hit return cached bincode blob; on miss parse then store
 
 ## §T Tasks
 
@@ -129,6 +130,7 @@ T23|x|Regex search/replace with capture groups (replaceAll across filtered items
 T24|x|Strings write-back deduplication (shared data offsets, ~17% size reduction)|G2
 T25|x|Auto-backup (5-min timer, SST snapshots, rotate last 10)|G3
 T26|x|Undo/Redo (stack-based, Ctrl+Z/Y, max 100 depth)|G7
+T27|x|ESP parse result cache (SHA-256 key, bincode blob, auto-prune)|G7
 
 ## §B Bugs
 

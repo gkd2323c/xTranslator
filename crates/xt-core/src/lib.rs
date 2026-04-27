@@ -1,4 +1,5 @@
 pub mod bsa;
+pub mod cache;
 pub mod esp;
 pub mod fuz;
 pub mod heuristic;

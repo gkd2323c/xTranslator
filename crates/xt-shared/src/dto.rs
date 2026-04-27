@@ -73,10 +73,13 @@ pub struct LoadEspResponse {
     pub compressed_records: u32,
     /// 成功加载的 Strings 文件数 (0-3)
     pub strings_loaded: u8,
-    /// 解析耗时（毫秒）
+    /// 解析耗时（毫秒）；缓存命中时为 0
     pub parse_time_ms: u64,
     /// 各记录类型数量统计
     pub record_counts: HashMap<String, usize>,
+    /// 是否从缓存加载（而非完整解析）
+    #[serde(default)]
+    pub cached: bool,
 }
 
 /// ESP 文件加载进度事件

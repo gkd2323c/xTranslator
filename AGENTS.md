@@ -38,7 +38,7 @@ Cargo workspace with 4 members:
 
 | Member | Role | Key Entrypoints |
 |--------|------|-----------------|
-| `crates/xt-core` | Core library: ESP parser, strings, SST, XML, heuristic search, translation API | `src/lib.rs` |
+| `crates/xt-core` | Core library: ESP parser, strings, SST, XML, heuristic search, translation API, ESP cache | `src/lib.rs` |
 | `crates/xt-shared` | IPC DTOs shared between backend and frontend | `src/dto.rs` |
 | `crates/xt-cli` | CLI tool (legacy, mostly superseded by Tauri UI) | `src/main.rs` |
 | `src-tauri` | Tauri 2.x desktop app backend | `src/main.rs`, `src/commands.rs` |
@@ -52,6 +52,9 @@ cargo build -p xtranslator-tauri
 
 # Core library tests (no external deps)
 cargo test -p xt-core --lib
+
+# Cache tests
+cargo test -p xt-core --lib cache
 
 # Run a single test
 cargo test -p xt-core --lib test_name_here
@@ -103,6 +106,16 @@ For production builds, `beforeBuildCommand` runs `cd ui && npm run build` correc
 - **Frontend state pipeline**: `appStore.allItems` (全量 DTO) → 客户端 filter/sort → `appStore.items` (显示用) → react-window `List` 虚拟渲染。SidePanel 统计基于 `allItems` 而非 `items`。
 - **Update by ID, not index**: `update_translation` takes a `u32 id` and looks up the string in the Vec. Frontend uses `selectedId` (not array index) — indices become invalid after filtering/sorting. Store 方法: `setSelectedById()`, `updateItemTranslation(id, text)`.
 - **Data refresh after mutation**: SST 加载 / XML 导入 → 后端 mutate `AppState.strings` → 前端重新 `loadAllStrings()` 分块刷新全量数据。单条翻译更新 → 前端本地 `updateItemTranslation(id, text)`（零 IPC）。
+
+### ESP Cache
+
+- **Location**: `%LOCALAPPDATA%/xTranslator/cache/` (Windows), `~/.cache/xTranslator/` (Linux/macOS).
+- **Cache key**: SHA-256 hash of the ESP file (content-addressable). If ESP content changes, cache auto-misses.
+- **Storage format**: `{sha256}.cache` files containing bincode-serialized `CachePayload { version, strings, compressed_records, strings_loaded }`.
+- **Integration**: `load_esp` command checks cache before parsing. On hit → returns instantly with `cached: true`, `parse_time_ms: 0`. On miss → parses normally, then stores cache for next time.
+- **Pruning**: Max 50 cache entries; oldest removed on `store()`. Manual clear via deleting the cache directory.
+- **Module**: `crates/xt-core/src/cache.rs` (`EsmCache`, `CachePayload`, `hash_file`).
+- **DTO field**: `LoadEspResponse.cached` (bool, `#[serde(default)]`) — frontend can show "Loaded from cache" vs parse time.
 
 ### Data Formats (Bethesda)
 

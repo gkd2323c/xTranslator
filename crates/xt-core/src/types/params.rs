@@ -3,7 +3,7 @@
 /// 对应 Delphi 的 `sStrParams` 集合类型，存储为 1 字节（u8）
 /// 这些标志位会持久化到 SST 字典文件中
 /// 注意：这些位用于跨会话状态恢复，调整语义需要兼容旧 SST。
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct SkyStringParams(pub u8);
 
 impl SkyStringParams {
@@ -76,7 +76,7 @@ impl SkyStringParams {
 /// 这些标志位仅在内存中使用，不会保存到 SST 文件中
 /// 使用 u64 可容纳 Delphi 原版使用的约 45 个标志位
 /// 约定：序列化/导出逻辑不应依赖这些位作为唯一数据来源。
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct SkyStringInternalParams(pub u64);
 
 impl SkyStringInternalParams {
