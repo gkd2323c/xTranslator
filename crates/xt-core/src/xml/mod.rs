@@ -5,7 +5,6 @@ use quick_xml::events::Event;
 use anyhow::{Context, Result};
 
 use crate::types::esp_pointer::{EspPointer, HeaderSig};
-use crate::types::params::SkyStringParams;
 use crate::types::sky_string::SkyString;
 
 /// Delphi xTranslator 的 XML 导出格式解析器
@@ -492,62 +491,23 @@ pub fn sky_strings_to_xml_entries(strings: &[SkyString]) -> Vec<XmlStringEntry> 
 
 /// 将 XML 导入条目应用到现有的 SkyString 列表
 ///
-/// 匹配规则：与 SST 匹配逻辑相同
-/// 通过 `str_id + record_sig + field_sig` 三元组精确匹配
+/// 使用增强多层级匹配策略：
+/// 1. 精确三元组 (str_id, record_sig, field_sig)
+/// 2. EDID 哈希匹配（跨版本稳定）
+/// 3. 词汇重叠匹配（Jaccard 相似度）
+/// 4. 规范化文本哈希匹配
 ///
 /// # 参数
 /// * `strings` - 可变的 SkyString 切片（通常来自 AppState.strings）
 /// * `xml_entries` - 从 XML 解析出的条目列表
 ///
 /// # 返回
-/// 三元组：(matched, unmatched, updated_ids)
-/// - matched: 成功匹配的条目数
-/// - unmatched: XML 中有但未找到匹配的条目数
-/// - updated_ids: 被更新的 SkyString 内部 ID 列表
-///
-/// # 行为
-/// 1. 只更新已翻译的条目（translation 非空）
-/// 2. 更新后标记为"已翻译"，清除"部分翻译"状态
-/// 3. 未匹配的条目会被统计（可能需要在 UI 中提示用户）
+/// 包含各层级匹配统计的 `MatchResult`
 pub fn import_xml_to_sky_strings(
     strings: &mut [SkyString],
     xml_entries: &[XmlStringEntry],
-) -> (u32, u32, Vec<u32>) {
-    let mut matched = 0u32;
-    let mut unmatched = 0u32;
-    let mut updated_ids = Vec::new();
-
-    for entry in xml_entries {
-        // 精确匹配：字符串 ID + 记录签名 + 字段签名
-        // 这是 SST 字典匹配的核心逻辑
-        let found = strings.iter_mut().find(|sk| {
-            sk.esp_ptr.str_id == entry.str_id
-                && sk.esp_ptr.record_sig == entry.record_sig
-                && sk.esp_ptr.field_sig == entry.field_sig
-        });
-
-        if let Some(sk) = found {
-            // 只更新非空的翻译（Delphi 行为）
-            if !entry.translation.is_empty() {
-                sk.set_translation(entry.translation.clone());
-            }
-            
-            // 更新状态标志
-            sk.params.set(SkyStringParams::TRANSLATED, true);      // 标记为已翻译
-            sk.params.set(SkyStringParams::INCOMPLETE_TRANS, false); // 清除部分翻译状态
-            
-            // 回传更新 ID，供前端做高亮/局部刷新。
-            updated_ids.push(sk.id);
-            matched += 1;
-        } else {
-            // 当前 ESP 中找不到该 XML 条目的匹配项
-            // 常见原因：不是同一份 ESP、或记录被过滤
-            unmatched += 1;
-        }
-    }
-
-    // 返回导入汇总统计，便于 UI 给出“成功/失败”反馈。
-    (matched, unmatched, updated_ids)
+) -> crate::matching::MatchResult {
+    crate::matching::enhanced_import_match(strings, xml_entries)
 }
 
 #[cfg(test)]
@@ -747,10 +707,11 @@ mod tests {
             },
         ];
 
-        let (matched, unmatched, _updated_ids) = import_xml_to_sky_strings(&mut strings, &xml_entries);
+        let result = import_xml_to_sky_strings(&mut strings, &xml_entries);
 
-        assert_eq!(matched, 1);
-        assert_eq!(unmatched, 1);
+        assert_eq!(result.tier_exact, 1);
+        assert_eq!(result.total_matched(), 1);
+        assert_eq!(result.unmatched, 1);
         assert_eq!(strings[0].translation, "你好");
         assert!(strings[0].params.is_translated());
         assert!(strings[1].translation.is_empty());

@@ -187,7 +187,17 @@ export function MenuBar() {
 
       try {
         const stats = await importXml(xmlPath);
-        toast.success(`XML imported: ${stats.matched} matched, ${stats.unmatched} unmatched of ${stats.total} entries`);
+        toast.success(
+          t("toast.xmlImported", {
+            matched: stats.matched,
+            unmatched: stats.unmatched,
+            total: stats.total,
+          }) +
+            (stats.tier_edid + stats.tier_vocab + stats.tier_normalized > 0
+              ? ` (exact: ${stats.tier_exact}, EDID: ${stats.tier_edid}, vocab: ${stats.tier_vocab}, norm: ${stats.tier_normalized})`
+              : ""),
+          { duration: 6000 }
+        );
         setIsDirty(true);
         await loadAllStrings();
       } finally {

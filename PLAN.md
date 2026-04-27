@@ -8,7 +8,7 @@ Parses ESP/ESM files (Skyrim SE, Fallout 4, Starfield, etc.), extracts translata
 
 ## Current Status
 
-**All 26 spec tasks complete — v1.0.** The app can load ESP+Strings, display 76K+ strings in a virtual-scrolled table, edit translations, translate via API, browse BSA archives, extract PEX strings, map FUZ audio, view NPC dialogs, and switch between 10 UI languages.
+**All 26 spec tasks complete — v1.0.** The app can load ESP+Strings, display 76K+ strings in a virtual-scrolled table, edit translations, translate via API, browse BSA archives, extract PEX strings, map FUZ audio, view NPC dialogs, import XML dictionaries with multi-tier enhanced matching (exact→EDID→vocab→normalized), and switch between 10 UI languages.
 
 ### Implemented
 
@@ -38,6 +38,7 @@ Parses ESP/ESM files (Skyrim SE, Fallout 4, Starfield, etc.), extracts translata
 | NPC map / dialog view | Done | parent_form_id tracking via GRUP s_type, DialogView grouping |
 | UI multi-language i18n | Done | react-i18next, 10 languages, zh-CN default |
 | Batch processor | Done | BatchExecutor + BatchPanel, multi-file translate/export |
+| Enhanced dictionary matching | Done | Multi-tier XML import: exact→EDID→vocab→normalized, ~60%→~85% hit rate |
 
 ### All Spec Tasks Complete
 
@@ -60,7 +61,7 @@ cargo build -p xtranslator-tauri --release
 ## Test
 
 ```bash
-# Rust unit tests (84 tests)
+# Rust unit tests (97 tests)
 cargo test -p xt-core
 
 # E2E tests (requires Skyrim SE at D:\SteamLibrary\...)

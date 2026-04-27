@@ -150,6 +150,10 @@ export interface XmlImportResponse {
   unmatched: number;
   total: number;
   updated_ids: number[];
+  tier_exact: number;
+  tier_edid: number;
+  tier_vocab: number;
+  tier_normalized: number;
 }
 
 export async function exportXml(request: XmlExportRequest): Promise<number> {

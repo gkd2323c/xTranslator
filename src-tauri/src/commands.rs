@@ -799,7 +799,7 @@ pub async fn export_xml(
 
 /// 导入 XML 翻译并合并到当前内存字符串。
 ///
-/// 返回匹配/未匹配数量及被更新的内部 ID 列表。
+/// 使用增强多层级匹配策略，返回各层级统计及被更新的内部 ID 列表。
 #[tauri::command]
 pub async fn import_xml(
     window: tauri::Window,
@@ -817,7 +817,7 @@ pub async fn import_xml(
     emit_xml_progress(&window, "merging", 1, 2, &format!("Merging {} entries...", total));
 
     let mut strings = state.strings.lock().map_err(|e| e.to_string())?;
-    let (matched, unmatched, updated_ids) = import_xml_to_sky_strings(&mut strings, &xml_entries);
+    let result = import_xml_to_sky_strings(&mut strings, &xml_entries);
 
     emit_xml_progress(&window, "done", 2, 2, "Import complete");
 
@@ -825,10 +825,14 @@ pub async fn import_xml(
     *state.is_dirty.lock().map_err(|e| e.to_string())? = true;
 
     Ok(XmlImportResponse {
-        matched,
-        unmatched,
+        matched: result.total_matched(),
+        unmatched: result.unmatched,
         total,
-        updated_ids,
+        updated_ids: result.updated_ids,
+        tier_exact: result.tier_exact,
+        tier_edid: result.tier_edid,
+        tier_vocab: result.tier_vocab,
+        tier_normalized: result.tier_normalized,
     })
 }
 

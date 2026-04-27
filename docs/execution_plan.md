@@ -2,7 +2,7 @@
 
 > 日期：2026-04-27
 > 基于：SPEC.md §T、PLAN.md、feature_comparison.md
-> 当前版本：v1.0 — 全部 26 项 SPEC 任务完成（84 测试通过，TypeScript 无错误，构建干净）
+> 当前版本：v1.0 — 全部 26 项 SPEC 任务完成 + P0 字典增强（97 测试通过，TypeScript 无错误，构建干净）
 
 ---
 
@@ -48,10 +48,10 @@
 
 | 指标 | 数值 |
 |------|------|
-| Rust 测试 | 84 通过，0 失败 |
+| Rust 测试 | 97 通过，0 失败 |
 | TypeScript 类型检查 | 0 错误 |
-| Cargo build | 0 警告 |
-| 项目代码量 | ~10,400 行（Rust + TypeScript） |
+| Cargo build | 0 警告（1 预存 dead_code） |
+| 项目代码量 | ~10,600 行（Rust + TypeScript） |
 | 旧版 Delphi 代码 | ~67,000 行（参考用） |
 
 ---
@@ -427,6 +427,60 @@ ui/src/
 | 7.3.6 | 完整回归测试（中文/英文切换后全部页面 UI 正常） | 0.5 天 |
 
 > **关键策略**：T16-T20 新增的组件（BsaBrowser、PexPanel、DialogView、NpcView）在创建时**直接使用 `t('key')`** 并同步写到 `locales/zh-CN/translation.json`。T22 时只需要翻译 `en.json` + 现有组件改造，无需碰新组件。由此 T22 的 4.5 天包含了些许 buffer。
+
+---
+
+## 二.B、P0：字典应用增强 ✅
+
+> **优先级**：P0（v1.0 发布前必须）
+> **目标**：提升 XML 字典导入的跨版本命中率，从 ~60% 提升至 ~85%+
+> **状态**：✅ 已完成（2026-04-27）
+
+### 问题分析
+
+当前 `import_xml_to_sky_strings` 仅使用 `(str_id, record_sig, field_sig)` 三元组精确匹配。当 ESP 版本变化时（如从 Skyrim 1.5 → 1.6），str_id 会发生偏移，导致大量 XML 条目无法匹配。
+
+### 技术方案
+
+新增 `crates/xt-core/src/matching.rs` 模块，实现多层级 fallback 匹配：
+
+| 层级 | 策略 | 匹配键 | 置信度 |
+|------|------|--------|--------|
+| T1 | 精确三元组 | `(str_id, record_sig, field_sig)` | 极高 |
+| T2 | EDID 哈希 | `(edid_hash, record_sig, field_sig)` + 规范化消歧 | 高 |
+| T3 | 词汇重叠 | `word_hashes` Jaccard ≥ 0.5 | 中 |
+| T4 | 规范化文本 | `(normalized_hash, record_sig, field_sig)` | 高 |
+
+#### 关键设计
+
+- **去重保护**：已匹配 SkyString 不会被后续条目重复匹配（`HashSet<u32>` 跟踪）
+- **REC+FIELD 始终参与**：所有层级都要求 record_sig + field_sig 一致，防止跨字段误匹配
+- **EDID 消歧**：同一 EDID 对应多字段时使用规范化文本消歧
+- **Jaccard 阈值 0.5**：平衡命中率和误匹配风险
+- **向前兼容**：返回结构新增 `tier_exact/tier_edid/tier_vocab/tier_normalized`，原有 `matched/unmatched/total` 不变
+
+#### 涉及文件
+
+| 文件 | 变更 |
+|------|------|
+| `crates/xt-core/src/matching.rs` | **新增**：增强匹配引擎 + 13 单元测试 |
+| `crates/xt-core/src/lib.rs` | 注册 matching 模块 |
+| `crates/xt-core/src/xml/mod.rs` | 委托到 enhanced_import_match |
+| `crates/xt-shared/src/dto.rs` | XmlImportResponse 新增 per-tier 字段 |
+| `src-tauri/src/commands.rs` | 适配新返回结构 |
+| `ui/src/api/strings.ts` | 更新 XmlImportResponse 接口 |
+| `ui/src/components/MenuBar.tsx` | i18n 化 toast + 显示层级详情 |
+
+### 验收标准
+
+- [x] Tier 1 精确匹配行为与旧版完全一致
+- [x] Tier 2 EDID 匹配可跨 str_id 变化
+- [x] Tier 3 词汇重叠可匹配同义改写
+- [x] Tier 4 规范化文本可处理标点/大小写差异
+- [x] 已匹配字符串不会被重复匹配
+- [x] 13 个新增单元测试全部通过
+- [x] REST 接口向后兼容
+- [x] 前端 toast 显示各层级匹配详情
 
 ---
 

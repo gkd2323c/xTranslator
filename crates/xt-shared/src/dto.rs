@@ -159,7 +159,7 @@ pub struct XmlExportRequest {
 /// XML 导入响应
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct XmlImportResponse {
-    /// 匹配成功的条目数
+    /// 匹配成功的总条目数
     pub matched: u32,
     /// 未匹配的 XML 条目数
     pub unmatched: u32,
@@ -168,6 +168,18 @@ pub struct XmlImportResponse {
     /// 被更新的 SkyString 内部 ID 列表（用于前端增量刷新）
     #[serde(default)]
     pub updated_ids: Vec<u32>,
+    /// Tier 1 精确三元组匹配数
+    #[serde(default)]
+    pub tier_exact: u32,
+    /// Tier 2 EDID 哈希匹配数
+    #[serde(default)]
+    pub tier_edid: u32,
+    /// Tier 3 词汇重叠匹配数
+    #[serde(default)]
+    pub tier_vocab: u32,
+    /// Tier 4 规范化文本匹配数
+    #[serde(default)]
+    pub tier_normalized: u32,
 }
 
 /// 保存 Strings 文件请求
