@@ -42,6 +42,12 @@ export interface LoadEspResponse {
 export interface LoadSstResponse {
   matched: number;
   unmatched: number;
+  updated_ids: number[];
+  tier_exact: number;
+  tier_edid: number;
+  tier_normalized: number;
+  tier_vocab: number;
+  ambiguous: number;
 }
 
 export interface HeuristicSearchRequest {
@@ -155,6 +161,7 @@ export interface XmlImportResponse {
   tier_edid: number;
   tier_vocab: number;
   tier_normalized: number;
+  ambiguous: number;
 }
 
 export async function exportXml(request: XmlExportRequest): Promise<number> {

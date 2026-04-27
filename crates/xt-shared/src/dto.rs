@@ -104,6 +104,24 @@ pub struct LoadSstResponse {
     pub matched: u32,
     /// 未匹配的 SST 条目数
     pub unmatched: u32,
+    /// 被更新的 SkyString 内部 ID 列表（用于前端增量刷新）
+    #[serde(default)]
+    pub updated_ids: Vec<u32>,
+    /// Tier 1 精确三元组匹配数
+    #[serde(default)]
+    pub tier_exact: u32,
+    /// Tier 2 EDID 哈希匹配数
+    #[serde(default)]
+    pub tier_edid: u32,
+    /// Tier 3 规范化文本匹配数
+    #[serde(default)]
+    pub tier_normalized: u32,
+    /// Tier 4 词汇重叠匹配数
+    #[serde(default)]
+    pub tier_vocab: u32,
+    /// 歧义但未自动应用的条目数
+    #[serde(default)]
+    pub ambiguous: u32,
 }
 
 /// 启发式搜索请求
@@ -183,6 +201,9 @@ pub struct XmlImportResponse {
     /// Tier 4 规范化文本匹配数
     #[serde(default)]
     pub tier_normalized: u32,
+    /// 歧义但未自动应用的条目数
+    #[serde(default)]
+    pub ambiguous: u32,
 }
 
 /// 保存 Strings 文件请求

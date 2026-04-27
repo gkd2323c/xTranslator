@@ -107,7 +107,13 @@ export function MenuBar() {
     try {
       const stats = await loadSst(sstPath);
       setSstLoaded(sstPath, stats);
-      toast.success(`SST loaded: ${stats.matched} matched, ${stats.unmatched} unmatched`);
+      setIsDirty(true);
+      toast.success(
+        `SST loaded: ${stats.matched} matched, ${stats.unmatched} unmatched` +
+          (stats.tier_edid + stats.tier_normalized + stats.tier_vocab + stats.ambiguous > 0
+            ? ` (exact: ${stats.tier_exact}, EDID: ${stats.tier_edid}, norm: ${stats.tier_normalized}, vocab: ${stats.tier_vocab}, ambiguous: ${stats.ambiguous})`
+            : "")
+      );
       await loadAllStrings();
     } catch (e: any) {
       toast.error(`Failed to load SST: ${e}`);
@@ -193,8 +199,8 @@ export function MenuBar() {
             unmatched: stats.unmatched,
             total: stats.total,
           }) +
-            (stats.tier_edid + stats.tier_vocab + stats.tier_normalized > 0
-              ? ` (exact: ${stats.tier_exact}, EDID: ${stats.tier_edid}, vocab: ${stats.tier_vocab}, norm: ${stats.tier_normalized})`
+            (stats.tier_edid + stats.tier_vocab + stats.tier_normalized + stats.ambiguous > 0
+              ? ` (exact: ${stats.tier_exact}, EDID: ${stats.tier_edid}, norm: ${stats.tier_normalized}, vocab: ${stats.tier_vocab}, ambiguous: ${stats.ambiguous})`
               : ""),
           { duration: 6000 }
         );

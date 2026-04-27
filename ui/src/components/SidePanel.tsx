@@ -143,6 +143,30 @@ export function SidePanel() {
             <span className="sidepanel-label">Unmatched</span>
             <span className="sidepanel-value status-incomplete">{sstStats.unmatched}</span>
           </div>
+          <div className="sidepanel-row">
+            <span className="sidepanel-label">Exact</span>
+            <span className="sidepanel-value">{sstStats.tier_exact}</span>
+          </div>
+          <div className="sidepanel-row">
+            <span className="sidepanel-label">EDID</span>
+            <span className="sidepanel-value">{sstStats.tier_edid}</span>
+          </div>
+          <div className="sidepanel-row">
+            <span className="sidepanel-label">Normalized</span>
+            <span className="sidepanel-value">{sstStats.tier_normalized}</span>
+          </div>
+          <div className="sidepanel-row">
+            <span className="sidepanel-label">Vocab</span>
+            <span className="sidepanel-value">{sstStats.tier_vocab}</span>
+          </div>
+          <div className="sidepanel-row">
+            <span className="sidepanel-label">Ambiguous</span>
+            <span className="sidepanel-value">{sstStats.ambiguous}</span>
+          </div>
+          <div className="sidepanel-row">
+            <span className="sidepanel-label">Updated</span>
+            <span className="sidepanel-value">{sstStats.updated_ids.length}</span>
+          </div>
         </div>
       )}
 

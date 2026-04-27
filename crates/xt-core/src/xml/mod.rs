@@ -1,8 +1,8 @@
-use std::path::Path;
-use std::io::{BufRead, Write};
-use quick_xml::Reader;
-use quick_xml::events::Event;
 use anyhow::{Context, Result};
+use quick_xml::events::Event;
+use quick_xml::Reader;
+use std::io::{BufRead, Write};
+use std::path::Path;
 
 use crate::types::esp_pointer::{EspPointer, HeaderSig};
 use crate::types::sky_string::SkyString;
@@ -40,13 +40,13 @@ pub struct XmlExportParams {
 
 #[derive(Debug, Clone)]
 pub struct XmlStringEntry {
-    pub list_index: u8,      // 0=strings，1=dlstrings，2=ilstrings
+    pub list_index: u8, // 0=strings，1=dlstrings，2=ilstrings
     pub str_id: i32,
     pub edid: Option<String>,
     pub record_sig: HeaderSig,
     pub field_sig: HeaderSig,
-    pub index: u16,          // 来自 REC 的 id 属性
-    pub index_max: u16,      // 来自 REC 的 idMax 属性
+    pub index: u16,     // 来自 REC 的 id 属性
+    pub index_max: u16, // 来自 REC 的 idMax 属性
     pub source: String,
     pub translation: String,
 }
@@ -54,7 +54,13 @@ pub struct XmlStringEntry {
 impl XmlStringEntry {
     /// 转换为 SkyString（仅填充最小必要的 EspPointer 信息）
     pub fn to_sky_string(&self, id: u32) -> SkyString {
-         let mut sk = SkyString::new(id, self.source.clone(), self.translation.clone(), self.record_sig, self.field_sig);
+        let mut sk = SkyString::new(
+            id,
+            self.source.clone(),
+            self.translation.clone(),
+            self.record_sig,
+            self.field_sig,
+        );
         sk.esp_ptr = EspPointer {
             str_id: self.str_id,
             form_id: 0,
@@ -99,21 +105,27 @@ pub fn parse_xml_export<R: BufRead>(reader: R) -> Result<(XmlExportParams, Vec<X
     // 原因：它会吞掉纯空白文本事件，进而改变实体解码后的原始空格布局。
 
     let mut params = XmlExportParams {
-        addon: String::new(),        // 插件/模组名称
-        source_lang: String::new(),  // 源语言
-        dest_lang: String::new(),    // 目标语言
-        version: 0,                  // XML 格式版本
+        addon: String::new(),       // 插件/模组名称
+        source_lang: String::new(), // 源语言
+        dest_lang: String::new(),   // 目标语言
+        version: 0,                 // XML 格式版本
     };
 
-    let mut entries = Vec::new();   // 解析出的字符串条目
-    let mut buf = Vec::new();       // XML 解析缓冲区
-    let mut current_element = String::new();  // 当前元素名称
-    let mut current_string: Option<XmlStringBuilder> = None;  // 正在构建的字符串条目
+    let mut entries = Vec::new(); // 解析出的字符串条目
+    let mut buf = Vec::new(); // XML 解析缓冲区
+    let mut current_element = String::new(); // 当前元素名称
+    let mut current_string: Option<XmlStringBuilder> = None; // 正在构建的字符串条目
 
     loop {
         let event = match xml_reader.read_event_into(&mut buf) {
             Ok(e) => e,
-            Err(e) => return Err(anyhow::anyhow!("XML parse error at pos {}: {}", xml_reader.error_position(), e)),
+            Err(e) => {
+                return Err(anyhow::anyhow!(
+                    "XML parse error at pos {}: {}",
+                    xml_reader.error_position(),
+                    e
+                ))
+            }
         };
 
         match event {
@@ -210,7 +222,10 @@ pub fn parse_xml_export<R: BufRead>(reader: R) -> Result<(XmlExportParams, Vec<X
                 }
             }
             Event::Text(e) => {
-                let text = e.decode().map_err(|err| anyhow::anyhow!("XML text decode error: {}", err))?.to_string();
+                let text = e
+                    .decode()
+                    .map_err(|err| anyhow::anyhow!("XML text decode error: {}", err))?
+                    .to_string();
 
                 // 在 String 节点内：累积全部文本（包括空白）
                 // 在 String 节点外：仅保留非空白文本（Params 区域）
@@ -298,11 +313,12 @@ pub fn parse_xml_export<R: BufRead>(reader: R) -> Result<(XmlExportParams, Vec<X
                 if name == "String" {
                     if let Some(s) = current_string.take() {
                         // 解析 REC 文本："RECORD:FIELD"
-                        let (record_sig, field_sig) = if let Some((rec, field)) = s.rec_text.split_once(':') {
-                            (parse_sig(rec), parse_sig(field))
-                        } else {
-                            (s.record_sig, s.field_sig)
-                        };
+                        let (record_sig, field_sig) =
+                            if let Some((rec, field)) = s.rec_text.split_once(':') {
+                                (parse_sig(rec), parse_sig(field))
+                            } else {
+                                (s.record_sig, s.field_sig)
+                            };
                         entries.push(XmlStringEntry {
                             list_index: s.list_index,
                             str_id: s.str_id,
@@ -346,7 +362,8 @@ fn decode_xml_entity(entity: &[u8]) -> String {
                     .map(|c| c.to_string())
                     .unwrap_or_default()
             } else {
-                num_str.parse::<u32>()
+                num_str
+                    .parse::<u32>()
                     .ok()
                     .and_then(|cp| char::from_u32(cp))
                     .map(|c| c.to_string())
@@ -406,11 +423,18 @@ pub fn write_xml_export<W: Write>(
             .replace('"', "&quot;")
     }
 
-    writeln!(writer, r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#)?;
+    writeln!(
+        writer,
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#
+    )?;
     writeln!(writer, "<SSTXMLRessources>")?;
     writeln!(writer, "  <Params>")?;
     writeln!(writer, "    <Addon>{}</Addon>", escape(&params.addon))?;
-    writeln!(writer, "    <Source>{}</Source>", escape(&params.source_lang))?;
+    writeln!(
+        writer,
+        "    <Source>{}</Source>",
+        escape(&params.source_lang)
+    )?;
     writeln!(writer, "    <Dest>{}</Dest>", escape(&params.dest_lang))?;
     writeln!(writer, "    <Version>{}</Version>", params.version)?;
     writeln!(writer, "  </Params>")?;
@@ -425,7 +449,11 @@ pub fn write_xml_export<W: Write>(
         // sID 使用 6 位十六进制大写，保持与 Delphi 文件习惯一致。
         let sid = format!("{:06X}", entry.str_id);
 
-        writeln!(writer, r#"    <String List="{}" sID="{}">"#, entry.list_index, sid)?;
+        writeln!(
+            writer,
+            r#"    <String List="{}" sID="{}">"#,
+            entry.list_index, sid
+        )?;
 
         if let Some(ref edid) = entry.edid {
             writeln!(writer, "      <EDID>{}</EDID>", escape(edid))?;
@@ -436,7 +464,9 @@ pub fn write_xml_export<W: Write>(
         writeln!(
             writer,
             r#"      <REC id="{}" idMax="{}">{}</REC>"#,
-            entry.index, entry.index_max, escape(&rec_text)
+            entry.index,
+            entry.index_max,
+            escape(&rec_text)
         )?;
 
         writeln!(writer, "      <Source>{}</Source>", escape(&entry.source))?;
@@ -451,7 +481,11 @@ pub fn write_xml_export<W: Write>(
 }
 
 /// 将 XML 导出写入文件
-pub fn write_xml_file(path: &Path, params: &XmlExportParams, entries: &[XmlStringEntry]) -> Result<()> {
+pub fn write_xml_file(
+    path: &Path,
+    params: &XmlExportParams,
+    entries: &[XmlStringEntry],
+) -> Result<()> {
     let mut file = std::fs::File::create(path)
         .with_context(|| format!("Failed to create XML file: {}", path.display()))?;
     write_xml_export(&mut file, params, entries)
@@ -474,11 +508,11 @@ pub fn write_xml_file(path: &Path, params: &XmlExportParams, entries: &[XmlStrin
 pub fn sky_strings_to_xml_entries(strings: &[SkyString]) -> Vec<XmlStringEntry> {
     strings
         .iter()
-        .filter(|sk| !sk.translation.is_empty())  // 仅导出已翻译字符串
+        .filter(|sk| !sk.translation.is_empty()) // 仅导出已翻译字符串
         .map(|sk| XmlStringEntry {
             list_index: sk.list_index,
-            str_id: sk.esp_ptr.str_id,      // 字符串 ID（用于匹配）
-            edid: None,                     // 当前 SkyString 未跟踪 Editor ID
+            str_id: sk.esp_ptr.str_id,           // 字符串 ID（用于匹配）
+            edid: None,                          // 当前 SkyString 未跟踪 Editor ID
             record_sig: sk.esp_ptr.record_sig,   // 记录类型签名
             field_sig: sk.esp_ptr.field_sig,     // 字段签名
             index: sk.esp_ptr.index,             // 字段索引
@@ -507,7 +541,7 @@ pub fn import_xml_to_sky_strings(
     strings: &mut [SkyString],
     xml_entries: &[XmlStringEntry],
 ) -> crate::matching::MatchResult {
-    crate::matching::enhanced_import_match(strings, xml_entries)
+    crate::matching::apply_xml_dictionary_entries(strings, xml_entries)
 }
 
 #[cfg(test)]
@@ -671,10 +705,10 @@ mod tests {
 
     #[test]
     fn test_import_xml_to_sky_strings() {
-         let mut strings = vec![
-             SkyString::new(0, "Hello".to_string(), String::new(), *b"HELO", *b"TXT "),
-             SkyString::new(1, "World".to_string(), String::new(), *b"WORL", *b"TXT "),
-         ];
+        let mut strings = vec![
+            SkyString::new(0, "Hello".to_string(), String::new(), *b"HELO", *b"TXT "),
+            SkyString::new(1, "World".to_string(), String::new(), *b"WORL", *b"TXT "),
+        ];
         strings[0].esp_ptr.str_id = 1;
         strings[0].esp_ptr.record_sig = *b"LCTN";
         strings[0].esp_ptr.field_sig = *b"FULL";
@@ -719,10 +753,16 @@ mod tests {
 
     #[test]
     fn test_sky_strings_to_xml_entries_filters_empty() {
-         let mut strings = vec![
-             SkyString::new(0, "Hello".to_string(), "你好".to_string(), *b"HELO", *b"TXT "),
-             SkyString::new(1, "World".to_string(), String::new(), *b"WORL", *b"TXT "), // empty translation
-         ];
+        let mut strings = vec![
+            SkyString::new(
+                0,
+                "Hello".to_string(),
+                "你好".to_string(),
+                *b"HELO",
+                *b"TXT ",
+            ),
+            SkyString::new(1, "World".to_string(), String::new(), *b"WORL", *b"TXT "), // empty translation
+        ];
         strings[0].esp_ptr.str_id = 1;
         strings[0].esp_ptr.record_sig = *b"LCTN";
         strings[0].esp_ptr.field_sig = *b"FULL";

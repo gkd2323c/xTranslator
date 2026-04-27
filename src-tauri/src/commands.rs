@@ -3,21 +3,24 @@ use std::sync::{Arc, Mutex};
 use tauri::Emitter;
 use xt_core::cache::EsmCache;
 use xt_core::esp::parser::{EspParser, StringsFiles};
-use xt_core::strings::CodepageTable;
+use xt_core::matching::{apply_dictionary_entries, DictionaryApplyEntry};
 use xt_core::sst::v8::SstDictionary;
+use xt_core::strings::CodepageTable;
 use xt_core::translation_api::{DeepLProvider, OpenAIProvider, ProviderType, TranslationProvider};
 use xt_core::types::game_id::GameId;
 use xt_core::types::params::SkyStringParams;
 use xt_core::types::sky_string::SkyString;
-use xt_core::xml::{import_xml_to_sky_strings, parse_xml_file, sky_strings_to_xml_entries, write_xml_file, XmlExportParams};
+use xt_core::xml::{
+    import_xml_to_sky_strings, parse_xml_file, sky_strings_to_xml_entries, write_xml_file,
+    XmlExportParams,
+};
 use xt_shared::dto::{
-    AutoBackupRequest, AutoBackupResponse, BatchConfig, BatchEntry, BatchStatus,
-    BsaFileEntryDto, BsaFileListDto,
-    DialogInfoDto, DialogTreeDto, FuzMapping, FuzScanResponse, NpcDialogDto,
-    EspLoadProgress, HeuristicMatchDTO, HeuristicSearchRequest, LoadEspResponse, LoadSstResponse,
-    PexScriptDto, PexTranslatableDto, QueryRequest,
-    QueryResponse, SaveStringsRequest, SaveStringsResponse, SkyStringDTO, TranslateRequest,
-    XmlExportRequest, XmlImportResponse, XmlProgress,
+    AutoBackupRequest, AutoBackupResponse, BatchConfig, BatchEntry, BatchStatus, BsaFileEntryDto,
+    BsaFileListDto, DialogInfoDto, DialogTreeDto, EspLoadProgress, FuzMapping, FuzScanResponse,
+    HeuristicMatchDTO, HeuristicSearchRequest, LoadEspResponse, LoadSstResponse, NpcDialogDto,
+    PexScriptDto, PexTranslatableDto, QueryRequest, QueryResponse, SaveStringsRequest,
+    SaveStringsResponse, SkyStringDTO, TranslateRequest, XmlExportRequest, XmlImportResponse,
+    XmlProgress,
 };
 
 use crate::batch::BatchExecutor;
@@ -148,224 +151,253 @@ pub async fn load_esp(
     let c_dir = cache_dir();
 
     // ESP 解析是 CPU 密集型任务，放到阻塞线程池里执行，避免卡住异步运行时。
-    let result = tokio::task::spawn_blocking(move || -> Result<(Vec<SkyString>, LoadEspResponse), String> {
-        let start = std::time::Instant::now();
+    let result = tokio::task::spawn_blocking(
+        move || -> Result<(Vec<SkyString>, LoadEspResponse), String> {
+            let start = std::time::Instant::now();
 
-        // ── 缓存检查阶段 ──
-        let cache = EsmCache::new(c_dir, 50);
-        let esp_path_ref = std::path::Path::new(&esp_path_clone);
+            // ── 缓存检查阶段 ──
+            let cache = EsmCache::new(c_dir, 50);
+            let esp_path_ref = std::path::Path::new(&esp_path_clone);
 
-        if let Some(cached) = cache.lookup(esp_path_ref) {
-            let _ = window.emit("esp-load-progress", EspLoadProgress {
-                stage: "cached".to_string(),
-                current: 100,
-                total: 100,
-                percentage: 100,
-                message: format!("Loaded from cache ({} strings)", cached.strings.len()),
-            });
+            if let Some(cached) = cache.lookup(esp_path_ref) {
+                let _ = window.emit(
+                    "esp-load-progress",
+                    EspLoadProgress {
+                        stage: "cached".to_string(),
+                        current: 100,
+                        total: 100,
+                        percentage: 100,
+                        message: format!("Loaded from cache ({} strings)", cached.strings.len()),
+                    },
+                );
 
-            let total = cached.strings.len() as u32;
-            let record_counts = EsmCache::compute_record_counts(&cached.strings);
+                let total = cached.strings.len() as u32;
+                let record_counts = EsmCache::compute_record_counts(&cached.strings);
 
-            return Ok((
-                cached.strings,
-                LoadEspResponse {
-                    total,
-                    compressed_records: cached.compressed_records,
-                    strings_loaded: cached.strings_loaded,
-                    parse_time_ms: 0,
-                    record_counts,
-                    cached: true,
+                return Ok((
+                    cached.strings,
+                    LoadEspResponse {
+                        total,
+                        compressed_records: cached.compressed_records,
+                        strings_loaded: cached.strings_loaded,
+                        parse_time_ms: 0,
+                        record_counts,
+                        cached: true,
+                    },
+                ));
+            }
+
+            // ── 缓存未命中，完整解析 ──
+
+            // 阶段 1：加载 record_defs
+            let _ = window.emit(
+                "esp-load-progress",
+                EspLoadProgress {
+                    stage: "reading_defs".to_string(),
+                    current: 0,
+                    total: 100,
+                    percentage: 0,
+                    message: "Loading record definitions...".to_string(),
                 },
-            ));
-        }
+            );
 
-        // ── 缓存未命中，完整解析 ──
+            // 兼容前端传入的游戏别名；无法识别时默认回退到天际特别版。
+            let game_id = game_clone
+                .as_deref()
+                .and_then(|g| match g.to_lowercase().as_str() {
+                    "skyrim" => Some(GameId::Skyrim),
+                    "skyrimse" | "skyrim se" => Some(GameId::SkyrimSE),
+                    "fallout4" | "fo4" => Some(GameId::Fallout4),
+                    "falloutnv" | "fonv" => Some(GameId::FalloutNV),
+                    "fallout76" | "fo76" => Some(GameId::Fallout76),
+                    "starfield" | "sf" => Some(GameId::Starfield),
+                    _ => None,
+                })
+                .unwrap_or(GameId::SkyrimSE);
 
-        // 阶段 1：加载 record_defs
-        let _ = window.emit("esp-load-progress", EspLoadProgress {
-            stage: "reading_defs".to_string(),
-            current: 0,
-            total: 100,
-            percentage: 0,
-            message: "Loading record definitions...".to_string(),
-        });
+            // 优先加载对应游戏的 record_defs；失败时回退到内置默认定义。
+            let data_dir = std::path::Path::new("Data");
+            let mut parser =
+                EspParser::with_game(data_dir, game_id).unwrap_or_else(|_| EspParser::new());
 
-        // 兼容前端传入的游戏别名；无法识别时默认回退到天际特别版。
-        let game_id = game_clone
-            .as_deref()
-            .and_then(|g| match g.to_lowercase().as_str() {
-                "skyrim" => Some(GameId::Skyrim),
-                "skyrimse" | "skyrim se" => Some(GameId::SkyrimSE),
-                "fallout4" | "fo4" => Some(GameId::Fallout4),
-                "falloutnv" | "fonv" => Some(GameId::FalloutNV),
-                "fallout76" | "fo76" => Some(GameId::Fallout76),
-                "starfield" | "sf" => Some(GameId::Starfield),
-                _ => None,
-            })
-            .unwrap_or(GameId::SkyrimSE);
+            let _ = window.emit(
+                "esp-load-progress",
+                EspLoadProgress {
+                    stage: "reading_defs".to_string(),
+                    current: 100,
+                    total: 100,
+                    percentage: 5,
+                    message: "Record definitions loaded".to_string(),
+                },
+            );
 
-        // 优先加载对应游戏的 record_defs；失败时回退到内置默认定义。
-        let data_dir = std::path::Path::new("Data");
-        let mut parser = EspParser::with_game(data_dir, game_id)
-            .unwrap_or_else(|_| EspParser::new());
+            // 阶段 2：加载 Strings 文件
+            let _ = window.emit(
+                "esp-load-progress",
+                EspLoadProgress {
+                    stage: "loading_strings".to_string(),
+                    current: 0,
+                    total: 100,
+                    percentage: 5,
+                    message: "Loading strings files...".to_string(),
+                },
+            );
 
-        let _ = window.emit("esp-load-progress", EspLoadProgress {
-            stage: "reading_defs".to_string(),
-            current: 100,
-            total: 100,
-            percentage: 5,
-            message: "Record definitions loaded".to_string(),
-        });
+            let lang = language_clone.as_deref().unwrap_or("english");
+            let base_name = std::path::Path::new(&esp_path_clone)
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("skyrim");
 
-        // 阶段 2：加载 Strings 文件
-        let _ = window.emit("esp-load-progress", EspLoadProgress {
-            stage: "loading_strings".to_string(),
-            current: 0,
-            total: 100,
-            percentage: 5,
-            message: "Loading strings files...".to_string(),
-        });
-
-        let lang = language_clone.as_deref().unwrap_or("english");
-        let base_name = std::path::Path::new(&esp_path_clone)
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .unwrap_or("skyrim");
-
-        let codepage_path = data_dir
-            .join(match game_id {
-                GameId::Skyrim => "Skyrim",
-                GameId::SkyrimSE => "SkyrimSE",
-                GameId::Fallout4 => "Fallout4",
-                GameId::FalloutNV => "FalloutNV",
-                GameId::Fallout76 => "Fallout76",
-                GameId::Starfield => "Starfield",
-            })
-            .join("codepage.txt");
-        let codepage_table = if codepage_path.exists() {
-            CodepageTable::load_from_file(&codepage_path).ok()
-        } else {
-            None
-        };
-
-        let mut strings_loaded = 0u8;
-
-        if let Some(ref dir) = strings_dir_clone {
-            let dir_path = std::path::Path::new(dir);
-            if let Some(ref table) = codepage_table {
-                parser.strings_files = StringsFiles::load_from_dir_with_language(
-                    dir_path, base_name, lang, table,
-                );
+            let codepage_path = data_dir
+                .join(match game_id {
+                    GameId::Skyrim => "Skyrim",
+                    GameId::SkyrimSE => "SkyrimSE",
+                    GameId::Fallout4 => "Fallout4",
+                    GameId::FalloutNV => "FalloutNV",
+                    GameId::Fallout76 => "Fallout76",
+                    GameId::Starfield => "Starfield",
+                })
+                .join("codepage.txt");
+            let codepage_table = if codepage_path.exists() {
+                CodepageTable::load_from_file(&codepage_path).ok()
             } else {
-                parser.load_strings_files(dir_path, base_name);
-            }
-            strings_loaded = parser.strings_files.loaded_count() as u8;
-        }
+                None
+            };
 
-        if strings_loaded == 0 {
-            let esp_dir = std::path::Path::new(&esp_path_clone)
-                .parent()
-                .unwrap_or_else(|| std::path::Path::new("."));
-            if let Some(ref table) = codepage_table {
-                parser.strings_files = StringsFiles::load_from_dir_with_language(
-                    esp_dir, base_name, lang, table,
+            let mut strings_loaded = 0u8;
+
+            if let Some(ref dir) = strings_dir_clone {
+                let dir_path = std::path::Path::new(dir);
+                if let Some(ref table) = codepage_table {
+                    parser.strings_files =
+                        StringsFiles::load_from_dir_with_language(dir_path, base_name, lang, table);
+                } else {
+                    parser.load_strings_files(dir_path, base_name);
+                }
+                strings_loaded = parser.strings_files.loaded_count() as u8;
+            }
+
+            if strings_loaded == 0 {
+                let esp_dir = std::path::Path::new(&esp_path_clone)
+                    .parent()
+                    .unwrap_or_else(|| std::path::Path::new("."));
+                if let Some(ref table) = codepage_table {
+                    parser.strings_files =
+                        StringsFiles::load_from_dir_with_language(esp_dir, base_name, lang, table);
+                } else {
+                    parser.load_strings_files(esp_dir, base_name);
+                }
+                strings_loaded = parser.strings_files.loaded_count() as u8;
+            }
+
+            let _ = window.emit(
+                "esp-load-progress",
+                EspLoadProgress {
+                    stage: "loading_strings".to_string(),
+                    current: 100,
+                    total: 100,
+                    percentage: 15,
+                    message: "Strings files loaded".to_string(),
+                },
+            );
+
+            // 阶段 3：解析 ESP/ESM
+            let _ = window.emit(
+                "esp-load-progress",
+                EspLoadProgress {
+                    stage: "parsing".to_string(),
+                    current: 0,
+                    total: 100,
+                    percentage: 15,
+                    message: "Parsing ESP file...".to_string(),
+                },
+            );
+
+            let mut file = std::fs::File::open(&esp_path_clone)
+                .map_err(|e| format!("Failed to open ESP: {}", e))?;
+
+            let file_size = file.metadata().map(|m| m.len()).unwrap_or(1);
+
+            let window_clone = window.clone();
+            let file_size_for_callback = file_size;
+            parser.set_progress_callback(move |current_bytes| {
+                let percentage =
+                    ((current_bytes as f64 / file_size_for_callback as f64) * 80.0) as u8 + 15;
+                let _ = window_clone.emit(
+                    "esp-load-progress",
+                    EspLoadProgress {
+                        stage: "parsing".to_string(),
+                        current: current_bytes,
+                        total: file_size_for_callback,
+                        percentage: percentage.min(95),
+                        message: format!(
+                            "Parsing... {:.1}%",
+                            (current_bytes as f64 / file_size_for_callback as f64) * 100.0
+                        ),
+                    },
                 );
-            } else {
-                parser.load_strings_files(esp_dir, base_name);
-            }
-            strings_loaded = parser.strings_files.loaded_count() as u8;
-        }
-
-        let _ = window.emit("esp-load-progress", EspLoadProgress {
-            stage: "loading_strings".to_string(),
-            current: 100,
-            total: 100,
-            percentage: 15,
-            message: "Strings files loaded".to_string(),
-        });
-
-        // 阶段 3：解析 ESP/ESM
-        let _ = window.emit("esp-load-progress", EspLoadProgress {
-            stage: "parsing".to_string(),
-            current: 0,
-            total: 100,
-            percentage: 15,
-            message: "Parsing ESP file...".to_string(),
-        });
-
-        let mut file = std::fs::File::open(&esp_path_clone)
-            .map_err(|e| format!("Failed to open ESP: {}", e))?;
-
-        let file_size = file.metadata()
-            .map(|m| m.len())
-            .unwrap_or(1);
-
-        let window_clone = window.clone();
-        let file_size_for_callback = file_size;
-        parser.set_progress_callback(move |current_bytes| {
-            let percentage = ((current_bytes as f64 / file_size_for_callback as f64) * 80.0) as u8 + 15;
-            let _ = window_clone.emit("esp-load-progress", EspLoadProgress {
-                stage: "parsing".to_string(),
-                current: current_bytes,
-                total: file_size_for_callback,
-                percentage: percentage.min(95),
-                message: format!("Parsing... {:.1}%", (current_bytes as f64 / file_size_for_callback as f64) * 100.0),
             });
-        });
 
-        parser
-            .parse(&mut file)
-            .map_err(|e| format!("Failed to parse ESP: {}", e))?;
+            parser
+                .parse(&mut file)
+                .map_err(|e| format!("Failed to parse ESP: {}", e))?;
 
-        let _ = window.emit("esp-load-progress", EspLoadProgress {
-            stage: "finalizing".to_string(),
-            current: 100,
-            total: 100,
-            percentage: 95,
-            message: "Storing cache...".to_string(),
-        });
+            let _ = window.emit(
+                "esp-load-progress",
+                EspLoadProgress {
+                    stage: "finalizing".to_string(),
+                    current: 100,
+                    total: 100,
+                    percentage: 95,
+                    message: "Storing cache...".to_string(),
+                },
+            );
 
-        let parse_time_ms = start.elapsed().as_millis() as u64;
-        let total = parser.strings.len() as u32;
+            let parse_time_ms = start.elapsed().as_millis() as u64;
+            let total = parser.strings.len() as u32;
 
-        let mut record_counts: HashMap<String, usize> = HashMap::new();
-        for sk in &parser.strings {
-            let sig = String::from_utf8_lossy(&sk.esp_ptr.record_sig).to_string();
-            *record_counts.entry(sig).or_insert(0) += 1;
-        }
+            let mut record_counts: HashMap<String, usize> = HashMap::new();
+            for sk in &parser.strings {
+                let sig = String::from_utf8_lossy(&sk.esp_ptr.record_sig).to_string();
+                *record_counts.entry(sig).or_insert(0) += 1;
+            }
 
-        let compressed_records = parser.compressed_records;
+            let compressed_records = parser.compressed_records;
 
-        // 存储解析结果到缓存（静默失败，不影响主流程）
-        let cache_payload = xt_core::cache::CachePayload {
-            version: 1,
-            strings: parser.strings.clone(),
-            compressed_records,
-            strings_loaded,
-        };
-        let _ = cache.store(esp_path_ref, &cache_payload);
-
-        let _ = window.emit("esp-load-progress", EspLoadProgress {
-            stage: "finalizing".to_string(),
-            current: 100,
-            total: 100,
-            percentage: 100,
-            message: "Complete".to_string(),
-        });
-
-        Ok((
-            parser.strings,
-            LoadEspResponse {
-                total,
+            // 存储解析结果到缓存（静默失败，不影响主流程）
+            let cache_payload = xt_core::cache::CachePayload {
+                version: 1,
+                strings: parser.strings.clone(),
                 compressed_records,
                 strings_loaded,
-                parse_time_ms,
-                record_counts,
-                cached: false,
-            },
-        ))
-    })
+            };
+            let _ = cache.store(esp_path_ref, &cache_payload);
+
+            let _ = window.emit(
+                "esp-load-progress",
+                EspLoadProgress {
+                    stage: "finalizing".to_string(),
+                    current: 100,
+                    total: 100,
+                    percentage: 100,
+                    message: "Complete".to_string(),
+                },
+            );
+
+            Ok((
+                parser.strings,
+                LoadEspResponse {
+                    total,
+                    compressed_records,
+                    strings_loaded,
+                    parse_time_ms,
+                    record_counts,
+                    cached: false,
+                },
+            ))
+        },
+    )
     .await
     .map_err(|e| format!("Task join error: {}", e))?
     .map_err(|e| e)?;
@@ -387,7 +419,7 @@ pub async fn load_esp(
 
 /// 加载 SST 字典并合并到当前内存字符串。
 ///
-/// 匹配键使用：`str_id + record_sig + field_sig`。
+/// 使用共享字典匹配引擎，按 exact / EDID / normalized / vocab 顺序应用。
 /// 该命令仅更新匹配成功的条目，不会新增行。
 #[tauri::command]
 pub async fn load_sst(
@@ -399,37 +431,25 @@ pub async fn load_sst(
         .map_err(|e| format!("Failed to load SST: {}", e))?;
 
     let mut strings = state.strings.lock().map_err(|e| e.to_string())?;
+    let apply_entries: Vec<DictionaryApplyEntry> = dict
+        .entries
+        .iter()
+        .map(DictionaryApplyEntry::from_sst_entry)
+        .collect();
+    let result = apply_dictionary_entries(&mut strings, &apply_entries);
 
-    let mut matched = 0u32;
-    let mut unmatched = 0u32;
+    *state.is_dirty.lock().map_err(|e| e.to_string())? = true;
 
-    // 按 strId + record_sig + field_sig 三元组精确匹配。
-    // 这与 SST/XML 导入逻辑保持一致，避免误匹配到同 record 下其他字段。
-    for entry in &dict.entries {
-        let found = strings.iter_mut().find(|sk| {
-            sk.esp_ptr.str_id == entry.esp_ptr.str_id
-                && sk.esp_ptr.record_sig == entry.esp_ptr.record_sig
-                && sk.esp_ptr.field_sig == entry.esp_ptr.field_sig
-        });
-
-        if let Some(sk) = found {
-            // 应用翻译
-            if !entry.translation.is_empty() {
-                sk.set_translation(entry.translation.clone());
-            }
-            // 应用状态
-            sk.params = entry.params;
-            // 若存在译文但状态位未标记为已翻译，则补标为“未完成翻译”。
-            if !sk.translation.is_empty() && !sk.params.is_translated() {
-                sk.params.set(SkyStringParams::INCOMPLETE_TRANS, true);
-            }
-            matched += 1;
-        } else {
-            unmatched += 1;
-        }
-    }
-
-    Ok(LoadSstResponse { matched, unmatched })
+    Ok(LoadSstResponse {
+        matched: result.total_matched(),
+        unmatched: result.unmatched,
+        updated_ids: result.updated_ids,
+        tier_exact: result.tier_exact,
+        tier_edid: result.tier_edid,
+        tier_normalized: result.tier_normalized,
+        tier_vocab: result.tier_vocab,
+        ambiguous: result.ambiguous,
+    })
 }
 
 /// 将当前内存字符串导出为 SST 字典文件。
@@ -666,10 +686,14 @@ pub async fn translate_string(
     request: TranslateRequest,
 ) -> Result<String, String> {
     // 确定使用哪个 provider（请求参数优先，否则用当前默认）
-    let provider_type = request.provider
+    let provider_type = request
+        .provider
         .map(|p| ProviderType::from_str(&p))
         .unwrap_or_else(|| {
-            *state.current_provider.lock().unwrap_or_else(|e| e.into_inner())
+            *state
+                .current_provider
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
         });
 
     // 获取对应 API Key
@@ -682,9 +706,10 @@ pub async fn translate_string(
         }
         ProviderType::DeepL => {
             let key = state.deepl_api_key.lock().map_err(|e| e.to_string())?;
-            key.clone().ok_or_else(||
-                "DeepL API key not set. Please set via Settings or XT_DEEPL_API_KEY env var".to_string()
-            )?
+            key.clone().ok_or_else(|| {
+                "DeepL API key not set. Please set via Settings or XT_DEEPL_API_KEY env var"
+                    .to_string()
+            })?
         }
     };
 
@@ -723,7 +748,11 @@ pub async fn set_openai_api_key(
     api_key: String,
 ) -> Result<(), String> {
     let mut key = state.openai_api_key.lock().map_err(|e| e.to_string())?;
-    *key = if api_key.is_empty() { None } else { Some(api_key) };
+    *key = if api_key.is_empty() {
+        None
+    } else {
+        Some(api_key)
+    };
     Ok(())
 }
 
@@ -737,7 +766,11 @@ pub async fn set_deepl_api_key(
     api_key: String,
 ) -> Result<(), String> {
     let mut key = state.deepl_api_key.lock().map_err(|e| e.to_string())?;
-    *key = if api_key.is_empty() { None } else { Some(api_key) };
+    *key = if api_key.is_empty() {
+        None
+    } else {
+        Some(api_key)
+    };
     Ok(())
 }
 
@@ -758,12 +791,23 @@ pub async fn get_translation_providers(
     state: tauri::State<'_, Arc<AppState>>,
 ) -> Result<(String, Vec<String>, bool, bool), String> {
     let current = state.current_provider.lock().map_err(|e| e.to_string())?;
-    let openai_set = state.openai_api_key.lock().map_err(|e| e.to_string())?.is_some();
-    let deepl_set = state.deepl_api_key.lock().map_err(|e| e.to_string())?.is_some();
+    let openai_set = state
+        .openai_api_key
+        .lock()
+        .map_err(|e| e.to_string())?
+        .is_some();
+    let deepl_set = state
+        .deepl_api_key
+        .lock()
+        .map_err(|e| e.to_string())?
+        .is_some();
 
     Ok((
         current.to_string(),
-        ProviderType::all().into_iter().map(|s| s.to_string()).collect(),
+        ProviderType::all()
+            .into_iter()
+            .map(|s| s.to_string())
+            .collect(),
         openai_set,
         deepl_set,
     ))
@@ -821,7 +865,13 @@ pub async fn export_xml(
     let entries = sky_strings_to_xml_entries(&strings);
     let exported_count = entries.len() as u32;
 
-    emit_xml_progress(&window, "collecting", 1, 3, &format!("Collected {} entries...", exported_count));
+    emit_xml_progress(
+        &window,
+        "collecting",
+        1,
+        3,
+        &format!("Collected {} entries...", exported_count),
+    );
 
     let params = XmlExportParams {
         addon,
@@ -854,13 +904,19 @@ pub async fn import_xml(
 ) -> Result<XmlImportResponse, String> {
     emit_xml_progress(&window, "parsing", 0, 2, "Parsing XML file...");
 
-    // 先解析 XML，再按三元组规则写回内存数据。
+    // 先解析 XML，再通过共享字典匹配引擎写回内存数据。
     let (_, xml_entries) = parse_xml_file(std::path::Path::new(&xml_path))
         .map_err(|e| format!("Failed to parse XML: {}", e))?;
 
     let total = xml_entries.len() as u32;
 
-    emit_xml_progress(&window, "merging", 1, 2, &format!("Merging {} entries...", total));
+    emit_xml_progress(
+        &window,
+        "merging",
+        1,
+        2,
+        &format!("Merging {} entries...", total),
+    );
 
     let mut strings = state.strings.lock().map_err(|e| e.to_string())?;
     let result = import_xml_to_sky_strings(&mut strings, &xml_entries);
@@ -879,6 +935,7 @@ pub async fn import_xml(
         tier_edid: result.tier_edid,
         tier_vocab: result.tier_vocab,
         tier_normalized: result.tier_normalized,
+        ambiguous: result.ambiguous,
     })
 }
 
@@ -906,18 +963,14 @@ pub async fn get_strings_chunk(
 
 /// 返回总条数，供前端计算分块拉取批次。
 #[tauri::command]
-pub async fn get_strings_count(
-    state: tauri::State<'_, Arc<AppState>>,
-) -> Result<u32, String> {
+pub async fn get_strings_count(state: tauri::State<'_, Arc<AppState>>) -> Result<u32, String> {
     let data = state.strings.lock().map_err(|e| e.to_string())?;
     Ok(data.len() as u32)
 }
 
 /// 查询当前是否有未保存的翻译修改
 #[tauri::command]
-pub async fn get_is_dirty(
-    state: tauri::State<'_, Arc<AppState>>,
-) -> Result<bool, String> {
+pub async fn get_is_dirty(state: tauri::State<'_, Arc<AppState>>) -> Result<bool, String> {
     let dirty = state.is_dirty.lock().map_err(|e| e.to_string())?;
     Ok(*dirty)
 }
@@ -959,7 +1012,8 @@ pub async fn save_strings(
 
     // 收集翻译映射：按 list_index 和 str_id 分组
     // 每个 SkyString 可能是源语言或目标语言的条目
-    let mut translated_map: std::collections::HashMap<(u8, i32), String> = std::collections::HashMap::new();
+    let mut translated_map: std::collections::HashMap<(u8, i32), String> =
+        std::collections::HashMap::new();
     for sk in strings.iter() {
         if !sk.translation.is_empty() {
             translated_map.insert((sk.list_index, sk.esp_ptr.str_id), sk.translation.clone());
@@ -981,8 +1035,12 @@ pub async fn save_strings(
         (1u8, "DLSTRINGS", &mut dlstrings_count),
         (2u8, "ILSTRINGS", &mut ilstrings_count),
     ] {
-        let source_path = std::path::Path::new(&strings_dir)
-            .join(format!("{}_{}.{}", base_name, source_lang, ext.to_lowercase()));
+        let source_path = std::path::Path::new(&strings_dir).join(format!(
+            "{}_{}.{}",
+            base_name,
+            source_lang,
+            ext.to_lowercase()
+        ));
 
         // 加载源语言文件作为基础（保留所有未翻译条目）
         let mut strings_file = if source_path.exists() {
@@ -1006,11 +1064,17 @@ pub async fn save_strings(
         }
 
         // 写入目标语言文件
-        let target_path = output_dir.join(format!("{}_{}.{}", base_name, target_lang, ext.to_lowercase()));
+        let target_path = output_dir.join(format!(
+            "{}_{}.{}",
+            base_name,
+            target_lang,
+            ext.to_lowercase()
+        ));
 
         // 确保输出目录存在
         if let Some(parent) = target_path.parent() {
-            std::fs::create_dir_all(parent).map_err(|e| format!("Failed to create output dir: {}", e))?;
+            std::fs::create_dir_all(parent)
+                .map_err(|e| format!("Failed to create output dir: {}", e))?;
         }
 
         // 设置正确的格式
@@ -1045,7 +1109,8 @@ pub async fn start_batch_translate(
     config: BatchConfig,
 ) -> Result<String, String> {
     let entries = config.entries.clone();
-    let provider = config.provider
+    let provider = config
+        .provider
         .as_deref()
         .map(ProviderType::from_str)
         .unwrap_or(ProviderType::OpenAI);
@@ -1150,9 +1215,13 @@ pub async fn auto_backup_sst(
     // Rotate: keep max_backups newest files
     let max_backups = request.max_backups.unwrap_or(10) as usize;
     let mut backup_files: Vec<std::path::PathBuf> = Vec::new();
-    let mut read_dir = std::fs::read_dir(&backup_dir)
-        .map_err(|e| format!("Failed to read backup dir: {}", e))?;
-    while let Some(entry) = read_dir.next().transpose().map_err(|e| format!("Read error: {}", e))? {
+    let mut read_dir =
+        std::fs::read_dir(&backup_dir).map_err(|e| format!("Failed to read backup dir: {}", e))?;
+    while let Some(entry) = read_dir
+        .next()
+        .transpose()
+        .map_err(|e| format!("Read error: {}", e))?
+    {
         let p = entry.path();
         if p.extension().and_then(|e| e.to_str()) == Some("sst") {
             backup_files.push(p);
@@ -1163,8 +1232,12 @@ pub async fn auto_backup_sst(
     backup_files.sort_by(|a, b| {
         let ma = a.metadata().ok();
         let mb = b.metadata().ok();
-        let ta = ma.and_then(|m| m.modified().ok()).unwrap_or(std::time::UNIX_EPOCH);
-        let tb = mb.and_then(|m| m.modified().ok()).unwrap_or(std::time::UNIX_EPOCH);
+        let ta = ma
+            .and_then(|m| m.modified().ok())
+            .unwrap_or(std::time::UNIX_EPOCH);
+        let tb = mb
+            .and_then(|m| m.modified().ok())
+            .unwrap_or(std::time::UNIX_EPOCH);
         tb.cmp(&ta)
     });
 
@@ -1188,16 +1261,9 @@ pub async fn list_bsa_files(bsa_path: String) -> Result<BsaFileListDto, String> 
     let bsa = xt_core::bsa::BsaArchive::open(&bsa_path)
         .map_err(|e| format!("Failed to open BSA: {}", e))?;
 
-    let archive_name = bsa
-        .archive_name()
-        .unwrap_or("unknown.bsa")
-        .to_string();
+    let archive_name = bsa.archive_name().unwrap_or("unknown.bsa").to_string();
 
-    let folders: Vec<String> = bsa
-        .folder_names()
-        .iter()
-        .map(|s| s.to_string())
-        .collect();
+    let folders: Vec<String> = bsa.folder_names().iter().map(|s| s.to_string()).collect();
 
     let files: Vec<BsaFileEntryDto> = bsa
         .list_all_files()
@@ -1244,8 +1310,7 @@ pub async fn extract_bsa_file(
             .map_err(|e| format!("Failed to create output dir: {}", e))?;
     }
 
-    std::fs::write(&output_path, &data)
-        .map_err(|e| format!("Failed to write output: {}", e))?;
+    std::fs::write(&output_path, &data).map_err(|e| format!("Failed to write output: {}", e))?;
 
     Ok(output_path.to_str().unwrap_or("").to_string())
 }
@@ -1293,8 +1358,8 @@ pub async fn extract_bsa_folder(
 
 #[tauri::command]
 pub async fn parse_pex_strings(pex_path: String) -> Result<PexScriptDto, String> {
-    let mut file = std::fs::File::open(&pex_path)
-        .map_err(|e| format!("Failed to open PEX: {}", e))?;
+    let mut file =
+        std::fs::File::open(&pex_path).map_err(|e| format!("Failed to open PEX: {}", e))?;
 
     let script = xt_core::pex::parser::parse_pex(&mut file)
         .map_err(|e| format!("Failed to parse PEX: {}", e))?;
@@ -1344,7 +1409,10 @@ pub async fn scan_fuz_directory(
         return Err(format!("Not a directory: {}", voice_dir));
     }
 
-    fn collect_fuz(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) -> std::io::Result<()> {
+    fn collect_fuz(
+        dir: &std::path::Path,
+        out: &mut Vec<std::path::PathBuf>,
+    ) -> std::io::Result<()> {
         if dir.is_dir() {
             for entry in std::fs::read_dir(dir)? {
                 let entry = entry?;
@@ -1359,8 +1427,7 @@ pub async fn scan_fuz_directory(
         Ok(())
     }
 
-    collect_fuz(walk_dir, &mut fuz_paths)
-        .map_err(|e| format!("Failed to scan: {}", e))?;
+    collect_fuz(walk_dir, &mut fuz_paths).map_err(|e| format!("Failed to scan: {}", e))?;
 
     let total_fuz = fuz_paths.len() as u32;
 
@@ -1396,15 +1463,18 @@ pub async fn scan_fuz_directory(
     }
 
     mappings.sort_by_key(|m| m.response_id);
-    Ok(FuzScanResponse { fuz_mappings: mappings, total_fuz_files: total_fuz })
+    Ok(FuzScanResponse {
+        fuz_mappings: mappings,
+        total_fuz_files: total_fuz,
+    })
 }
 
 #[tauri::command]
 pub async fn get_fuz_audio_data(fuz_path: String) -> Result<Vec<u8>, String> {
-    let mut file = std::fs::File::open(&fuz_path)
-        .map_err(|e| format!("Failed to open FUZ: {}", e))?;
-    let fuz = xt_core::fuz::FuzFile::parse(&mut file)
-        .map_err(|e| format!("Failed to parse: {}", e))?;
+    let mut file =
+        std::fs::File::open(&fuz_path).map_err(|e| format!("Failed to open FUZ: {}", e))?;
+    let fuz =
+        xt_core::fuz::FuzFile::parse(&mut file).map_err(|e| format!("Failed to parse: {}", e))?;
     Ok(fuz.wav_data)
 }
 
@@ -1417,7 +1487,8 @@ pub async fn build_dialog_tree(
     let strings = state.strings.lock().map_err(|e| e.to_string())?;
 
     // Group INFO strings by their parent DIAL FormID
-    let mut npc_groups: std::collections::HashMap<String, Vec<DialogInfoDto>> = std::collections::HashMap::new();
+    let mut npc_groups: std::collections::HashMap<String, Vec<DialogInfoDto>> =
+        std::collections::HashMap::new();
 
     for s in strings.iter() {
         let record_sig = String::from_utf8_lossy(&s.record_sig);

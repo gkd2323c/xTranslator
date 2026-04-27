@@ -1,22 +1,20 @@
-//! 增强版 XML 导入匹配引擎
+//! Shared dictionary apply matcher.
 //!
-//! 多层级 fallback 策略，逐步提升跨版本字典的命中率：
+//! XML imports and SST loads share the same tiered matching order:
 //!
-//! | 层级 | 策略 | 匹配键 | 置信度 |
-//! |------|------|--------|--------|
-//! | T1 | 精确三元组 | (str_id, record_sig, field_sig) | 极高 |
-//! | T2 | EDID 哈希 | (edid_hash, record_sig, field_sig) | 高 |
-//! | T3 | 词汇重叠 | word_hashes Jaccard ≥ 0.5 | 中 |
-//! | T4 | 规范化文本 | (normalized_hash, record_sig, field_sig) | 高 |
+//! | Tier | Strategy | Key | Confidence |
+//! |------|----------|-----|------------|
+//! | T1 | Exact triple | (str_id, record_sig, field_sig) | very high |
+//! | T2 | EDID hash | (edid_hash, record_sig, field_sig) | high |
+//! | T3 | Normalized source | (normalized_hash, record_sig, field_sig) | high |
+//! | T4 | Vocabulary overlap | word_hashes Jaccard >= 0.5 | medium |
 //!
-//! 预期效果：
-//! - 纯三元组命中率 ~60%
-//! - 增强后命中率 ~85%+
+//! Ambiguous matches are not auto-applied.
 
 use std::collections::HashSet;
 
 use crate::normalization;
-use crate::types::esp_pointer::string_hash;
+use crate::types::esp_pointer::{string_hash, HeaderSig};
 use crate::types::params::SkyStringParams;
 use crate::types::sky_string::SkyString;
 use crate::xml::XmlStringEntry;
@@ -28,143 +26,246 @@ use crate::xml::XmlStringEntry;
 /// 0.5 意味着至少一半的规范化词汇需要重叠
 const MIN_JACCARD: f64 = 0.5;
 
-/// 匹配策略层级
+/// Source format for dictionary entries.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum MatchTier {
-    /// 精确三元组匹配 (str_id, record_sig, field_sig)
-    Exact,
-    /// EDID 哈希匹配（跨版本稳定）
-    Edid,
-    /// 词汇重叠匹配（Jaccard ≥ MIN_JACCARD）
-    Vocab,
-    /// 规范化文本哈希匹配
-    Normalized,
+pub enum DictionarySourceFormat {
+    Xml,
+    Sst,
 }
 
-/// 增强匹配结果统计
+/// Neutral dictionary entry consumed by the shared matcher.
 #[derive(Debug, Clone)]
+pub struct DictionaryApplyEntry {
+    pub source_format: DictionarySourceFormat,
+    pub list_index: u8,
+    pub str_id: i32,
+    pub record_sig: HeaderSig,
+    pub field_sig: HeaderSig,
+    pub index: u16,
+    pub index_max: u16,
+    pub source: String,
+    pub translation: String,
+    pub edid: Option<String>,
+    pub edid_hash: Option<u32>,
+    pub params: Option<SkyStringParams>,
+}
+
+impl DictionaryApplyEntry {
+    pub fn from_xml_entry(entry: &XmlStringEntry) -> Self {
+        Self {
+            source_format: DictionarySourceFormat::Xml,
+            list_index: entry.list_index,
+            str_id: entry.str_id,
+            record_sig: entry.record_sig,
+            field_sig: entry.field_sig,
+            index: entry.index,
+            index_max: entry.index_max,
+            source: entry.source.clone(),
+            translation: entry.translation.clone(),
+            edid: entry.edid.clone(),
+            edid_hash: entry.edid.as_ref().map(|edid| string_hash(edid)),
+            params: None,
+        }
+    }
+
+    pub fn from_sst_entry(entry: &SkyString) -> Self {
+        Self {
+            source_format: DictionarySourceFormat::Sst,
+            list_index: entry.list_index,
+            str_id: entry.esp_ptr.str_id,
+            record_sig: entry.esp_ptr.record_sig,
+            field_sig: entry.esp_ptr.field_sig,
+            index: entry.esp_ptr.index,
+            index_max: entry.esp_ptr.index_max,
+            source: entry.source.clone(),
+            translation: entry.translation.clone(),
+            edid: None,
+            edid_hash: if entry.esp_ptr.edid_hash == 0 {
+                None
+            } else {
+                Some(entry.esp_ptr.edid_hash)
+            },
+            params: Some(entry.params),
+        }
+    }
+}
+
+/// Matching tiers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MatchTier {
+    /// Exact triple match.
+    Exact,
+    /// EDID hash match.
+    Edid,
+    /// Normalized source match.
+    Normalized,
+    /// Vocabulary overlap match.
+    Vocab,
+}
+
+/// Shared dictionary application result.
+#[derive(Debug, Clone, Default)]
 pub struct MatchResult {
-    /// Tier 1 精确匹配数
+    /// Tier 1 exact match count.
     pub tier_exact: u32,
-    /// Tier 2 EDID 匹配数
+    /// Tier 2 EDID match count.
     pub tier_edid: u32,
-    /// Tier 3 词汇重叠匹配数
-    pub tier_vocab: u32,
-    /// Tier 4 规范化文本匹配数
+    /// Tier 3 normalized source match count.
     pub tier_normalized: u32,
-    /// 全部层级均未匹配的条目数
+    /// Tier 4 vocabulary match count.
+    pub tier_vocab: u32,
+    /// Ambiguous entries that were not auto-applied.
+    pub ambiguous: u32,
+    /// Unmatched entries.
     pub unmatched: u32,
-    /// 被更新的 SkyString 内部 ID 列表（用于前端增量刷新）
+    /// Updated SkyString IDs.
     pub updated_ids: Vec<u32>,
 }
 
 impl MatchResult {
-    /// 总命中数
+    /// Total applied matches.
     pub fn total_matched(&self) -> u32 {
-        self.tier_exact + self.tier_edid + self.tier_vocab + self.tier_normalized
+        self.tier_exact + self.tier_edid + self.tier_normalized + self.tier_vocab
     }
 }
 
-/// 增强版 XML 导入匹配
-///
-/// 对每个 XML 条目，按 T1→T2→T3→T4 顺序尝试匹配。
-/// 一旦某层级匹配成功，不再尝试后续层级。
-/// 已匹配的 SkyString 不会被后续条目重复匹配（通过 `matched_ids` 去重）。
-///
-/// # 参数
-/// * `strings` - 可变的 SkyString 切片（来自已加载的 ESP）
-/// * `xml_entries` - 从 XML 解析出的翻译条目
-///
-/// # 返回
-/// 包含各层级匹配统计和更新 ID 列表的 `MatchResult`
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TierMatch {
+    None,
+    Unique(usize),
+    Ambiguous,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum EntryOutcome {
+    Applied(MatchTier, usize),
+    Ambiguous,
+    Unmatched,
+}
+
+/// Apply dictionary entries through the shared matcher.
+pub fn apply_dictionary_entries(
+    strings: &mut [SkyString],
+    entries: &[DictionaryApplyEntry],
+) -> MatchResult {
+    let mut result = MatchResult::default();
+    let mut matched_ids: HashSet<u32> = HashSet::new();
+
+    for entry in entries {
+        match match_entry(strings, entry, &matched_ids) {
+            EntryOutcome::Applied(tier, idx) => {
+                apply_match(
+                    strings,
+                    idx,
+                    entry,
+                    &mut result.updated_ids,
+                    &mut matched_ids,
+                );
+                match tier {
+                    MatchTier::Exact => result.tier_exact += 1,
+                    MatchTier::Edid => result.tier_edid += 1,
+                    MatchTier::Normalized => result.tier_normalized += 1,
+                    MatchTier::Vocab => result.tier_vocab += 1,
+                }
+            }
+            EntryOutcome::Ambiguous => result.ambiguous += 1,
+            EntryOutcome::Unmatched => result.unmatched += 1,
+        }
+    }
+
+    result
+}
+
+/// Convert XML entries and apply them through the shared matcher.
+pub fn apply_xml_dictionary_entries(
+    strings: &mut [SkyString],
+    xml_entries: &[XmlStringEntry],
+) -> MatchResult {
+    let entries: Vec<DictionaryApplyEntry> = xml_entries
+        .iter()
+        .map(DictionaryApplyEntry::from_xml_entry)
+        .collect();
+    apply_dictionary_entries(strings, &entries)
+}
+
+/// Backward-compatible XML import entry point.
 pub fn enhanced_import_match(
     strings: &mut [SkyString],
     xml_entries: &[XmlStringEntry],
 ) -> MatchResult {
-    let mut tier_exact = 0u32;
-    let mut tier_edid = 0u32;
-    let mut tier_vocab = 0u32;
-    let mut tier_normalized = 0u32;
-    let mut unmatched = 0u32;
-    let mut updated_ids = Vec::new();
-    let mut matched_ids: HashSet<u32> = HashSet::new();
-
-    for entry in xml_entries {
-        // ── Tier 1: 精确三元组匹配 ──
-        if let Some(idx) = find_tier1(strings, entry, &matched_ids) {
-            apply_match(strings, idx, entry, &mut updated_ids, &mut matched_ids);
-            tier_exact += 1;
-            continue;
-        }
-
-        // ── Tier 2: EDID 哈希匹配 ──
-        if let Some(idx) = find_tier2(strings, entry, &matched_ids) {
-            apply_match(strings, idx, entry, &mut updated_ids, &mut matched_ids);
-            tier_edid += 1;
-            continue;
-        }
-
-        // ── Tier 3: 词汇重叠匹配 ──
-        if let Some(idx) = find_tier3(strings, entry, &matched_ids) {
-            apply_match(strings, idx, entry, &mut updated_ids, &mut matched_ids);
-            tier_vocab += 1;
-            continue;
-        }
-
-        // ── Tier 4: 规范化文本匹配 ──
-        if let Some(idx) = find_tier4(strings, entry, &matched_ids) {
-            apply_match(strings, idx, entry, &mut updated_ids, &mut matched_ids);
-            tier_normalized += 1;
-            continue;
-        }
-
-        unmatched += 1;
-    }
-
-    MatchResult {
-        tier_exact,
-        tier_edid,
-        tier_vocab,
-        tier_normalized,
-        unmatched,
-        updated_ids,
-    }
+    apply_xml_dictionary_entries(strings, xml_entries)
 }
 
 // ── 各层级查找逻辑 ──
 
-/// Tier 1: (str_id, record_sig, field_sig) 精确匹配
-fn find_tier1(
+fn match_entry(
     strings: &[SkyString],
-    entry: &XmlStringEntry,
+    entry: &DictionaryApplyEntry,
     matched_ids: &HashSet<u32>,
-) -> Option<usize> {
-    strings.iter().position(|sk| {
-        !matched_ids.contains(&sk.id)
-            && sk.esp_ptr.str_id == entry.str_id
-            && sk.esp_ptr.record_sig == entry.record_sig
-            && sk.esp_ptr.field_sig == entry.field_sig
-    })
+) -> EntryOutcome {
+    match find_tier1(strings, entry, matched_ids) {
+        TierMatch::Unique(idx) => return EntryOutcome::Applied(MatchTier::Exact, idx),
+        TierMatch::Ambiguous => return EntryOutcome::Ambiguous,
+        TierMatch::None => {}
+    }
+
+    match find_tier2(strings, entry, matched_ids) {
+        TierMatch::Unique(idx) => return EntryOutcome::Applied(MatchTier::Edid, idx),
+        TierMatch::Ambiguous => return EntryOutcome::Ambiguous,
+        TierMatch::None => {}
+    }
+
+    match find_tier3(strings, entry, matched_ids) {
+        TierMatch::Unique(idx) => return EntryOutcome::Applied(MatchTier::Normalized, idx),
+        TierMatch::Ambiguous => return EntryOutcome::Ambiguous,
+        TierMatch::None => {}
+    }
+
+    match find_tier4(strings, entry, matched_ids) {
+        TierMatch::Unique(idx) => EntryOutcome::Applied(MatchTier::Vocab, idx),
+        TierMatch::Ambiguous => EntryOutcome::Ambiguous,
+        TierMatch::None => EntryOutcome::Unmatched,
+    }
 }
 
-/// Tier 2: EDID 哈希匹配
-///
-/// 策略：
-/// 1. 计算 XML EDID 的 FNV-1a 哈希
-/// 2. 在未匹配的 SkyString 中查找 edid_hash + REC + FIELD 匹配项
-/// 3. 若唯一匹配 → 直接确认
-/// 4. 若多个匹配 → 用规范化文本消歧
-/// 5. 若仍无法确定 → 放弃（返回 None，交给后续 tier）
+/// Tier 1: exact triple match.
+fn find_tier1(
+    strings: &[SkyString],
+    entry: &DictionaryApplyEntry,
+    matched_ids: &HashSet<u32>,
+) -> TierMatch {
+    let candidates: Vec<usize> = strings
+        .iter()
+        .enumerate()
+        .filter(|(_, sk)| {
+            !matched_ids.contains(&sk.id)
+                && sk.esp_ptr.str_id == entry.str_id
+                && sk.esp_ptr.record_sig == entry.record_sig
+                && sk.esp_ptr.field_sig == entry.field_sig
+        })
+        .map(|(i, _)| i)
+        .collect();
+
+    match candidates.len() {
+        0 => TierMatch::None,
+        1 => TierMatch::Unique(candidates[0]),
+        _ => TierMatch::Ambiguous,
+    }
+}
+
+/// Tier 2: EDID hash match.
 fn find_tier2(
     strings: &[SkyString],
-    entry: &XmlStringEntry,
+    entry: &DictionaryApplyEntry,
     matched_ids: &HashSet<u32>,
-) -> Option<usize> {
-    let edid = entry.edid.as_ref()?;
-    if edid.is_empty() {
-        return None;
-    }
-    let edid_hash = string_hash(edid);
+) -> TierMatch {
+    let edid_hash = match entry.edid_hash {
+        Some(hash) => hash,
+        None => match entry.edid.as_ref() {
+            Some(edid) if !edid.is_empty() => string_hash(edid),
+            _ => return TierMatch::None,
+        },
+    };
 
     let candidates: Vec<usize> = strings
         .iter()
@@ -179,28 +280,49 @@ fn find_tier2(
         .collect();
 
     match candidates.len() {
-        0 => None,
-        1 => Some(candidates[0]),
-        _ => {
-            // 多个候选：用规范化文本消歧
-            disambiguate_by_normalized(strings, &candidates, &entry.source)
-        }
+        0 => TierMatch::None,
+        1 => TierMatch::Unique(candidates[0]),
+        _ => disambiguate_by_normalized(strings, &candidates, &entry.source),
     }
 }
 
-/// Tier 3: 词汇重叠匹配
-///
-/// 算法：
-/// 1. 从 entry.source 提取词哈希集合
-/// 2. 扫描所有未匹配且 REC+FIELD 相同的 SkyString
-/// 3. 计算 Jaccard 相似度：|entry_words ∩ sk_words| / |entry_words ∪ sk_words|
-/// 4. 取最佳匹配（需 ≥ MIN_JACCARD）
+/// Tier 3: normalized source match.
 fn find_tier3(
     strings: &[SkyString],
-    entry: &XmlStringEntry,
+    entry: &DictionaryApplyEntry,
     matched_ids: &HashSet<u32>,
-) -> Option<usize> {
-    // 提取 entry 的词哈希
+) -> TierMatch {
+    let norm = normalization::normalize(&entry.source);
+    if norm.is_empty() {
+        return TierMatch::None;
+    }
+    let norm_hash = string_hash(&norm);
+
+    let candidates: Vec<usize> = strings
+        .iter()
+        .enumerate()
+        .filter(|(_, sk)| {
+            !matched_ids.contains(&sk.id)
+                && sk.esp_ptr.record_sig == entry.record_sig
+                && sk.esp_ptr.field_sig == entry.field_sig
+                && sk.normalized_hash == Some(norm_hash)
+        })
+        .map(|(i, _)| i)
+        .collect();
+
+    match candidates.len() {
+        0 => TierMatch::None,
+        1 => TierMatch::Unique(candidates[0]),
+        _ => TierMatch::Ambiguous,
+    }
+}
+
+/// Tier 4: vocabulary overlap.
+fn find_tier4(
+    strings: &[SkyString],
+    entry: &DictionaryApplyEntry,
+    matched_ids: &HashSet<u32>,
+) -> TierMatch {
     let entry_words: Vec<u32> = entry
         .source
         .split(|c: char| !c.is_alphanumeric())
@@ -209,13 +331,14 @@ fn find_tier3(
         .collect();
 
     if entry_words.is_empty() {
-        return None;
+        return TierMatch::None;
     }
 
     let entry_set: HashSet<u32> = entry_words.iter().copied().collect();
 
     let mut best_idx: Option<usize> = None;
     let mut best_score = 0.0f64;
+    let mut best_score_count = 0u32;
 
     for (i, sk) in strings.iter().enumerate() {
         if matched_ids.contains(&sk.id) {
@@ -232,86 +355,65 @@ fn find_tier3(
         }
 
         let score = jaccard(&entry_set, &sk.word_hashes);
-        if score > best_score && score >= MIN_JACCARD {
+        if score < MIN_JACCARD {
+            continue;
+        }
+
+        if score > best_score {
             best_score = score;
             best_idx = Some(i);
+            best_score_count = 1;
+        } else if (score - best_score).abs() < f64::EPSILON {
+            best_score_count += 1;
         }
     }
 
-    best_idx
-}
-
-/// Tier 4: 规范化文本哈希匹配
-///
-/// 将 entry.source 规范化后计算哈希，与 SkyString.normalized_hash 对比。
-/// 同时要求 REC+FIELD 一致以缩小搜索空间。
-fn find_tier4(
-    strings: &[SkyString],
-    entry: &XmlStringEntry,
-    matched_ids: &HashSet<u32>,
-) -> Option<usize> {
-    let norm = normalization::normalize(&entry.source);
-    if norm.is_empty() {
-        return None;
-    }
-    let norm_hash = string_hash(&norm);
-
-    let candidates: Vec<usize> = strings
-        .iter()
-        .enumerate()
-        .filter(|(_, sk)| {
-            !matched_ids.contains(&sk.id)
-                && sk.normalized_hash == Some(norm_hash)
-                && sk.esp_ptr.record_sig == entry.record_sig
-                && sk.esp_ptr.field_sig == entry.field_sig
-        })
-        .map(|(i, _)| i)
-        .collect();
-
-    if candidates.len() == 1 {
-        Some(candidates[0])
-    } else {
-        None
+    match (best_idx, best_score_count) {
+        (Some(idx), 1) => TierMatch::Unique(idx),
+        (Some(_), _) => TierMatch::Ambiguous,
+        _ => TierMatch::None,
     }
 }
 
 // ── 辅助函数 ──
 
-/// 应用匹配：更新目标 SkyString 的翻译和状态
+/// Apply a match to the target string.
 fn apply_match(
     strings: &mut [SkyString],
     idx: usize,
-    entry: &XmlStringEntry,
+    entry: &DictionaryApplyEntry,
     updated_ids: &mut Vec<u32>,
     matched_ids: &mut HashSet<u32>,
 ) {
     let sk = &mut strings[idx];
 
-    // 只更新非空翻译
     if !entry.translation.is_empty() {
         sk.set_translation(entry.translation.clone());
     }
 
-    // 更新状态标志
-    sk.params.set(SkyStringParams::TRANSLATED, true);
-    sk.params.set(SkyStringParams::INCOMPLETE_TRANS, false);
+    if let Some(params) = entry.params {
+        sk.params = params;
+        if !sk.translation.is_empty() && !sk.params.is_translated() {
+            sk.params.set(SkyStringParams::INCOMPLETE_TRANS, true);
+        }
+    } else {
+        sk.params.set(SkyStringParams::TRANSLATED, true);
+        sk.params.set(SkyStringParams::INCOMPLETE_TRANS, false);
+    }
 
     updated_ids.push(sk.id);
     matched_ids.insert(sk.id);
 }
 
-/// 通过规范化文本在多个 EDID 候选中消歧
-///
-/// 当同一个 EDID 对应多个字段（如多 NAM1 的 INFO 记录），
-/// 用规范化文本来区分具体是哪个字段。
+/// Disambiguate EDID candidates using normalized source.
 fn disambiguate_by_normalized(
     strings: &[SkyString],
     candidates: &[usize],
     source: &str,
-) -> Option<usize> {
+) -> TierMatch {
     let norm = normalization::normalize(source);
     if norm.is_empty() {
-        return None;
+        return TierMatch::Ambiguous;
     }
     let norm_hash = string_hash(&norm);
 
@@ -321,10 +423,9 @@ fn disambiguate_by_normalized(
         .copied()
         .collect();
 
-    if matching.len() == 1 {
-        Some(matching[0])
-    } else {
-        None
+    match matching.len() {
+        1 => TierMatch::Unique(matching[0]),
+        _ => TierMatch::Ambiguous,
     }
 }
 
@@ -419,7 +520,14 @@ mod tests {
     fn test_tier2_edid_match_different_str_id() {
         // 模拟跨版本 ESP：同一记录的 str_id 改变了
         let edid_hash = string_hash("TestLocation");
-        let mut strings = vec![make_sk(0, "Hello World", 999, *b"LCTN", *b"FULL", edid_hash)];
+        let mut strings = vec![make_sk(
+            0,
+            "Hello World",
+            999,
+            *b"LCTN",
+            *b"FULL",
+            edid_hash,
+        )];
 
         let entries = vec![make_entry(
             1, // 不同的 str_id
@@ -448,10 +556,8 @@ mod tests {
 
         let result = enhanced_import_match(&mut strings, &entries);
 
-        // Tier 1 失败（str_id 不匹配），Tier 2 跳过（无 EDID），
-        // Tier 3 可能通过词汇匹配到，也可能不匹配
-        // 这里 "Hello" 的唯一词哈希与 SkyString 的 word_hashes 完全重叠 → Jaccard = 1.0
-        assert_eq!(result.tier_vocab, 1);
+        // Tier 1 失败（str_id 不匹配），Tier 2 跳过（无 EDID），Tier 3 命中
+        assert_eq!(result.tier_normalized, 1);
         assert_eq!(result.total_matched(), 1);
     }
 
@@ -461,7 +567,14 @@ mod tests {
         let edid_hash = string_hash("TestQuest");
         let mut strings = vec![
             make_sk(0, "Retrieve the sword", 10, *b"INFO", *b"NAM1", edid_hash),
-            make_sk(1, "Return to Jarl Balgruuf", 11, *b"INFO", *b"NAM1", edid_hash),
+            make_sk(
+                1,
+                "Return to Jarl Balgruuf",
+                11,
+                *b"INFO",
+                *b"NAM1",
+                edid_hash,
+            ),
         ];
 
         let entries = vec![make_entry(
@@ -481,6 +594,32 @@ mod tests {
         // 应该是 strings[1] 被匹配（规范化文本匹配消歧）
         assert_eq!(strings[1].translation, "回到白漫领主");
         assert!(strings[0].translation.is_empty());
+    }
+
+    #[test]
+    fn test_tier2_edid_ambiguous_without_normalized_disambiguation() {
+        let edid_hash = string_hash("TestQuest");
+        let mut strings = vec![
+            make_sk(0, "Alpha", 10, *b"INFO", *b"NAM1", edid_hash),
+            make_sk(1, "Beta", 11, *b"INFO", *b"NAM1", edid_hash),
+        ];
+
+        let entries = vec![make_entry(
+            1,
+            Some("TestQuest"),
+            *b"INFO",
+            *b"NAM1",
+            "Gamma",
+            "回到白漫领主",
+        )];
+
+        let result = enhanced_import_match(&mut strings, &entries);
+
+        assert_eq!(result.tier_exact, 0);
+        assert_eq!(result.tier_edid, 0);
+        assert_eq!(result.ambiguous, 1);
+        assert_eq!(result.total_matched(), 0);
+        assert!(strings.iter().all(|sk| sk.translation.is_empty()));
     }
 
     #[test]
@@ -547,14 +686,7 @@ mod tests {
     #[test]
     fn test_tier4_normalized_match() {
         // 标点、大小写不同，但规范化后完全一致
-        let mut strings = vec![make_sk(
-            0,
-            "Hello, World!",
-            999,
-            *b"LCTN",
-            *b"FULL",
-            0,
-        )];
+        let mut strings = vec![make_sk(0, "Hello, World!", 999, *b"LCTN", *b"FULL", 0)];
 
         let entries = vec![make_entry(
             1,
@@ -567,10 +699,8 @@ mod tests {
 
         let result = enhanced_import_match(&mut strings, &entries);
 
-        // "hello world" → 词: ["hello", "world"]
-        // "Hello, World!" → 词: ["Hello", "World"]
-        // Jaccard = 2/2 = 1.0 ≥ 0.5 → Tier 3 就会命中
-        // 规范化文本匹配作为兜底，在这里也被 Tier 3 抢了先
+        // 规范化文本先于词汇重叠，因此这里应命中 Tier 3 normalized
+        assert_eq!(result.tier_normalized, 1);
         assert_eq!(result.total_matched(), 1);
         assert_eq!(strings[0].translation, "你好世界");
     }
@@ -584,21 +714,69 @@ mod tests {
         ];
 
         let entries = vec![make_entry(
-            1,
-            None,
-            *b"LCTN",
-            *b"FULL",
-            "hello", // 规范化后=hello，与 "Hello" 匹配
+            1, None, *b"LCTN", *b"FULL", "hello", // 规范化后=hello，与 "Hello" 匹配
             "你好",
         )];
 
         let result = enhanced_import_match(&mut strings, &entries);
 
-        // Tier 3: "hello" / "Hello" → 单词重叠 → Jaccard = 1.0 → match strings[0]
+        // Tier 3 normalized should win before vocabulary overlap.
+        assert_eq!(result.tier_normalized, 1);
         assert_eq!(result.total_matched(), 1);
         assert_eq!(strings[0].translation, "你好");
         // strings[1] 的 REC+FIELD 不同，不应被匹配
         assert!(strings[1].translation.is_empty());
+    }
+
+    #[test]
+    fn test_tier4_vocab_tie_is_ambiguous() {
+        let mut strings = vec![
+            make_sk(0, "Alpha Beta Gamma", 999, *b"QUST", *b"NNAM", 0),
+            make_sk(1, "Gamma Alpha Beta", 998, *b"QUST", *b"NNAM", 0),
+        ];
+
+        let entries = vec![make_entry(
+            1,
+            None,
+            *b"QUST",
+            *b"NNAM",
+            "Beta Gamma Alpha",
+            "词汇翻译",
+        )];
+
+        let result = enhanced_import_match(&mut strings, &entries);
+
+        assert_eq!(result.total_matched(), 0);
+        assert_eq!(result.ambiguous, 1);
+        assert!(strings.iter().all(|sk| sk.translation.is_empty()));
+    }
+
+    #[test]
+    fn test_sst_entry_preserves_params_and_uses_normalized_match() {
+        let mut strings = vec![make_sk(0, "Hello, World!", 123, *b"LCTN", *b"FULL", 0)];
+
+        let mut sst_entry = SkyString::new(
+            99,
+            "hello world".to_string(),
+            "你好世界".to_string(),
+            *b"LCTN",
+            *b"FULL",
+        );
+        sst_entry.esp_ptr.str_id = 1;
+        sst_entry.esp_ptr.record_sig = *b"LCTN";
+        sst_entry.esp_ptr.field_sig = *b"FULL";
+        sst_entry.params.set(SkyStringParams::TRANSLATED, true);
+        sst_entry.params.set(SkyStringParams::VALIDATED, true);
+
+        let entries = vec![DictionaryApplyEntry::from_sst_entry(&sst_entry)];
+        let result = apply_dictionary_entries(&mut strings, &entries);
+
+        assert_eq!(result.tier_normalized, 1);
+        assert_eq!(result.total_matched(), 1);
+        assert_eq!(strings[0].translation, "你好世界");
+        assert!(strings[0].params.is_translated());
+        assert!(strings[0].params.is_validated());
+        assert_eq!(strings[0].params, sst_entry.params);
     }
 
     #[test]
@@ -628,16 +806,30 @@ mod tests {
             // Tier 2: EDID 匹配（str_id 不同）
             make_sk(1, "World", 999, *b"QUST", *b"NNAM", edid_hash),
             // Tier 3: 词汇重叠（str_id 不同，无 EDID，词重叠 ≥ 50%）
-            make_sk(2, "Retrieve the ancient sword from the tomb", 888, *b"INFO", *b"NAM1", 0),
+            make_sk(
+                2,
+                "Retrieve the ancient sword from the tomb",
+                888,
+                *b"INFO",
+                *b"NAM1",
+                0,
+            ),
             // 不匹配的
-            make_sk(3, "Something completely different", 777, *b"NPC_", *b"FULL", 0),
+            make_sk(
+                3,
+                "Something completely different",
+                777,
+                *b"NPC_",
+                *b"FULL",
+                0,
+            ),
         ];
 
         let entries = vec![
             make_entry(10, None, *b"LCTN", *b"FULL", "Hello", "你好"), // T1
             make_entry(1, Some("MyQuest"), *b"QUST", *b"NNAM", "World", "世界"), // T2 (str_id=1 vs 999)
             make_entry(2, None, *b"INFO", *b"NAM1", "Retrieve the sword", "取回剑"), // T3
-            make_entry(3, None, *b"NPC_", *b"FULL", "Unrelated", "无关"), // unmatched
+            make_entry(3, None, *b"NPC_", *b"FULL", "Unrelated", "无关"),        // unmatched
         ];
 
         let result = enhanced_import_match(&mut strings, &entries);
