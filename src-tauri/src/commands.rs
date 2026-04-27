@@ -12,8 +12,8 @@ use xt_core::xml::{import_xml_to_sky_strings, parse_xml_file, sky_strings_to_xml
 use xt_shared::dto::{
     AutoBackupRequest, AutoBackupResponse, BatchConfig, BatchEntry, BatchStatus,
     BsaFileEntryDto, BsaFileListDto,
-    EspLoadProgress, FuzMapping, FuzScanResponse,
-    HeuristicMatchDTO, HeuristicSearchRequest, LoadEspResponse, LoadSstResponse,
+    DialogInfoDto, DialogTreeDto, FuzMapping, FuzScanResponse, NpcDialogDto,
+    EspLoadProgress, HeuristicMatchDTO, HeuristicSearchRequest, LoadEspResponse, LoadSstResponse,
     PexScriptDto, PexTranslatableDto, QueryRequest,
     QueryResponse, SaveStringsRequest, SaveStringsResponse, SkyStringDTO, TranslateRequest,
     XmlExportRequest, XmlImportResponse, XmlProgress,
@@ -1356,4 +1356,61 @@ pub async fn get_fuz_audio_data(fuz_path: String) -> Result<Vec<u8>, String> {
     let fuz = xt_core::fuz::FuzFile::parse(&mut file)
         .map_err(|e| format!("Failed to parse: {}", e))?;
     Ok(fuz.wav_data)
+}
+
+// ── Dialog Tree Commands ─────────────────────────────────────────────
+
+#[tauri::command]
+pub async fn build_dialog_tree(
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<DialogTreeDto, String> {
+    let strings = state.strings.lock().map_err(|e| e.to_string())?;
+
+    // Group INFO strings by their parent DIAL FormID
+    let mut npc_groups: std::collections::HashMap<String, Vec<DialogInfoDto>> = std::collections::HashMap::new();
+
+    for s in strings.iter() {
+        let record_sig = String::from_utf8_lossy(&s.record_sig);
+
+        // Focus on INFO records (dialog responses) and NPC_ records (for name association)
+        if record_sig == "INFO" && !s.source.is_empty() {
+            let parent_form_id = s.parent_form_id;
+
+            // Build dialog entry
+            let entry = DialogInfoDto {
+                id: s.id,
+                form_id: parent_form_id,
+                source: s.source.clone(),
+                translation: s.translation.clone(),
+                dialog_text: s.source.clone(),
+            };
+
+            // Group by parent DIAL form_id as string key
+            let key = format!("DIAL_{:08X}", parent_form_id);
+            npc_groups.entry(key).or_default().push(entry);
+        }
+    }
+
+    // Also associate NPC_ record strings (names) with their dialogues
+    let mut npc_names: std::collections::HashMap<u32, String> = std::collections::HashMap::new();
+    for s in strings.iter() {
+        let sig = String::from_utf8_lossy(&s.record_sig);
+        if sig == "NPC_" {
+            npc_names.insert(s.esp_ptr.form_id, s.source.clone());
+        }
+    }
+
+    // Build response
+    let npcs: Vec<NpcDialogDto> = npc_groups
+        .into_iter()
+        .map(|(key, dialogues)| {
+            let edid = key.clone();
+            NpcDialogDto {
+                npc_edid: edid,
+                dialogues,
+            }
+        })
+        .collect();
+
+    Ok(DialogTreeDto { npcs })
 }

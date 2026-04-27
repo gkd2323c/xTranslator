@@ -393,3 +393,25 @@ pub struct FuzScanResponse {
     pub fuz_mappings: Vec<FuzMapping>,
     pub total_fuz_files: u32,
 }
+
+// ── Dialog Tree DTOs ─────────────────────────────────────────────────
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct DialogInfoDto {
+    pub id: u32,
+    pub form_id: u32,
+    pub source: String,
+    pub translation: String,
+    pub dialog_text: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct NpcDialogDto {
+    pub npc_edid: String,
+    pub dialogues: Vec<DialogInfoDto>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct DialogTreeDto {
+    pub npcs: Vec<NpcDialogDto>,
+}

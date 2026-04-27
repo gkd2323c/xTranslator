@@ -2,7 +2,7 @@ import { useAppStore } from "../stores/appStore";
 import { loadEsp, loadSst, saveSst, exportXml, importXml, saveStrings } from "../api/strings";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { listen } from "@tauri-apps/api/event";
-import { FolderOpen, FileUp, FileDown, FileCode, Save, RotateCcw, RefreshCw, FileArchive, Braces, Volume2 } from "lucide-react";
+import { FolderOpen, FileUp, FileDown, FileCode, Save, RotateCcw, RefreshCw, FileArchive, Braces, Volume2, MessagesSquare } from "lucide-react";
 import toast from "react-hot-toast";
 
 export function MenuBar() {
@@ -32,6 +32,8 @@ export function MenuBar() {
   const setShowPexPanel = useAppStore((s) => s.setShowPexPanel);
   const showFuzPanel = useAppStore((s) => s.showFuzPanel);
   const setShowFuzPanel = useAppStore((s) => s.setShowFuzPanel);
+  const showDialogView = useAppStore((s) => s.showDialogView);
+  const setShowDialogView = useAppStore((s) => s.setShowDialogView);
   const batchEntries = useAppStore((s) => s.batchEntries);
 
   const handleLoadEsp = async () => {
@@ -302,6 +304,13 @@ export function MenuBar() {
           title={showFuzPanel ? "Close Voice Panel" : "Open Voice Panel"}
         >
           <Volume2 size={16} />
+        </button>
+        <button
+          onClick={() => setShowDialogView(!showDialogView)}
+          className={`btn btn-ghost ${showDialogView ? "active" : ""}`}
+          title={showDialogView ? "Close Dialog View" : "Open Dialog View"}
+        >
+          <MessagesSquare size={16} />
         </button>
         <select
           value={theme}

@@ -380,3 +380,26 @@ export async function scanFuzDirectory(voiceDir: string): Promise<FuzScanRespons
 export async function getFuzAudioData(fuzPath: string): Promise<number[]> {
   return invoke("get_fuz_audio_data", { fuzPath });
 }
+
+// ── Dialog Tree Types ───────────────────────────────────────────────
+
+export interface DialogInfoDto {
+  id: number;
+  form_id: number;
+  source: string;
+  translation: string;
+  dialog_text: string;
+}
+
+export interface NpcDialogDto {
+  npc_edid: string;
+  dialogues: DialogInfoDto[];
+}
+
+export interface DialogTreeDto {
+  npcs: NpcDialogDto[];
+}
+
+export async function buildDialogTree(): Promise<DialogTreeDto> {
+  return invoke("build_dialog_tree");
+}

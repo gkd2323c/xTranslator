@@ -12,7 +12,7 @@ use commands::{
     get_all_strings, get_batch_status, get_is_dirty, get_stats,
     get_strings_chunk, get_strings_count, get_translation_providers, heuristic_search, import_xml,
     list_bsa_files, list_esp_files, load_esp, load_sst, parse_pex_strings,
-    scan_fuz_directory, get_fuz_audio_data, query_strings_command, save_strings, save_sst,
+    scan_fuz_directory, get_fuz_audio_data, build_dialog_tree, query_strings_command, save_strings, save_sst,
     start_batch_export, start_batch_translate, set_deepl_api_key, set_openai_api_key,
     set_translation_provider, translate_string, update_translation, AppState,
 };
@@ -57,7 +57,8 @@ fn main() {
             extract_bsa_folder,
             parse_pex_strings,
             scan_fuz_directory,
-            get_fuz_audio_data
+            get_fuz_audio_data,
+            build_dialog_tree
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

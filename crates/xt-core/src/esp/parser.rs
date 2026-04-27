@@ -399,6 +399,7 @@ pub struct EspParser {
     pub strings: Vec<SkyString>,
     pub strings_files: StringsFiles,
     pub compressed_records: u32,
+    current_parent_form_id: u32,
     progress_callback: Option<Box<dyn Fn(u64) + Send>>,
 }
 
@@ -411,6 +412,7 @@ impl EspParser {
             strings: Vec::new(),
             strings_files: StringsFiles::default(),
             compressed_records: 0,
+            current_parent_form_id: 0,
             progress_callback: None,
         }
     }
@@ -421,6 +423,7 @@ impl EspParser {
             strings: Vec::new(),
             strings_files: StringsFiles::default(),
             compressed_records: 0,
+            current_parent_form_id: 0,
             progress_callback: None,
         }
     }
@@ -614,7 +617,12 @@ impl EspParser {
         if header.is_grup() {
             // 嵌套 GRUP：递归解析其中的子记录。
             *record_count -= 1; // 不算作 record
-            let _grup_header = GrupHeader::read_from(reader)?;
+            let grup_header = GrupHeader::read_from(reader)?;
+            // s_type contains the parent FormID for child GRUPs or record type for type GRUPs
+            let saved_parent = self.current_parent_form_id;
+            if grup_header.s_type != 0 {
+                self.current_parent_form_id = grup_header.s_type;
+            }
             // GRUP 结构：GenericHeader(8) + GrupHeader(16) + payload
             // dsize 包含头部，因此 payload = dsize - 24。
             let grup_data_size = if header.dsize >= 24 {
@@ -639,10 +647,9 @@ impl EspParser {
                     }
                 }
             }
+            self.current_parent_form_id = saved_parent;
             return Ok(());
         }
-
-        *record_count += 1;
 
         let record_header_data = RecordHeaderData::read_from(reader)?;
         // 普通 Record：dsize 仅表示字段区大小，不包含 RecordHeaderData。
@@ -792,7 +799,8 @@ impl EspParser {
                         // 初始状态：有源文、无译文 => 未完成翻译。
                         sk.params.set(SkyStringParams::INCOMPLETE_TRANS, true);
                         sk.list_index = def.list_index;
-                        
+                        sk.parent_form_id = self.current_parent_form_id;
+
                         self.strings.push(sk);
                     }
                 }

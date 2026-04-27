@@ -47,6 +47,10 @@ pub struct SkyString {
     /// 对应 Delphi 的 esp 字段，类型为 rEspPointerLite
     pub esp_ptr: EspPointer,
 
+    /// 父记录 FormID（运行时从 GRUP 层级提取，不持久化到 SST）
+    /// 例如：INFO 记录的 parent_form_id = 所属 DIAL 的 FormID
+    pub parent_form_id: u32,
+
     /// 状态参数（持久化到 SST 字典，对应 Delphi 的 sparams 集合）
     /// 包含 translated/locked/incomplete 等标志位
     pub params: SkyStringParams,
@@ -137,6 +141,7 @@ impl SkyString {
             min_word: 0,
             tag_hash: 0,
             rec_refs: Vec::new(),
+            parent_form_id: 0,
         }
     }
 
