@@ -2,7 +2,7 @@ import { useAppStore } from "../stores/appStore";
 import { loadEsp, loadSst, saveSst, exportXml, importXml, saveStrings } from "../api/strings";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { listen } from "@tauri-apps/api/event";
-import { FolderOpen, FileUp, FileDown, FileCode, Save, RotateCcw, Sun, Moon, Cloud, RefreshCw } from "lucide-react";
+import { FolderOpen, FileUp, FileDown, FileCode, Save, RotateCcw, RefreshCw } from "lucide-react";
 import toast from "react-hot-toast";
 
 export function MenuBar() {
@@ -23,12 +23,10 @@ export function MenuBar() {
   const setTargetLang = useAppStore((s) => s.setTargetLang);
   const reset = useAppStore((s) => s.reset);
   const theme = useAppStore((s) => s.theme);
-  const cycleTheme = useAppStore((s) => s.cycleTheme);
+  const setTheme = useAppStore((s) => s.setTheme);
   const showBatchPanel = useAppStore((s) => s.showBatchPanel);
   const setShowBatchPanel = useAppStore((s) => s.setShowBatchPanel);
   const batchEntries = useAppStore((s) => s.batchEntries);
-
-  const ThemeIcon = theme === "dark" ? Moon : theme === "light" ? Sun : Cloud;
 
   const handleLoadEsp = async () => {
     if (isDirty && !confirm("You have unsaved changes. Load a new file anyway?")) return;
@@ -278,13 +276,17 @@ export function MenuBar() {
         >
           <RefreshCw size={16} />
         </button>
-        <button
-          onClick={cycleTheme}
-          className="btn btn-ghost"
-          title={`Theme: ${theme} (click to cycle)`}
+        <select
+          value={theme}
+          onChange={(e) => setTheme(e.target.value as any)}
+          className="lang-select"
+          title="Theme"
         >
-          <ThemeIcon size={16} />
-        </button>
+          <option value="auto">Auto</option>
+          <option value="dark">Dark</option>
+          <option value="light">Light</option>
+          <option value="gray">Gray</option>
+        </select>
         <button onClick={() => {
           if (isDirty && !confirm("You have unsaved changes. Reset anyway?")) return;
           reset();

@@ -1,7 +1,6 @@
 # xTranslator - Rust Rewrite
 
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue.svg)](LICENSE)
-[![Rust](https://github.com/xTranslator/xTranslator/workflows/CI/badge.svg)](https://github.com/xTranslator/xTranslator/actions)
 
 A modern Rust-based translator for Bethesda game mods (Skyrim, Skyrim SE, Fallout 4, Starfield). This is a complete rewrite of the original Delphi xTranslator tool, featuring a Tauri-based desktop UI with React frontend.
 

@@ -14,9 +14,8 @@
 //! Supports both free and pro DeepL API endpoints.
 //! Automatically detects free vs pro based on API key ending with ':fx'
 //! (matching Delphi TESVT_TranslatorApi.pas behavior).
-use anyhow::{anyhow, Result};
-use serde::{Deserialize, Serialize};
-use async_trait::async_trait;
+use anyhow::Result;
+use serde::Deserialize;
 
 #[derive(Clone)]
 pub struct DeepLProvider {
@@ -137,7 +136,7 @@ struct DeepLResponse {
 /// Individual translation result from DeepL API
 #[derive(Debug, Deserialize)]
 struct DeepLTranslation {
-    /// Detected source language (may differ from requested source_lang)
+    #[allow(dead_code)]
     #[serde(rename = "detected_source_language")]
     detected_source_language: String,
     /// Translated text
@@ -147,7 +146,6 @@ struct DeepLTranslation {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::env;
 
     #[test]
     fn test_deepl_provider_new_free_api() {

@@ -3,9 +3,20 @@ import type { SkyStringDTO, LoadEspResponse, LoadSstResponse, BatchEntry, BatchS
 import { getAllStrings, getStringsChunk, getStringsCount, queryStrings, updateTranslation } from "../api/strings";
 import toast from "react-hot-toast";
 
-export type Theme = "dark" | "light" | "gray";
+export type Theme = "dark" | "light" | "gray" | "auto";
 
 const THEME_STORAGE_KEY = "xtranslator-theme";
+
+function getSystemPrefersDark(): boolean {
+  return window.matchMedia("(prefers-color-scheme: dark)").matches;
+}
+
+function resolveTheme(theme: Theme): "dark" | "light" | "gray" {
+  if (theme === "auto") {
+    return getSystemPrefersDark() ? "dark" : "light";
+  }
+  return theme;
+}
 
 interface LoadProgress {
   stage: string;
@@ -14,6 +25,14 @@ interface LoadProgress {
   percentage: number;
   message: string;
 }
+
+interface UndoEntry {
+  id: number;
+  oldTranslation: string;
+  oldStatus: string;
+}
+
+const MAX_UNDO_STACK = 100;
 
 interface AppState {
   // Full dataset (all strings from backend)
@@ -60,6 +79,10 @@ interface AppState {
   // Dirty state (unsaved translation changes)
   isDirty: boolean;
 
+  // Undo/Redo
+  undoStack: UndoEntry[];
+  redoStack: UndoEntry[];
+
   // Batch processor
   showBatchPanel: boolean;
   batchEntries: BatchEntry[];
@@ -81,12 +104,15 @@ interface AppState {
   setRecordFilter: (record: string | null) => void;
   setSort: (field: string, dir?: "asc" | "desc") => void;
   replaceAll: () => Promise<void>;
+  undo: () => Promise<void>;
+  redo: () => Promise<void>;
   setSelectedById: (id: number | null) => void;
   updateItemTranslation: (id: number, translation: string) => void;
   applyIncrementalUpdate: (updatedIds: number[]) => void;
   setIsDirty: (dirty: boolean) => void;
   setTheme: (theme: Theme) => void;
   cycleTheme: () => void;
+  reapplyTheme: () => void;
   selectNextRow: () => void;
   selectPrevRow: () => void;
   loadAllStrings: () => Promise<void>;
@@ -102,13 +128,13 @@ interface AppState {
 function getInitialTheme(): Theme {
   try {
     const stored = localStorage.getItem(THEME_STORAGE_KEY);
-    if (stored === "light" || stored === "gray" || stored === "dark") return stored;
+    if (stored === "light" || stored === "gray" || stored === "dark" || stored === "auto") return stored;
   } catch { /* localStorage unavailable */ }
-  return "dark";
+  return "auto";
 }
 
-const THEME_LABELS: Record<Theme, string> = { dark: "Dark", light: "Light", gray: "Gray" };
-const THEME_NEXT: Record<Theme, Theme> = { dark: "light", light: "gray", gray: "dark" };
+const THEME_LABELS: Record<Theme, string> = { dark: "Dark", light: "Light", gray: "Gray", auto: "Auto" };
+const THEME_NEXT: Record<Theme, Theme> = { dark: "light", light: "gray", gray: "auto", auto: "dark" };
 
 function applyFilterAndSort(
   allItems: SkyStringDTO[],
@@ -208,6 +234,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   theme: getInitialTheme(),
   themeLabel: THEME_LABELS[getInitialTheme()],
   isDirty: false,
+  undoStack: [],
+  redoStack: [],
   showBatchPanel: false,
   batchEntries: [],
   batchStatus: null,
@@ -335,6 +363,100 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
+  undo: async () => {
+    const state = get();
+    if (state.undoStack.length === 0) {
+      toast("Nothing to undo");
+      return;
+    }
+    const entry = state.undoStack[0];
+    const newUndo = state.undoStack.slice(1);
+
+    // Record current state in redo
+    const currentItem = state.allItems.find((i) => i.id === entry.id);
+    const redoEntry: UndoEntry = {
+      id: entry.id,
+      oldTranslation: currentItem?.translation || "",
+      oldStatus: currentItem?.status || "incomplete",
+    };
+    const newRedo = [redoEntry, ...state.redoStack];
+
+    // Revert via IPC
+    try {
+      await updateTranslation(entry.id, entry.oldTranslation);
+    } catch {
+      toast.error("Undo failed");
+      return;
+    }
+
+    // Apply locally without recording another undo
+    const newAllItems = state.allItems.map((item) =>
+      item.id === entry.id
+        ? { ...item, translation: entry.oldTranslation, status: entry.oldStatus }
+        : item
+    );
+    const items = applyFilterAndSort(
+      newAllItems,
+      state.filter,
+      state.useRegex,
+      state.statusFilter,
+      state.recordFilter,
+      state.sortField,
+      state.sortDir
+    );
+    const selectedItem = state.selectedId === entry.id
+      ? { ...state.selectedItem!, translation: entry.oldTranslation, status: entry.oldStatus }
+      : state.selectedItem;
+    set({ allItems: newAllItems, items, filtered: items.length, selectedItem, undoStack: newUndo, redoStack: newRedo });
+  },
+
+  redo: async () => {
+    const state = get();
+    if (state.redoStack.length === 0) {
+      toast("Nothing to redo");
+      return;
+    }
+    const entry = state.redoStack[0];
+    const newRedo = state.redoStack.slice(1);
+
+    // Record current state in undo
+    const currentItem = state.allItems.find((i) => i.id === entry.id);
+    const undoEntry: UndoEntry = {
+      id: entry.id,
+      oldTranslation: currentItem?.translation || "",
+      oldStatus: currentItem?.status || "incomplete",
+    };
+    const newUndo = [undoEntry, ...state.undoStack].slice(0, MAX_UNDO_STACK);
+
+    // Revert via IPC
+    try {
+      await updateTranslation(entry.id, entry.oldTranslation);
+    } catch {
+      toast.error("Redo failed");
+      return;
+    }
+
+    // Apply locally without recording another undo
+    const newAllItems = state.allItems.map((item) =>
+      item.id === entry.id
+        ? { ...item, translation: entry.oldTranslation, status: entry.oldStatus }
+        : item
+    );
+    const items = applyFilterAndSort(
+      newAllItems,
+      state.filter,
+      state.useRegex,
+      state.statusFilter,
+      state.recordFilter,
+      state.sortField,
+      state.sortDir
+    );
+    const selectedItem = state.selectedId === entry.id
+      ? { ...state.selectedItem!, translation: entry.oldTranslation, status: entry.oldStatus }
+      : state.selectedItem;
+    set({ allItems: newAllItems, items, filtered: items.length, selectedItem, undoStack: newUndo, redoStack: newRedo });
+  },
+
   setStatusFilter: (statusFilter) => {
     const state = get();
     const items = applyFilterAndSort(
@@ -391,6 +513,20 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   updateItemTranslation: (id, translation) => {
     const state = get();
+
+    // Record undo entry before mutation
+    const oldItem = state.allItems.find((i) => i.id === id);
+    if (oldItem && oldItem.translation !== translation) {
+      const entry: UndoEntry = {
+        id,
+        oldTranslation: oldItem.translation,
+        oldStatus: oldItem.status,
+      };
+      const newUndo = [entry, ...state.undoStack].slice(0, MAX_UNDO_STACK);
+      set({ undoStack: newUndo, redoStack: [] });
+    }
+
+    // Apply translation mutation
     const newAllItems = state.allItems.map((item) =>
       item.id === id
         ? { ...item, translation, status: translation ? "translated" : "incomplete" }
@@ -465,7 +601,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   setTheme: (theme) => {
     try { localStorage.setItem(THEME_STORAGE_KEY, theme); } catch { /* ok */ }
-    document.documentElement.setAttribute("data-theme", theme);
+    document.documentElement.setAttribute("data-theme", resolveTheme(theme));
     set({ theme, themeLabel: THEME_LABELS[theme] });
   },
 
@@ -473,8 +609,13 @@ export const useAppStore = create<AppState>((set, get) => ({
     const current = get().theme;
     const next = THEME_NEXT[current];
     try { localStorage.setItem(THEME_STORAGE_KEY, next); } catch { /* ok */ }
-    document.documentElement.setAttribute("data-theme", next);
+    document.documentElement.setAttribute("data-theme", resolveTheme(next));
     set({ theme: next, themeLabel: THEME_LABELS[next] });
+  },
+
+  reapplyTheme: () => {
+    const theme = get().theme;
+    document.documentElement.setAttribute("data-theme", resolveTheme(theme));
   },
 
   selectNextRow: () => {
@@ -575,6 +716,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       selectedId: null,
       selectedItem: null,
       isDirty: false,
+      undoStack: [],
+      redoStack: [],
       targetLang: "chinese",
     }),
 }));

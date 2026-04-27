@@ -8,7 +8,7 @@ mod commands;
 
 use crate::batch::BatchExecutor;
 use commands::{
-    cancel_batch_job, export_xml, get_all_strings, get_batch_status, get_is_dirty, get_stats,
+    auto_backup_sst, cancel_batch_job, export_xml, get_all_strings, get_batch_status, get_is_dirty, get_stats,
     get_strings_chunk, get_strings_count, get_translation_providers, heuristic_search, import_xml,
     list_esp_files, load_esp, load_sst, query_strings_command, save_strings, save_sst,
     start_batch_export, start_batch_translate, set_deepl_api_key, set_openai_api_key,
@@ -38,6 +38,7 @@ fn main() {
             set_deepl_api_key,
             set_translation_provider,
             get_translation_providers,
+            auto_backup_sst,
             export_xml,
             import_xml,
             get_is_dirty,

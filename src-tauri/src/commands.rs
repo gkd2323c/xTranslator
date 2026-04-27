@@ -10,7 +10,7 @@ use xt_core::types::params::SkyStringParams;
 use xt_core::types::sky_string::SkyString;
 use xt_core::xml::{import_xml_to_sky_strings, parse_xml_file, sky_strings_to_xml_entries, write_xml_file, XmlExportParams};
 use xt_shared::dto::{
-    BatchConfig, BatchEntry, BatchStatus,
+    AutoBackupRequest, AutoBackupResponse, BatchConfig, BatchEntry, BatchStatus,
     EspLoadProgress, HeuristicMatchDTO, HeuristicSearchRequest, LoadEspResponse, LoadSstResponse, QueryRequest,
     QueryResponse, SaveStringsRequest, SaveStringsResponse, SkyStringDTO, TranslateRequest, XmlExportRequest, XmlImportResponse,
     XmlProgress,
@@ -1053,4 +1053,77 @@ pub async fn list_esp_files(dir: String) -> Result<Vec<String>, String> {
     }
     entries.sort();
     Ok(entries)
+}
+
+#[tauri::command]
+pub async fn auto_backup_sst(
+    state: tauri::State<'_, Arc<AppState>>,
+    request: AutoBackupRequest,
+) -> Result<AutoBackupResponse, String> {
+    let is_dirty = *state.is_dirty.lock().map_err(|e| e.to_string())?;
+    if !is_dirty {
+        return Ok(AutoBackupResponse {
+            backup_path: None,
+            total_backups: 0,
+        });
+    }
+
+    let sst_path = std::path::Path::new(&request.sst_path);
+    let parent = sst_path
+        .parent()
+        .ok_or_else(|| "Invalid SST path: no parent directory".to_string())?;
+    let backup_dir = parent.join("backups");
+    std::fs::create_dir_all(&backup_dir)
+        .map_err(|e| format!("Failed to create backup dir: {}", e))?;
+
+    let stem = sst_path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("backup");
+    // Generate timestamp from UNIX epoch seconds
+    let epoch = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let backup_name = format!("{}_{}.sst", stem, epoch);
+    let backup_path = backup_dir.join(&backup_name);
+
+    // Build SST from current strings
+    let strings = state.strings.lock().map_err(|e| e.to_string())?;
+    let sst = xt_core::sst::v8::SstDictionary::from_entries(strings.clone());
+    sst.save_to_file(backup_path.to_str().ok_or("Invalid backup path")?)
+        .map_err(|e| format!("Failed to save backup: {}", e))?;
+
+    // Rotate: keep max_backups newest files
+    let max_backups = request.max_backups.unwrap_or(10) as usize;
+    let mut backup_files: Vec<std::path::PathBuf> = Vec::new();
+    let mut read_dir = std::fs::read_dir(&backup_dir)
+        .map_err(|e| format!("Failed to read backup dir: {}", e))?;
+    while let Some(entry) = read_dir.next().transpose().map_err(|e| format!("Read error: {}", e))? {
+        let p = entry.path();
+        if p.extension().and_then(|e| e.to_str()) == Some("sst") {
+            backup_files.push(p);
+        }
+    }
+
+    // Sort by modified time descending (newest first)
+    backup_files.sort_by(|a, b| {
+        let ma = a.metadata().ok();
+        let mb = b.metadata().ok();
+        let ta = ma.and_then(|m| m.modified().ok()).unwrap_or(std::time::UNIX_EPOCH);
+        let tb = mb.and_then(|m| m.modified().ok()).unwrap_or(std::time::UNIX_EPOCH);
+        tb.cmp(&ta)
+    });
+
+    // Delete excess old backups
+    for old in backup_files.iter().skip(max_backups) {
+        let _ = std::fs::remove_file(old);
+    }
+
+    let total_backups = std::cmp::min(backup_files.len(), max_backups) as u32;
+
+    Ok(AutoBackupResponse {
+        backup_path: Some(backup_path.to_str().unwrap_or("").to_string()),
+        total_backups,
+    })
 }

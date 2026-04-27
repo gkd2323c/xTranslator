@@ -747,7 +747,7 @@ mod tests {
             },
         ];
 
-        let (matched, unmatched, updated_ids) = import_xml_to_sky_strings(&mut strings, &xml_entries);
+        let (matched, unmatched, _updated_ids) = import_xml_to_sky_strings(&mut strings, &xml_entries);
 
         assert_eq!(matched, 1);
         assert_eq!(unmatched, 1);

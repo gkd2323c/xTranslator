@@ -10,11 +10,11 @@ pub mod directory;
 pub mod extraction;
 pub mod header;
 
-use directory::{BsaDirectory, BsaFileRecord, BsaFolder};
+use directory::BsaDirectory;
 use extraction::extract_file_data;
 use header::BsaHeader;
 use std::fs::File;
-use std::io::{BufReader, Read, Seek};
+use std::io::BufReader;
 use std::path::Path;
 
 /// BSA 归档文件
@@ -52,7 +52,7 @@ impl BsaArchive {
     ///
     /// 路径格式：`folder/filename.ext`（如 `strings/skyrim_english.strings`）
     pub fn extract_file(&self, path: &str) -> std::io::Result<Vec<u8>> {
-        let (folder, file) = self
+        let (_folder, file) = self
             .directory
             .find_by_path(path)
             .ok_or_else(|| {

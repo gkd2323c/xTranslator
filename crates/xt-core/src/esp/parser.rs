@@ -537,6 +537,7 @@ impl EspParser {
         Ok(())
     }
 
+    #[allow(dead_code)]
     fn parse_top_level<R: Read>(&mut self, reader: &mut R) -> Result<()> {
         self.parse_top_level_debug(reader, &mut 0, &mut 0)
     }
@@ -594,6 +595,7 @@ impl EspParser {
         Ok(())
     }
 
+    #[allow(dead_code)]
     fn parse_record<R: Read>(&mut self, reader: &mut R) -> Result<()> {
         self.parse_record_debug(reader, &mut 0)
     }
@@ -669,6 +671,7 @@ impl EspParser {
         Ok(())
     }
 
+    #[allow(dead_code)]
     fn parse_record_fields(&mut self, record_sig: &[u8; 4], data: &[u8]) -> Result<()> {
         self.parse_record_fields_with_id(record_sig, 0, data)
     }

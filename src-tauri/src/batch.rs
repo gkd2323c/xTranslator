@@ -14,6 +14,7 @@ use xt_shared::dto::{
 /// 批处理运行状态
 enum BatchJobState {
     Idle,
+    #[allow(dead_code)]
     Running {
         job_id: String,
         job_type: String,
@@ -43,6 +44,7 @@ impl BatchExecutor {
     }
 
     /// 检查是否空闲
+    #[allow(dead_code)]
     pub fn is_idle(&self) -> bool {
         self.state.lock().map_or(false, |s| matches!(&*s, BatchJobState::Idle))
     }
@@ -105,6 +107,9 @@ impl BatchExecutor {
         target_lang: String,
         skip_translated: bool,
     ) -> Result<String, String> {
+        // 验证所有入口
+        validate_entries(&entries)?;
+
         {
             let mut s = self.state.lock().map_err(|e| e.to_string())?;
             if matches!(&*s, BatchJobState::Running { .. }) {
@@ -151,6 +156,9 @@ impl BatchExecutor {
         output_dir: String,
         export_format: String,
     ) -> Result<String, String> {
+        // 验证所有入口
+        validate_entries(&entries)?;
+
         {
             let mut s = self.state.lock().map_err(|e| e.to_string())?;
             if matches!(&*s, BatchJobState::Running { .. }) {
@@ -184,6 +192,37 @@ impl BatchExecutor {
             _ => Err("Failed to start batch job".to_string()),
         }
     }
+}
+
+// ── 入口验证 ─────────────────────────────────────────────
+
+/// 验证批处理入口：检查 ESP 文件存在、strings 目录可用
+fn validate_entries(entries: &[BatchEntry]) -> Result<(), String> {
+    for entry in entries {
+        // 检查 ESP 文件存在
+        if !std::path::Path::new(&entry.esp_path).exists() {
+            return Err(format!("ESP file not found: {}", entry.esp_path));
+        }
+
+        // 检查 strings 目录（如果指定）
+        if let Some(ref strings_dir) = entry.strings_dir {
+            let dir = std::path::Path::new(strings_dir);
+            if !dir.exists() {
+                // 尝试在 ESP 所在目录的 ../Strings 查找
+                if let Some(parent) = std::path::Path::new(&entry.esp_path).parent() {
+                    let fallback = parent.join("..").join("Strings");
+                    if !fallback.exists() {
+                        return Err(format!(
+                            "Strings directory not found: {} (also tried {})",
+                            strings_dir,
+                            fallback.display()
+                        ));
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
 }
 
 // ── 语言映射（前端全名 → API 代码） ─────────────────────────────

@@ -1,5 +1,5 @@
 use byteorder::{LittleEndian, ReadBytesExt};
-use std::io::{Read, Result, Seek, SeekFrom};
+use std::io::{Read, Result, Seek};
 
 /// BSA 文件头
 #[derive(Clone, Debug)]

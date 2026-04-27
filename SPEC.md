@@ -127,6 +127,8 @@ T21|x|Theme system (dark/light/gray, CSS variables, Zustand + localStorage)|G7
 T22|.|UI multi-language (i18n)|G7
 T23|x|Regex search/replace with capture groups (replaceAll across filtered items)|G7
 T24|x|Strings write-back deduplication (shared data offsets, ~17% size reduction)|G2
+T25|x|Auto-backup (5-min timer, SST snapshots, rotate last 10)|G3
+T26|x|Undo/Redo (stack-based, Ctrl+Z/Y, max 100 depth)|G7
 
 ## §B Bugs
 

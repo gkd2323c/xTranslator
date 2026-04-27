@@ -319,3 +319,21 @@ pub struct SaveStringsResponse {
     /// 被翻译覆盖的条目总数
     pub translated_count: u32,
 }
+
+/// 自动备份请求
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct AutoBackupRequest {
+    /// SST 文件路径（用于推导备份目录和基础文件名）
+    pub sst_path: String,
+    /// 最大保留备份数（默认 10）
+    pub max_backups: Option<u32>,
+}
+
+/// 自动备份响应
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct AutoBackupResponse {
+    /// 备份文件路径（为空表示无需备份）
+    pub backup_path: Option<String>,
+    /// 备份目录中的总备份数
+    pub total_backups: u32,
+}

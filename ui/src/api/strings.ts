@@ -290,3 +290,19 @@ export async function cancelBatchJob(): Promise<void> {
 export async function listEspFiles(dir: string): Promise<string[]> {
   return invoke("list_esp_files", { dir });
 }
+
+// ── Auto Backup Types ──────────────────────────────────────────────
+
+export interface AutoBackupRequest {
+  sst_path: string;
+  max_backups?: number;
+}
+
+export interface AutoBackupResponse {
+  backup_path: string | null;
+  total_backups: number;
+}
+
+export async function autoBackupSst(request: AutoBackupRequest): Promise<AutoBackupResponse> {
+  return invoke("auto_backup_sst", { request });
+}
