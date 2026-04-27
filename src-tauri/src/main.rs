@@ -8,9 +8,10 @@ mod commands;
 
 use crate::batch::BatchExecutor;
 use commands::{
-    auto_backup_sst, cancel_batch_job, export_xml, get_all_strings, get_batch_status, get_is_dirty, get_stats,
+    auto_backup_sst, cancel_batch_job, export_xml, extract_bsa_file, extract_bsa_folder,
+    get_all_strings, get_batch_status, get_is_dirty, get_stats,
     get_strings_chunk, get_strings_count, get_translation_providers, heuristic_search, import_xml,
-    list_esp_files, load_esp, load_sst, query_strings_command, save_strings, save_sst,
+    list_bsa_files, list_esp_files, load_esp, load_sst, query_strings_command, save_strings, save_sst,
     start_batch_export, start_batch_translate, set_deepl_api_key, set_openai_api_key,
     set_translation_provider, translate_string, update_translation, AppState,
 };
@@ -48,7 +49,11 @@ fn main() {
             start_batch_export,
             get_batch_status,
             cancel_batch_job,
-            list_esp_files
+            list_esp_files,
+            // BSA browser commands
+            list_bsa_files,
+            extract_bsa_file,
+            extract_bsa_folder
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

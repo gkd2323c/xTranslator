@@ -337,3 +337,22 @@ pub struct AutoBackupResponse {
     /// 备份目录中的总备份数
     pub total_backups: u32,
 }
+
+// ── BSA Browser DTOs ───────────────────────────────────────────────
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct BsaFileEntryDto {
+    pub path: String,
+    pub size: u64,
+    pub compressed: bool,
+    pub folder: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct BsaFileListDto {
+    pub archive_name: String,
+    pub version: u32,
+    pub total_files: u32,
+    pub folders: Vec<String>,
+    pub files: Vec<BsaFileEntryDto>,
+}

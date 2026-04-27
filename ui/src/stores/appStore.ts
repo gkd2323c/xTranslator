@@ -88,6 +88,9 @@ interface AppState {
   batchEntries: BatchEntry[];
   batchStatus: BatchStatus | null;
 
+  // BSA Browser
+  showBsaBrowser: boolean;
+
   // Actions
   setAllItems: (items: SkyStringDTO[]) => void;
   setLoading: (loading: boolean) => void;
@@ -117,6 +120,7 @@ interface AppState {
   selectPrevRow: () => void;
   loadAllStrings: () => Promise<void>;
   setShowBatchPanel: (show: boolean) => void;
+  setShowBsaBrowser: (show: boolean) => void;
   setBatchEntries: (entries: BatchEntry[]) => void;
   addBatchEntries: (entries: BatchEntry[]) => void;
   removeBatchEntry: (index: number) => void;
@@ -239,6 +243,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   showBatchPanel: false,
   batchEntries: [],
   batchStatus: null,
+  showBsaBrowser: false,
 
   setAllItems: (allItems) => {
     const state = get();
@@ -559,6 +564,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   setIsDirty: (isDirty) => set({ isDirty }),
 
   setShowBatchPanel: (showBatchPanel) => set({ showBatchPanel }),
+  setShowBsaBrowser: (showBsaBrowser) => set({ showBsaBrowser }),
 
   setBatchEntries: (batchEntries) => set({ batchEntries }),
 

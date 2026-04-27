@@ -104,6 +104,53 @@ impl BsaArchive {
     pub fn file_count(&self) -> u32 {
         self.header.file_count
     }
+
+    /// 获取所有文件夹名称
+    pub fn folder_names(&self) -> Vec<&str> {
+        self.directory
+            .folders
+            .iter()
+            .filter(|f| !f.name.is_empty())
+            .map(|f| f.name.as_str())
+            .collect()
+    }
+
+    /// 获取归档文件名
+    pub fn archive_name(&self) -> Option<&str> {
+        self.path.file_name().and_then(|s| s.to_str())
+    }
+
+    /// 列出所有文件及其元数据
+    pub fn list_all_files(&self) -> Vec<BsaFileEntry> {
+        let mut entries = Vec::new();
+        for folder in &self.directory.folders {
+            for file in &folder.files {
+                let is_compressed = (self.header.archive_flags & 0x0004) != 0
+                    && file.raw_size > 0;
+                entries.push(BsaFileEntry {
+                    path: if folder.name.is_empty() {
+                        file.name.clone()
+                    } else {
+                        format!("{}/{}", folder.name, file.name)
+                    },
+                    size: file.raw_size as u64,
+                    compressed: is_compressed,
+                    folder: folder.name.clone(),
+                });
+            }
+        }
+        entries.sort_by(|a, b| a.path.cmp(&b.path));
+        entries
+    }
+}
+
+/// BSA 文件条目（用于前端展示）
+#[derive(Clone, Debug)]
+pub struct BsaFileEntry {
+    pub path: String,
+    pub size: u64,
+    pub compressed: bool,
+    pub folder: String,
 }
 
 #[cfg(test)]

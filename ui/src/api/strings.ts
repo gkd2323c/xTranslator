@@ -306,3 +306,32 @@ export interface AutoBackupResponse {
 export async function autoBackupSst(request: AutoBackupRequest): Promise<AutoBackupResponse> {
   return invoke("auto_backup_sst", { request });
 }
+
+// ── BSA Browser Types ──────────────────────────────────────────────
+
+export interface BsaFileEntryDto {
+  path: string;
+  size: number;
+  compressed: boolean;
+  folder: string;
+}
+
+export interface BsaFileListDto {
+  archive_name: string;
+  version: number;
+  total_files: number;
+  folders: string[];
+  files: BsaFileEntryDto[];
+}
+
+export async function listBsaFiles(bsaPath: string): Promise<BsaFileListDto> {
+  return invoke("list_bsa_files", { bsaPath });
+}
+
+export async function extractBsaFile(bsaPath: string, filePath: string, outputDir: string): Promise<string> {
+  return invoke("extract_bsa_file", { bsaPath, filePath, outputDir });
+}
+
+export async function extractBsaFolder(bsaPath: string, folder: string, outputDir: string): Promise<string[]> {
+  return invoke("extract_bsa_folder", { bsaPath, folder, outputDir });
+}

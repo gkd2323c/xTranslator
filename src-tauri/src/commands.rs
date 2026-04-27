@@ -11,6 +11,7 @@ use xt_core::types::sky_string::SkyString;
 use xt_core::xml::{import_xml_to_sky_strings, parse_xml_file, sky_strings_to_xml_entries, write_xml_file, XmlExportParams};
 use xt_shared::dto::{
     AutoBackupRequest, AutoBackupResponse, BatchConfig, BatchEntry, BatchStatus,
+    BsaFileEntryDto, BsaFileListDto,
     EspLoadProgress, HeuristicMatchDTO, HeuristicSearchRequest, LoadEspResponse, LoadSstResponse, QueryRequest,
     QueryResponse, SaveStringsRequest, SaveStringsResponse, SkyStringDTO, TranslateRequest, XmlExportRequest, XmlImportResponse,
     XmlProgress,
@@ -1126,4 +1127,112 @@ pub async fn auto_backup_sst(
         backup_path: Some(backup_path.to_str().unwrap_or("").to_string()),
         total_backups,
     })
+}
+
+// ── BSA Browser Commands ────────────────────────────────────────────
+
+#[tauri::command]
+pub async fn list_bsa_files(bsa_path: String) -> Result<BsaFileListDto, String> {
+    let bsa = xt_core::bsa::BsaArchive::open(&bsa_path)
+        .map_err(|e| format!("Failed to open BSA: {}", e))?;
+
+    let archive_name = bsa
+        .archive_name()
+        .unwrap_or("unknown.bsa")
+        .to_string();
+
+    let folders: Vec<String> = bsa
+        .folder_names()
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+
+    let files: Vec<BsaFileEntryDto> = bsa
+        .list_all_files()
+        .iter()
+        .map(|e| BsaFileEntryDto {
+            path: e.path.clone(),
+            size: e.size,
+            compressed: e.compressed,
+            folder: e.folder.clone(),
+        })
+        .collect();
+
+    Ok(BsaFileListDto {
+        archive_name,
+        version: bsa.version(),
+        total_files: files.len() as u32,
+        folders,
+        files,
+    })
+}
+
+#[tauri::command]
+pub async fn extract_bsa_file(
+    bsa_path: String,
+    file_path: String,
+    output_dir: String,
+) -> Result<String, String> {
+    let bsa = xt_core::bsa::BsaArchive::open(&bsa_path)
+        .map_err(|e| format!("Failed to open BSA: {}", e))?;
+
+    let data = bsa
+        .extract_file(&file_path)
+        .map_err(|e| format!("Failed to extract '{}': {}", file_path, e))?;
+
+    // Determine output filename from the file path
+    let file_name = std::path::Path::new(&file_path)
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or("extracted.bin");
+
+    let output_path = std::path::Path::new(&output_dir).join(file_name);
+    if let Some(parent) = output_path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create output dir: {}", e))?;
+    }
+
+    std::fs::write(&output_path, &data)
+        .map_err(|e| format!("Failed to write output: {}", e))?;
+
+    Ok(output_path.to_str().unwrap_or("").to_string())
+}
+
+#[tauri::command]
+pub async fn extract_bsa_folder(
+    bsa_path: String,
+    folder: String,
+    output_dir: String,
+) -> Result<Vec<String>, String> {
+    let bsa = xt_core::bsa::BsaArchive::open(&bsa_path)
+        .map_err(|e| format!("Failed to open BSA: {}", e))?;
+
+    let mut extracted: Vec<String> = Vec::new();
+
+    for entry in bsa.list_all_files() {
+        if entry.folder == folder {
+            match bsa.extract_file(&entry.path) {
+                Ok(data) => {
+                    let file_name = std::path::Path::new(&entry.path)
+                        .file_name()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or("unknown");
+                    let output_path = std::path::Path::new(&output_dir).join(file_name);
+                    if let Some(parent) = output_path.parent() {
+                        let _ = std::fs::create_dir_all(parent);
+                    }
+                    if let Err(e) = std::fs::write(&output_path, &data) {
+                        eprintln!("Failed to write {}: {}", entry.path, e);
+                    } else {
+                        extracted.push(output_path.to_str().unwrap_or("").to_string());
+                    }
+                }
+                Err(e) => {
+                    eprintln!("Failed to extract {}: {}", entry.path, e);
+                }
+            }
+        }
+    }
+
+    Ok(extracted)
 }

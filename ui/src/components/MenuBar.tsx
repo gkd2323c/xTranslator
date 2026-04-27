@@ -2,7 +2,7 @@ import { useAppStore } from "../stores/appStore";
 import { loadEsp, loadSst, saveSst, exportXml, importXml, saveStrings } from "../api/strings";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { listen } from "@tauri-apps/api/event";
-import { FolderOpen, FileUp, FileDown, FileCode, Save, RotateCcw, RefreshCw } from "lucide-react";
+import { FolderOpen, FileUp, FileDown, FileCode, Save, RotateCcw, RefreshCw, FileArchive } from "lucide-react";
 import toast from "react-hot-toast";
 
 export function MenuBar() {
@@ -26,6 +26,8 @@ export function MenuBar() {
   const setTheme = useAppStore((s) => s.setTheme);
   const showBatchPanel = useAppStore((s) => s.showBatchPanel);
   const setShowBatchPanel = useAppStore((s) => s.setShowBatchPanel);
+  const showBsaBrowser = useAppStore((s) => s.showBsaBrowser);
+  const setShowBsaBrowser = useAppStore((s) => s.setShowBsaBrowser);
   const batchEntries = useAppStore((s) => s.batchEntries);
 
   const handleLoadEsp = async () => {
@@ -275,6 +277,13 @@ export function MenuBar() {
           title={showBatchPanel ? "Close Batch Panel" : "Open Batch Panel"}
         >
           <RefreshCw size={16} />
+        </button>
+        <button
+          onClick={() => setShowBsaBrowser(!showBsaBrowser)}
+          className={`btn btn-ghost ${showBsaBrowser ? "active" : ""}`}
+          title={showBsaBrowser ? "Close BSA Browser" : "Open BSA Browser"}
+        >
+          <FileArchive size={16} />
         </button>
         <select
           value={theme}

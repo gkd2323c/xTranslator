@@ -39,7 +39,7 @@
 | **ESP/ESM 解析** | ✅ 全游戏完整 | ✅ Skyrim.esm 验证 | ~80% | 压缩记录解压✅，嵌套 GRUP✅，EDID✅；待验证其他游戏 |
 | **压缩记录解压** | ✅ [4B size]+[zlib] | ✅ 同格式 | 100% | 44,153 条正确解压，NPC_/CELL 字符串可见 |
 | **Strings 文件读取** | ✅ 三格式+codepage | ✅ 三格式+codepage | ~95% | null-终止/长度前缀两种格式均支持 |
-| **Strings 文件写入** | ✅ codepage 编码+去重 | ✅ codepage 编码 | ~80% | 写入功能已有，去重优化（hash_trans+trans 共享偏移）未实现 |
+| **Strings 文件写入** | ✅ codepage 编码+去重 | ✅ codepage 编码+去重 | ~95% | 写入+去重（HashMap shared offsets ~17% 缩减）已完成 |
 | **SST v8 字典读取** | ✅ UTF-16LE | ✅ UTF-16LE | 100% | roundtrip 验证通过 |
 | **SST v8 字典写入** | ✅ | ✅ save_to_file | ~95% | 写入+roundtrip 验证通过 |
 | **record_defs 加载** | ✅ 完整标记 | ✅ */?/-proc 标记+GameId | ~95% | parse_record_defs 支持 */?/-proc，load_game_record_defs |
@@ -92,7 +92,7 @@
 | 功能 | 原版 | Rust 重写 | 覆盖度 | 说明 |
 |------|------|----------|--------|------|
 | **ESM 缓存** | ✅ SQLite 缓存加速重载 | ❌ | 0% | - |
-| **自动备份** | ✅ 定时字典备份 | ❌ | 0% | - |
+| **自动备份** | ✅ 定时字典备份 | ✅ 5-min SST snapshots | ~80% | SST 快照，保留 10 份，静默失败 |
 | **配置系统** | ✅ res.ini+注册表 | ⚠️ Cargo.toml 配置 | ~5% | 跨平台配置方案设计过，未实现 |
 | **vocabulary.txt** | ✅ 词汇列表 | ✅ Data/*/vocabulary.txt 存在 | ~20% | 文件存在但未在代码中使用 |
 | **ctdaFunc.txt** | ✅ 条件函数定义 | ✅ 文件存在 | ~10% | 未解析 |
@@ -157,22 +157,22 @@
 | 差距 | 说明 | 预估工作量 |
 |------|------|-----------|
 | BSA/BA2 归档 | 文件提取+浏览 | 1-2 周 |
-| PEX 脚本解析 | 反编译+翻译 | 2 周 |
+| PEX 脚本解析 | 字符串提取+编辑（T17） | 2 周 |
 | FUZ 音频映射 | NPC 地图+音频播放 | 1 周 |
 | MCM 翻译 | 自定义 txt 导入 | 3-5 天 |
 | ESPCompare | 两 ESP 对比建字符串对 | 1 周 |
 | ESM 缓存 | SQLite 缓存加速重载 | 3-5 天 |
-| 撤销/重做 | 编辑历史管理 | 3-5 天 |
+| ~~撤销/重做~~ | ✅ Ctrl+Z/Y Stack-based (max 100) | Done |
 
 ### P3 - 体验优化
 
 | 差距 | 说明 | 预估工作量 |
 |------|------|-----------|
-| 批量处理器 | 命令式批处理 | 1 周 |
+| ~~批量处理器~~ | ✅ BatchExecutor + BatchPanel | Done |
 | Header 处理器 | ESP 头部修改 | 1 周 |
-| 主题系统 | 亮/暗主题 | 3-5 天 |
-| UI 多语言 | i18n 框架 | 1 周 |
-| 自动备份 | 定时字典备份 | 1-2 天 |
+| ~~主题系统~~ | ✅ Dark/Light/Gray/Auto | Done |
+| UI 多语言 | i18n 框架（T22） | 1 周 |
+| ~~自动备份~~ | ✅ 5-min SST snapshots | Done |
 | 高 DPI 支持 | Tauri 原生处理 | 1-2 天 |
 
 ### 技术债务
@@ -180,7 +180,6 @@
 | 问题 | 影响 | 建议 |
 |------|------|------|
 | 嵌套 GRUP 验证 | CELL/WRLD 内的子 GRUP 可能跳过部分字符串 | 需真实数据验证 diff 一致性 |
-| Strings 写入去重 | 文件比 Delphi 大约 17%（914KB vs 782KB） | 功能正确，低优先级优化 |
 | Delphi 交叉验证 | 无法确认 99% 一致率 | 需 Delphi 环境生成对照文件 |
 | SST 旧版本兼容 | 无法读取 v1-v7 SST | 低优先级，v8 是主流格式 |
 
