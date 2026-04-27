@@ -12,7 +12,8 @@ use xt_core::xml::{import_xml_to_sky_strings, parse_xml_file, sky_strings_to_xml
 use xt_shared::dto::{
     AutoBackupRequest, AutoBackupResponse, BatchConfig, BatchEntry, BatchStatus,
     BsaFileEntryDto, BsaFileListDto,
-    EspLoadProgress, HeuristicMatchDTO, HeuristicSearchRequest, LoadEspResponse, LoadSstResponse,
+    EspLoadProgress, FuzMapping, FuzScanResponse,
+    HeuristicMatchDTO, HeuristicSearchRequest, LoadEspResponse, LoadSstResponse,
     PexScriptDto, PexTranslatableDto, QueryRequest,
     QueryResponse, SaveStringsRequest, SaveStringsResponse, SkyStringDTO, TranslateRequest,
     XmlExportRequest, XmlImportResponse, XmlProgress,
@@ -1274,4 +1275,85 @@ pub async fn parse_pex_strings(pex_path: String) -> Result<PexScriptDto, String>
         string_count: script.string_table.len() as u32,
         translatable,
     })
+}
+
+// ── FUZ Commands ────────────────────────────────────────────────────
+
+#[tauri::command]
+pub async fn scan_fuz_directory(
+    state: tauri::State<'_, Arc<AppState>>,
+    voice_dir: String,
+) -> Result<FuzScanResponse, String> {
+    let strings = state.strings.lock().map_err(|e| e.to_string())?;
+
+    let mut mappings: Vec<FuzMapping> = Vec::new();
+    let mut fuz_paths: Vec<std::path::PathBuf> = Vec::new();
+
+    let walk_dir = std::path::Path::new(&voice_dir);
+    if !walk_dir.is_dir() {
+        return Err(format!("Not a directory: {}", voice_dir));
+    }
+
+    fn collect_fuz(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) -> std::io::Result<()> {
+        if dir.is_dir() {
+            for entry in std::fs::read_dir(dir)? {
+                let entry = entry?;
+                let path = entry.path();
+                if path.is_dir() {
+                    collect_fuz(&path, out)?;
+                } else if path.extension().map_or(false, |e| e == "fuz") {
+                    out.push(path);
+                }
+            }
+        }
+        Ok(())
+    }
+
+    collect_fuz(walk_dir, &mut fuz_paths)
+        .map_err(|e| format!("Failed to scan: {}", e))?;
+
+    let total_fuz = fuz_paths.len() as u32;
+
+    for fuz_path in &fuz_paths {
+        let stem = fuz_path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+        let parts: Vec<&str> = stem.split('_').collect();
+        if parts.is_empty() {
+            continue;
+        }
+
+        if let Ok(resp_id) = u32::from_str_radix(parts[0], 16) {
+            let dur = xt_core::fuz::FuzFile::parse(
+                &mut std::fs::File::open(fuz_path).map_err(|e| format!("Failed: {}", e))?,
+            )
+            .map(|f| f.duration_secs)
+            .unwrap_or(0.0);
+
+            let dialog_text = strings
+                .iter()
+                .find(|s| s.esp_ptr.str_id == resp_id as i32)
+                .map(|s| s.source.clone())
+                .unwrap_or_default();
+
+            if !dialog_text.is_empty() || dur > 0.0 {
+                mappings.push(FuzMapping {
+                    response_id: resp_id,
+                    dialog_text,
+                    fuz_file: fuz_path.to_str().unwrap_or("").to_string(),
+                    duration_secs: dur,
+                });
+            }
+        }
+    }
+
+    mappings.sort_by_key(|m| m.response_id);
+    Ok(FuzScanResponse { fuz_mappings: mappings, total_fuz_files: total_fuz })
+}
+
+#[tauri::command]
+pub async fn get_fuz_audio_data(fuz_path: String) -> Result<Vec<u8>, String> {
+    let mut file = std::fs::File::open(&fuz_path)
+        .map_err(|e| format!("Failed to open FUZ: {}", e))?;
+    let fuz = xt_core::fuz::FuzFile::parse(&mut file)
+        .map_err(|e| format!("Failed to parse: {}", e))?;
+    Ok(fuz.wav_data)
 }

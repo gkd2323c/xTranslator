@@ -1,5 +1,6 @@
 pub mod bsa;
 pub mod esp;
+pub mod fuz;
 pub mod heuristic;
 pub mod normalization;
 pub mod pex;

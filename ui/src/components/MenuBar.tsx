@@ -2,7 +2,7 @@ import { useAppStore } from "../stores/appStore";
 import { loadEsp, loadSst, saveSst, exportXml, importXml, saveStrings } from "../api/strings";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { listen } from "@tauri-apps/api/event";
-import { FolderOpen, FileUp, FileDown, FileCode, Save, RotateCcw, RefreshCw, FileArchive, Braces } from "lucide-react";
+import { FolderOpen, FileUp, FileDown, FileCode, Save, RotateCcw, RefreshCw, FileArchive, Braces, Volume2 } from "lucide-react";
 import toast from "react-hot-toast";
 
 export function MenuBar() {
@@ -30,6 +30,8 @@ export function MenuBar() {
   const setShowBsaBrowser = useAppStore((s) => s.setShowBsaBrowser);
   const showPexPanel = useAppStore((s) => s.showPexPanel);
   const setShowPexPanel = useAppStore((s) => s.setShowPexPanel);
+  const showFuzPanel = useAppStore((s) => s.showFuzPanel);
+  const setShowFuzPanel = useAppStore((s) => s.setShowFuzPanel);
   const batchEntries = useAppStore((s) => s.batchEntries);
 
   const handleLoadEsp = async () => {
@@ -293,6 +295,13 @@ export function MenuBar() {
           title={showPexPanel ? "Close PEX Panel" : "Open PEX Panel"}
         >
           <Braces size={16} />
+        </button>
+        <button
+          onClick={() => setShowFuzPanel(!showFuzPanel)}
+          className={`btn btn-ghost ${showFuzPanel ? "active" : ""}`}
+          title={showFuzPanel ? "Close Voice Panel" : "Open Voice Panel"}
+        >
+          <Volume2 size={16} />
         </button>
         <select
           value={theme}

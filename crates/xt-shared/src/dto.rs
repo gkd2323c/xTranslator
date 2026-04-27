@@ -377,3 +377,19 @@ pub struct PexScriptDto {
     pub string_count: u32,
     pub translatable: Vec<PexTranslatableDto>,
 }
+
+// ── FUZ DTOs ────────────────────────────────────────────────────────
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct FuzMapping {
+    pub response_id: u32,
+    pub dialog_text: String,
+    pub fuz_file: String,
+    pub duration_secs: f32,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct FuzScanResponse {
+    pub fuz_mappings: Vec<FuzMapping>,
+    pub total_fuz_files: u32,
+}

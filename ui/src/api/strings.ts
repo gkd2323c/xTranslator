@@ -358,3 +358,25 @@ export interface PexScriptDto {
 export async function parsePexStrings(pexPath: string): Promise<PexScriptDto> {
   return invoke("parse_pex_strings", { pexPath });
 }
+
+// ── FUZ Types ───────────────────────────────────────────────────────
+
+export interface FuzMapping {
+  response_id: number;
+  dialog_text: string;
+  fuz_file: string;
+  duration_secs: number;
+}
+
+export interface FuzScanResponse {
+  fuz_mappings: FuzMapping[];
+  total_fuz_files: number;
+}
+
+export async function scanFuzDirectory(voiceDir: string): Promise<FuzScanResponse> {
+  return invoke("scan_fuz_directory", { voiceDir });
+}
+
+export async function getFuzAudioData(fuzPath: string): Promise<number[]> {
+  return invoke("get_fuz_audio_data", { fuzPath });
+}

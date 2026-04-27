@@ -94,6 +94,9 @@ interface AppState {
   // PEX Panel
   showPexPanel: boolean;
 
+  // FUZ Panel
+  showFuzPanel: boolean;
+
   // Actions
   setAllItems: (items: SkyStringDTO[]) => void;
   setLoading: (loading: boolean) => void;
@@ -125,6 +128,7 @@ interface AppState {
   setShowBatchPanel: (show: boolean) => void;
   setShowBsaBrowser: (show: boolean) => void;
   setShowPexPanel: (show: boolean) => void;
+  setShowFuzPanel: (show: boolean) => void;
   setBatchEntries: (entries: BatchEntry[]) => void;
   addBatchEntries: (entries: BatchEntry[]) => void;
   removeBatchEntry: (index: number) => void;
@@ -249,6 +253,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   batchStatus: null,
   showBsaBrowser: false,
   showPexPanel: false,
+  showFuzPanel: false,
 
   setAllItems: (allItems) => {
     const state = get();
@@ -571,6 +576,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   setShowBatchPanel: (showBatchPanel) => set({ showBatchPanel }),
   setShowBsaBrowser: (showBsaBrowser) => set({ showBsaBrowser }),
   setShowPexPanel: (showPexPanel) => set({ showPexPanel }),
+  setShowFuzPanel: (showFuzPanel) => set({ showFuzPanel }),
 
   setBatchEntries: (batchEntries) => set({ batchEntries }),
 
