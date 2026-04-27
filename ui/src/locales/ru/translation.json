@@ -86,12 +86,18 @@
     "name": "Name",
     "version": "Version",
     "files": "Files",
+    "filesCount": "Files ({{count}})",
     "folders": "Folders",
     "openAnother": "Open Another",
     "allFiles": "All Files",
     "filtered": "(filtered)",
     "extractAll": "Extract All",
-    "compressed": "Compressed"
+    "compressed": "Compressed",
+    "inFolder": "in {{folder}}",
+    "failedToOpen": "Failed to open",
+    "extractedTo": "Extracted to {{path}}",
+    "extractFailed": "Extract failed",
+    "extractedFiles": "Extracted {{count}} files"
   },
   "pex": {
     "title": "Open a PEX script",
@@ -99,11 +105,21 @@
     "openPex": "Open PEX",
     "parsing": "Parsing...",
     "scriptInfo": "Script Info",
+    "name": "Name",
+    "version": "Version",
     "stringsTable": "Strings (table)",
     "translatable": "translatable",
     "stringTypes": "String Types",
+    "all": "All",
+    "stringsHeader": "Strings",
+    "stringsDetail": "{{tableCount}} (table) / {{transCount}} (translatable)",
+    "stringsCount": "Strings ({{count}})",
     "openAnother": "Open Another",
-    "exportXml": "Export XML"
+    "exportXml": "Export XML",
+    "foundStrings": "{{count}} translatable strings found",
+    "parseFailed": "Failed to parse",
+    "exportedEntries": "Exported {{count}} entries",
+    "exportFailed": "Export failed"
   },
   "fuz": {
     "title": "Scan Voice Directory",
@@ -113,11 +129,15 @@
     "voiceFiles": "Voice Files",
     "totalFuz": "Total FUZ",
     "matched": "Matched",
+    "matchedCount": "Matched ({{count}})",
     "rescan": "Rescan",
     "noTextMatch": "(no text match)",
     "play": "Play",
     "stop": "Stop",
-    "playbackFailed": "Playback failed"
+    "playbackFailed": "Playback failed",
+    "foundMatches": "Found {{matched}} matched of {{total}} FUZ files",
+    "scanFailed": "Scan failed",
+    "loadAudioFailed": "Failed to load audio"
   },
   "dialog": {
     "title": "Dialog View",
@@ -125,7 +145,10 @@
     "loadDialogs": "Load Dialogs",
     "loading": "Loading...",
     "dialogGroups": "Dialog Groups",
-    "reload": "Reload"
+    "dialogGroupsCount": "Dialog Groups ({{count}})",
+    "reload": "Reload",
+    "loaded": "{{count}} dialog groups loaded",
+    "loadFailed": "Failed to load"
   },
   "toast": {
     "loadedStrings": "Loaded {{count}} strings",
@@ -146,4 +169,3 @@
     "batchConflict": "Batch includes the currently loaded ESP"
   }
 }
-

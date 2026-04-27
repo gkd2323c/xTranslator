@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
+import { useTranslation } from "react-i18next";
 import {
   FolderOpen, FileText, Download, Folder,
   HardDrive, FileArchive, ChevronRight, ChevronDown
@@ -15,6 +16,7 @@ function formatSize(bytes: number): string {
 }
 
 export function BsaBrowser() {
+  const { t } = useTranslation();
   const [bsaPath, setBsaPath] = useState<string | null>(null);
   const [fileList, setFileList] = useState<BsaFileListDto | null>(null);
   const [loading, setLoading] = useState(false);
@@ -44,7 +46,7 @@ export function BsaBrowser() {
       setBsaPath(path);
       setExpandedFolders(new Set(list.folders));
     } catch (e: any) {
-      toast.error(`Failed to open: ${e}`);
+      toast.error(`${t("bsa.failedToOpen")}: ${e}`);
     } finally {
       setLoading(false);
     }
@@ -60,9 +62,9 @@ export function BsaBrowser() {
 
     try {
       const result = await extractBsaFile(bsaPath, entry.path, outputDir);
-      toast.success(`Extracted to ${result}`);
+      toast.success(t("bsa.extractedTo", { path: result }));
     } catch (e: any) {
-      toast.error(`Extract failed: ${e}`);
+      toast.error(`${t("bsa.extractFailed")}: ${e}`);
     }
   };
 
@@ -75,9 +77,9 @@ export function BsaBrowser() {
 
     try {
       const results = await extractBsaFolder(bsaPath, folderName, outputDir);
-      toast.success(`Extracted ${results.length} files`);
+      toast.success(t("bsa.extractedFiles", { count: results.length }));
     } catch (e: any) {
-      toast.error(`Extract failed: ${e}`);
+      toast.error(`${t("bsa.extractFailed")}: ${e}`);
     }
   };
 
@@ -99,33 +101,33 @@ export function BsaBrowser() {
       {!fileList ? (
         <div className="sidepanel-empty">
           <FileArchive size={36} />
-          <p style={{ marginTop: 8 }}>Open a BSA/BA2 archive</p>
-          <p className="sidepanel-hint">Browse and extract files</p>
+          <p style={{ marginTop: 8 }}>{t("bsa.title")}</p>
+          <p className="sidepanel-hint">{t("bsa.subtitle")}</p>
           <button onClick={handleOpen} disabled={loading} className="btn btn-primary" style={{ marginTop: 16 }}>
             <FolderOpen size={16} />
-            <span>{loading ? "Opening..." : "Open BSA"}</span>
+            <span>{loading ? t("bsa.opening") : t("bsa.openBsa")}</span>
           </button>
         </div>
       ) : (
         <>
           <div className="sidepanel-section">
-            <h3>Archive</h3>
+            <h3>{t("bsa.archive")}</h3>
             <div className="sidepanel-row">
-              <span className="sidepanel-label">Name</span>
+              <span className="sidepanel-label">{t("bsa.name")}</span>
               <span className="sidepanel-value file-path" title={fileList.archive_name}>
                 {fileList.archive_name}
               </span>
             </div>
             <div className="sidepanel-row">
-              <span className="sidepanel-label">Version</span>
+              <span className="sidepanel-label">{t("bsa.version")}</span>
               <span className="sidepanel-value">0x{fileList.version.toString(16).toUpperCase()}</span>
             </div>
             <div className="sidepanel-row">
-              <span className="sidepanel-label">Files</span>
+              <span className="sidepanel-label">{t("bsa.files")}</span>
               <span className="sidepanel-value">{fileList.total_files.toLocaleString()}</span>
             </div>
             <div className="sidepanel-row">
-              <span className="sidepanel-label">Folders</span>
+              <span className="sidepanel-label">{t("bsa.folders")}</span>
               <span className="sidepanel-value">{fileList.folders.length}</span>
             </div>
             <button
@@ -133,7 +135,7 @@ export function BsaBrowser() {
               className="btn btn-sm"
               style={{ marginTop: 8, width: "100%" }}
             >
-              <FolderOpen size={12} /> Open Another
+              <FolderOpen size={12} /> {t("bsa.openAnother")}
             </button>
           </div>
 
@@ -141,11 +143,11 @@ export function BsaBrowser() {
           <div className="sidepanel-section">
             <h3>
               <span onClick={() => setSelectedFolder(null)} style={{ cursor: "pointer" }}>
-                Folders {selectedFolder && "(filtered)"}
+                {t("bsa.folders")} {selectedFolder && t("bsa.filtered")}
               </span>
             </h3>
             <div className="record-type-row" onClick={() => setSelectedFolder(null)}>
-              <span className="sidepanel-label">All Files</span>
+              <span className="sidepanel-label">{t("bsa.allFiles")}</span>
               <span className="sidepanel-value">{fileList.files.length}</span>
             </div>
             {fileList.folders.map((folder) => {
@@ -174,7 +176,7 @@ export function BsaBrowser() {
                         onClick={(e) => { e.stopPropagation(); handleExtractFolder(folder); }}
                         style={{ fontSize: 10, padding: "2px 8px" }}
                       >
-                        <Download size={10} /> Extract All
+                        <Download size={10} /> {t("bsa.extractAll")}
                       </button>
                     </div>
                   )}
@@ -186,10 +188,10 @@ export function BsaBrowser() {
           {/* File List */}
           <div className="sidepanel-section">
             <h3>
-              Files ({filteredFiles.length})
+              {t("bsa.filesCount", { count: filteredFiles.length })}
               {selectedFolder && (
                 <span style={{ fontSize: 10, fontWeight: 400, marginLeft: 8 }}>
-                  in {selectedFolder}
+                  {t("bsa.inFolder", { folder: selectedFolder })}
                 </span>
               )}
             </h3>
@@ -200,7 +202,7 @@ export function BsaBrowser() {
                   className="record-type-row"
                   style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11 }}
                   onClick={() => handleExtractFile(entry)}
-                  title={`${entry.path}\n${entry.compressed ? "Compressed" : "Stored"} — ${formatSize(entry.size)}`}
+                  title={`${entry.path}\n${entry.compressed ? t("bsa.compressed") : "Stored"} — ${formatSize(entry.size)}`}
                 >
                   <FileText size={12} style={{ color: "var(--text-secondary)", flexShrink: 0 }} />
                   <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
@@ -210,7 +212,7 @@ export function BsaBrowser() {
                     {formatSize(entry.size)}
                   </span>
                   {entry.compressed && (
-                    <span title="Compressed">
+                    <span title={t("bsa.compressed")}>
                       <HardDrive size={10} style={{ color: "var(--accent-cyan)", flexShrink: 0 }} />
                     </span>
                   )}

@@ -31,19 +31,19 @@
 | sidebar | 10 | 文件信息、统计数据 |
 | editor | 12 | 编辑器面板 |
 | batch | 15 | 批量处理器 |
-| bsa | 11 | BSA 浏览器 |
-| pex | 9 | PEX 面板 |
-| fuz | 10 | 音频面板 |
-| dialog | 6 | 对话视图 |
+| bsa | 20 | BSA 浏览器 |
+| pex | 20 | PEX 面板 |
+| fuz | 16 | 音频面板 |
+| dialog | 9 | 对话视图 |
 | toast | 14 | 通知消息 |
-| **总计** | **109** | — |
+| **总计** | **138** | — |
 
 ## 当前覆盖状态
 
 | 语言 | 代码 | 翻译状态 |
 |------|------|----------|
-| 中文 | zh-CN | ✅ 完成（109 key） |
-| English | en | ✅ 完成（109 key） |
+| 中文 | zh-CN | ✅ 完成（138 key） |
+| English | en | ✅ 完成（138 key） |
 | 日本語 | ja | ⏳ 模板（en copy，待翻译） |
 | 한국어 | ko | ⏳ 模板 |
 | Français | fr | ⏳ 模板 |
@@ -53,9 +53,19 @@
 | Polski | pl | ⏳ 模板 |
 | Português | pt | ⏳ 模板 |
 
-## 预埋策略
+## 组件接线状态
 
-T16-T20 新增组件（BsaBrowser、PexPanel、FuzPanel、DialogView）在创建时直接使用 `t('key')`，同步写入 `zh-CN/translation.json`。T22 时只需翻译 `en.json`，无需二次改造组件。
+| 组件 | i18n 状态 |
+|------|----------|
+| MenuBar | ✅ 已接线 |
+| SidePanel | ✅ 已接线 |
+| StringTable | ⚠️ 部分硬编码 |
+| EditorPanel | ⚠️ 部分硬编码 |
+| BatchPanel | ⚠️ 部分硬编码 |
+| BsaBrowser | ✅ 已接线 |
+| PexPanel | ✅ 已接线 |
+| FuzPanel | ✅ 已接线 |
+| DialogView | ✅ 已接线 |
 
 ## Strings 去重缓存
 

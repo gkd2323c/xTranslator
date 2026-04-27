@@ -1,11 +1,13 @@
 import { useState } from "react";
 import { open, save } from "@tauri-apps/plugin-dialog";
+import { useTranslation } from "react-i18next";
 import { FileCode, FileUp } from "lucide-react";
 import toast from "react-hot-toast";
 import { parsePexStrings, exportXml } from "../api/strings";
 import type { PexScriptDto } from "../api/strings";
 
 export function PexPanel() {
+  const { t } = useTranslation();
   const [script, setScript] = useState<PexScriptDto | null>(null);
   const [loading, setLoading] = useState(false);
   const [selectedType, setSelectedType] = useState<string | null>(null);
@@ -30,9 +32,9 @@ export function PexPanel() {
     try {
       const result = await parsePexStrings(path);
       setScript(result);
-      toast.success(`${result.translatable.length} translatable strings found`);
+      toast.success(t("pex.foundStrings", { count: result.translatable.length }));
     } catch (e: any) {
-      toast.error(`Failed to parse: ${e}`);
+      toast.error(`${t("pex.parseFailed")}: ${e}`);
     } finally {
       setLoading(false);
     }
@@ -48,9 +50,9 @@ export function PexPanel() {
 
     try {
       const count = await exportXml({ path, dest_lang: "chinese" });
-      toast.success(`Exported ${count} entries`);
+      toast.success(t("pex.exportedEntries", { count }));
     } catch (e: any) {
-      toast.error(`Export failed: ${e}`);
+      toast.error(`${t("pex.exportFailed")}: ${e}`);
     }
   };
 
@@ -59,46 +61,48 @@ export function PexPanel() {
       {!script ? (
         <div className="sidepanel-empty">
           <FileCode size={36} />
-          <p style={{ marginTop: 8 }}>Open a PEX script</p>
-          <p className="sidepanel-hint">Extract translatable strings</p>
+          <p style={{ marginTop: 8 }}>{t("pex.title")}</p>
+          <p className="sidepanel-hint">{t("pex.subtitle")}</p>
           <button onClick={handleOpen} disabled={loading} className="btn btn-primary" style={{ marginTop: 16 }}>
             <FileUp size={16} />
-            <span>{loading ? "Parsing..." : "Open PEX"}</span>
+            <span>{loading ? t("pex.parsing") : t("pex.openPex")}</span>
           </button>
         </div>
       ) : (
         <>
           <div className="sidepanel-section">
-            <h3>Script Info</h3>
+            <h3>{t("pex.scriptInfo")}</h3>
             <div className="sidepanel-row">
-              <span className="sidepanel-label">Name</span>
+              <span className="sidepanel-label">{t("pex.name")}</span>
               <span className="sidepanel-value">{script.script_name}</span>
             </div>
             <div className="sidepanel-row">
-              <span className="sidepanel-label">Version</span>
+              <span className="sidepanel-label">{t("pex.version")}</span>
               <span className="sidepanel-value">
                 {script.major_version}.{script.minor_version}
               </span>
             </div>
             <div className="sidepanel-row">
-              <span className="sidepanel-label">Strings</span>
-              <span className="sidepanel-value">{script.string_count} (table) / {script.translatable.length} (translatable)</span>
+              <span className="sidepanel-label">{t("pex.stringsHeader")}</span>
+              <span className="sidepanel-value">
+                {t("pex.stringsDetail", { tableCount: script.string_count, transCount: script.translatable.length })}
+              </span>
             </div>
             <div style={{ display: "flex", gap: 4, marginTop: 8 }}>
               <button onClick={handleOpen} className="btn btn-sm" style={{ flex: 1 }}>
-                <FileUp size={12} /> Open Another
+                <FileUp size={12} /> {t("pex.openAnother")}
               </button>
               <button onClick={handleExportXml} className="btn btn-sm" style={{ flex: 1 }} disabled={script.translatable.length === 0}>
-                <FileCode size={12} /> Export XML
+                <FileCode size={12} /> {t("pex.exportXml")}
               </button>
             </div>
           </div>
 
           {/* Type filter */}
           <div className="sidepanel-section">
-            <h3>String Types</h3>
+            <h3>{t("pex.stringTypes")}</h3>
             <div className="record-type-row" onClick={() => setSelectedType(null)}>
-              <span className="sidepanel-label">All</span>
+              <span className="sidepanel-label">{t("pex.all")}</span>
               <span className="sidepanel-value">{script.translatable.length}</span>
             </div>
             {types.map((t) => {
@@ -118,7 +122,7 @@ export function PexPanel() {
 
           {/* String list */}
           <div className="sidepanel-section">
-            <h3>Strings ({filtered.length})</h3>
+            <h3>{t("pex.stringsCount", { count: filtered.length })}</h3>
             <div style={{ maxHeight: 300, overflowY: "auto" }}>
               {filtered.map((entry, i) => (
                 <div key={i} className="record-type-row" style={{ padding: "6px 8px", lineHeight: 1.4 }}>

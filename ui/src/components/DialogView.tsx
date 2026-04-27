@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { MessagesSquare, ChevronDown, ChevronRight } from "lucide-react";
 import toast from "react-hot-toast";
 import { useAppStore } from "../stores/appStore";
@@ -6,6 +7,7 @@ import { buildDialogTree } from "../api/strings";
 import type { DialogTreeDto, DialogInfoDto } from "../api/strings";
 
 export function DialogView() {
+  const { t } = useTranslation();
   const [tree, setTree] = useState<DialogTreeDto | null>(null);
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -18,9 +20,9 @@ export function DialogView() {
       const result = await buildDialogTree();
       setTree(result);
       setExpanded(new Set());
-      toast.success(`${result.npcs.length} dialog groups loaded`);
+      toast.success(t("dialog.loaded", { count: result.npcs.length }));
     } catch (e: any) {
-      toast.error(`Failed: ${e}`);
+      toast.error(`${t("dialog.loadFailed")}: ${e}`);
     } finally {
       setLoading(false);
     }
@@ -44,19 +46,19 @@ export function DialogView() {
       {!tree ? (
         <div className="sidepanel-empty">
           <MessagesSquare size={36} />
-          <p style={{ marginTop: 8 }}>Dialog View</p>
-          <p className="sidepanel-hint">Group dialogues by parent DIAL</p>
+          <p style={{ marginTop: 8 }}>{t("dialog.title")}</p>
+          <p className="sidepanel-hint">{t("dialog.subtitle")}</p>
           <button onClick={handleLoad} disabled={loading} className="btn btn-primary" style={{ marginTop: 16 }}>
             <MessagesSquare size={16} />
-            <span>{loading ? "Loading..." : "Load Dialogs"}</span>
+            <span>{loading ? t("dialog.loading") : t("dialog.loadDialogs")}</span>
           </button>
         </div>
       ) : (
         <>
           <div className="sidepanel-section">
-            <h3>Dialog Groups ({tree.npcs.length})</h3>
+            <h3>{t("dialog.dialogGroupsCount", { count: tree.npcs.length })}</h3>
             <button onClick={handleLoad} className="btn btn-sm" style={{ marginBottom: 8, width: "100%" }}>
-              Reload
+              {t("dialog.reload")}
             </button>
           </div>
           <div style={{ maxHeight: 500, overflowY: "auto" }}>

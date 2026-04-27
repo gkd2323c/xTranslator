@@ -86,12 +86,18 @@
     "name": "名称",
     "version": "版本",
     "files": "文件",
+    "filesCount": "文件 ({{count}})",
     "folders": "文件夹",
     "openAnother": "打开其他",
     "allFiles": "所有文件",
     "filtered": "(已筛选)",
     "extractAll": "提取全部",
-    "compressed": "已压缩"
+    "compressed": "已压缩",
+    "inFolder": "在 {{folder}} 内",
+    "failedToOpen": "打开失败",
+    "extractedTo": "已提取到 {{path}}",
+    "extractFailed": "提取失败",
+    "extractedFiles": "已提取 {{count}} 个文件"
   },
   "pex": {
     "title": "打开 PEX 脚本",
@@ -99,11 +105,21 @@
     "openPex": "打开 PEX",
     "parsing": "解析中...",
     "scriptInfo": "脚本信息",
+    "name": "名称",
+    "version": "版本",
     "stringsTable": "字符串表",
     "translatable": "可翻译",
     "stringTypes": "字符串类型",
+    "all": "全部",
+    "stringsHeader": "字符串",
+    "stringsDetail": "{{tableCount}}（表）/ {{transCount}}（可翻译）",
+    "stringsCount": "字符串 ({{count}})",
     "openAnother": "打开其他",
-    "exportXml": "导出 XML"
+    "exportXml": "导出 XML",
+    "foundStrings": "找到 {{count}} 条可翻译字符串",
+    "parseFailed": "解析失败",
+    "exportedEntries": "已导出 {{count}} 条",
+    "exportFailed": "导出失败"
   },
   "fuz": {
     "title": "扫描 Voice 目录",
@@ -113,11 +129,15 @@
     "voiceFiles": "音频文件",
     "totalFuz": "FUZ 总数",
     "matched": "已匹配",
+    "matchedCount": "已匹配 ({{count}})",
     "rescan": "重新扫描",
     "noTextMatch": "(无文本匹配)",
     "play": "播放",
     "stop": "停止",
-    "playbackFailed": "播放失败"
+    "playbackFailed": "播放失败",
+    "foundMatches": "找到 {{matched}} 个匹配（共 {{total}} 个 FUZ 文件）",
+    "scanFailed": "扫描失败",
+    "loadAudioFailed": "加载音频失败"
   },
   "dialog": {
     "title": "对话视图",
@@ -125,7 +145,10 @@
     "loadDialogs": "加载对话",
     "loading": "加载中...",
     "dialogGroups": "对话分组",
-    "reload": "重新加载"
+    "dialogGroupsCount": "对话分组 ({{count}})",
+    "reload": "重新加载",
+    "loaded": "已加载 {{count}} 个对话分组",
+    "loadFailed": "加载失败"
   },
   "toast": {
     "loadedStrings": "已加载 {{count}} 条字符串",
