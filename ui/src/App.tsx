@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { Toaster } from "react-hot-toast";
 import toast from "react-hot-toast";
 import { Loader } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { useAppStore } from "./stores/appStore";
 import { MenuBar } from "./components/MenuBar";
 import { SidePanel } from "./components/SidePanel";
@@ -15,9 +16,10 @@ import { EditorPanel } from "./components/EditorPanel";
 import { autoBackupSst } from "./api/strings";
 import "./App.css";
 
-const AUTO_BACKUP_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+const AUTO_BACKUP_INTERVAL_MS = 5 * 60 * 1000;
 
 function App() {
+  const { t } = useTranslation();
   const setSelectedById = useAppStore((s) => s.setSelectedById);
   const isLoading = useAppStore((s) => s.isLoading);
   const isParsing = useAppStore((s) => s.isParsing);
@@ -55,7 +57,6 @@ function App() {
     reapplyTheme();
   }, [theme, reapplyTheme]);
 
-  // Listen for system color scheme changes when in "auto" mode
   useEffect(() => {
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
     const handler = () => {
@@ -65,7 +66,6 @@ function App() {
     return () => mq.removeEventListener("change", handler);
   }, [theme, reapplyTheme]);
 
-  // Auto-backup timer: saves SST snapshot every 5 minutes when dirty
   useEffect(() => {
     const interval = setInterval(async () => {
       if (!sstPath) return;
@@ -74,21 +74,20 @@ function App() {
           const res = await autoBackupSst({ sst_path: sstPath, max_backups: 10 });
           if (res.backup_path) {
             backupIdRef.current = toast.success(
-              `Auto-backup saved (${res.total_backups} total)`,
+              `${t("toast.autoBackupSaved")} (${res.total_backups})`,
               { duration: 2000 }
             );
           }
         } catch {
-          // Silent fail — don't interrupt user for backup errors
+          /* silent */
         }
       }
     }, AUTO_BACKUP_INTERVAL_MS);
-
     return () => {
       clearInterval(interval);
       if (backupIdRef.current !== null) toast.dismiss(backupIdRef.current);
     };
-  }, [sstPath, isDirty]);
+  }, [sstPath, isDirty, t]);
 
   const isLocked = isLoading || isParsing;
 
@@ -113,7 +112,7 @@ function App() {
         <div className="app-overlay">
           <Loader size={40} className="app-overlay-spinner" />
           <p className="app-overlay-message">
-            {loadProgress?.message || (isParsing ? "Parsing ESP..." : "Processing...")}
+            {loadProgress?.message || (isParsing ? t("app.parsing") : t("app.processing"))}
           </p>
           {loadProgress && loadProgress.total > 0 && (
             <div className="app-overlay-progress">

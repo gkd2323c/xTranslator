@@ -4,8 +4,16 @@ import { open, save } from "@tauri-apps/plugin-dialog";
 import { listen } from "@tauri-apps/api/event";
 import { FolderOpen, FileUp, FileDown, FileCode, Save, RotateCcw, RefreshCw, FileArchive, Braces, Volume2, MessagesSquare } from "lucide-react";
 import toast from "react-hot-toast";
+import { useTranslation } from "react-i18next";
+import { setI18nLanguage } from "../i18n";
+
+const LANGS: Record<string, string> = {
+  "zh-CN": "中文",
+  en: "English",
+};
 
 export function MenuBar() {
+  const { t, i18n } = useTranslation();
   const isParsing = useAppStore((s) => s.isParsing);
   const isLoading = useAppStore((s) => s.isLoading);
   const espPath = useAppStore((s) => s.espPath);
@@ -37,7 +45,7 @@ export function MenuBar() {
   const batchEntries = useAppStore((s) => s.batchEntries);
 
   const handleLoadEsp = async () => {
-    if (isDirty && !confirm("You have unsaved changes. Load a new file anyway?")) return;
+    if (isDirty && !confirm(t("batch.batchConflict"))) return;
 
     const espPath = await open({
       multiple: false,
@@ -79,13 +87,13 @@ export function MenuBar() {
         setEspLoaded(espPath, stats, stringsDir);
         await loadAllStrings();
         setIsDirty(false);
-        toast.success(`Loaded ${stats.total.toLocaleString()} strings from ESP`);
+        toast.success(`Loaded ${stats.total.toLocaleString()} ${t('sidebar.totalStrings').toLowerCase()}`);
       } finally {
         unlisten();
       }
     } catch (e: any) {
       setError(e.toString());
-      toast.error(`Failed to load ESP: ${e}`);
+      toast.error(`${t('app.loading')} ${e}`);
     } finally {
       setParsing(false);
       setLoadProgress(null);
@@ -233,28 +241,28 @@ export function MenuBar() {
       <div className="menubar-actions">
         <button onClick={handleLoadEsp} disabled={isParsing} className="btn btn-primary">
           <FolderOpen size={16} />
-          <span>Load ESP</span>
+          <span>{t("common.loadEsp")}</span>
         </button>
         <button onClick={handleLoadSst} disabled={isLoading || !espPath} className="btn">
           <FileUp size={16} />
-          <span>Load SST</span>
+          <span>{t("common.loadSst")}</span>
         </button>
         <button onClick={handleSaveSst} disabled={isLoading || !espPath} className="btn">
           <FileDown size={16} />
-          <span>Save SST</span>
+          <span>{t("common.saveSst")}</span>
         </button>
         <button onClick={handleSaveStrings} disabled={isLoading || !espPath} className="btn">
           <Save size={16} />
-          <span>Save Strings</span>
+          <span>{t("common.saveStrings")}</span>
         </button>
         <div className="menubar-sep" />
         <button onClick={handleExportXml} disabled={isLoading || !espPath} className="btn">
           <FileCode size={16} />
-          <span>Export XML</span>
+          <span>{t("common.exportXml")}</span>
         </button>
         <button onClick={handleImportXml} disabled={isLoading || !espPath} className="btn">
           <FileCode size={16} />
-          <span>Import XML</span>
+          <span>{t("common.importXml")}</span>
         </button>
         <div className="menubar-sep" />
         <select
@@ -322,6 +330,16 @@ export function MenuBar() {
           <option value="dark">Dark</option>
           <option value="light">Light</option>
           <option value="gray">Gray</option>
+        </select>
+        <select
+          value={i18n.language}
+          onChange={(e) => setI18nLanguage(e.target.value)}
+          className="lang-select"
+          title={t("common.language")}
+        >
+          {Object.entries(LANGS).map(([code, label]) => (
+            <option key={code} value={code}>{label}</option>
+          ))}
         </select>
         <button onClick={() => {
           if (isDirty && !confirm("You have unsaved changes. Reset anyway?")) return;

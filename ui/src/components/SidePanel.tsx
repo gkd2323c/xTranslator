@@ -1,8 +1,10 @@
 import { useMemo } from "react";
 import { useAppStore } from "../stores/appStore";
 import { FileText, Languages, Database, BarChart3 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 export function SidePanel() {
+  const { t } = useTranslation();
   const espPath = useAppStore((s) => s.espPath);
   const espStats = useAppStore((s) => s.espStats);
   const sstStats = useAppStore((s) => s.sstStats);
@@ -63,8 +65,8 @@ export function SidePanel() {
       <div className="sidepanel">
         <div className="sidepanel-empty">
           <FileText size={48} opacity={0.3} />
-          <p>No ESP loaded</p>
-          <p className="sidepanel-hint">Click "Load ESP" to start</p>
+          <p>{t("sidebar.noEspLoaded")}</p>
+          <p className="sidepanel-hint">{t("sidebar.loadEspToStart")}</p>
         </div>
       </div>
     );
@@ -75,7 +77,7 @@ export function SidePanel() {
   return (
     <div className="sidepanel">
       <div className="sidepanel-section">
-        <h3><FileText size={16} /> File</h3>
+        <h3><FileText size={16} /> {t("sidebar.fileInfo")}</h3>
         <div className="sidepanel-row">
           <span className="sidepanel-label">ESP</span>
           <span className="sidepanel-value file-path" title={espPath || ""}>
