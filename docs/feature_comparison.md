@@ -49,7 +49,7 @@
 | **XXXX 超大字段** | ✅ 4字节扩展大小 | ✅ | 100% | 已处理 next_field_size 逻辑 |
 | **XML 导入** | ✅ | ✅ 解析+匹配+更新 | ~95% | 共享 matcher：exact / EDID / normalized / vocab，歧义不自动应用 |
 | **XML 导出** | ✅ | ✅ 写入+实体转义 | ~95% | `write_xml_export` Delphi 兼容格式，只导出有翻译的条目 |
-| **BSA/BA2 归档** | ✅ 提取+浏览 | ⚠️ BSA 完成，BA2 待实现 | ~60% | `BsaArchive` 支持 BSA v0x68/v0x69，`list_all_files` + `extract_file`，BsaBrowser 组件；BA2 General 留作 v2 |
+| **BSA/BA2 归档** | ✅ 提取+浏览 | ✅ BSA + BA2 GNRL 全支持 | ~80% | `BsaArchive` v0x68/v0x69，`Ba2Archive` v0x01/0x02/0x08 GNRL，`list_all_files` + `extract_file` + `BsaBrowser` 组件，ESP strings 回退到 BA2 搜索 |
 | **PEX 脚本解析** | ✅ 反编译+编辑 | ✅ 字符串提取+写回 | ~60% | PEX parser 完成（Header+StringTable+ObjectInfo），可翻译字符串提取 + PexPanel；写回 PEX 已完成（字符串表原地更新，原始 opcode/调试信息全部保留，索引不变，roundtrip 测试通过） |
 | **FUZ 音频映射** | ✅ 映射+播放 | ✅ FuzFile parse + WAV 播放 | ~50% | FuzHeader 解析 + Sound/Voice/ 扫描 + RESP/INFO 关联 + FuzPanel；LIP 唇形数据未处理 |
 
@@ -78,8 +78,7 @@
 
 | 功能 | 原版 | Rust 重写 | 覆盖度 | 说明 |
 |------|------|----------|--------|------|
-| **ESPCompare** | ✅ 两 ESP 建立字符串对 | ❌ | 0% | - |
-| **Diff 查看器** | ✅ 原/更新源字符串差异 | ✅ diff+diff-xml CLI | ~50% | CLI 命令已有，UI 可视化 diff 未实现 |
+| **ESPCompare** | ✅ 两 ESP 建立字符串对 | ✅ StringKey 三元组匹配，identical/added/removed/modified 四类 | ~50% | `esp/compare.rs` 引擎 + Tauri 命令；UI 可视化对比仍待实现 |
 | **Strings Compare** | ✅ .Strings 文件对比 | ❌ | 0% | - |
 | **MCM Compare** | ✅ | ❌ | 0% | - |
 | **别名检查** | ✅ 源/翻译 Alias 完整性 | ❌ | 0% | - |
@@ -156,14 +155,12 @@
 
 | 差距 | 说明 | 预估工作量 |
 |------|------|-----------|
-| ~~BSA 归档浏览器~~ | ✅ BsaBrowser + list_all_files + unit tests | Done |
-| BA2 General 格式 | Fallout 4/76/Starfield 归档读取与 strings fallback | 3-5 天 |
+| ~~BA2 General 格式~~ | ✅ Fallout 4/76/Starfield GNRL 归档读取、列出、提取与 strings fallback | Done |
 | ~~PEX 脚本解析~~ | ✅ PEX parser + string extraction + PexPanel + write-back (roundtrip tested) | Done |
 | ~~FUZ 音频映射~~ | ✅ FuzFile parse + scan + FuzPanel | Done |
 | MCM 翻译 | 自定义 txt 导入 | 3-5 天 |
-| ESPCompare | 两 ESP 对比建字符串对 | 1 周 |
+| ~~ESPCompare~~ | ✅ 两 ESP 建字符串对（identical/added/removed/modified 四类） | Done |
 | ESM 缓存 | SQLite 缓存加速重载 | 3-5 天 |
-| ~~撤销/重做~~ | ✅ Ctrl+Z/Y Stack-based (max 100) | Done |
 
 ### P3 - 体验优化
 
