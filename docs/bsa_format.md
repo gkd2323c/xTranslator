@@ -7,7 +7,7 @@ Delphi 原版 xTranslator 的 `legacy/original-delphi/TESVT_bsa.pas`（1,478 行
 - 浏览归档内容（BSA Browser）
 - PEX 脚本和 FUZ 音频的提取
 
-Rust 重写当前已实现 BSA v0x68/v0x69 的 Strings fallback、目录浏览和按需提取；BA2 与归档注入仍留作后续阶段。
+Rust 重写当前已实现 BSA v0x68/v0x69 与 BA2 General 的 Strings fallback、目录浏览和按需提取；纹理类 BA2 与归档注入仍留作后续阶段。
 
 ---
 
@@ -151,7 +151,7 @@ function BSAhash64(s, ext: string): uInt64;
 |------|--------|-----------|
 | 缓存 | `TwbReadOnlyCachedFileStream` 自定义缓存 | 使用标准 `BufReader` + `File` |
 | 注入 | 完整支持 BSA/BA2 文件注入 | **不实现，除非后续明确需要** |
-| BA2 | 完整支持（纹理/普通两种格式） | **v2 计划：先实现 General 读取/提取** |
+| BA2 | 完整支持（纹理/普通两种格式） | 已实现 General 读取/提取；纹理类 BA2 暂不支持 |
 | 哈希查找 | 预构建 `TStringList` + `Objects` | `HashMap<u64, BsaFolder>` |
 
 ---
@@ -166,7 +166,7 @@ function BSAhash64(s, ext: string): uInt64;
 - ✅ 归档浏览器 UI 和文件列表
 
 ### 不支持（后续阶段）
-- ❌ BA2 格式（Fallout 4/76/Starfield）
+- ❌ BA2 纹理类归档
 - ❌ BSA 文件注入/修改
 - ❌ 文件列表导出
 - ❌ FUZ/PEX 专用归档工作流

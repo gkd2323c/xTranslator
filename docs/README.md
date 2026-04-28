@@ -35,7 +35,7 @@ This directory is organized by reader need: start with the project overview, the
 | [`esp_format.md`](esp_format.md) | ESP/ESM binary layout, compressed records, GRUP sizing, translatable field extraction |
 | [`strings_format.md`](strings_format.md) | `.STRINGS`, `.DLSTRINGS`, `.ILSTRINGS`, codepage behavior, write-back details |
 | [`sst_v8_format.md`](sst_v8_format.md) | SST v8 binary format and Delphi-compatible params |
-| [`bsa_format.md`](bsa_format.md) | BSA v0x68/v0x69 structure, BSAhash64, compression, current BA2 boundary |
+| [`bsa_format.md`](bsa_format.md) | BSA v0x68/v0x69 and BA2 General structure, archive lookup, compression, and current archive-editing boundary |
 | [`pex_format.md`](pex_format.md) | PEX binary layout and translatable string extraction notes |
 | [`fuz_format.md`](fuz_format.md) | FUZ container structure and dialogue/audio association notes |
 

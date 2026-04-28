@@ -39,7 +39,7 @@
 - [x] SST 字典应用逻辑 (id 匹配, EDID, normalized, vocab, 状态语义)
 - [x] 翻译保存流程 (checkForNullTrans, hash 去重)
 - [x] BSA v0x68/v0x69 归档读取与浏览
-- [ ] BA2 归档读取
+- [x] BA2 General 归档读取
 - [x] PEX 脚本解析（字符串提取）
 - [x] FUZ 音频匹配
 
@@ -91,7 +91,7 @@
 
 ### PEX 与 noTrans
 - **Delphi**: `TESVT_MainLoader.pas:1653-1676` 通过 `NoTransPexCheck` 和 PEX `auth/warn` 标记 `pexNoTrans` / `pexWarn`；`TESVT_MainLoader.pas:2027-2045` 可写回 PEX。
-- **Rust**: `crates/xt-core/src/pex` 当前范围是 PEX 字符串提取和展示，不做二进制写回。
+- **Rust**: `crates/xt-core/src/pex` 当前支持 PEX 字符串提取和二进制结构保留写回；完整 Papyrus 反编译仍未实现。
 
 ### 翻译 API
 - **Delphi**: `TESVT_TranslatorApi.pas` 支持 Microsoft、Yandex、Baidu、Youdao、Google、DeepL、OpenAI 等 provider，并有偏好、请求数、字符数、array translation、CRLF clear/restore。

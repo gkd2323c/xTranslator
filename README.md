@@ -32,8 +32,8 @@ A modern Rust-based translator for Bethesda game mods (Skyrim, Skyrim SE, Fallou
 - **Undo/Redo**: Stack-based (max 100), Ctrl+Z/Y, IPC-synced
 - **Auto-Backup**: 5-min SST snapshots, rotate last 10
 - **Batch Processor**: Multi-file sequential ESP translate/export with progress events and cancellation
-- **BSA Archive Browser**: Browse, preview, and extract files from BSA v0x68/v0x69 archives
-- **PEX Script String Extraction**: Parse Papyrus scripts and extract translatable strings
+- **BSA/BA2 Archive Browser**: Browse, preview, and extract files from BSA v0x68/v0x69 and BA2 General archives
+- **PEX Script Translation**: Parse Papyrus scripts, extract translatable strings, and write updated string tables while preserving binary structure
 - **FUZ Audio Mapping**: Map dialog strings to WAV audio with playback
 - **NPC/Dialog View**: Dialog tree grouped by QUST→DIAL→INFO with NPC association
 - **Multi-Language UI**: 10 languages (zh-CN, en, de, es, fr, ja, ko, pl, pt, ru)
@@ -147,10 +147,9 @@ Filtering logic: during ESP parsing, if a GMST record's `EDID` field starts with
 
 ## Known Limitations
 
-- **PEX Write-back**: String extraction only; writing translations back to PEX files is a v2 feature
 - **E2E Tests**: Require Skyrim SE installed at `D:\SteamLibrary\steamapps\common\Skyrim Special Edition\Data\Skyrim.esm`
 - **Record Defs Loading**: Best-effort; if `Data/<Game>/record_defs` is missing, parser falls back to generic parsing
-- **BA2 Archives**: Not yet supported (BSA v0x68/v0x69 is implemented; BA2 General support is a v2 priority)
+- **BA2 Archives**: General archives are supported; texture-specific BA2 variants and archive injection are intentionally out of scope for now
 
 ## Credits
 

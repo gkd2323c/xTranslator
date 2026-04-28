@@ -2,7 +2,7 @@
 
 > **更新日期**：2026-04-28
 > **原版版本**：xTranslator 1.6.0（Delphi 12.1 CE，~6.7 万行代码，10+ 年迭代）
-> **重写版本**：v1.0 — 全部 27 项 SPEC 任务完成（xt-core 113 个单元测试通过，0 警告）
+> **重写版本**：v1.0 — 全部 27 项 SPEC 任务完成（xt-core 125 个单元测试通过，0 警告）
 
 ---
 
@@ -27,8 +27,8 @@
 | **ESP 模式** | ✅ 直接翻译 ESP/ESM | ⚠️ 仅解析 | 部分实现 | ESP 解析完整（71,937条），编辑/写入未实现 |
 | **Strings 模式** | ✅ 翻译 STRINGS 文件（已弃用） | ✅ 三格式读写 | 等价实现 | .STRINGS/.DLSTRINGS/.ILSTRINGS 均支持 |
 | **Hybrid 模式** | ✅ 推荐模式：ESP 结构+编辑 Strings | ⚠️ 后端就绪 | 部分实现 | 解析+Strings 读写已有，UI 编辑器未实现 |
-| **MCM/Translate** | ✅ MCM 菜单翻译文件 | ❌ | 未实现 | 自定义 txt 导入解析未开始 |
-| **Papyrus Pex** | ✅ PEX 反编译+翻译 | ⚠️ 字符串提取 + 编辑 | 部分实现 | PEX 解析器完成（Header+StringTable+ObjectInfo），可翻译字符串提取，写回 PEX 留 v2 |
+| **MCM/Translate** | ✅ MCM 菜单翻译文件 | ✅ 后端解析+UI面板 | ~50% | 后端：parser+types+IPC命令；前端：McmPanel，含加载/保存/编辑/过滤 |
+| **Papyrus Pex** | ✅ PEX 反编译+翻译 | ✅ 字符串提取 + 写回 | 部分实现 | PEX 解析器完成（Header+StringTable+ObjectInfo），可翻译字符串提取；写回通过重建字符串表并保留原始 opcode/调试信息完成 |
 
 ---
 
@@ -78,7 +78,7 @@
 
 | 功能 | 原版 | Rust 重写 | 覆盖度 | 说明 |
 |------|------|----------|--------|------|
-| **ESPCompare** | ✅ 两 ESP 建立字符串对 | ✅ StringKey 三元组匹配，identical/added/removed/modified 四类 | ~50% | `esp/compare.rs` 引擎 + Tauri 命令；UI 可视化对比仍待实现 |
+| **ESPCompare** | ✅ 两 ESP 建立字符串对 | ✅ StringKey 三元组匹配，EspComparePanel UI，含四标签页+文本过滤 | ~80% | 后端 `esp/compare.rs` 引擎 + Tauri 命令；前端 `EspComparePanel` 含加载/重比/标签页/过滤 |
 | **Strings Compare** | ✅ .Strings 文件对比 | ❌ | 0% | - |
 | **MCM Compare** | ✅ | ❌ | 0% | - |
 | **别名检查** | ✅ 源/翻译 Alias 完整性 | ❌ | 0% | - |
@@ -158,8 +158,8 @@
 | ~~BA2 General 格式~~ | ✅ Fallout 4/76/Starfield GNRL 归档读取、列出、提取与 strings fallback | Done |
 | ~~PEX 脚本解析~~ | ✅ PEX parser + string extraction + PexPanel + write-back (roundtrip tested) | Done |
 | ~~FUZ 音频映射~~ | ✅ FuzFile parse + scan + FuzPanel | Done |
-| MCM 翻译 | 自定义 txt 导入 | 3-5 天 |
-| ~~ESPCompare~~ | ✅ 两 ESP 建字符串对（identical/added/removed/modified 四类） | Done |
+| ~~MCM 翻译~~ | ✅ MCM parser (UTF-16LE/UTF-8/ANSI) + types + IPC命令 + McmPanel UI（加载/保存/编辑/过滤） | Done |
+| ~~ESPCompare~~ | ✅ `esp/compare.rs` 引擎 + Tauri 命令 + EspComparePanel UI（identical/added/removed/modified 四类，含标签页+过滤） | ✅ 完成 |
 | ESM 缓存 | SQLite 缓存加速重载 | 3-5 天 |
 
 ### P3 - 体验优化

@@ -4,7 +4,7 @@
 
 | Check | Result | Notes |
 |------|--------|-------|
-| `cargo test -p xt-core --lib` | PASS | 113 passed |
+| `cargo test -p xt-core --lib` | PASS | 125 passed |
 | `cargo test -p xt-core --lib matching` | PASS | 22 dictionary-apply tests passed |
 | `cargo build -p xtranslator-tauri` | PASS | Debug build completed |
 | `cd ui && npx tsc --noEmit` | PASS | TypeScript check completed |
@@ -28,5 +28,5 @@ Run this before tagging or shipping a release candidate when local Bethesda game
 ## Compatibility Notes
 
 - Dictionary apply parity is covered by unit tests for exact/EDID/normalized/vocab tiers, pending skips, locked/incomplete precedence, tag-only updates, string ID replacement, index warnings, and preserved oldData.
-- BA2 archives remain intentionally deferred; BSA v0x68/v0x69 browsing and extraction are implemented.
+- BSA v0x68/v0x69 and BA2 General browsing/extraction are implemented; texture BA2 variants and archive injection remain out of scope.
 - Delphi-generated reference comparisons are still the main residual gap for a 99% compatibility claim.

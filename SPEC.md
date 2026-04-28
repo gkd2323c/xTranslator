@@ -9,7 +9,7 @@ G4: Delphi-compatible XML import/export (entity escape, trim, REC:FIELD sigs)
 G5: Heuristic similarity search (Levenshtein + LCS + LCP) on translated corpus
 G6: Translation API provider trait; OpenAI + DeepL implementations (env key or runtime set)
 G7: Tauri 2.x desktop app; React frontend with client-side virtual scroll (react-window v2)
-G8: BSA v0x68/v0x69 fallback for strings when standalone files missing
+G8: BSA v0x68/v0x69 and BA2 General fallback for strings when standalone files missing
 
 ## §C Constraints
 
@@ -90,7 +90,7 @@ V7: ∀ save_strings → load source-language files as base, overwrite by transl
 V8: ∀ GMST:DATA → if EDID starts with 's' → keep (string ref); else skip (numeric)
 V9: ∀ StringsFile.save → entries sorted by id asc; offsets relative to data section start
 V10: ∀ codepage decode → UTF-8 primary; on failure use configured fallback; no fallback → byte-by-byte fallback
-V11: ∀ BSA fallback → scan `.bsa` in ESP dir; extract from `strings/<filename>` via BSAhash64
+V11: ∀ archive fallback → scan `.bsa` and BA2 General archives in ESP dir; extract from `strings/<filename>` via archive lookup
 V12: ∀ frontend state → `allItems` (full DTO) → filter/sort → `items` (display). SidePanel stats from `allItems`.
 V13: ∀ Zustand selectors → `useAppStore((s) => s.field)` (not `const store = useAppStore()`)
 V14: ∀ react-window v2 → props: `rowComponent`, `rowCount`, `rowHeight`, `rowProps`
@@ -121,7 +121,7 @@ T12|x|Update by ID (not index) across filter/sort|C7
 T13|x|Full-load + client-side filter/sort (<10ms)|C2
 T14|x|XML progress events during import/export|G4
 T15|x|DeepL translation provider|G6
-T16|x|BSA v0x68/v0x69 archive browser; BA2 deferred|G8
+T16|x|BSA v0x68/v0x69 and BA2 General archive browser/fallback|G8
 T17|x|PEX script string extraction|G1
 T18|x|FUZ audio mapping|G2
 T19|x|Batch processor|G7

@@ -100,6 +100,12 @@ interface AppState {
   // Dialog View
   showDialogView: boolean;
 
+  // MCM Panel
+  showMcmPanel: boolean;
+
+  // ESP Compare Panel
+  showEspCompare: boolean;
+
   // Actions
   setAllItems: (items: SkyStringDTO[]) => void;
   setLoading: (loading: boolean) => void;
@@ -133,6 +139,8 @@ interface AppState {
   setShowPexPanel: (show: boolean) => void;
   setShowFuzPanel: (show: boolean) => void;
   setShowDialogView: (show: boolean) => void;
+  setShowMcmPanel: (show: boolean) => void;
+  setShowEspCompare: (show: boolean) => void;
   setBatchEntries: (entries: BatchEntry[]) => void;
   addBatchEntries: (entries: BatchEntry[]) => void;
   removeBatchEntry: (index: number) => void;
@@ -259,6 +267,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   showPexPanel: false,
   showFuzPanel: false,
   showDialogView: false,
+
+  showMcmPanel: false,
+  showEspCompare: false,
 
   setAllItems: (allItems) => {
     const state = get();
@@ -578,11 +589,69 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   setIsDirty: (isDirty) => set({ isDirty }),
 
-  setShowBatchPanel: (showBatchPanel) => set({ showBatchPanel }),
-  setShowBsaBrowser: (showBsaBrowser) => set({ showBsaBrowser }),
-  setShowPexPanel: (showPexPanel) => set({ showPexPanel }),
-  setShowFuzPanel: (showFuzPanel) => set({ showFuzPanel }),
-  setShowDialogView: (showDialogView) => set({ showDialogView }),
+  setShowBatchPanel: (showBatchPanel) => set({
+    showBatchPanel,
+    showBsaBrowser: false,
+    showPexPanel: false,
+    showFuzPanel: false,
+    showDialogView: false,
+    showMcmPanel: false,
+    showEspCompare: false,
+  }),
+  setShowBsaBrowser: (showBsaBrowser) => set({
+    showBatchPanel: false,
+    showBsaBrowser,
+    showPexPanel: false,
+    showFuzPanel: false,
+    showDialogView: false,
+    showMcmPanel: false,
+    showEspCompare: false,
+  }),
+  setShowPexPanel: (showPexPanel) => set({
+    showBatchPanel: false,
+    showBsaBrowser: false,
+    showPexPanel,
+    showFuzPanel: false,
+    showDialogView: false,
+    showMcmPanel: false,
+    showEspCompare: false,
+  }),
+  setShowFuzPanel: (showFuzPanel) => set({
+    showBatchPanel: false,
+    showBsaBrowser: false,
+    showPexPanel: false,
+    showFuzPanel,
+    showDialogView: false,
+    showMcmPanel: false,
+    showEspCompare: false,
+  }),
+  setShowDialogView: (showDialogView) => set({
+    showBatchPanel: false,
+    showBsaBrowser: false,
+    showPexPanel: false,
+    showFuzPanel: false,
+    showDialogView,
+    showMcmPanel: false,
+    showEspCompare: false,
+  }),
+  setShowMcmPanel: (showMcmPanel) => set({
+    showBatchPanel: false,
+    showBsaBrowser: false,
+    showPexPanel: false,
+    showFuzPanel: false,
+    showDialogView: false,
+    showMcmPanel,
+    showEspCompare: false,
+  }),
+  setShowEspCompare: (showEspCompare) => set({
+    showBatchPanel: false,
+    showBsaBrowser: false,
+    showPexPanel: false,
+    showFuzPanel: false,
+    showDialogView: false,
+    showMcmPanel: false,
+    showEspCompare,
+  }),
 
   setBatchEntries: (batchEntries) => set({ batchEntries }),
 

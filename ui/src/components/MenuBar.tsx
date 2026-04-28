@@ -5,7 +5,7 @@ import type { LoadSstResponse, XmlImportResponse } from "../api/strings";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
-import { FolderOpen, FileUp, FileDown, FileCode, Save, RotateCcw, RefreshCw, FileArchive, Braces, Volume2, MessagesSquare } from "lucide-react";
+import { FolderOpen, FileUp, FileDown, FileCode, Save, RotateCcw, RefreshCw, FileArchive, Braces, Volume2, MessagesSquare, FileText, GitCompare } from "lucide-react";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import { setI18nLanguage, SUPPORTED_LANGS } from "../i18n";
@@ -84,6 +84,10 @@ export function MenuBar() {
   const setShowFuzPanel = useAppStore((s) => s.setShowFuzPanel);
   const showDialogView = useAppStore((s) => s.showDialogView);
   const setShowDialogView = useAppStore((s) => s.setShowDialogView);
+  const showMcmPanel = useAppStore((s) => s.showMcmPanel);
+  const setShowMcmPanel = useAppStore((s) => s.setShowMcmPanel);
+  const showEspCompare = useAppStore((s) => s.showEspCompare);
+  const setShowEspCompare = useAppStore((s) => s.setShowEspCompare);
   const batchEntries = useAppStore((s) => s.batchEntries);
 
   const warnIfBatchFile = useCallback((path: string) => {
@@ -461,6 +465,20 @@ export function MenuBar() {
           title={showDialogView ? "Close Dialog View" : "Open Dialog View"}
         >
           <MessagesSquare size={16} />
+        </button>
+        <button
+          onClick={() => setShowMcmPanel(!showMcmPanel)}
+          className={`btn btn-ghost ${showMcmPanel ? "active" : ""}`}
+          title={showMcmPanel ? "Close MCM Panel" : "Open MCM Panel"}
+        >
+          <FileText size={16} />
+        </button>
+        <button
+          onClick={() => setShowEspCompare(!showEspCompare)}
+          className={`btn btn-ghost ${showEspCompare ? "active" : ""}`}
+          title={showEspCompare ? "Close ESP Compare" : "Open ESP Compare"}
+        >
+          <GitCompare size={16} />
         </button>
         <select
           value={theme}

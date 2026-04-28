@@ -11,6 +11,8 @@ import { BsaBrowser } from "./components/BsaBrowser";
 import { PexPanel } from "./components/PexPanel";
 import { FuzPanel } from "./components/FuzPanel";
 import { DialogView } from "./components/DialogView";
+import { McmPanel } from "./components/McmPanel";
+import { EspComparePanel } from "./components/EspComparePanel";
 import { StringTable } from "./components/StringTable";
 import { EditorPanel } from "./components/EditorPanel";
 import { autoBackupSst } from "./api/strings";
@@ -26,6 +28,8 @@ function App() {
   const loadProgress = useAppStore((s) => s.loadProgress);
   const theme = useAppStore((s) => s.theme);
   const showBatchPanel = useAppStore((s) => s.showBatchPanel);
+  const showMcmPanel = useAppStore((s) => s.showMcmPanel);
+  const showEspCompare = useAppStore((s) => s.showEspCompare);
   const showBsaBrowser = useAppStore((s) => s.showBsaBrowser);
   const showPexPanel = useAppStore((s) => s.showPexPanel);
   const showFuzPanel = useAppStore((s) => s.showFuzPanel);
@@ -97,7 +101,7 @@ function App() {
       <MenuBar />
       <div className="app-body">
         <aside className="app-sidebar">
-          {showBsaBrowser ? <BsaBrowser /> : showPexPanel ? <PexPanel /> : showFuzPanel ? <FuzPanel /> : showDialogView ? <DialogView /> : showBatchPanel ? <BatchPanel /> : <SidePanel />}
+          {showMcmPanel ? <McmPanel /> : showEspCompare ? <EspComparePanel /> : showBsaBrowser ? <BsaBrowser /> : showPexPanel ? <PexPanel /> : showFuzPanel ? <FuzPanel /> : showDialogView ? <DialogView /> : showBatchPanel ? <BatchPanel /> : <SidePanel />}
         </aside>
         <main className="app-main">
           <div className="app-table-area">

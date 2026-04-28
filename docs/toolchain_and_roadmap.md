@@ -42,5 +42,5 @@ xtranslator-tauri (bin)
 | 完整反编译 | Papyrus 指令集全量反编译为可读伪代码 | 待实现 |
 | ESP 模式编辑 | 直接编辑 ESP 文件中的字符串（当前策略：修改 Strings 文件） | 待实现 |
 | Delphi 风格 ESM 缓存 | SQLite 缓存加速重载（区别于当前 SHA-256+bincode ESP 解析缓存） | 待实现 |
-| MCM 翻译 | 自定义 txt 格式的 MCM 菜单翻译文件导入 | 待实现 |
+| ~~MCM 翻译~~ | ✅ MCM parser (UTF-16LE/UTF-8/ANSI) + types + IPC命令 + McmPanel UI（加载/保存/编辑/过滤） | ✅ 完成 |
 | ~~ESPCompare~~ | ✅ 两个 ESP 文件对比建字符串对（identical/added/removed/modified 四类） | ✅ 完成 |

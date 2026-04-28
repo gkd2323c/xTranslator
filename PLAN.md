@@ -8,7 +8,7 @@ Parses ESP/ESM files (Skyrim SE, Fallout 4, Starfield, etc.), extracts translata
 
 ## Current Status
 
-**All 27 spec tasks complete — v1.0.** The app can load ESP+Strings, display 76K+ strings in a virtual-scrolled table, edit translations, translate via API, browse BSA archives, extract PEX strings, map FUZ audio, view NPC dialogs, import XML dictionaries with multi-tier enhanced matching (exact→EDID→normalized→vocab), and switch between 10 UI languages.
+**All 27 spec tasks complete — v1.0.** The app can load ESP+Strings, display 76K+ strings in a virtual-scrolled table, edit translations, translate via API, browse BSA/BA2 archives, translate PEX and MCM files, map FUZ audio, view NPC dialogs, compare ESP files, import XML dictionaries with multi-tier enhanced matching (exact→EDID→normalized→vocab), and switch between 10 UI languages.
 
 ### Implemented
 
@@ -32,17 +32,19 @@ Parses ESP/ESM files (Skyrim SE, Fallout 4, Starfield, etc.), extracts translata
 | Theme system | Done | Dark/light/gray/auto, CSS variables + localStorage + matchMedia |
 | Auto-backup | Done | 5-min SST snapshots, rotate last 10, silent fail |
 | Undo/Redo | Done | Stack-based (max 100), Ctrl+Z/Y, IPC sync |
-| BSA archive browser | Done | BSA v0x68/v0x69 list_all_files + BsaBrowser component + unit tests; BA2 deferred to v2 |
-| PEX script string extraction | Done | parser + string extraction + PexPanel, write-back v2 |
+| BSA/BA2 archive browser | Done | BSA v0x68/v0x69 plus BA2 General list/extract + BsaBrowser + strings fallback |
+| PEX script translation | Done | Parser + string extraction + PexPanel + binary-preserving string-table write-back |
 | FUZ audio mapping | Done | FuzFile parse + scan + WAV playback |
 | NPC map / dialog view | Done | parent_form_id tracking via GRUP s_type, DialogView grouping |
 | UI multi-language i18n | Done | react-i18next, 10 languages, zh-CN default |
 | Batch processor | Done | BatchExecutor + BatchPanel, multi-file translate/export |
 | Enhanced dictionary matching | Done | Multi-tier XML/SST import: exact→EDID→normalized→vocab, with Delphi-style pending/oldData/warning semantics |
+| MCM translation | Done | UTF-16LE/UTF-8/ANSI parser + save path + McmPanel UI |
+| ESPCompare | Done | StringKey triple compare + identical/added/removed/modified UI |
 
 ### All Spec Tasks Complete
 
-All 27 SPEC.md tasks (§T) now marked `x`. See [`docs/feature_comparison.md`](docs/feature_comparison.md) for remaining gap analysis vs Delphi original (BA2, MCM, ESPCompare, Delphi-style ESM cache, etc.).
+All 27 SPEC.md tasks (§T) now marked `x`. See [`docs/feature_comparison.md`](docs/feature_comparison.md) for remaining gap analysis vs Delphi original (direct ESP editing, Delphi-style ESM cache, Strings/MCM compare, RTL, and advanced validation tools).
 
 ## Quick Start
 
@@ -61,7 +63,7 @@ cargo build -p xtranslator-tauri --release
 ## Test
 
 ```bash
-# Rust unit tests (97 tests)
+# Rust unit tests (125 tests)
 cargo test -p xt-core
 
 # E2E tests (requires Skyrim SE at D:\SteamLibrary\...)
