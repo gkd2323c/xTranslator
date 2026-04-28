@@ -32,7 +32,7 @@ export function BsaBrowser() {
       multiple: false,
       directory: false,
       filters: [
-        { name: "Bethesda Archive", extensions: ["bsa", "ba2"] },
+        { name: "Bethesda BSA Archive", extensions: ["bsa"] },
         { name: "All", extensions: ["*"] },
       ],
     });

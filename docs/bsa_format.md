@@ -2,12 +2,12 @@
 
 ## 背景
 
-Delphi 原版 xTranslator 的 `TESVT_bsa.pas`（1,478 行）实现了完整的 BSA/BA2 归档读取，用于：
+Delphi 原版 xTranslator 的 `legacy/original-delphi/TESVT_bsa.pas`（1,478 行）实现了完整的 BSA/BA2 归档读取，用于：
 - 从 BSA 中提取 `.STRINGS` / `.DLSTRINGS` / `.ILSTRINGS`
 - 浏览归档内容（BSA Browser）
 - PEX 脚本和 FUZ 音频的提取
 
-Rust 重写第一阶段只需 **Strings 文件提取**，无需完整的归档浏览器或注入功能。
+Rust 重写当前已实现 BSA v0x68/v0x69 的 Strings fallback、目录浏览和按需提取；BA2 与归档注入仍留作后续阶段。
 
 ---
 
@@ -150,8 +150,8 @@ function BSAhash64(s, ext: string): uInt64;
 | 项目 | Delphi | Rust 计划 |
 |------|--------|-----------|
 | 缓存 | `TwbReadOnlyCachedFileStream` 自定义缓存 | 使用标准 `BufReader` + `File` |
-| 注入 | 完整支持 BSA/BA2 文件注入 | **第一阶段不实现** |
-| BA2 | 完整支持（纹理/普通两种格式） | **第一阶段不实现** |
+| 注入 | 完整支持 BSA/BA2 文件注入 | **不实现，除非后续明确需要** |
+| BA2 | 完整支持（纹理/普通两种格式） | **v2 计划：先实现 General 读取/提取** |
 | 哈希查找 | 预构建 `TStringList` + `Objects` | `HashMap<u64, BsaFolder>` |
 
 ---
@@ -163,19 +163,19 @@ function BSAhash64(s, ext: string): uInt64;
 - ✅ zlib / LZ4 解压
 - ✅ 按 `folder/filename.ext` 路径提取文件
 - ✅ Strings 文件自动加载集成
+- ✅ 归档浏览器 UI 和文件列表
 
 ### 不支持（后续阶段）
 - ❌ BA2 格式（Fallout 4/76/Starfield）
 - ❌ BSA 文件注入/修改
-- ❌ 归档浏览器 UI
 - ❌ 文件列表导出
-- ❌ FUZ/PEX 提取
+- ❌ FUZ/PEX 专用归档工作流
 
 ---
 
 ## 参考
 
-- Delphi 源码：`TESVT_bsa.pas`（基于 xEdit 的 `wbBSA.pas`）
+- Delphi 源码：`legacy/original-delphi/TESVT_bsa.pas`（基于 xEdit 的 `wbBSA.pas`）
 - xEdit: https://github.com/TES5Edit/TES5Edit
 - UESP BSA Format: https://en.uesp.net/wiki/Skyrim_Mod:Archive_File_Format
 - BA2 Format: https://en.uesp.net/wiki/Fallout_4_Mod:Archive_File_Format

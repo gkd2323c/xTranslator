@@ -1,11 +1,58 @@
+import { useCallback, useEffect } from "react";
 import { useAppStore } from "../stores/appStore";
 import { loadEsp, loadSst, saveSst, exportXml, importXml, saveStrings } from "../api/strings";
+import type { LoadSstResponse, XmlImportResponse } from "../api/strings";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { listen } from "@tauri-apps/api/event";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { FolderOpen, FileUp, FileDown, FileCode, Save, RotateCcw, RefreshCw, FileArchive, Braces, Volume2, MessagesSquare } from "lucide-react";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import { setI18nLanguage, SUPPORTED_LANGS } from "../i18n";
+
+type ApplyStats = Pick<
+  LoadSstResponse | XmlImportResponse,
+  | "tier_exact"
+  | "tier_edid"
+  | "tier_normalized"
+  | "tier_vocab"
+  | "ambiguous"
+  | "pending_skipped"
+  | "old_data_preserved"
+  | "warning"
+  | "big_warning"
+>;
+
+function getPathExt(path: string): string {
+  const fileName = path.replace(/\\/g, "/").split("/").pop() ?? "";
+  const dotIndex = fileName.lastIndexOf(".");
+  return dotIndex >= 0 ? fileName.slice(dotIndex + 1).toLowerCase() : "";
+}
+
+function formatApplyStats(stats: ApplyStats): string {
+  const tierTotal =
+    stats.tier_exact +
+    stats.tier_edid +
+    stats.tier_normalized +
+    stats.tier_vocab +
+    stats.ambiguous;
+  const semanticTotal =
+    stats.pending_skipped +
+    stats.old_data_preserved +
+    stats.warning +
+    stats.big_warning;
+
+  const tierStats =
+    tierTotal > 0
+      ? ` (exact: ${stats.tier_exact}, EDID: ${stats.tier_edid}, norm: ${stats.tier_normalized}, vocab: ${stats.tier_vocab}, ambiguous: ${stats.ambiguous})`
+      : "";
+  const semanticStats =
+    semanticTotal > 0
+      ? ` (pending: ${stats.pending_skipped}, oldData: ${stats.old_data_preserved}, warnings: ${stats.warning}/${stats.big_warning})`
+      : "";
+
+  return `${tierStats}${semanticStats}`;
+}
 
 export function MenuBar() {
   const { t, i18n } = useTranslation();
@@ -39,32 +86,24 @@ export function MenuBar() {
   const setShowDialogView = useAppStore((s) => s.setShowDialogView);
   const batchEntries = useAppStore((s) => s.batchEntries);
 
-  const handleLoadEsp = async () => {
-    if (isDirty && !confirm(t("batch.batchConflict"))) return;
-
-    const espPath = await open({
-      multiple: false,
-      directory: false,
-      filters: [
-        { name: "ESP/ESM", extensions: ["esp", "esm"] },
-        { name: "All", extensions: ["*"] },
-      ],
-    });
-    if (!espPath) return;
-
-    // Conflict check: warn if selected file is also in batch queue
-    const normalizedPath = espPath.replace(/\\/g, "/").toLowerCase();
+  const warnIfBatchFile = useCallback((path: string) => {
+    const normalizedPath = path.replace(/\\/g, "/").toLowerCase();
     const isBatchFile = batchEntries.some(
-      (e) => e.esp_path.replace(/\\/g, "/").toLowerCase() === normalizedPath
+      (entry) => entry.esp_path.replace(/\\/g, "/").toLowerCase() === normalizedPath
     );
     if (isBatchFile && !showBatchPanel) {
       toast(
         "This file is also in the batch queue. Changes may be overwritten when the batch runs.",
-        { icon: "⚠️", duration: 4000 }
+        { icon: "!", duration: 4000 }
       );
     }
+  }, [batchEntries, showBatchPanel]);
 
-    const espDir = espPath.replace(/\\/g, "/").split("/").slice(0, -1).join("/");
+  const loadEspFromPath = useCallback(async (path: string) => {
+    if (isDirty && !confirm(t("batch.batchConflict"))) return;
+    warnIfBatchFile(path);
+
+    const espDir = path.replace(/\\/g, "/").split("/").slice(0, -1).join("/");
     const stringsDir = `${espDir}/Strings`;
 
     setParsing(true);
@@ -78,8 +117,8 @@ export function MenuBar() {
       });
 
       try {
-        const stats = await loadEsp(espPath, stringsDir, language);
-        setEspLoaded(espPath, stats, stringsDir);
+        const stats = await loadEsp(path, stringsDir, language);
+        setEspLoaded(path, stats, stringsDir);
         await loadAllStrings();
         setIsDirty(false);
         toast.success(`Loaded ${stats.total.toLocaleString()} ${t('sidebar.totalStrings').toLowerCase()}`);
@@ -93,31 +132,48 @@ export function MenuBar() {
       setParsing(false);
       setLoadProgress(null);
     }
-  };
+  }, [
+    isDirty,
+    language,
+    loadAllStrings,
+    setError,
+    setEspLoaded,
+    setIsDirty,
+    setLoadProgress,
+    setParsing,
+    t,
+    warnIfBatchFile,
+  ]);
 
-  const handleLoadSst = async () => {
-    const sstPath = await open({
+  const handleLoadEsp = useCallback(async () => {
+    const selected = await open({
       multiple: false,
       directory: false,
-      filters: [{ name: "SST Dictionary", extensions: ["sst"] }],
+      filters: [
+        { name: "ESP/ESM", extensions: ["esp", "esm"] },
+        { name: "All", extensions: ["*"] },
+      ],
     });
-    if (!sstPath) return;
+    const path = Array.isArray(selected) ? selected[0] : selected;
+    if (!path) return;
+
+    await loadEspFromPath(path);
+  }, [loadEspFromPath]);
+
+  const loadSstFromPath = useCallback(async (path: string) => {
+    if (!espPath) {
+      toast.error("Load an ESP before loading an SST dictionary.");
+      return;
+    }
 
     setLoading(true);
     try {
-      const stats = await loadSst(sstPath);
-      setSstLoaded(sstPath, stats);
+      const stats = await loadSst(path);
+      setSstLoaded(path, stats);
       setIsDirty(true);
-      const semanticStats =
-        stats.pending_skipped + stats.old_data_preserved + stats.warning + stats.big_warning;
       toast.success(
         `SST loaded: ${stats.matched} matched, ${stats.unmatched} unmatched` +
-          (stats.tier_edid + stats.tier_normalized + stats.tier_vocab + stats.ambiguous > 0
-            ? ` (exact: ${stats.tier_exact}, EDID: ${stats.tier_edid}, norm: ${stats.tier_normalized}, vocab: ${stats.tier_vocab}, ambiguous: ${stats.ambiguous})`
-            : "") +
-          (semanticStats > 0
-            ? ` (pending: ${stats.pending_skipped}, oldData: ${stats.old_data_preserved}, warnings: ${stats.warning}/${stats.big_warning})`
-            : "")
+          formatApplyStats(stats)
       );
       await loadAllStrings();
     } catch (e: any) {
@@ -125,7 +181,19 @@ export function MenuBar() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [espPath, loadAllStrings, setIsDirty, setLoading, setSstLoaded]);
+
+  const handleLoadSst = useCallback(async () => {
+    const selected = await open({
+      multiple: false,
+      directory: false,
+      filters: [{ name: "SST Dictionary", extensions: ["sst"] }],
+    });
+    const path = Array.isArray(selected) ? selected[0] : selected;
+    if (!path) return;
+
+    await loadSstFromPath(path);
+  }, [loadSstFromPath]);
 
   const handleSaveSst = async () => {
     const sstPath = await save({
@@ -180,13 +248,11 @@ export function MenuBar() {
     }
   };
 
-  const handleImportXml = async () => {
-    const xmlPath = await open({
-      multiple: false,
-      directory: false,
-      filters: [{ name: "XML Import", extensions: ["xml"] }],
-    });
-    if (!xmlPath) return;
+  const importXmlFromPath = useCallback(async (path: string) => {
+    if (!espPath) {
+      toast.error("Load an ESP before importing XML.");
+      return;
+    }
 
     setLoading(true);
     setLoadProgress(null);
@@ -197,19 +263,13 @@ export function MenuBar() {
       });
 
       try {
-        const stats = await importXml(xmlPath);
+        const stats = await importXml(path);
         toast.success(
           t("toast.xmlImported", {
             matched: stats.matched,
             unmatched: stats.unmatched,
             total: stats.total,
-          }) +
-            (stats.tier_edid + stats.tier_vocab + stats.tier_normalized + stats.ambiguous > 0
-              ? ` (exact: ${stats.tier_exact}, EDID: ${stats.tier_edid}, norm: ${stats.tier_normalized}, vocab: ${stats.tier_vocab}, ambiguous: ${stats.ambiguous})`
-              : "") +
-            (stats.pending_skipped + stats.warning + stats.big_warning > 0
-              ? ` (pending: ${stats.pending_skipped}, warnings: ${stats.warning}/${stats.big_warning})`
-              : ""),
+          }) + formatApplyStats(stats),
           { duration: 6000 }
         );
         setIsDirty(true);
@@ -223,7 +283,70 @@ export function MenuBar() {
       setLoading(false);
       setLoadProgress(null);
     }
-  };
+  }, [espPath, loadAllStrings, setIsDirty, setLoadProgress, setLoading, t]);
+
+  const handleImportXml = useCallback(async () => {
+    const selected = await open({
+      multiple: false,
+      directory: false,
+      filters: [{ name: "XML Import", extensions: ["xml"] }],
+    });
+    const path = Array.isArray(selected) ? selected[0] : selected;
+    if (!path) return;
+
+    await importXmlFromPath(path);
+  }, [importXmlFromPath]);
+
+  const routeDroppedPath = useCallback((path: string) => {
+    const ext = getPathExt(path);
+    if (ext === "esp" || ext === "esm") {
+      void loadEspFromPath(path);
+      return;
+    }
+    if (ext === "sst") {
+      void loadSstFromPath(path);
+      return;
+    }
+    if (ext === "xml") {
+      void importXmlFromPath(path);
+      return;
+    }
+
+    toast.error("Drop an ESP/ESM, SST, or XML file.");
+  }, [importXmlFromPath, loadEspFromPath, loadSstFromPath]);
+
+  useEffect(() => {
+    let disposed = false;
+    let unlistenDragDrop: (() => void) | null = null;
+
+    getCurrentWebview()
+      .onDragDropEvent((event) => {
+        if (event.payload.type !== "drop") return;
+
+        const firstSupportedPath =
+          event.payload.paths.find((path) => ["esp", "esm", "sst", "xml"].includes(getPathExt(path))) ??
+          event.payload.paths[0];
+
+        if (firstSupportedPath) {
+          routeDroppedPath(firstSupportedPath);
+        }
+      })
+      .then((unlisten) => {
+        if (disposed) {
+          unlisten();
+        } else {
+          unlistenDragDrop = unlisten;
+        }
+      })
+      .catch(() => {
+        /* Drag/drop is unavailable in plain browser previews. */
+      });
+
+    return () => {
+      disposed = true;
+      unlistenDragDrop?.();
+    };
+  }, [routeDroppedPath]);
 
   const handleSaveStrings = async () => {
     const outputDir = await open({

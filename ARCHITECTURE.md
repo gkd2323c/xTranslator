@@ -37,13 +37,15 @@ xTranslator/
     │   ├── locales/        # Language files (zh-CN, en, de, es, fr, ja, ko, pl, pt, ru)
     │   └── components/     # MenuBar, SidePanel, StringTable, EditorPanel, BatchPanel, BsaBrowser, PexPanel, FuzPanel, DialogView
     └── package.json
+├── Data/                   # Shared game definitions loaded by xt-core
+└── legacy/original-delphi/ # Original Delphi project kept as read-only reference
 ```
 
 ### Member Roles
 
 | Member | Role | Key Files |
 |--------|------|-----------|
-| `xt-core` | Domain logic: ESP parsing, Bethesda strings formats, SST v8 read/write, XML import/export, BSA/BA2 archive, PEX script parsing, FUZ audio, heuristic similarity search, translation API providers, ESP cache | `src/lib.rs`, `src/esp/`, `src/strings/`, `src/sst/`, `src/xml/`, `src/bsa/`, `src/pex/`, `src/fuz/`, `src/heuristic/`, `src/translation_api/`, `src/cache.rs` |
+| `xt-core` | Domain logic: ESP parsing, Bethesda strings formats, SST v8 read/write, XML import/export, BSA v0x68/v0x69 archive support, PEX script parsing, FUZ audio, heuristic similarity search, translation API providers, ESP cache | `src/lib.rs`, `src/esp/`, `src/strings/`, `src/sst/`, `src/xml/`, `src/bsa/`, `src/pex/`, `src/fuz/`, `src/heuristic/`, `src/translation_api/`, `src/cache.rs` |
 | `xt-shared` | Serializable DTOs for IPC. Source of truth for data shapes. | `src/dto.rs` |
 | `xt-cli` | Legacy CLI for testing core functionality without UI. | `src/main.rs` |
 | `src-tauri` | Tauri backend: holds `AppState`, exposes commands to frontend. | `src/main.rs`, `src/commands.rs` |

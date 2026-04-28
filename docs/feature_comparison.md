@@ -1,8 +1,8 @@
 # xTranslator 功能对比：Delphi 原版 vs Rust 重写
 
-> **更新日期**：2026-04-27
+> **更新日期**：2026-04-28
 > **原版版本**：xTranslator 1.6.0（Delphi 12.1 CE，~6.7 万行代码，10+ 年迭代）
-> **重写版本**：v1.0 — 全部 26 项 SPEC 任务完成（84 测试通过，0 警告）
+> **重写版本**：v1.0 — 全部 27 项 SPEC 任务完成（xt-core 113 个单元测试通过，0 警告）
 
 ---
 
@@ -49,7 +49,7 @@
 | **XXXX 超大字段** | ✅ 4字节扩展大小 | ✅ | 100% | 已处理 next_field_size 逻辑 |
 | **XML 导入** | ✅ | ✅ 解析+匹配+更新 | ~95% | 共享 matcher：exact / EDID / normalized / vocab，歧义不自动应用 |
 | **XML 导出** | ✅ | ✅ 写入+实体转义 | ~95% | `write_xml_export` Delphi 兼容格式，只导出有翻译的条目 |
-| **BSA/BA2 归档** | ✅ 提取+浏览 | ✅ 提取+浏览 | ~60% | `BsaArchive` 支持 v0x68/v0x69，`list_all_files` + `extract_file`，BsaBrowser 组件；BA2 未实现 |
+| **BSA/BA2 归档** | ✅ 提取+浏览 | ⚠️ BSA 完成，BA2 待实现 | ~60% | `BsaArchive` 支持 BSA v0x68/v0x69，`list_all_files` + `extract_file`，BsaBrowser 组件；BA2 General 留作 v2 |
 | **PEX 脚本解析** | ✅ 反编译+编辑 | ⚠️ 字符串提取 | ~40% | PEX parser 完成（Header+StringTable+ObjectInfo），可翻译字符串提取 + PexPanel；写回 PEX 留 v2 |
 | **FUZ 音频映射** | ✅ 映射+播放 | ✅ FuzFile parse + WAV 播放 | ~50% | FuzHeader 解析 + Sound/Voice/ 扫描 + RESP/INFO 关联 + FuzPanel；LIP 唇形数据未处理 |
 
@@ -59,7 +59,7 @@
 
 | 功能 | 原版 | Rust 重写 | 覆盖度 | 说明 |
 |------|------|----------|--------|------|
-| **字典应用 (apply)** | ✅ ID+EDID+词汇匹配+状态语义 | ✅ 共享 matcher + Delphi 状态语义进行中 | ~70% | exact/EDID/normalized/vocab 已实现；pending、oldData、warning、tagOnly、stringID 语义已纳入当前 OpenSpec 变更 |
+| **字典应用 (apply)** | ✅ ID+EDID+词汇匹配+状态语义 | ✅ 共享 matcher + Delphi 状态语义 | ~90% | exact/EDID/normalized/vocab 已实现；pending、oldData、warning、tagOnly、stringID 语义有回归测试覆盖；仍需 Delphi 实机对照确认 |
 | **启发式搜索** | ✅ Levenshtein/LCS | ✅ | ~80% | xt-core heuristic 模块，Levenshtein+LCS+LCP，IPC+UI 已集成 |
 | **翻译 API** | ✅ DeepL/MS/Google/OpenAI/Youdao/Baidu | ✅ OpenAI + DeepL 已实现，其他 provider 仅作为原版对比 | ~60% | OpenAIProvider + DeepLProvider 已就绪，支持运行时切换 |
 | **字符串编辑** | ✅ 行内+窗口编辑 | ⚠️ 基础编辑 | ~70% | EditorPanel：文本编辑、Ctrl+Enter 保存、状态切换、启发式搜索、翻译 API |
@@ -91,7 +91,7 @@
 
 | 功能 | 原版 | Rust 重写 | 覆盖度 | 说明 |
 |------|------|----------|--------|------|
-| **ESM 缓存** | ✅ SQLite 缓存加速重载 | ❌ | 0% | - |
+| **ESM 缓存** | ✅ SQLite 缓存加速重载 | ⚠️ ESP 解析结果缓存已实现 | ~40% | Rust 已有 SHA-256+bincode 解析缓存；Delphi 风格 SQLite ESM 缓存仍未实现 |
 | **自动备份** | ✅ 定时字典备份 | ✅ 5-min SST snapshots | ~80% | SST 快照，保留 10 份，静默失败 |
 | **配置系统** | ✅ res.ini+注册表 | ⚠️ Cargo.toml 配置 | ~5% | 跨平台配置方案设计过，未实现 |
 | **vocabulary.txt** | ✅ 词汇列表 | ✅ Data/*/vocabulary.txt 存在 | ~20% | 文件存在但未在代码中使用 |
@@ -116,7 +116,7 @@
 | **主题支持** | ✅ 默认/亮/灰/暗 | ✅ Dark/Light/Gray/Auto | ~90% | CSS variables + Zustand + localStorage, system follow via matchMedia |
 | **UI 多语言** | ✅ 10+ 语言 | ✅ react-i18next 10 语言 | ~80% | zh-CN/en/de/es/fr/ja/ko/pl/pt/ru locales，MenuBar 切换 + localStorage 持久化 |
 | **高分辨率 DPI** | ✅ DPI 感知 | ❌ | 0% | - |
-| **拖放加载** | ✅ XML 拖放 | ❌ | 0% | - |
+| **拖放加载** | ✅ XML 拖放 | ✅ 基础拖放 | ~40% | 支持拖放 ESP/ESM、SST、XML 到主窗口；BSA/PEX/FUZ 拖放仍可后续补 |
 
 ---
 
@@ -141,7 +141,7 @@
 |------|------|-----------|
 | ~~Tauri UI 基础框架~~ | ✅ 已完成 — MenuBar + SidePanel + StringTable + EditorPanel + BatchPanel | Done |
 | ~~字符串编辑+保存流程~~ | ✅ 已完成 — 编辑 → SST/XML → Strings 完整闭环 | Done |
-| 字典应用语义补齐 | pending/oldData/tagOnly/stringID/indexMax warning 等 Delphi 行为 | 当前变更：`delphi-apply-semantics-parity` |
+| ~~字典应用语义补齐~~ | ✅ pending/oldData/tagOnly/stringID/indexMax warning 等 Delphi 行为已实现并归档 | Done |
 
 ### P1 - 核心功能补全
 
@@ -156,7 +156,8 @@
 
 | 差距 | 说明 | 预估工作量 |
 |------|------|-----------|
-| ~~BSA/BA2 归档~~ | ✅ BsaBrowser + list_all_files + unit tests | Done |
+| ~~BSA 归档浏览器~~ | ✅ BsaBrowser + list_all_files + unit tests | Done |
+| BA2 General 格式 | Fallout 4/76/Starfield 归档读取与 strings fallback | 3-5 天 |
 | ~~PEX 脚本解析~~ | ✅ PEX parser + string extraction + PexPanel | Done |
 | ~~FUZ 音频映射~~ | ✅ FuzFile parse + scan + FuzPanel | Done |
 | MCM 翻译 | 自定义 txt 导入 | 3-5 天 |
@@ -174,6 +175,7 @@
 | ~~UI 多语言~~ | ✅ react-i18next 10 languages | Done |
 | ~~自动备份~~ | ✅ 5-min SST snapshots | Done |
 | 高 DPI 支持 | Tauri 原生处理 | 1-2 天 |
+| ~~拖放加载~~ | ✅ ESP/ESM、SST、XML 文件拖放 | Done |
 
 ### 技术债务
 
@@ -181,7 +183,7 @@
 |------|------|------|
 | 嵌套 GRUP 验证 | CELL/WRLD 内的子 GRUP 可能跳过部分字符串 | 需真实数据验证 diff 一致性 |
 | Delphi 交叉验证 | 无法确认 99% 一致率 | 需 Delphi 环境生成对照文件 |
-| SST 旧版本兼容 | 无法读取 v1-v7 SST | 低优先级，v8 是主流格式；当前重点是 v8 apply 语义 |
+| SST 旧版本兼容 | 无法读取 v1-v7 SST | 低优先级，v8 是主流格式 |
 
 ---
 
@@ -198,7 +200,7 @@
 | TESVT_Utils.pas | ✅ 已分析 | ✅ StringHash 复刻完成 |
 | TESVT_HeuristicSearch.pas | ⚠️ 已分析 | ✅ 已实现 |
 | TESVT_scriptPex.pas | ⚠️ 已分析 | ✅ PEX 解析器完成 |
-| TESVT_TranslateFunc.pas | ✅ 已分析 apply 核心路径 | ✅ matcher 已实现，apply 状态语义补齐中 |
+| TESVT_TranslateFunc.pas | ✅ 已分析 apply 核心路径 | ✅ matcher 与 apply 状态语义已实现 |
 | TESVT_MainLoader.pas | ✅ 已分析 SST/XML/PEX/缓存关键路径 | ⚠️ Rust 以 Tauri commands + AppState 分拆实现 |
 | TESVT_TranslatorApi.pas | ⚠️ 已分析 | ✅ OpenAI + DeepL 已实现 |
 

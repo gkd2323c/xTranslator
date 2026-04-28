@@ -2,6 +2,8 @@
 
 本文档记录从 Delphi 源代码中提取的关键信息，用于指导 Rust 重写。
 
+原始 Delphi 工程已整理到 `legacy/original-delphi/`。下文的 `TESVT_*.pas`、`*.dfm`、`xTranslator.dproj` 等文件名均以该目录为参考根。
+
 ## 核心文件清单
 
 | 文件 | 内容 | 分析状态 | 关键发现 |
@@ -36,9 +38,10 @@
 - [x] 文件加载流程 (TESVT_MainLoader.pas)
 - [x] SST 字典应用逻辑 (id 匹配, EDID, normalized, vocab, 状态语义)
 - [x] 翻译保存流程 (checkForNullTrans, hash 去重)
-- [ ] BSA/BA2 归档读取
-- [ ] PEX 脚本解析
-- [ ] FUZ 音频匹配
+- [x] BSA v0x68/v0x69 归档读取与浏览
+- [ ] BA2 归档读取
+- [x] PEX 脚本解析（字符串提取）
+- [x] FUZ 音频匹配
 
 ## 关键代码位置索引
 
@@ -80,7 +83,7 @@
 ### 字典应用语义
 - **Delphi**: `TESVT_MainLoader.pas:2071-2158` (`doApplySst` / `keepOldData`), `TESVT_TranslateFunc.pas:777-948` (`findStrMatchEx` / `findEdidMatchEx`)
 - **关键逻辑**: 同语言应用倾向 `validated`，不同语言应用倾向 `translated`；`pending` 不覆盖译文；`lockedTrans`/`incompleteTrans` 继承状态；EDID/indexMax 不确定时标记 warning/bigWarning；可 tagOnly 更新 colab；可改写 string ID；未应用 SST 项保留为 oldData。
-- **Rust**: `delphi-apply-semantics-parity` 变更将这些行为显式建模为 `ApplyPolicy`，避免把状态语义混入匹配 tier。
+- **Rust**: `crates/xt-core/src/matching.rs` 将这些行为显式建模为 `ApplyPolicy`，避免把状态语义混入匹配 tier，并有 pending、oldData、tagOnly、stringID、warning/bigWarning 回归测试覆盖。
 
 ### XML 导入导出
 - **Delphi**: `TESVT_XMLFunc.pas:96-155` 写出 `SSTXMLRessources`、`Params`、`EDID`、`REC`、`Source`、`Dest`；`TESVT_XMLFunc.pas:241-412` 导入时构造 vocab/EDID list 并调用同一套匹配函数。

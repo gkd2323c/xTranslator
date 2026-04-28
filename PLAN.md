@@ -8,7 +8,7 @@ Parses ESP/ESM files (Skyrim SE, Fallout 4, Starfield, etc.), extracts translata
 
 ## Current Status
 
-**All 26 spec tasks complete — v1.0.** The app can load ESP+Strings, display 76K+ strings in a virtual-scrolled table, edit translations, translate via API, browse BSA archives, extract PEX strings, map FUZ audio, view NPC dialogs, import XML dictionaries with multi-tier enhanced matching (exact→EDID→vocab→normalized), and switch between 10 UI languages.
+**All 27 spec tasks complete — v1.0.** The app can load ESP+Strings, display 76K+ strings in a virtual-scrolled table, edit translations, translate via API, browse BSA archives, extract PEX strings, map FUZ audio, view NPC dialogs, import XML dictionaries with multi-tier enhanced matching (exact→EDID→normalized→vocab), and switch between 10 UI languages.
 
 ### Implemented
 
@@ -32,17 +32,17 @@ Parses ESP/ESM files (Skyrim SE, Fallout 4, Starfield, etc.), extracts translata
 | Theme system | Done | Dark/light/gray/auto, CSS variables + localStorage + matchMedia |
 | Auto-backup | Done | 5-min SST snapshots, rotate last 10, silent fail |
 | Undo/Redo | Done | Stack-based (max 100), Ctrl+Z/Y, IPC sync |
-| BSA/BA2 archive browser | Done | list_all_files + BsaBrowser component + unit tests |
+| BSA archive browser | Done | BSA v0x68/v0x69 list_all_files + BsaBrowser component + unit tests; BA2 deferred to v2 |
 | PEX script string extraction | Done | parser + string extraction + PexPanel, write-back v2 |
 | FUZ audio mapping | Done | FuzFile parse + scan + WAV playback |
 | NPC map / dialog view | Done | parent_form_id tracking via GRUP s_type, DialogView grouping |
 | UI multi-language i18n | Done | react-i18next, 10 languages, zh-CN default |
 | Batch processor | Done | BatchExecutor + BatchPanel, multi-file translate/export |
-| Enhanced dictionary matching | Done | Multi-tier XML import: exact→EDID→vocab→normalized, ~60%→~85% hit rate |
+| Enhanced dictionary matching | Done | Multi-tier XML/SST import: exact→EDID→normalized→vocab, with Delphi-style pending/oldData/warning semantics |
 
 ### All Spec Tasks Complete
 
-All 26 SPEC.md tasks (§T) now marked `x`. See [`docs/feature_comparison.md`](docs/feature_comparison.md) for remaining gap analysis vs Delphi original (MCM, ESPCompare, ESM cache, etc.).
+All 27 SPEC.md tasks (§T) now marked `x`. See [`docs/feature_comparison.md`](docs/feature_comparison.md) for remaining gap analysis vs Delphi original (BA2, MCM, ESPCompare, Delphi-style ESM cache, etc.).
 
 ## Quick Start
 
@@ -81,7 +81,9 @@ xTranslator/
 │   └── xt-cli/         # CLI testing tool
 ├── src-tauri/          # Tauri 2.x backend (main.rs, commands.rs, batch.rs)
 ├── ui/                 # React + Vite frontend
-└── docs/               # Format specs and analysis docs
+├── Data/               # Shared game definitions used by the rewrite
+├── docs/               # Format specs and analysis docs
+└── legacy/original-delphi/ # Original Delphi project kept as reference
 ```
 
 ## Key Design Decisions
@@ -93,18 +95,21 @@ xTranslator/
 
 ## Docs
 
+- [`docs/README.md`](docs/README.md) — organized documentation index
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) — Data flow, module details, adding IPC commands
 - [`AGENTS.md`](AGENTS.md) — Coding conventions and project rules for AI assistants
+- [`SPEC.md`](SPEC.md) — Canonical goals, constraints, interfaces, invariants, tasks, and bug history
 - [`docs/bsa_format.md`](docs/bsa_format.md) — BSA v0x68/v0x69 format analysis
 - [`docs/esp_format.md`](docs/esp_format.md) — ESP/ESM binary format
 - [`docs/sst_v8_format.md`](docs/sst_v8_format.md) — SST v8 dictionary binary format
 - [`docs/feature_comparison.md`](docs/feature_comparison.md) — Full gap analysis vs Delphi original
 - [`docs/pex_format.md`](docs/pex_format.md) — PEX binary format (layout, opcodes, value types)
 - [`docs/fuz_format.md`](docs/fuz_format.md) — FUZ audio container format
-- [`docs/bsa_findings.md`](docs/bsa_findings.md) — BSA archive analysis (compression, isolation, performance)
 - [`docs/esp_grup_tracking.md`](docs/esp_grup_tracking.md) — ESP GRUP hierarchy and parent FormID tracking
 - [`docs/i18n_architecture.md`](docs/i18n_architecture.md) — Multi-language architecture and translation workflow
 - [`docs/toolchain_and_roadmap.md`](docs/toolchain_and_roadmap.md) — Dependencies, warnings cleanup, v2 roadmap
+- [`docs/release_qa_2026-04-28.md`](docs/release_qa_2026-04-28.md) — Release verification checklist
+- [`legacy/original-delphi/README.md`](legacy/original-delphi/README.md) — Original Delphi source/resource archive
 
 ## License
 

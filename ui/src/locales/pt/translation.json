@@ -78,7 +78,7 @@
     "errors": "Errors"
   },
   "bsa": {
-    "title": "Open a BSA/BA2 archive",
+    "title": "Open a BSA archive",
     "subtitle": "Browse and extract files",
     "openBsa": "Open BSA",
     "opening": "Opening...",

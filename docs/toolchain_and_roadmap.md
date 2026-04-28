@@ -12,6 +12,7 @@ xt-core (lib)
 ├── reqwest         # HTTP 客户端（翻译 API）
 ├── encoding_rs     # 编码检测与转换
 ├── quick-xml       # XML 解析/生成
+├── sha2/bincode    # ESP 解析结果缓存
 └── async-trait     # 异步 trait 支持
 
 xtranslator-tauri (bin)
@@ -36,10 +37,10 @@ xtranslator-tauri (bin)
 
 | 项目 | 说明 |
 |------|------|
+| BA2 General 格式 | Fallout 4/76/Starfield 的通用 BA2 读取、列出、提取与 strings fallback |
 | PEX 写回 | `compile_pex_strings` — 重建 StringTable，写回二进制 PEX |
-| BA2 格式 | Fallout 4/76 的 BA2 General 格式支持 |
 | 完整反编译 | Papyrus 指令集全量反编译为可读伪代码 |
 | ESP 模式编辑 | 直接编辑 ESP 文件中的字符串（当前策略：修改 Strings 文件） |
-| ESM 缓存 | SQLite 缓存加速重载（Delphi 原版有此功能） |
+| Delphi 风格 ESM 缓存 | SQLite 缓存加速重载（区别于当前 SHA-256+bincode ESP 解析缓存） |
 | MCM 翻译 | 自定义 txt 格式的 MCM 菜单翻译文件导入 |
 | ESPCompare | 两个 ESP 文件对比建字符串对 |

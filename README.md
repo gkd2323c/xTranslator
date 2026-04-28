@@ -43,13 +43,25 @@ A modern Rust-based translator for Bethesda game mods (Skyrim, Skyrim SE, Fallou
 ```
 xTranslator/
 ├── crates/
-│   ├── xt-core/         # Core library: ESP parser, strings, SST, XML, heuristic search
+│   ├── xt-core/         # Core library: ESP parser, strings, SST, XML, BSA, heuristic search
 │   ├── xt-shared/       # Shared DTOs for IPC between backend and frontend
 │   └── xt-cli/          # CLI tool (legacy, superseded by Tauri UI)
 ├── src-tauri/           # Tauri 2.x desktop app backend
 ├── ui/                  # React + Vite frontend
-└── docs/                # Documentation
+├── Data/                # Shared game definitions used by the rewrite
+├── docs/                # Documentation
+└── legacy/original-delphi/ # Original Delphi project kept as reference
 ```
+
+## Documentation
+
+Start with [`docs/README.md`](docs/README.md) for the organized documentation map. The most-used project references are:
+
+- [`PLAN.md`](PLAN.md) — current v1.0 status and roadmap
+- [`SPEC.md`](SPEC.md) — canonical goals, constraints, interfaces, invariants, and tasks
+- [`ARCHITECTURE.md`](ARCHITECTURE.md) — implementation architecture and IPC/data-flow notes
+- [`docs/feature_comparison.md`](docs/feature_comparison.md) — Delphi parity and remaining gaps
+- [`docs/release_qa_2026-04-28.md`](docs/release_qa_2026-04-28.md) — release QA checklist
 
 ## Build & Test
 
@@ -138,7 +150,7 @@ Filtering logic: during ESP parsing, if a GMST record's `EDID` field starts with
 - **PEX Write-back**: String extraction only; writing translations back to PEX files is a v2 feature
 - **E2E Tests**: Require Skyrim SE installed at `D:\SteamLibrary\steamapps\common\Skyrim Special Edition\Data\Skyrim.esm`
 - **Record Defs Loading**: Best-effort; if `Data/<Game>/record_defs` is missing, parser falls back to generic parsing
-- **BA2 Archives**: Not yet supported (BSA v0x68/v0x69 only)
+- **BA2 Archives**: Not yet supported (BSA v0x68/v0x69 is implemented; BA2 General support is a v2 priority)
 
 ## Credits
 

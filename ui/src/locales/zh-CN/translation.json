@@ -78,7 +78,7 @@
     "errors": "错误"
   },
   "bsa": {
-    "title": "打开 BSA/BA2 归档文件",
+    "title": "打开 BSA 归档文件",
     "subtitle": "浏览和提取文件",
     "openBsa": "打开 BSA",
     "opening": "打开中...",
