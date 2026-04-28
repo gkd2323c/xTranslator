@@ -426,6 +426,9 @@ pub struct PexTranslatableDto {
     pub function_name: String,
     pub string_type: String,
     pub source_text: String,
+    /// 翻译后的文本（为空表示未翻译）
+    #[serde(default)]
+    pub translation: String,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -474,4 +477,35 @@ pub struct NpcDialogDto {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct DialogTreeDto {
     pub npcs: Vec<NpcDialogDto>,
+}
+
+// ── ESP Compare DTOs ─────────────────────────────────────────────────
+
+/// A single string pair in the comparison result
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct EspComparePairDto {
+    pub new_id: u32,
+    pub old_id: u32,
+    pub source: String,
+    pub record_sig: String,
+    pub field_sig: String,
+    pub old_source: String,
+    pub new_source: String,
+}
+
+/// Summary of the comparison result
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct EspCompareResultDto {
+    pub identical_count: usize,
+    pub added_count: usize,
+    pub removed_count: usize,
+    pub modified_count: usize,
+    /// New IDs that are identical (same key + same text)
+    pub identical: Vec<EspComparePairDto>,
+    /// New IDs present in new ESP but not in old
+    pub added: Vec<EspComparePairDto>,
+    /// Old IDs present in old ESP but not in new
+    pub removed: Vec<EspComparePairDto>,
+    /// New IDs with same key but different text
+    pub modified: Vec<EspComparePairDto>,
 }

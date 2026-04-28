@@ -208,17 +208,34 @@ impl StringsFiles {
     }
 
     fn try_load_from_bsa(dir: &Path, filename: &str, format: StringsFormat) -> Option<StringsFile> {
-        use crate::bsa::BsaArchive;
         use std::ffi::OsStr;
 
-        let bsa_path_in_archive = format!("strings/{}", filename.to_lowercase());
+        let archive_path_in_bsa = format!("strings/{}", filename.to_lowercase());
 
         if let Ok(entries) = std::fs::read_dir(dir) {
+            // 1. 先尝试 BSA 文件（Skyrim/Skyrim SE）
             for entry in entries.flatten() {
                 let path = entry.path();
                 if path.extension().and_then(OsStr::to_str) == Some("bsa") {
-                    if let Ok(bsa) = BsaArchive::open(&path) {
-                        if let Ok(data) = bsa.extract_file(&bsa_path_in_archive) {
+                    if let Ok(bsa) = crate::bsa::BsaArchive::open(&path) {
+                        if let Ok(data) = bsa.extract_file(&archive_path_in_bsa) {
+                            return StringsFile::load_from_bytes(
+                                &data,
+                                format,
+                                crate::strings::CodepageConfig::utf8(),
+                            )
+                            .ok();
+                        }
+                    }
+                }
+            }
+
+            // 2. 再尝试 BA2 文件（Fallout 4/76/Starfield）
+            for entry in std::fs::read_dir(dir).ok()?.flatten() {
+                let path = entry.path();
+                if path.extension().and_then(OsStr::to_str) == Some("ba2") {
+                    if let Ok(ba2) = crate::ba2::Ba2Archive::open(&path) {
+                        if let Ok(data) = ba2.extract_file(&archive_path_in_bsa) {
                             return StringsFile::load_from_bytes(
                                 &data,
                                 format,

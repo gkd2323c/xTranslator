@@ -8,13 +8,14 @@ mod commands;
 
 use crate::batch::BatchExecutor;
 use commands::{
-    auto_backup_sst, build_dialog_tree, cancel_batch_job, export_xml, extract_bsa_file,
-    extract_bsa_folder, get_all_strings, get_batch_status, get_fuz_audio_data, get_is_dirty,
-    get_stats, get_strings_chunk, get_strings_count, get_translation_providers, heuristic_search,
-    import_xml, list_bsa_files, list_esp_files, load_esp, load_sst, parse_pex_strings,
-    query_strings_command, save_sst, save_strings, scan_fuz_directory, set_deepl_api_key,
-    set_openai_api_key, set_translation_provider, start_batch_export, start_batch_translate,
-    translate_string, update_translation, AppState,
+    auto_backup_sst, build_dialog_tree, cancel_batch_job, compare_esp_files, compile_pex,
+    export_xml, extract_ba2_file, extract_ba2_folder, extract_bsa_file, extract_bsa_folder,
+    get_all_strings, get_batch_status, get_fuz_audio_data, get_is_dirty, get_stats,
+    get_strings_chunk, get_strings_count, get_translation_providers, heuristic_search,
+    import_xml, list_ba2_files, list_bsa_files, list_esp_files, load_esp, load_sst,
+    parse_pex_strings, query_strings_command, save_sst, save_strings, scan_fuz_directory,
+    set_deepl_api_key, set_openai_api_key, set_translation_provider, start_batch_export,
+    start_batch_translate, translate_string, update_translation, AppState,
 };
 use std::sync::Arc;
 
@@ -53,9 +54,15 @@ fn main() {
             list_esp_files,
             // BSA browser commands
             list_bsa_files,
+            list_ba2_files,
             extract_bsa_file,
+            extract_ba2_file,
             extract_bsa_folder,
+            extract_ba2_folder,
+            // PEX commands
             parse_pex_strings,
+            compile_pex,
+            compare_esp_files,
             scan_fuz_directory,
             get_fuz_audio_data,
             build_dialog_tree

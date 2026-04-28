@@ -30,6 +30,8 @@ pub struct PexTranslatableString {
     pub string_type: String,
     /// The original text to translate
     pub source_text: String,
+    /// The translated text (empty if not yet translated)
+    pub translation: String,
 }
 
 /// Parsed PEX script information

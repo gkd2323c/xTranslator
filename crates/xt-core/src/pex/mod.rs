@@ -6,7 +6,8 @@
 //!
 //! Based on Delphi TESVT_scriptPex.pas and community format documentation.
 //!
-//! Scope: string extraction only. Full decompilation is not implemented.
+//! Scope: string extraction + v1.5 write-back support (string table reconstruction).
 
+pub mod compile;
 pub mod parser;
 pub mod types;

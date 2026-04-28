@@ -348,12 +348,24 @@ export async function listBsaFiles(bsaPath: string): Promise<BsaFileListDto> {
   return invoke("list_bsa_files", { bsaPath });
 }
 
+export async function listBa2Files(ba2Path: string): Promise<BsaFileListDto> {
+  return invoke("list_ba2_files", { ba2Path });
+}
+
 export async function extractBsaFile(bsaPath: string, filePath: string, outputDir: string): Promise<string> {
   return invoke("extract_bsa_file", { bsaPath, filePath, outputDir });
 }
 
+export async function extractBa2File(ba2Path: string, filePath: string, outputDir: string): Promise<string> {
+  return invoke("extract_ba2_file", { ba2Path, filePath, outputDir });
+}
+
 export async function extractBsaFolder(bsaPath: string, folder: string, outputDir: string): Promise<string[]> {
   return invoke("extract_bsa_folder", { bsaPath, folder, outputDir });
+}
+
+export async function extractBa2Folder(ba2Path: string, folder: string, outputDir: string): Promise<string[]> {
+  return invoke("extract_ba2_folder", { ba2Path, folder, outputDir });
 }
 
 // ── PEX Types ───────────────────────────────────────────────────────
@@ -422,4 +434,41 @@ export interface DialogTreeDto {
 
 export async function buildDialogTree(): Promise<DialogTreeDto> {
   return invoke("build_dialog_tree");
+}
+
+// ── ESP Compare Types ───────────────────────────────────────────────
+
+export interface EspComparePairDto {
+  new_id: number;
+  old_id: number;
+  source: string;
+  record_sig: string;
+  field_sig: string;
+  old_source: string;
+  new_source: string;
+}
+
+export interface EspCompareResultDto {
+  identical_count: number;
+  added_count: number;
+  removed_count: number;
+  modified_count: number;
+  identical: EspComparePairDto[];
+  added: EspComparePairDto[];
+  removed: EspComparePairDto[];
+  modified: EspComparePairDto[];
+}
+
+export async function compareEspFiles(
+  oldEspPath: string,
+  newEspPath: string,
+  dataDir?: string,
+  game?: string,
+): Promise<EspCompareResultDto> {
+  return invoke("compare_esp_files", {
+    oldEspPath,
+    newEspPath,
+    dataDir,
+    game,
+  });
 }

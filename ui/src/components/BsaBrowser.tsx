@@ -6,7 +6,7 @@ import {
   HardDrive, FileArchive, ChevronRight, ChevronDown
 } from "lucide-react";
 import toast from "react-hot-toast";
-import { listBsaFiles, extractBsaFile, extractBsaFolder } from "../api/strings";
+import { listBsaFiles, listBa2Files, extractBsaFile, extractBa2File, extractBsaFolder, extractBa2Folder } from "../api/strings";
 import type { BsaFileListDto, BsaFileEntryDto } from "../api/strings";
 
 function formatSize(bytes: number): string {
@@ -17,7 +17,8 @@ function formatSize(bytes: number): string {
 
 export function BsaBrowser() {
   const { t } = useTranslation();
-  const [bsaPath, setBsaPath] = useState<string | null>(null);
+  const [archivePath, setArchivePath] = useState<string | null>(null);
+  const [archiveType, setArchiveType] = useState<"bsa" | "ba2" | null>(null);
   const [fileList, setFileList] = useState<BsaFileListDto | null>(null);
   const [loading, setLoading] = useState(false);
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
@@ -32,7 +33,9 @@ export function BsaBrowser() {
       multiple: false,
       directory: false,
       filters: [
-        { name: "Bethesda BSA Archive", extensions: ["bsa"] },
+        { name: "Bethesda Archive", extensions: ["bsa", "ba2"] },
+        { name: "BSA Archive (Skyrim)", extensions: ["bsa"] },
+        { name: "BA2 Archive (Fallout/Starfield)", extensions: ["ba2"] },
         { name: "All", extensions: ["*"] },
       ],
     });
@@ -41,9 +44,13 @@ export function BsaBrowser() {
     setLoading(true);
     setSelectedFolder(null);
     try {
-      const list = await listBsaFiles(path);
+      const ext = path.split('.').pop()?.toLowerCase();
+      const list = ext === 'ba2'
+        ? await listBa2Files(path)
+        : await listBsaFiles(path);
       setFileList(list);
-      setBsaPath(path);
+      setArchivePath(path);
+      setArchiveType(ext === 'ba2' ? 'ba2' : 'bsa');
       setExpandedFolders(new Set(list.folders));
     } catch (e: any) {
       toast.error(`${t("bsa.failedToOpen")}: ${e}`);
@@ -53,15 +60,16 @@ export function BsaBrowser() {
   };
 
   const handleExtractFile = async (entry: BsaFileEntryDto) => {
-    // Use save dialog to pick output directory
     const outputDir = await open({
       multiple: false,
       directory: true,
     });
-    if (!outputDir || !bsaPath) return;
+    if (!outputDir || !archivePath || !archiveType) return;
 
     try {
-      const result = await extractBsaFile(bsaPath, entry.path, outputDir);
+      const result = archiveType === 'ba2'
+        ? await extractBa2File(archivePath, entry.path, outputDir)
+        : await extractBsaFile(archivePath, entry.path, outputDir);
       toast.success(t("bsa.extractedTo", { path: result }));
     } catch (e: any) {
       toast.error(`${t("bsa.extractFailed")}: ${e}`);
@@ -73,10 +81,12 @@ export function BsaBrowser() {
       multiple: false,
       directory: true,
     });
-    if (!outputDir || !bsaPath) return;
+    if (!outputDir || !archivePath || !archiveType) return;
 
     try {
-      const results = await extractBsaFolder(bsaPath, folderName, outputDir);
+      const results = archiveType === 'ba2'
+        ? await extractBa2Folder(archivePath, folderName, outputDir)
+        : await extractBsaFolder(archivePath, folderName, outputDir);
       toast.success(t("bsa.extractedFiles", { count: results.length }));
     } catch (e: any) {
       toast.error(`${t("bsa.extractFailed")}: ${e}`);

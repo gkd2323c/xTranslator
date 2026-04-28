@@ -4,6 +4,7 @@ use tauri::Emitter;
 use xt_core::cache::EsmCache;
 use xt_core::esp::parser::{EspParser, StringsFiles};
 use xt_core::matching::{apply_dictionary_entries_with_policy, ApplyPolicy, DictionaryApplyEntry};
+use xt_core::pex::types::PexTranslatableString;
 use xt_core::sst::v8::SstDictionary;
 use xt_core::strings::CodepageTable;
 use xt_core::translation_api::{DeepLProvider, OpenAIProvider, ProviderType, TranslationProvider};
@@ -16,11 +17,11 @@ use xt_core::xml::{
 };
 use xt_shared::dto::{
     AutoBackupRequest, AutoBackupResponse, BatchConfig, BatchEntry, BatchStatus, BsaFileEntryDto,
-    BsaFileListDto, DialogInfoDto, DialogTreeDto, EspLoadProgress, FuzMapping, FuzScanResponse,
-    HeuristicMatchDTO, HeuristicSearchRequest, LoadEspResponse, LoadSstResponse, NpcDialogDto,
-    PexScriptDto, PexTranslatableDto, QueryRequest, QueryResponse, SaveStringsRequest,
-    SaveStringsResponse, SkyStringDTO, TranslateRequest, XmlExportRequest, XmlImportResponse,
-    XmlProgress,
+    BsaFileListDto, DialogInfoDto, DialogTreeDto, EspComparePairDto, EspCompareResultDto,
+    EspLoadProgress, FuzMapping, FuzScanResponse, HeuristicMatchDTO, HeuristicSearchRequest,
+    LoadEspResponse, LoadSstResponse, NpcDialogDto, PexScriptDto, PexTranslatableDto, QueryRequest,
+    QueryResponse, SaveStringsRequest, SaveStringsResponse, SkyStringDTO, TranslateRequest,
+    XmlExportRequest, XmlImportResponse, XmlProgress,
 };
 
 use crate::batch::BatchExecutor;
@@ -1291,7 +1292,7 @@ pub async fn auto_backup_sst(
     })
 }
 
-// ── BSA Browser Commands ────────────────────────────────────────────
+// ── BSA/BA2 Browser Commands ─────────────────────────────────────────
 
 #[tauri::command]
 pub async fn list_bsa_files(bsa_path: String) -> Result<BsaFileListDto, String> {
@@ -1316,6 +1317,35 @@ pub async fn list_bsa_files(bsa_path: String) -> Result<BsaFileListDto, String> 
     Ok(BsaFileListDto {
         archive_name,
         version: bsa.version(),
+        total_files: files.len() as u32,
+        folders,
+        files,
+    })
+}
+
+#[tauri::command]
+pub async fn list_ba2_files(ba2_path: String) -> Result<BsaFileListDto, String> {
+    let ba2 = xt_core::ba2::Ba2Archive::open(&ba2_path)
+        .map_err(|e| format!("Failed to open BA2: {}", e))?;
+
+    let archive_name = ba2.archive_name().unwrap_or("unknown.ba2").to_string();
+
+    let folders: Vec<String> = ba2.folder_names().iter().map(|s| s.to_string()).collect();
+
+    let files: Vec<BsaFileEntryDto> = ba2
+        .list_all_files()
+        .iter()
+        .map(|e| BsaFileEntryDto {
+            path: e.path.clone(),
+            size: e.size,
+            compressed: e.compressed,
+            folder: e.folder.clone(),
+        })
+        .collect();
+
+    Ok(BsaFileListDto {
+        archive_name,
+        version: ba2.version(),
         total_files: files.len() as u32,
         folders,
         files,
@@ -1391,8 +1421,77 @@ pub async fn extract_bsa_folder(
     Ok(extracted)
 }
 
+#[tauri::command]
+pub async fn extract_ba2_file(
+    ba2_path: String,
+    file_path: String,
+    output_dir: String,
+) -> Result<String, String> {
+    let ba2 = xt_core::ba2::Ba2Archive::open(&ba2_path)
+        .map_err(|e| format!("Failed to open BA2: {}", e))?;
+
+    let data = ba2
+        .extract_file(&file_path)
+        .map_err(|e| format!("Failed to extract '{}': {}", file_path, e))?;
+
+    let file_name = std::path::Path::new(&file_path)
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or("extracted.bin");
+
+    let output_path = std::path::Path::new(&output_dir).join(file_name);
+    if let Some(parent) = output_path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create output dir: {}", e))?;
+    }
+
+    std::fs::write(&output_path, &data).map_err(|e| format!("Failed to write output: {}", e))?;
+
+    Ok(output_path.to_str().unwrap_or("").to_string())
+}
+
+#[tauri::command]
+pub async fn extract_ba2_folder(
+    ba2_path: String,
+    folder: String,
+    output_dir: String,
+) -> Result<Vec<String>, String> {
+    let ba2 = xt_core::ba2::Ba2Archive::open(&ba2_path)
+        .map_err(|e| format!("Failed to open BA2: {}", e))?;
+
+    let mut extracted: Vec<String> = Vec::new();
+
+    for entry in ba2.list_all_files() {
+        if entry.folder == folder {
+            match ba2.extract_file(&entry.path) {
+                Ok(data) => {
+                    let file_name = std::path::Path::new(&entry.path)
+                        .file_name()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or("unknown");
+                    let output_path = std::path::Path::new(&output_dir).join(file_name);
+                    if let Some(parent) = output_path.parent() {
+                        let _ = std::fs::create_dir_all(parent);
+                    }
+                    if let Err(e) = std::fs::write(&output_path, &data) {
+                        eprintln!("Failed to write {}: {}", entry.path, e);
+                    } else {
+                        extracted.push(output_path.to_str().unwrap_or("").to_string());
+                    }
+                }
+                Err(e) => {
+                    eprintln!("Failed to extract {}: {}", entry.path, e);
+                }
+            }
+        }
+    }
+
+    Ok(extracted)
+}
+
 // ── PEX Commands ────────────────────────────────────────────────────
 
+/// Parse a PEX file and extract translatable strings
 #[tauri::command]
 pub async fn parse_pex_strings(pex_path: String) -> Result<PexScriptDto, String> {
     let mut file =
@@ -1416,6 +1515,7 @@ pub async fn parse_pex_strings(pex_path: String) -> Result<PexScriptDto, String>
             function_name: t.function_name.clone(),
             string_type: t.string_type.clone(),
             source_text: t.source_text.clone(),
+            translation: t.translation.clone(),
         })
         .collect();
 
@@ -1427,6 +1527,141 @@ pub async fn parse_pex_strings(pex_path: String) -> Result<PexScriptDto, String>
         string_count: script.string_table.len() as u32,
         translatable,
     })
+}
+
+/// Compile a PEX file with updated translations
+///
+/// Takes the original PEX script and a list of translated strings,
+/// writes a new PEX file with the updated string table.
+#[tauri::command]
+pub async fn compile_pex(
+    pex_path: String,
+    output_path: String,
+    translations: Vec<PexTranslatableDto>,
+) -> Result<String, String> {
+    use std::fs::File;
+    use xt_core::pex::compile::compile_pex;
+
+    // Parse original PEX
+    let mut file = File::open(&pex_path).map_err(|e| format!("Failed to open PEX: {}", e))?;
+    let script = xt_core::pex::parser::parse_pex(&mut file)
+        .map_err(|e| format!("Failed to parse PEX: {}", e))?;
+
+    // Convert DTOs to PexTranslatableString
+    let pex_translations: Vec<PexTranslatableString> = translations
+        .iter()
+        .map(|t| PexTranslatableString {
+            object_name: t.object_name.clone(),
+            state_name: t.state_name.clone(),
+            function_name: t.function_name.clone(),
+            string_type: t.string_type.clone(),
+            source_text: t.source_text.clone(),
+            translation: t.translation.clone(),
+        })
+        .collect();
+
+    // Compile with actual translations
+    let result = compile_pex(&script, &pex_translations, &output_path)
+        .map_err(|e| format!("Failed to compile PEX: {}", e))?;
+
+    Ok(result.path)
+}
+
+// ── ESP Compare Commands ───────────────────────────────────────────
+
+use xt_core::esp::compare::{self, EspComparison};
+
+/// Convert internal comparison result to DTO
+fn comparison_to_dto(comp: EspComparison) -> EspCompareResultDto {
+    let sig_to_str = |sig: &[u8; 4]| String::from_utf8_lossy(sig).to_string();
+
+    let to_pair = |new_id: u32, old_id: u32, new_strings: &[SkyString], old_strings: &[SkyString]| -> EspComparePairDto {
+        let new_s = new_strings.iter().find(|s| s.id == new_id);
+        let old_s = old_strings.iter().find(|s| s.id == old_id);
+        EspComparePairDto {
+            new_id,
+            old_id,
+            source: new_s.map(|s| s.source.clone()).unwrap_or_default(),
+            record_sig: new_s.map(|s| sig_to_str(&s.record_sig)).unwrap_or_default(),
+            field_sig: new_s.map(|s| sig_to_str(&s.esp_ptr.field_sig)).unwrap_or_default(),
+            old_source: old_s.map(|s| s.source.clone()).unwrap_or_default(),
+            new_source: new_s.map(|s| s.source.clone()).unwrap_or_default(),
+        }
+    };
+
+    let identical: Vec<EspComparePairDto> = comp
+        .matched_pairs
+        .iter()
+        .map(|(&new_id, &old_id)| to_pair(new_id, old_id, &comp.new_strings, &comp.old_strings))
+        .collect();
+
+    let added: Vec<EspComparePairDto> = comp
+        .added
+        .iter()
+        .map(|&new_id| EspComparePairDto {
+            new_id,
+            old_id: 0,
+            source: comp.new_strings.iter().find(|s| s.id == new_id).map(|s| s.source.clone()).unwrap_or_default(),
+            record_sig: comp.new_strings.iter().find(|s| s.id == new_id).map(|s| sig_to_str(&s.record_sig)).unwrap_or_default(),
+            field_sig: comp.new_strings.iter().find(|s| s.id == new_id).map(|s| sig_to_str(&s.esp_ptr.field_sig)).unwrap_or_default(),
+            old_source: String::new(),
+            new_source: comp.new_strings.iter().find(|s| s.id == new_id).map(|s| s.source.clone()).unwrap_or_default(),
+        })
+        .collect();
+
+    let removed: Vec<EspComparePairDto> = comp
+        .removed
+        .iter()
+        .map(|&old_id| EspComparePairDto {
+            new_id: 0,
+            old_id,
+            source: comp.old_strings.iter().find(|s| s.id == old_id).map(|s| s.source.clone()).unwrap_or_default(),
+            record_sig: comp.old_strings.iter().find(|s| s.id == old_id).map(|s| sig_to_str(&s.record_sig)).unwrap_or_default(),
+            field_sig: comp.old_strings.iter().find(|s| s.id == old_id).map(|s| sig_to_str(&s.esp_ptr.field_sig)).unwrap_or_default(),
+            old_source: comp.old_strings.iter().find(|s| s.id == old_id).map(|s| s.source.clone()).unwrap_or_default(),
+            new_source: String::new(),
+        })
+        .collect();
+
+    let modified: Vec<EspComparePairDto> = comp
+        .modified_pairs
+        .iter()
+        .map(|(&new_id, &old_id)| to_pair(new_id, old_id, &comp.new_strings, &comp.old_strings))
+        .collect();
+
+    EspCompareResultDto {
+        identical_count: identical.len(),
+        added_count: added.len(),
+        removed_count: removed.len(),
+        modified_count: modified.len(),
+        identical,
+        added,
+        removed,
+        modified,
+    }
+}
+
+/// Compare two ESP/ESM files and return string pair mappings
+#[tauri::command]
+pub async fn compare_esp_files(
+    old_esp_path: String,
+    new_esp_path: String,
+    data_dir: Option<String>,
+    game: Option<String>,
+) -> Result<EspCompareResultDto, String> {
+    let game_id = match game.as_deref() {
+        Some("Skyrim") => GameId::Skyrim,
+        Some("SkyrimSE") => GameId::SkyrimSE,
+        Some("Fallout4") => GameId::Fallout4,
+        Some("FalloutNV") => GameId::FalloutNV,
+        Some("Fallout76") => GameId::Fallout76,
+        Some("Starfield") => GameId::Starfield,
+        None => GameId::SkyrimSE,
+        Some(g) => return Err(format!("Unknown game: {}", g)),
+    };
+    let comp = compare::compare_esp_files(&old_esp_path, &new_esp_path, data_dir.as_deref(), game_id)
+        .map_err(|e| format!("Failed to compare ESP files: {}", e))?;
+    Ok(comparison_to_dto(comp))
 }
 
 // ── FUZ Commands ────────────────────────────────────────────────────
