@@ -175,12 +175,14 @@ body::after {
 
 /* === MenuBar === */
 .menubar {
-  height: var(--menubar-height);
+  min-height: var(--menubar-height);
+  height: auto;
   background: linear-gradient(180deg, var(--bg-secondary) 0%, var(--bg-primary) 100%);
   border-bottom: 1px solid var(--border-subtle);
   display: flex;
   align-items: center;
-  padding: 0 20px;
+  flex-wrap: wrap;
+  padding: 8px 16px;
   gap: 12px;
   flex-shrink: 0;
   position: relative;
@@ -206,21 +208,45 @@ body::after {
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
-  margin-right: auto;
+  flex: 0 0 auto;
+  margin-right: 8px;
   text-shadow: 0 0 30px rgba(0, 245, 255, 0.3);
 }
 
 .menubar-actions {
   display: flex;
-  gap: 8px;
   align-items: center;
+  justify-content: flex-end;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
 }
 
-.menubar-sep {
-  width: 1px;
-  height: 28px;
-  background: linear-gradient(180deg, transparent, var(--border-subtle), transparent);
-  margin: 0 8px;
+.toolbar-group {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 0;
+  min-height: 38px;
+  padding: 3px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-secondary);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
+}
+
+.toolbar-group-primary {
+  background: var(--bg-tertiary);
+}
+
+.toolbar-icon-group .btn,
+.toolbar-selects .btn-ghost {
+  width: 32px;
+  height: 30px;
+  justify-content: center;
+  padding: 0;
 }
 
 .lang-select {
@@ -228,6 +254,8 @@ body::after {
   color: var(--text-primary);
   border: 1px solid var(--border-subtle);
   border-radius: 6px;
+  min-height: 30px;
+  min-width: 100px;
   padding: 4px 8px;
   font-size: 12px;
   font-family: 'Inter', sans-serif;
@@ -273,7 +301,8 @@ body::after {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 16px;
+  min-height: 30px;
+  padding: 6px 9px;
   border: 1px solid var(--border-subtle);
   border-radius: 6px;
   background: var(--bg-tertiary);
@@ -284,6 +313,7 @@ body::after {
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
   overflow: hidden;
+  white-space: nowrap;
 }
 
 .btn::before {
@@ -304,8 +334,14 @@ body::after {
 .btn:hover:not(:disabled) {
   background: var(--bg-hover);
   border-color: var(--accent-cyan);
-  box-shadow: 0 0 15px var(--border-glow), inset 0 0 10px rgba(0, 245, 255, 0.05);
+  box-shadow: 0 0 10px var(--border-glow), inset 0 0 8px rgba(0, 245, 255, 0.04);
   transform: translateY(-1px);
+}
+
+.btn:focus-visible {
+  outline: none;
+  border-color: var(--accent-cyan);
+  box-shadow: 0 0 0 2px rgba(0, 245, 255, 0.22);
 }
 
 .btn:disabled {
@@ -318,12 +354,12 @@ body::after {
   border-color: var(--accent-cyan);
   color: var(--bg-deep);
   font-weight: 600;
-  box-shadow: 0 0 20px rgba(0, 245, 255, 0.3);
+  box-shadow: 0 0 14px rgba(0, 245, 255, 0.22);
 }
 
 .btn-primary:hover:not(:disabled) {
   background: linear-gradient(135deg, #00ffff, var(--accent-cyan));
-  box-shadow: 0 0 30px rgba(0, 245, 255, 0.5);
+  box-shadow: 0 0 20px rgba(0, 245, 255, 0.36);
 }
 
 .btn-ghost {
@@ -1433,6 +1469,24 @@ body::after {
 .btn-ghost.active {
   background: var(--bg-tertiary);
   border-color: var(--accent-cyan);
-  box-shadow: 0 0 15px var(--border-glow);
+  box-shadow: 0 0 10px var(--border-glow);
   color: var(--accent-cyan);
+}
+
+@media (max-width: 1180px) {
+  .menubar {
+    align-items: flex-start;
+  }
+
+  .menubar-brand {
+    width: 100%;
+    margin-right: 0;
+  }
+
+  .menubar-actions {
+    flex-basis: 100%;
+    justify-content: flex-start;
+    overflow-x: auto;
+    padding-bottom: 2px;
+  }
 }

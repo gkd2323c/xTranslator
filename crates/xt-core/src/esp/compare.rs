@@ -101,46 +101,49 @@ fn build_comparison(
     old_strings: Vec<SkyString>,
     new_strings: Vec<SkyString>,
 ) -> EspComparison {
-    // Build key -> (internal_id, SkyString) maps
-    let mut old_by_key: HashMap<StringKey, (u32, SkyString)> = HashMap::new();
-    for s in &old_strings {
+    // Build key -> index maps. Keeping indexes avoids cloning every SkyString
+    // into the lookup maps, which matters for full master files.
+    let mut old_by_key: HashMap<StringKey, usize> = HashMap::with_capacity(old_strings.len());
+    for (index, s) in old_strings.iter().enumerate() {
         let key = StringKey::from_sky_string(s);
-        old_by_key.insert(key, (s.id, s.clone()));
+        old_by_key.insert(key, index);
     }
 
-    let mut new_by_key: HashMap<StringKey, (u32, SkyString)> = HashMap::new();
-    for s in &new_strings {
+    let mut new_by_key: HashMap<StringKey, usize> = HashMap::with_capacity(new_strings.len());
+    for (index, s) in new_strings.iter().enumerate() {
         let key = StringKey::from_sky_string(s);
-        new_by_key.insert(key, (s.id, s.clone()));
+        new_by_key.insert(key, index);
     }
 
-    let mut matched_pairs = HashMap::new();
+    let mut matched_pairs = HashMap::with_capacity(new_strings.len().min(old_strings.len()));
     let mut removed = Vec::new();
     let mut modified = Vec::new();
     let mut modified_pairs = HashMap::new();
 
     // Check old entries: find matches, removals, modifications
-    for (key, (old_id, old_s)) in &old_by_key {
-        if let Some((new_id, new_s)) = new_by_key.get(key) {
+    for (key, old_index) in &old_by_key {
+        let old_s = &old_strings[*old_index];
+        if let Some(new_index) = new_by_key.get(key) {
+            let new_s = &new_strings[*new_index];
             if old_s.source == new_s.source {
                 // Exact match
-                matched_pairs.insert(*new_id, *old_id);
+                matched_pairs.insert(new_s.id, old_s.id);
             } else {
                 // Modified (same key, different text)
-                modified.push(*new_id);
-                modified_pairs.insert(*new_id, *old_id);
+                modified.push(new_s.id);
+                modified_pairs.insert(new_s.id, old_s.id);
             }
         } else {
             // Removed from old
-            removed.push(*old_id);
+            removed.push(old_s.id);
         }
     }
 
     // Find added entries (in new but not in old)
     let mut added = Vec::new();
-    for (key, (new_id, _)) in &new_by_key {
+    for (key, new_index) in &new_by_key {
         if !old_by_key.contains_key(key) {
-            added.push(*new_id);
+            added.push(new_strings[*new_index].id);
         }
     }
 

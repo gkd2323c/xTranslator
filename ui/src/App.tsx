@@ -20,6 +20,58 @@ import "./App.css";
 
 const AUTO_BACKUP_INTERVAL_MS = 5 * 60 * 1000;
 
+type SidebarPanelId =
+  | "mcm"
+  | "espCompare"
+  | "bsa"
+  | "pex"
+  | "fuz"
+  | "dialog"
+  | "batch"
+  | "overview";
+
+type SidebarPanelFlags = {
+  showMcmPanel: boolean;
+  showEspCompare: boolean;
+  showBsaBrowser: boolean;
+  showPexPanel: boolean;
+  showFuzPanel: boolean;
+  showDialogView: boolean;
+  showBatchPanel: boolean;
+};
+
+function getActiveSidebarPanel(flags: SidebarPanelFlags): SidebarPanelId {
+  if (flags.showMcmPanel) return "mcm";
+  if (flags.showEspCompare) return "espCompare";
+  if (flags.showBsaBrowser) return "bsa";
+  if (flags.showPexPanel) return "pex";
+  if (flags.showFuzPanel) return "fuz";
+  if (flags.showDialogView) return "dialog";
+  if (flags.showBatchPanel) return "batch";
+  return "overview";
+}
+
+function renderSidebarPanel(panelId: SidebarPanelId) {
+  switch (panelId) {
+    case "mcm":
+      return <McmPanel />;
+    case "espCompare":
+      return <EspComparePanel />;
+    case "bsa":
+      return <BsaBrowser />;
+    case "pex":
+      return <PexPanel />;
+    case "fuz":
+      return <FuzPanel />;
+    case "dialog":
+      return <DialogView />;
+    case "batch":
+      return <BatchPanel />;
+    case "overview":
+      return <SidePanel />;
+  }
+}
+
 function App() {
   const { t } = useTranslation();
   const setSelectedById = useAppStore((s) => s.setSelectedById);
@@ -94,14 +146,23 @@ function App() {
   }, [sstPath, isDirty, t]);
 
   const isLocked = isLoading || isParsing;
+  const activeSidebarPanel = getActiveSidebarPanel({
+    showMcmPanel,
+    showEspCompare,
+    showBsaBrowser,
+    showPexPanel,
+    showFuzPanel,
+    showDialogView,
+    showBatchPanel,
+  });
 
   return (
     <div className="app">
       <Toaster position="top-right" />
       <MenuBar />
       <div className="app-body">
-        <aside className="app-sidebar">
-          {showMcmPanel ? <McmPanel /> : showEspCompare ? <EspComparePanel /> : showBsaBrowser ? <BsaBrowser /> : showPexPanel ? <PexPanel /> : showFuzPanel ? <FuzPanel /> : showDialogView ? <DialogView /> : showBatchPanel ? <BatchPanel /> : <SidePanel />}
+        <aside className="app-sidebar" aria-label="Active side panel">
+          {renderSidebarPanel(activeSidebarPanel)}
         </aside>
         <main className="app-main">
           <div className="app-table-area">

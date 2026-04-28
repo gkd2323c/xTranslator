@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useMemo, useState, type CSSProperties, type ReactElement } from "react";
+import { List } from "react-window";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useTranslation } from "react-i18next";
 import { GitCompare, FileUp, RefreshCw } from "lucide-react";
@@ -12,6 +13,114 @@ interface CompareResult {
   result: EspCompareResultDto;
   oldPath: string;
   newPath: string;
+}
+
+interface CompareRowData {
+  entries: EspComparePairDto[];
+  activeTab: Tab;
+}
+
+const ROW_HEIGHT = 94;
+
+function CompareRow(props: {
+  ariaAttributes: {
+    "aria-posinset": number;
+    "aria-setsize": number;
+    role: "listitem";
+  };
+  index: number;
+  style: CSSProperties;
+  entries: EspComparePairDto[];
+  activeTab: Tab;
+}): ReactElement | null {
+  const { ariaAttributes, index, style, entries, activeTab } = props;
+  const entry = entries[index];
+  if (!entry) return null;
+
+  const oldId = activeTab === "added" ? "-" : `#${entry.old_id.toString(16).toUpperCase()}`;
+  const newId = activeTab === "removed" ? "-" : `#${entry.new_id.toString(16).toUpperCase()}`;
+
+  return (
+    <div
+      {...ariaAttributes}
+      style={{
+        ...style,
+        boxSizing: "border-box",
+        padding: "2px 12px",
+      }}
+    >
+      <div
+        className="record-type-row"
+        style={{
+          height: ROW_HEIGHT - 6,
+          boxSizing: "border-box",
+          padding: "8px",
+          background: "var(--bg-secondary)",
+          borderRadius: 4,
+          overflow: "hidden",
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+          <span
+            style={{
+              fontSize: 10,
+              fontFamily: "monospace",
+              color: "var(--text-muted)",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+            title={`${entry.record_sig}/${entry.field_sig} [old=${oldId} new=${newId}]`}
+          >
+            {entry.record_sig}/{entry.field_sig} [old={oldId} new={newId}]
+          </span>
+        </div>
+        <div
+          style={{
+            fontSize: 11,
+            color: "var(--text-secondary)",
+            marginBottom: 2,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+          title={entry.old_source || entry.source}
+        >
+          <span style={{ color: "var(--text-muted)" }}>OLD: </span>
+          {entry.old_source || entry.source || <em style={{ opacity: 0.5 }}>(empty)</em>}
+        </div>
+        {activeTab === "modified" ? (
+          <div
+            style={{
+              fontSize: 11,
+              color: "var(--text-secondary)",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+            title={entry.new_source}
+          >
+            <span style={{ color: "var(--accent)" }}>NEW: </span>
+            {entry.new_source || <em style={{ opacity: 0.5 }}>(empty)</em>}
+          </div>
+        ) : (
+          <div
+            style={{
+              fontSize: 11,
+              color: "var(--text-primary)",
+              marginTop: 2,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+            title={entry.source}
+          >
+            {entry.source || <em style={{ opacity: 0.5 }}>(empty)</em>}
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 export function EspComparePanel() {
@@ -54,7 +163,7 @@ export function EspComparePanel() {
     }
   };
 
-  const getEntries = (): EspComparePairDto[] => {
+  const entries = useMemo(() => {
     if (!compareResult) return [];
     const tabMap: Record<Tab, EspComparePairDto[]> = {
       identical: compareResult.result.identical,
@@ -62,19 +171,22 @@ export function EspComparePanel() {
       removed: compareResult.result.removed,
       modified: compareResult.result.modified,
     };
-    let entries = tabMap[activeTab] ?? [];
-    if (filterText.trim()) {
-      const q = filterText.toLowerCase();
-      entries = entries.filter(
-        (e) =>
-          e.source.toLowerCase().includes(q) ||
-          e.old_source.toLowerCase().includes(q) ||
-          e.new_source.toLowerCase().includes(q) ||
-          e.record_sig.toLowerCase().includes(q) ||
-          e.field_sig.toLowerCase().includes(q)
-      );
-    }
-    return entries;
+    const tabEntries = tabMap[activeTab] ?? [];
+    const q = filterText.trim().toLowerCase();
+    if (!q) return tabEntries;
+    return tabEntries.filter(
+      (e) =>
+        e.source.toLowerCase().includes(q) ||
+        e.old_source.toLowerCase().includes(q) ||
+        e.new_source.toLowerCase().includes(q) ||
+        e.record_sig.toLowerCase().includes(q) ||
+        e.field_sig.toLowerCase().includes(q)
+    );
+  }, [activeTab, compareResult, filterText]);
+
+  const rowData: CompareRowData = {
+    entries,
+    activeTab,
   };
 
   const tabCounts: Record<Tab, number> = compareResult
@@ -157,36 +269,20 @@ export function EspComparePanel() {
           </div>
 
           {/* Entry list */}
-          <div style={{ flex: 1, overflowY: "auto", padding: "0 12px" }}>
-            {getEntries().length === 0 ? (
+          <div style={{ height: "calc(100vh - 245px)", minHeight: 240 }}>
+            {entries.length === 0 ? (
               <div style={{ textAlign: "center", color: "var(--text-muted)", padding: 20, fontSize: 12 }}>
                 {t("espCompare.noMatch")}
               </div>
             ) : (
-              getEntries().map((entry, idx) => (
-                <div key={idx} className="record-type-row" style={{ padding: "8px", marginBottom: 4, background: "var(--bg-secondary)", borderRadius: 4 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-                    <span style={{ fontSize: 10, fontFamily: "monospace", color: "var(--text-muted)" }}>
-                      {entry.record_sig}/{entry.field_sig} [old=#{entry.old_id.toString(16).toUpperCase()} new=#{entry.new_id.toString(16).toUpperCase()}]
-                    </span>
-                  </div>
-                  <div style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 2 }}>
-                    <span style={{ color: "var(--text-muted)" }}>OLD: </span>
-                    {entry.old_source ? entry.old_source : <em style={{ opacity: 0.5 }}>(empty)</em>}
-                  </div>
-                  {activeTab === "modified" && (
-                    <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>
-                      <span style={{ color: "var(--accent)" }}>NEW: </span>
-                      {entry.new_source ? entry.new_source : <em style={{ opacity: 0.5 }}>(empty)</em>}
-                    </div>
-                  )}
-                  {activeTab !== "modified" && (
-                    <div style={{ fontSize: 11, color: "var(--text-primary)", marginTop: 2 }}>
-                      {entry.source ? entry.source : <em style={{ opacity: 0.5 }}>(empty)</em>}
-                    </div>
-                  )}
-                </div>
-              ))
+              <List<CompareRowData>
+                rowComponent={CompareRow}
+                rowCount={entries.length}
+                rowHeight={ROW_HEIGHT}
+                rowProps={rowData}
+                overscanCount={8}
+                style={{ height: "100%", width: "100%" }}
+              />
             )}
           </div>
         </>

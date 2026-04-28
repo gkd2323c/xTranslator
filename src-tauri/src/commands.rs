@@ -1576,15 +1576,27 @@ use xt_core::esp::compare::{self, EspComparison};
 fn comparison_to_dto(comp: EspComparison) -> EspCompareResultDto {
     let sig_to_str = |sig: &[u8; 4]| String::from_utf8_lossy(sig).to_string();
 
-    let to_pair = |new_id: u32, old_id: u32, new_strings: &[SkyString], old_strings: &[SkyString]| -> EspComparePairDto {
-        let new_s = new_strings.iter().find(|s| s.id == new_id);
-        let old_s = old_strings.iter().find(|s| s.id == old_id);
+    let old_by_id: HashMap<u32, &SkyString> = comp.old_strings.iter().map(|s| (s.id, s)).collect();
+    let new_by_id: HashMap<u32, &SkyString> = comp.new_strings.iter().map(|s| (s.id, s)).collect();
+
+    let to_pair = |new_id: u32, old_id: u32| -> EspComparePairDto {
+        let new_s = new_by_id.get(&new_id).copied();
+        let old_s = old_by_id.get(&old_id).copied();
+        let record_sig = new_s
+            .or(old_s)
+            .map(|s| sig_to_str(&s.record_sig))
+            .unwrap_or_default();
+        let field_sig = new_s
+            .or(old_s)
+            .map(|s| sig_to_str(&s.esp_ptr.field_sig))
+            .unwrap_or_default();
+
         EspComparePairDto {
             new_id,
             old_id,
             source: new_s.map(|s| s.source.clone()).unwrap_or_default(),
-            record_sig: new_s.map(|s| sig_to_str(&s.record_sig)).unwrap_or_default(),
-            field_sig: new_s.map(|s| sig_to_str(&s.esp_ptr.field_sig)).unwrap_or_default(),
+            record_sig,
+            field_sig,
             old_source: old_s.map(|s| s.source.clone()).unwrap_or_default(),
             new_source: new_s.map(|s| s.source.clone()).unwrap_or_default(),
         }
@@ -1593,41 +1605,29 @@ fn comparison_to_dto(comp: EspComparison) -> EspCompareResultDto {
     let identical: Vec<EspComparePairDto> = comp
         .matched_pairs
         .iter()
-        .map(|(&new_id, &old_id)| to_pair(new_id, old_id, &comp.new_strings, &comp.old_strings))
+        .map(|(&new_id, &old_id)| to_pair(new_id, old_id))
         .collect();
 
     let added: Vec<EspComparePairDto> = comp
         .added
         .iter()
-        .map(|&new_id| EspComparePairDto {
-            new_id,
-            old_id: 0,
-            source: comp.new_strings.iter().find(|s| s.id == new_id).map(|s| s.source.clone()).unwrap_or_default(),
-            record_sig: comp.new_strings.iter().find(|s| s.id == new_id).map(|s| sig_to_str(&s.record_sig)).unwrap_or_default(),
-            field_sig: comp.new_strings.iter().find(|s| s.id == new_id).map(|s| sig_to_str(&s.esp_ptr.field_sig)).unwrap_or_default(),
-            old_source: String::new(),
-            new_source: comp.new_strings.iter().find(|s| s.id == new_id).map(|s| s.source.clone()).unwrap_or_default(),
-        })
+        .map(|&new_id| to_pair(new_id, 0))
         .collect();
 
     let removed: Vec<EspComparePairDto> = comp
         .removed
         .iter()
-        .map(|&old_id| EspComparePairDto {
-            new_id: 0,
-            old_id,
-            source: comp.old_strings.iter().find(|s| s.id == old_id).map(|s| s.source.clone()).unwrap_or_default(),
-            record_sig: comp.old_strings.iter().find(|s| s.id == old_id).map(|s| sig_to_str(&s.record_sig)).unwrap_or_default(),
-            field_sig: comp.old_strings.iter().find(|s| s.id == old_id).map(|s| sig_to_str(&s.esp_ptr.field_sig)).unwrap_or_default(),
-            old_source: comp.old_strings.iter().find(|s| s.id == old_id).map(|s| s.source.clone()).unwrap_or_default(),
-            new_source: String::new(),
+        .map(|&old_id| {
+            let mut pair = to_pair(0, old_id);
+            pair.source = pair.old_source.clone();
+            pair
         })
         .collect();
 
     let modified: Vec<EspComparePairDto> = comp
         .modified_pairs
         .iter()
-        .map(|(&new_id, &old_id)| to_pair(new_id, old_id, &comp.new_strings, &comp.old_strings))
+        .map(|(&new_id, &old_id)| to_pair(new_id, old_id))
         .collect();
 
     EspCompareResultDto {
@@ -1660,9 +1660,14 @@ pub async fn compare_esp_files(
         None => GameId::SkyrimSE,
         Some(g) => return Err(format!("Unknown game: {}", g)),
     };
-    let comp = compare::compare_esp_files(&old_esp_path, &new_esp_path, data_dir.as_deref(), game_id)
-        .map_err(|e| format!("Failed to compare ESP files: {}", e))?;
-    Ok(comparison_to_dto(comp))
+    tokio::task::spawn_blocking(move || {
+        let comp =
+            compare::compare_esp_files(&old_esp_path, &new_esp_path, data_dir.as_deref(), game_id)
+                .map_err(|e| format!("Failed to compare ESP files: {}", e))?;
+        Ok(comparison_to_dto(comp))
+    })
+    .await
+    .map_err(|e| format!("ESP comparison task failed: {}", e))?
 }
 
 // ── MCM Commands ────────────────────────────────────────────────────

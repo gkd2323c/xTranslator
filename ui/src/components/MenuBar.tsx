@@ -323,28 +323,32 @@ export function MenuBar() {
     let disposed = false;
     let unlistenDragDrop: (() => void) | null = null;
 
-    getCurrentWebview()
-      .onDragDropEvent((event) => {
-        if (event.payload.type !== "drop") return;
+    try {
+      getCurrentWebview()
+        .onDragDropEvent((event) => {
+          if (event.payload.type !== "drop") return;
 
-        const firstSupportedPath =
-          event.payload.paths.find((path) => ["esp", "esm", "sst", "xml"].includes(getPathExt(path))) ??
-          event.payload.paths[0];
+          const firstSupportedPath =
+            event.payload.paths.find((path) => ["esp", "esm", "sst", "xml"].includes(getPathExt(path))) ??
+            event.payload.paths[0];
 
-        if (firstSupportedPath) {
-          routeDroppedPath(firstSupportedPath);
-        }
-      })
-      .then((unlisten) => {
-        if (disposed) {
-          unlisten();
-        } else {
-          unlistenDragDrop = unlisten;
-        }
-      })
-      .catch(() => {
-        /* Drag/drop is unavailable in plain browser previews. */
-      });
+          if (firstSupportedPath) {
+            routeDroppedPath(firstSupportedPath);
+          }
+        })
+        .then((unlisten) => {
+          if (disposed) {
+            unlisten();
+          } else {
+            unlistenDragDrop = unlisten;
+          }
+        })
+        .catch(() => {
+          /* Drag/drop is unavailable in plain browser previews. */
+        });
+    } catch {
+      /* Tauri webview metadata is unavailable in plain browser previews. */
+    }
 
     return () => {
       disposed = true;
@@ -384,129 +388,168 @@ export function MenuBar() {
   return (
     <div className="menubar">
       <div className="menubar-brand">xTranslator</div>
-      <div className="menubar-actions">
-        <button onClick={handleLoadEsp} disabled={isParsing} className="btn btn-primary">
-          <FolderOpen size={16} />
-          <span>{t("common.loadEsp")}</span>
-        </button>
-        <button onClick={handleLoadSst} disabled={isLoading || !espPath} className="btn">
-          <FileUp size={16} />
-          <span>{t("common.loadSst")}</span>
-        </button>
-        <button onClick={handleSaveSst} disabled={isLoading || !espPath} className="btn">
-          <FileDown size={16} />
-          <span>{t("common.saveSst")}</span>
-        </button>
-        <button onClick={handleSaveStrings} disabled={isLoading || !espPath} className="btn">
-          <Save size={16} />
-          <span>{t("common.saveStrings")}</span>
-        </button>
-        <div className="menubar-sep" />
-        <button onClick={handleExportXml} disabled={isLoading || !espPath} className="btn">
-          <FileCode size={16} />
-          <span>{t("common.exportXml")}</span>
-        </button>
-        <button onClick={handleImportXml} disabled={isLoading || !espPath} className="btn">
-          <FileCode size={16} />
-          <span>{t("common.importXml")}</span>
-        </button>
-        <div className="menubar-sep" />
-        <select
-          value={targetLang}
-          onChange={(e) => setTargetLang(e.target.value)}
-          className="lang-select"
-          title="Target language"
-        >
-          <option value="chinese">Chinese</option>
-          <option value="japanese">Japanese</option>
-          <option value="korean">Korean</option>
-          <option value="french">French</option>
-          <option value="german">German</option>
-          <option value="spanish">Spanish</option>
-          <option value="italian">Italian</option>
-          <option value="russian">Russian</option>
-          <option value="polish">Polish</option>
-          <option value="portuguese">Portuguese</option>
-          <option value="brazilian">Brazilian</option>
-          <option value="czech">Czech</option>
-          <option value="hungarian">Hungarian</option>
-        </select>
-        <button
-          onClick={() => setShowBatchPanel(!showBatchPanel)}
-          className={`btn btn-ghost ${showBatchPanel ? "active" : ""}`}
-          title={showBatchPanel ? "Close Batch Panel" : "Open Batch Panel"}
-        >
-          <RefreshCw size={16} />
-        </button>
-        <button
-          onClick={() => setShowBsaBrowser(!showBsaBrowser)}
-          className={`btn btn-ghost ${showBsaBrowser ? "active" : ""}`}
-          title={showBsaBrowser ? "Close BSA Browser" : "Open BSA Browser"}
-        >
-          <FileArchive size={16} />
-        </button>
-        <button
-          onClick={() => setShowPexPanel(!showPexPanel)}
-          className={`btn btn-ghost ${showPexPanel ? "active" : ""}`}
-          title={showPexPanel ? "Close PEX Panel" : "Open PEX Panel"}
-        >
-          <Braces size={16} />
-        </button>
-        <button
-          onClick={() => setShowFuzPanel(!showFuzPanel)}
-          className={`btn btn-ghost ${showFuzPanel ? "active" : ""}`}
-          title={showFuzPanel ? "Close Voice Panel" : "Open Voice Panel"}
-        >
-          <Volume2 size={16} />
-        </button>
-        <button
-          onClick={() => setShowDialogView(!showDialogView)}
-          className={`btn btn-ghost ${showDialogView ? "active" : ""}`}
-          title={showDialogView ? "Close Dialog View" : "Open Dialog View"}
-        >
-          <MessagesSquare size={16} />
-        </button>
-        <button
-          onClick={() => setShowMcmPanel(!showMcmPanel)}
-          className={`btn btn-ghost ${showMcmPanel ? "active" : ""}`}
-          title={showMcmPanel ? "Close MCM Panel" : "Open MCM Panel"}
-        >
-          <FileText size={16} />
-        </button>
-        <button
-          onClick={() => setShowEspCompare(!showEspCompare)}
-          className={`btn btn-ghost ${showEspCompare ? "active" : ""}`}
-          title={showEspCompare ? "Close ESP Compare" : "Open ESP Compare"}
-        >
-          <GitCompare size={16} />
-        </button>
-        <select
-          value={theme}
-          onChange={(e) => setTheme(e.target.value as any)}
-          className="lang-select"
-          title="Theme"
-        >
-          <option value="auto">Auto</option>
-          <option value="dark">Dark</option>
-          <option value="light">Light</option>
-          <option value="gray">Gray</option>
-        </select>
-        <select
-          value={i18n.language}
-          onChange={(e) => setI18nLanguage(e.target.value)}
-          className="lang-select"
-          title={t("common.language")}
-        >
-          {Object.entries(SUPPORTED_LANGS).map(([code, label]) => (
-            <option key={code} value={code}>{label}</option>
-          ))}
-        </select>
-        <button onClick={() => {
-          if (isDirty && !confirm("You have unsaved changes. Reset anyway?")) return;
-          reset();
-        }} className="btn btn-ghost">
-          <RotateCcw size={16} />
-        </button>
+      <div className="menubar-actions" role="toolbar" aria-label="Application actions">
+        <div className="toolbar-group toolbar-group-primary" role="group" aria-label="Files">
+          <button type="button" onClick={handleLoadEsp} disabled={isParsing} className="btn btn-primary">
+            <FolderOpen size={16} />
+            <span>{t("common.loadEsp")}</span>
+          </button>
+          <button type="button" onClick={handleLoadSst} disabled={isLoading || !espPath} className="btn">
+            <FileUp size={16} />
+            <span>{t("common.loadSst")}</span>
+          </button>
+          <button type="button" onClick={handleSaveSst} disabled={isLoading || !espPath} className="btn">
+            <FileDown size={16} />
+            <span>{t("common.saveSst")}</span>
+          </button>
+          <button type="button" onClick={handleSaveStrings} disabled={isLoading || !espPath} className="btn">
+            <Save size={16} />
+            <span>{t("common.saveStrings")}</span>
+          </button>
+        </div>
+
+        <div className="toolbar-group" role="group" aria-label="Exchange formats">
+          <button type="button" onClick={handleExportXml} disabled={isLoading || !espPath} className="btn">
+            <FileCode size={16} />
+            <span>{t("common.exportXml")}</span>
+          </button>
+          <button type="button" onClick={handleImportXml} disabled={isLoading || !espPath} className="btn">
+            <FileCode size={16} />
+            <span>{t("common.importXml")}</span>
+          </button>
+        </div>
+
+        <div className="toolbar-group toolbar-icon-group" role="group" aria-label="Tool panels">
+          <button
+            type="button"
+            onClick={() => setShowBatchPanel(!showBatchPanel)}
+            className={`btn btn-ghost ${showBatchPanel ? "active" : ""}`}
+            title={showBatchPanel ? "Close Batch Panel" : "Open Batch Panel"}
+            aria-label={showBatchPanel ? "Close Batch Panel" : "Open Batch Panel"}
+            aria-pressed={showBatchPanel}
+          >
+            <RefreshCw size={16} />
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowBsaBrowser(!showBsaBrowser)}
+            className={`btn btn-ghost ${showBsaBrowser ? "active" : ""}`}
+            title={showBsaBrowser ? "Close BSA Browser" : "Open BSA Browser"}
+            aria-label={showBsaBrowser ? "Close BSA Browser" : "Open BSA Browser"}
+            aria-pressed={showBsaBrowser}
+          >
+            <FileArchive size={16} />
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowPexPanel(!showPexPanel)}
+            className={`btn btn-ghost ${showPexPanel ? "active" : ""}`}
+            title={showPexPanel ? "Close PEX Panel" : "Open PEX Panel"}
+            aria-label={showPexPanel ? "Close PEX Panel" : "Open PEX Panel"}
+            aria-pressed={showPexPanel}
+          >
+            <Braces size={16} />
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowFuzPanel(!showFuzPanel)}
+            className={`btn btn-ghost ${showFuzPanel ? "active" : ""}`}
+            title={showFuzPanel ? "Close Voice Panel" : "Open Voice Panel"}
+            aria-label={showFuzPanel ? "Close Voice Panel" : "Open Voice Panel"}
+            aria-pressed={showFuzPanel}
+          >
+            <Volume2 size={16} />
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowDialogView(!showDialogView)}
+            className={`btn btn-ghost ${showDialogView ? "active" : ""}`}
+            title={showDialogView ? "Close Dialog View" : "Open Dialog View"}
+            aria-label={showDialogView ? "Close Dialog View" : "Open Dialog View"}
+            aria-pressed={showDialogView}
+          >
+            <MessagesSquare size={16} />
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowMcmPanel(!showMcmPanel)}
+            className={`btn btn-ghost ${showMcmPanel ? "active" : ""}`}
+            title={showMcmPanel ? "Close MCM Panel" : "Open MCM Panel"}
+            aria-label={showMcmPanel ? "Close MCM Panel" : "Open MCM Panel"}
+            aria-pressed={showMcmPanel}
+          >
+            <FileText size={16} />
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowEspCompare(!showEspCompare)}
+            className={`btn btn-ghost ${showEspCompare ? "active" : ""}`}
+            title={showEspCompare ? "Close ESP Compare" : "Open ESP Compare"}
+            aria-label={showEspCompare ? "Close ESP Compare" : "Open ESP Compare"}
+            aria-pressed={showEspCompare}
+          >
+            <GitCompare size={16} />
+          </button>
+        </div>
+
+        <div className="toolbar-group toolbar-selects" role="group" aria-label="Preferences">
+          <select
+            value={targetLang}
+            onChange={(e) => setTargetLang(e.target.value)}
+            className="lang-select"
+            title="Target language"
+            aria-label="Target language"
+          >
+            <option value="chinese">Chinese</option>
+            <option value="japanese">Japanese</option>
+            <option value="korean">Korean</option>
+            <option value="french">French</option>
+            <option value="german">German</option>
+            <option value="spanish">Spanish</option>
+            <option value="italian">Italian</option>
+            <option value="russian">Russian</option>
+            <option value="polish">Polish</option>
+            <option value="portuguese">Portuguese</option>
+            <option value="brazilian">Brazilian</option>
+            <option value="czech">Czech</option>
+            <option value="hungarian">Hungarian</option>
+          </select>
+          <select
+            value={theme}
+            onChange={(e) => setTheme(e.target.value as any)}
+            className="lang-select"
+            title="Theme"
+            aria-label="Theme"
+          >
+            <option value="auto">Auto</option>
+            <option value="dark">Dark</option>
+            <option value="light">Light</option>
+            <option value="gray">Gray</option>
+          </select>
+          <select
+            value={i18n.language}
+            onChange={(e) => setI18nLanguage(e.target.value)}
+            className="lang-select"
+            title={t("common.language")}
+            aria-label={t("common.language")}
+          >
+            {Object.entries(SUPPORTED_LANGS).map(([code, label]) => (
+              <option key={code} value={code}>{label}</option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={() => {
+              if (isDirty && !confirm("You have unsaved changes. Reset anyway?")) return;
+              reset();
+            }}
+            className="btn btn-ghost"
+            title="Reset workspace"
+            aria-label="Reset workspace"
+          >
+            <RotateCcw size={16} />
+          </button>
+        </div>
       </div>
       {isParsing && <span className="menubar-status parsing">Parsing ESP...</span>}
       {isLoading && <span className="menubar-status loading">Loading...</span>}
