@@ -50,7 +50,7 @@
 | **XML 导入** | ✅ | ✅ 解析+匹配+更新 | ~95% | 共享 matcher：exact / EDID / normalized / vocab，歧义不自动应用 |
 | **XML 导出** | ✅ | ✅ 写入+实体转义 | ~95% | `write_xml_export` Delphi 兼容格式，只导出有翻译的条目 |
 | **BSA/BA2 归档** | ✅ 提取+浏览 | ⚠️ BSA 完成，BA2 待实现 | ~60% | `BsaArchive` 支持 BSA v0x68/v0x69，`list_all_files` + `extract_file`，BsaBrowser 组件；BA2 General 留作 v2 |
-| **PEX 脚本解析** | ✅ 反编译+编辑 | ⚠️ 字符串提取 | ~40% | PEX parser 完成（Header+StringTable+ObjectInfo），可翻译字符串提取 + PexPanel；写回 PEX 留 v2 |
+| **PEX 脚本解析** | ✅ 反编译+编辑 | ✅ 字符串提取+写回 | ~60% | PEX parser 完成（Header+StringTable+ObjectInfo），可翻译字符串提取 + PexPanel；写回 PEX 已完成（字符串表原地更新，原始 opcode/调试信息全部保留，索引不变，roundtrip 测试通过） |
 | **FUZ 音频映射** | ✅ 映射+播放 | ✅ FuzFile parse + WAV 播放 | ~50% | FuzHeader 解析 + Sound/Voice/ 扫描 + RESP/INFO 关联 + FuzPanel；LIP 唇形数据未处理 |
 
 ---
@@ -158,7 +158,7 @@
 |------|------|-----------|
 | ~~BSA 归档浏览器~~ | ✅ BsaBrowser + list_all_files + unit tests | Done |
 | BA2 General 格式 | Fallout 4/76/Starfield 归档读取与 strings fallback | 3-5 天 |
-| ~~PEX 脚本解析~~ | ✅ PEX parser + string extraction + PexPanel | Done |
+| ~~PEX 脚本解析~~ | ✅ PEX parser + string extraction + PexPanel + write-back (roundtrip tested) | Done |
 | ~~FUZ 音频映射~~ | ✅ FuzFile parse + scan + FuzPanel | Done |
 | MCM 翻译 | 自定义 txt 导入 | 3-5 天 |
 | ESPCompare | 两 ESP 对比建字符串对 | 1 周 |

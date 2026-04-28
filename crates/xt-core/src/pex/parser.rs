@@ -41,25 +41,35 @@ pub fn parse_pex<R: Read>(reader: &mut R) -> Result<PexScript> {
         });
     }
 
-    // Debug info
-    let _mod_time = reader.read_u64::<LittleEndian>()?;
+    // Debug info — capture raw bytes for preservation during recompile
+    let debug_mod_time = reader.read_u64::<LittleEndian>()?;
     let debug_count = reader.read_u16::<LittleEndian>()? as usize;
+    let mut debug_info_raw = Vec::with_capacity(8 + 2 + debug_count * 512);
+    debug_info_raw.extend_from_slice(&debug_mod_time.to_le_bytes());
+    debug_info_raw.extend_from_slice(&(debug_count as u16).to_le_bytes());
     for _ in 0..debug_count {
         let len = reader.read_u16::<LittleEndian>()? as usize;
         let mut buf = vec![0u8; len];
         reader.read_exact(&mut buf)?;
+        debug_info_raw.extend_from_slice(&(len as u16).to_le_bytes());
+        debug_info_raw.extend_from_slice(&buf);
     }
 
-    // User flags
+    // User flags — capture raw bytes for preservation during recompile
     let uf_count = reader.read_u16::<LittleEndian>()? as usize;
+    let mut user_flags_raw = Vec::with_capacity(2 + uf_count * 3);
+    user_flags_raw.extend_from_slice(&(uf_count as u16).to_le_bytes());
     for _ in 0..uf_count {
-        let _n = reader.read_u16::<LittleEndian>()?;
-        let _f = reader.read_u8()?;
+        let n = reader.read_u16::<LittleEndian>()?;
+        let f = reader.read_u8()?;
+        user_flags_raw.extend_from_slice(&n.to_le_bytes());
+        user_flags_raw.push(f);
     }
 
-    // Objects
+    // Objects — parse for strings AND preserve raw body bytes
     let object_count = reader.read_u16::<LittleEndian>()? as usize;
     let mut translatable = Vec::new();
+    let mut object_bodies_raw = Vec::with_capacity(object_count);
     let st = &string_table;
 
     for _ in 0..object_count {
@@ -73,8 +83,12 @@ pub fn parse_pex<R: Read>(reader: &mut R) -> Result<PexScript> {
         let body_size = reader.read_u32::<LittleEndian>()? as usize;
         let mut body_bytes = vec![0u8; body_size];
         reader.read_exact(&mut body_bytes)?;
-        let mut cur = Cursor::new(&body_bytes[..]);
 
+        // Preserve raw body bytes for recompile
+        object_bodies_raw.push(body_bytes.clone());
+
+        // Parse body for translatable strings
+        let mut cur = Cursor::new(&body_bytes[..]);
         parse_object_body(&mut cur, &obj_name, st, &mut translatable)?;
     }
 
@@ -82,6 +96,9 @@ pub fn parse_pex<R: Read>(reader: &mut R) -> Result<PexScript> {
         header,
         string_table,
         translatable,
+        debug_info_raw,
+        user_flags_raw,
+        object_bodies_raw,
     })
 }
 

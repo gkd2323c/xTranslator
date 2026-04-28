@@ -42,4 +42,10 @@ pub struct PexScript {
     pub string_table: Vec<PexStringEntry>,
     /// All extracted translatable strings
     pub translatable: Vec<PexTranslatableString>,
+    /// Raw debug info section bytes (for preservation during recompile)
+    pub debug_info_raw: Vec<u8>,
+    /// Raw user flags section bytes (for preservation during recompile)
+    pub user_flags_raw: Vec<u8>,
+    /// Raw object body bytes per object (for preservation during recompile)
+    pub object_bodies_raw: Vec<Vec<u8>>,
 }
