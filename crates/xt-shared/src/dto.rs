@@ -509,3 +509,31 @@ pub struct EspCompareResultDto {
     /// New IDs with same key but different text
     pub modified: Vec<EspComparePairDto>,
 }
+
+// ── MCM Types ────────────────────────────────────────────────────────
+
+/// 单个 MCM 条目
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct McmEntryDto {
+    pub id: String,
+    pub source: String,
+    pub translation: String,
+    pub line_index: u32,
+    pub byte_offset: u32,
+}
+
+/// 已解析的 MCM 文件摘要
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct McmFileDto {
+    pub path: String,
+    pub entry_count: u32,
+    pub encoding: String,
+    pub entries: Vec<McmEntryDto>,
+}
+
+/// MCM 保存请求
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct McmSaveRequest {
+    pub path: String,
+    pub entries: Vec<McmEntryDto>,
+}

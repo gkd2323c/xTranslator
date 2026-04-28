@@ -472,3 +472,33 @@ export async function compareEspFiles(
     game,
   });
 }
+
+// ── MCM Types ───────────────────────────────────────────────────────
+
+export interface McmEntryDto {
+  id: string;
+  source: string;
+  translation: string;
+  line_index: number;
+  byte_offset: number;
+}
+
+export interface McmFileDto {
+  path: string;
+  entry_count: number;
+  encoding: string;
+  entries: McmEntryDto[];
+}
+
+export interface McmSaveRequest {
+  path: string;
+  entries: McmEntryDto[];
+}
+
+export async function loadMcmFile(mcmPath: string): Promise<McmFileDto> {
+  return invoke("load_mcm_file", { mcmPath });
+}
+
+export async function saveMcmFile(request: McmSaveRequest): Promise<void> {
+  return invoke("save_mcm_file", { request });
+}

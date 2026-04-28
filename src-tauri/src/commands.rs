@@ -19,9 +19,10 @@ use xt_shared::dto::{
     AutoBackupRequest, AutoBackupResponse, BatchConfig, BatchEntry, BatchStatus, BsaFileEntryDto,
     BsaFileListDto, DialogInfoDto, DialogTreeDto, EspComparePairDto, EspCompareResultDto,
     EspLoadProgress, FuzMapping, FuzScanResponse, HeuristicMatchDTO, HeuristicSearchRequest,
-    LoadEspResponse, LoadSstResponse, NpcDialogDto, PexScriptDto, PexTranslatableDto, QueryRequest,
-    QueryResponse, SaveStringsRequest, SaveStringsResponse, SkyStringDTO, TranslateRequest,
-    XmlExportRequest, XmlImportResponse, XmlProgress,
+    LoadEspResponse, LoadSstResponse, McmEntryDto, McmFileDto, McmSaveRequest, NpcDialogDto,
+    PexScriptDto, PexTranslatableDto, QueryRequest, QueryResponse, SaveStringsRequest,
+    SaveStringsResponse, SkyStringDTO, TranslateRequest, XmlExportRequest, XmlImportResponse,
+    XmlProgress,
 };
 
 use crate::batch::BatchExecutor;
@@ -1662,6 +1663,62 @@ pub async fn compare_esp_files(
     let comp = compare::compare_esp_files(&old_esp_path, &new_esp_path, data_dir.as_deref(), game_id)
         .map_err(|e| format!("Failed to compare ESP files: {}", e))?;
     Ok(comparison_to_dto(comp))
+}
+
+// ── MCM Commands ────────────────────────────────────────────────────
+
+use xt_core::mcm::{self, types::McmEncoding};
+
+/// Convert internal McmFile to DTO
+fn mcm_file_to_dto(file: &xt_core::mcm::McmFile) -> McmFileDto {
+    McmFileDto {
+        path: file.path.clone(),
+        entry_count: file.entries.len() as u32,
+        encoding: match &file.encoding {
+            McmEncoding::Utf16Le => "UTF-16LE".to_string(),
+            McmEncoding::Utf16Be => "UTF-16BE".to_string(),
+            McmEncoding::Utf8 => "UTF-8".to_string(),
+            McmEncoding::Ansi(cp) => format!("windows-{}", cp),
+        },
+        entries: file
+            .entries
+            .iter()
+            .map(|e| McmEntryDto {
+                id: e.id.clone(),
+                source: e.source.clone(),
+                translation: e.translation.clone(),
+                line_index: e.line_index as u32,
+                byte_offset: e.byte_offset as u32,
+            })
+            .collect(),
+    }
+}
+
+/// Load and parse an MCM translation file
+#[tauri::command]
+pub async fn load_mcm_file(mcm_path: String) -> Result<McmFileDto, String> {
+    let file = mcm::parse_mcm_file(&mcm_path)
+        .map_err(|e| format!("Failed to parse MCM file: {}", e))?;
+    Ok(mcm_file_to_dto(&file))
+}
+
+/// Save an MCM file with updated translations
+#[tauri::command]
+pub async fn save_mcm_file(request: McmSaveRequest) -> Result<(), String> {
+    // We need the original McmFile to preserve encoding and normalized_lines.
+    // Load it, apply translations from request, then save.
+    let mut file = mcm::parse_mcm_file(&request.path)
+        .map_err(|e| format!("Failed to open MCM file for save: {}", e))?;
+
+    for dto_entry in &request.entries {
+        if let Some(entry) = file.entries.iter_mut().find(|e| e.line_index as u32 == dto_entry.line_index) {
+            entry.translation = dto_entry.translation.clone();
+        }
+    }
+
+    mcm::save_mcm_file(&request.path, &file)
+        .map_err(|e| format!("Failed to save MCM file: {}", e))?;
+    Ok(())
 }
 
 // ── FUZ Commands ────────────────────────────────────────────────────

@@ -4,6 +4,7 @@ pub mod cache;
 pub mod esp;
 pub mod fuz;
 pub mod heuristic;
+pub mod mcm;
 pub mod matching;
 pub mod normalization;
 pub mod pex;
