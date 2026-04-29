@@ -16,7 +16,7 @@ use commands::{
     load_sst, parse_pex_strings, query_strings_command, save_mcm_file, save_sst, save_strings,
     scan_fuz_directory, set_deepl_api_key, set_openai_api_key, set_translation_provider,
     start_batch_export, start_batch_translate, translate_string, update_translation,
-    load_config, save_config, AppState,
+    load_config, save_config, get_api_config, AppState,
 };
 use std::sync::Arc;
 
@@ -74,6 +74,7 @@ fn main() {
             // Config commands
             load_config,
             save_config,
+            get_api_config,
             scan_fuz_directory,
             get_fuz_audio_data,
             build_dialog_tree

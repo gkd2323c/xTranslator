@@ -506,6 +506,26 @@ export interface AppConfigDto {
   current_provider?: string;
   theme?: string;
   language?: string;
+  proxy_server?: string;
+  proxy_port?: number;
+  proxy_username?: string;
+  proxy_password?: string;
+}
+
+// ── API Config ──────────────────────────────────────────────────────
+
+export interface ApiProviderInfo {
+  name: string;
+  label: string;
+  enabled: boolean;
+  models: string[];
+  default_query: string | null;
+  char_limit: number;
+  array_limit: number;
+}
+
+export interface ApiConfigResponse {
+  providers: ApiProviderInfo[];
 }
 
 export async function loadConfig(): Promise<AppConfigDto> {
@@ -514,6 +534,10 @@ export async function loadConfig(): Promise<AppConfigDto> {
 
 export async function saveConfig(config: AppConfigDto): Promise<void> {
   return invoke("save_config", { config });
+}
+
+export async function getApiConfig(): Promise<ApiConfigResponse> {
+  return invoke("get_api_config");
 }
 
 export async function loadMcmFile(mcmPath: string): Promise<McmFileDto> {

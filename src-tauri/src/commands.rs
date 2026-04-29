@@ -1940,3 +1940,25 @@ pub async fn save_config(config: AppConfigDto) -> Result<(), String> {
     existing.save(&dir)
         .map_err(|e| format!("Failed to save config: {}", e))
 }
+
+/// Return API translator config info (providers, models, limits)
+#[tauri::command]
+pub async fn get_api_config(
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<xt_shared::dto::ApiConfigResponse, String> {
+    use xt_shared::dto::ApiProviderInfo;
+    let mut providers = Vec::new();
+    for (name, cfg) in &state.api_config.providers {
+        providers.push(ApiProviderInfo {
+            name: name.clone(),
+            label: cfg.label.clone(),
+            enabled: cfg.enabled,
+            models: cfg.models.clone(),
+            default_query: cfg.default_query.clone(),
+            char_limit: cfg.char_limit,
+            array_limit: cfg.array_limit,
+        });
+    }
+    providers.sort_by(|a, b| a.name.cmp(&b.name));
+    Ok(xt_shared::dto::ApiConfigResponse { providers })
+}

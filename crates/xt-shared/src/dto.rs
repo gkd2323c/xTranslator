@@ -538,6 +538,24 @@ pub struct McmSaveRequest {
     pub entries: Vec<McmEntryDto>,
 }
 
+// ── API Config DTOs ──────────────────────────────────────────────────
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ApiProviderInfo {
+    pub name: String,
+    pub label: String,
+    pub enabled: bool,
+    pub models: Vec<String>,
+    pub default_query: Option<String>,
+    pub char_limit: u32,
+    pub array_limit: u32,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ApiConfigResponse {
+    pub providers: Vec<ApiProviderInfo>,
+}
+
 // ── Config DTOs ─────────────────────────────────────────────────────
 
 #[derive(Clone, Debug, Serialize, Deserialize, Default)]
