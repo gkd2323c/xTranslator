@@ -107,6 +107,9 @@ interface AppState {
   // ESP Compare Panel
   showEspCompare: boolean;
 
+  // Finalize Panel
+  showFinalizePanel: boolean;
+
   // Actions
   setAllItems: (items: SkyStringDTO[]) => void;
   setLoading: (loading: boolean) => void;
@@ -142,6 +145,7 @@ interface AppState {
   setShowDialogView: (show: boolean) => void;
   setShowMcmPanel: (show: boolean) => void;
   setShowEspCompare: (show: boolean) => void;
+  setShowFinalizePanel: (show: boolean) => void;
   setBatchEntries: (entries: BatchEntry[]) => void;
   addBatchEntries: (entries: BatchEntry[]) => void;
   removeBatchEntry: (index: number) => void;
@@ -277,6 +281,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   showMcmPanel: false,
   showEspCompare: false,
+  showFinalizePanel: false,
 
   setAllItems: (allItems) => {
     const state = get();
@@ -658,6 +663,16 @@ export const useAppStore = create<AppState>((set, get) => ({
     showDialogView: false,
     showMcmPanel: false,
     showEspCompare,
+  }),
+  setShowFinalizePanel: (showFinalizePanel) => set({
+    showBatchPanel: false,
+    showBsaBrowser: false,
+    showPexPanel: false,
+    showFuzPanel: false,
+    showDialogView: false,
+    showMcmPanel: false,
+    showEspCompare: false,
+    showFinalizePanel,
   }),
 
   setBatchEntries: (batchEntries) => set({ batchEntries }),

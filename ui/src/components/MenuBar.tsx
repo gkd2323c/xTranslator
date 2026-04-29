@@ -5,7 +5,7 @@ import type { LoadSstResponse, XmlImportResponse } from "../api/strings";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
-import { FolderOpen, FileUp, FileDown, FileCode, Save, RotateCcw, RefreshCw, FileArchive, Braces, Volume2, MessagesSquare, FileText, GitCompare } from "lucide-react";
+import { FolderOpen, FileUp, FileDown, FileCode, Save, RotateCcw, RefreshCw, FileArchive, Braces, Volume2, MessagesSquare, FileText, GitCompare, CheckCircle } from "lucide-react";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import { setI18nLanguage, SUPPORTED_LANGS } from "../i18n";
@@ -88,6 +88,8 @@ export function MenuBar() {
   const setShowMcmPanel = useAppStore((s) => s.setShowMcmPanel);
   const showEspCompare = useAppStore((s) => s.showEspCompare);
   const setShowEspCompare = useAppStore((s) => s.setShowEspCompare);
+  const showFinalizePanel = useAppStore((s) => s.showFinalizePanel);
+  const setShowFinalizePanel = useAppStore((s) => s.setShowFinalizePanel);
   const batchEntries = useAppStore((s) => s.batchEntries);
 
   const warnIfBatchFile = useCallback((path: string) => {
@@ -416,6 +418,19 @@ export function MenuBar() {
           <button type="button" onClick={handleImportXml} disabled={isLoading || !espPath} className="btn">
             <FileCode size={16} />
             <span>{t("common.importXml")}</span>
+          </button>
+        </div>
+
+        <div className="toolbar-group" role="group" aria-label="Finalize">
+          <button
+            type="button"
+            onClick={() => setShowFinalizePanel(!showFinalizePanel)}
+            disabled={isLoading || !espPath}
+            className={`btn btn-primary ${showFinalizePanel ? "active" : ""}`}
+            title={t("finalize.title")}
+          >
+            <CheckCircle size={16} />
+            <span>{t("finalize.title")}</span>
           </button>
         </div>
 

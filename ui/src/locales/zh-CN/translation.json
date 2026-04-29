@@ -221,5 +221,25 @@
   "progress": {
     "translated": "已翻译",
     "total": "总计"
+  },
+  "finalize": {
+    "title": "完成导出",
+    "subtitle": "一次性导出所有翻译文件",
+    "summary": "翻译概览",
+    "total": "总计",
+    "translated": "已翻译",
+    "incomplete": "未完成",
+    "locked": "锁定",
+    "outputOptions": "输出选项",
+    "outputDirectory": "输出目录",
+    "selectDirectory": "选择输出目录...",
+    "saveSst": "保存 SST 字典",
+    "sstPathPlaceholder": "SST 文件路径...",
+    "exportXml": "导出 XML",
+    "exportAll": "导出全部",
+    "exporting": "导出中...",
+    "outputFiles": "输出文件",
+    "success": "已导出 {strings} + {dlstrings} + {ilstrings} 个文件",
+    "failed": "完成导出失败"
   }
 }

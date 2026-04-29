@@ -553,3 +553,27 @@ export async function saveMcmFile(request: McmSaveRequest): Promise<void> {
 export async function tcscConvert(text: string, direction: "to_simplified" | "to_traditional"): Promise<string> {
   return invoke("tcsc_convert", { text, direction });
 }
+
+// ── Finalize Types ──────────────────────────────────────────────────
+
+export interface FinalizeRequest {
+  strings_output_dir: string;
+  target_lang: string;
+  base_name: string;
+  sst_path?: string;
+  xml_path?: string;
+}
+
+export interface FinalizeResponse {
+  strings_path: string;
+  dlstrings_path: string;
+  ilstrings_path: string;
+  sst_path: string;
+  xml_path: string;
+  translated_count: number;
+  total_count: number;
+}
+
+export async function finalize(request: FinalizeRequest): Promise<FinalizeResponse> {
+  return invoke("finalize", { request });
+}

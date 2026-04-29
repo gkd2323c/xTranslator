@@ -19,11 +19,11 @@ use xt_core::xml::{
 use xt_shared::dto::{
     AutoBackupRequest, AutoBackupResponse, BatchConfig, BatchEntry, BatchStatus, BsaFileEntryDto,
     BsaFileListDto, DialogInfoDto, DialogTreeDto, EspComparePairDto, EspCompareResultDto,
-    EspLoadProgress, FuzMapping, FuzScanResponse, HeuristicMatchDTO, HeuristicSearchRequest,
-    LoadEspResponse, LoadSstResponse, McmEntryDto, McmFileDto, McmSaveRequest, NpcDialogDto,
-    PexScriptDto, PexTranslatableDto, QueryRequest, QueryResponse, SaveStringsRequest,
-    SaveStringsResponse, SkyStringDTO, TranslateRequest, XmlExportRequest, XmlImportResponse,
-    XmlProgress,
+    EspLoadProgress, FinalizeRequest, FinalizeResponse, FuzMapping, FuzScanResponse,
+    HeuristicMatchDTO, HeuristicSearchRequest, LoadEspResponse, LoadSstResponse, McmEntryDto,
+    McmFileDto, McmSaveRequest, NpcDialogDto, PexScriptDto, PexTranslatableDto, QueryRequest,
+    QueryResponse, SaveStringsRequest, SaveStringsResponse, SkyStringDTO, TranslateRequest,
+    XmlExportRequest, XmlImportResponse, XmlProgress,
 };
 
 use crate::batch::BatchExecutor;
@@ -1972,11 +1972,195 @@ pub async fn get_api_config(
             label: cfg.label.clone(),
             enabled: cfg.enabled,
             models: cfg.models.clone(),
-            default_query: cfg.default_query.clone(),
+default_query: cfg.default_query.clone(),
             char_limit: cfg.char_limit,
             array_limit: cfg.array_limit,
         });
     }
     providers.sort_by(|a, b| a.name.cmp(&b.name));
     Ok(xt_shared::dto::ApiConfigResponse { providers })
+}
+
+// ── Finalize Command ────────────────────────────────────────────────
+
+/// Finalize 翻译流程：一次性完成 Strings 文件保存、SST 字典保存、XML 导出。
+#[tauri::command]
+pub async fn finalize(
+    window: tauri::Window,
+    state: tauri::State<'_, Arc<AppState>>,
+    request: FinalizeRequest,
+) -> Result<FinalizeResponse, String> {
+    // 提取所有需要的数据（锁的scope要尽量小）
+    let (strings_data, file_info_data, old_data) = {
+        let strings = state.strings.lock().map_err(|e| e.to_string())?;
+        let file_info = state.file_info.lock().map_err(|e| e.to_string())?;
+        let old_data = state.sst_old_data.lock().map_err(|e| e.to_string())?;
+
+        let source_lang = file_info
+            .as_ref()
+            .map(|fi| fi.language.clone())
+            .unwrap_or_else(|| "english".to_string());
+        let strings_dir = file_info
+            .as_ref()
+            .and_then(|fi| fi.strings_dir.clone())
+            .unwrap_or_default();
+        let esp_path = file_info
+            .as_ref()
+            .map(|fi| fi.esp_path.clone())
+            .unwrap_or_default();
+
+        let total_strings = strings.len() as u32;
+        let translated_count = strings.iter().filter(|sk| sk.params.is_translated()).count() as u32;
+
+        let mut translated_map: std::collections::HashMap<(u8, i32), String> =
+            std::collections::HashMap::new();
+        for sk in strings.iter() {
+            if !sk.translation.is_empty() {
+                translated_map.insert((sk.list_index, sk.esp_ptr.str_id), sk.translation.clone());
+            }
+        }
+
+        (
+            (strings.clone(), total_strings, translated_count, translated_map),
+            (source_lang, strings_dir, esp_path),
+            old_data.clone(),
+        )
+    }; // 锁在这里释放
+
+    let (strings_clone, total_strings, translated_count, translated_map) = strings_data;
+    let (source_lang, strings_dir, esp_path) = file_info_data;
+
+    let output_dir = std::path::Path::new(&request.strings_output_dir);
+    let base_name = &request.base_name;
+    let target_lang = &request.target_lang;
+
+    emit_xml_progress(&window, "preparing", 0, 3, "Preparing finalize...");
+
+    // 1. 保存 Strings 文件
+    let mut strings_count_val = 0u32;
+    let mut dlstrings_count_val = 0u32;
+    let mut ilstrings_count_val = 0u32;
+
+    for (list_index, ext, count_ref) in [
+        (0u8, "STRINGS", &mut strings_count_val),
+        (1u8, "DLSTRINGS", &mut dlstrings_count_val),
+        (2u8, "ILSTRINGS", &mut ilstrings_count_val),
+    ] {
+        let source_path = std::path::Path::new(&strings_dir).join(format!(
+            "{}_{}.{}",
+            base_name,
+            source_lang,
+            ext.to_lowercase()
+        ));
+
+        let mut strings_file = if source_path.exists() {
+            xt_core::strings::StringsFile::load_with_format(
+                &source_path,
+                xt_core::strings::StringsFile::detect_format(&source_path),
+            )
+            .unwrap_or_else(|_| xt_core::strings::StringsFile::new())
+        } else {
+            xt_core::strings::StringsFile::new()
+        };
+
+        for (&(li, str_id), translation) in &translated_map {
+            if li == list_index {
+                let id = str_id as u32;
+                strings_file.strings.insert(id, translation.clone());
+            }
+        }
+
+        let target_path = output_dir.join(format!(
+            "{}_{}.{}",
+            base_name,
+            target_lang,
+            ext.to_lowercase()
+        ));
+
+        if let Some(parent) = target_path.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| format!("Failed to create output dir: {}", e))?;
+        }
+
+        let format = xt_core::strings::StringsFile::detect_format(&target_path);
+        strings_file.format = format;
+
+        strings_file
+            .save_with_format(&target_path, format)
+            .map_err(|e| format!("Failed to write {}: {}", ext, e))?;
+
+        *count_ref = strings_file.strings.len() as u32;
+    }
+
+    let strings_path = output_dir
+        .join(format!("{}_{}.strings", base_name, target_lang))
+        .to_str()
+        .unwrap_or("")
+        .to_string();
+    let dlstrings_path = output_dir
+        .join(format!("{}_{}.dlstrings", base_name, target_lang))
+        .to_str()
+        .unwrap_or("")
+        .to_string();
+    let ilstrings_path = output_dir
+        .join(format!("{}_{}.ilstrings", base_name, target_lang))
+        .to_str()
+        .unwrap_or("")
+        .to_string();
+
+    emit_xml_progress(&window, "strings_done", 1, 3, "Strings files saved");
+
+    // 2. 保存 SST 字典
+    let mut sst_saved_path = String::new();
+    if let Some(ref sst_path) = request.sst_path {
+        let mut entries = strings_clone.clone();
+        append_old_data_entries(&mut entries, &old_data);
+        let dict = xt_core::sst::v8::SstDictionary::from_entries(entries);
+        dict.save_to_file(sst_path)
+            .map_err(|e| format!("Failed to save SST: {}", e))?;
+        sst_saved_path = sst_path.clone();
+        emit_xml_progress(&window, "sst_done", 2, 3, "SST dictionary saved");
+    }
+
+    // 3. 导出 XML
+    let mut xml_saved_path = String::new();
+    if let Some(ref xml_path) = request.xml_path {
+        if !esp_path.is_empty() {
+            let addon = std::path::Path::new(&esp_path)
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("Unknown")
+                .to_string();
+
+            let entries = xt_core::xml::sky_strings_to_xml_entries(&strings_clone);
+
+            let params = xt_core::xml::XmlExportParams {
+                addon,
+                source_lang,
+                dest_lang: request.target_lang.clone(),
+                version: 2,
+            };
+
+            xt_core::xml::write_xml_file(std::path::Path::new(xml_path), &params, &entries)
+                .map_err(|e| format!("Failed to write XML: {}", e))?;
+            xml_saved_path = xml_path.clone();
+
+            emit_xml_progress(&window, "xml_done", 3, 3, "XML exported");
+        }
+    }
+
+    // 全部完成后清除脏标记
+    *state.is_dirty.lock().map_err(|e| e.to_string())? = false;
+
+    emit_xml_progress(&window, "done", 3, 3, "Finalize complete");
+
+    Ok(FinalizeResponse {
+        strings_path,
+        dlstrings_path,
+        ilstrings_path,
+        sst_path: sst_saved_path,
+        xml_path: xml_saved_path,
+        translated_count,
+        total_count: total_strings,
+    })
 }

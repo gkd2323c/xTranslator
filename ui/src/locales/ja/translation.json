@@ -216,5 +216,25 @@
   "progress": {
     "translated": "Translated",
     "total": "Total"
+  },
+  "finalize": {
+    "title": "Finalize",
+    "subtitle": "Export all translation files at once",
+    "summary": "Translation Summary",
+    "total": "Total",
+    "translated": "Translated",
+    "incomplete": "Incomplete",
+    "locked": "Locked",
+    "outputOptions": "Output Options",
+    "outputDirectory": "Output Directory",
+    "selectDirectory": "Select output directory...",
+    "saveSst": "Save SST Dictionary",
+    "sstPathPlaceholder": "SST file path...",
+    "exportXml": "Export XML",
+    "exportAll": "Export All",
+    "exporting": "Exporting...",
+    "outputFiles": "Output Files",
+    "success": "Exported {strings} + {dlstrings} + {ilstrings} files",
+    "failed": "Finalize failed"
   }
 }

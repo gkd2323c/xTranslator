@@ -14,6 +14,7 @@ import { FuzPanel } from "./components/FuzPanel";
 import { DialogView } from "./components/DialogView";
 import { McmPanel } from "./components/McmPanel";
 import { EspComparePanel } from "./components/EspComparePanel";
+import { FinalizePanel } from "./components/FinalizePanel";
 import { StringTable } from "./components/StringTable";
 import { EditorPanel } from "./components/EditorPanel";
 import { autoBackupSst, loadConfig, setOpenAiApiKey, setDeeplApiKey, setTranslationProvider } from "./api/strings";
@@ -29,6 +30,7 @@ type SidebarPanelId =
   | "fuz"
   | "dialog"
   | "batch"
+  | "finalize"
   | "overview";
 
 type SidebarPanelFlags = {
@@ -39,6 +41,7 @@ type SidebarPanelFlags = {
   showFuzPanel: boolean;
   showDialogView: boolean;
   showBatchPanel: boolean;
+  showFinalizePanel: boolean;
 };
 
 function getActiveSidebarPanel(flags: SidebarPanelFlags): SidebarPanelId {
@@ -49,6 +52,7 @@ function getActiveSidebarPanel(flags: SidebarPanelFlags): SidebarPanelId {
   if (flags.showFuzPanel) return "fuz";
   if (flags.showDialogView) return "dialog";
   if (flags.showBatchPanel) return "batch";
+  if (flags.showFinalizePanel) return "finalize";
   return "overview";
 }
 
@@ -68,6 +72,8 @@ function renderSidebarPanel(panelId: SidebarPanelId) {
       return <DialogView />;
     case "batch":
       return <BatchPanel />;
+    case "finalize":
+      return <FinalizePanel />;
     case "overview":
       return <SidePanel />;
   }
@@ -87,6 +93,7 @@ function App() {
   const showPexPanel = useAppStore((s) => s.showPexPanel);
   const showFuzPanel = useAppStore((s) => s.showFuzPanel);
   const showDialogView = useAppStore((s) => s.showDialogView);
+  const showFinalizePanel = useAppStore((s) => s.showFinalizePanel);
   const isDirty = useAppStore((s) => s.isDirty);
   const sstPath = useAppStore((s) => s.sstPath);
   const undo = useAppStore((s) => s.undo);
@@ -165,6 +172,7 @@ function App() {
     showFuzPanel,
     showDialogView,
     showBatchPanel,
+    showFinalizePanel,
   });
 
   return (

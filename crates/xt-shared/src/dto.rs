@@ -556,6 +556,49 @@ pub struct ApiConfigResponse {
     pub providers: Vec<ApiProviderInfo>,
 }
 
+// ── Finalize DTOs ─────────────────────────────────────────────────────
+
+/// Finalize workflow request — orchestrates save_strings + save_sst + export_xml.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct FinalizeRequest {
+    /// Output directory for .STRINGS/.DLSTRINGS/.ILSTRINGS files.
+    pub strings_output_dir: String,
+    /// Target language for strings files.
+    pub target_lang: String,
+    /// ESP base name (e.g. "Skyrim").
+    pub base_name: String,
+    /// Optional SST output path. If None, SST is skipped.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sst_path: Option<String>,
+    /// Optional XML output path. If None, XML export is skipped.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub xml_path: Option<String>,
+}
+
+/// Finalize workflow response — paths of all generated output files.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct FinalizeResponse {
+    /// .STRINGS file path (empty if skipped/failed).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub strings_path: String,
+    /// .DLSTRINGS file path (empty if skipped/failed or no entries).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub dlstrings_path: String,
+    /// .ILSTRINGS file path (empty if skipped/failed or no entries).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub ilstrings_path: String,
+    /// SST dictionary path (empty if skipped).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub sst_path: String,
+    /// XML export path (empty if skipped).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub xml_path: String,
+    /// Number of translated strings written.
+    pub translated_count: u32,
+    /// Total strings in the file.
+    pub total_count: u32,
+}
+
 // ── TCSC Types ────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
