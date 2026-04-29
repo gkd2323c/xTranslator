@@ -1,8 +1,8 @@
 //! 中文繁简转换 (Traditional Chinese ↔ Simplified Chinese)
 //!
 //! 基于 OpenCC 项目的 STCharacters.txt + TSCharacters.txt 合并构建，
-//! 包含 4099 对单字符映射。通过 `include_str!` 编译期嵌入。
-//! 与 Delphi `doConvertTCSC` 功能对应，但字典覆盖更完整。
+//! 包含 3960 对一致性验证过的双向单字符映射。通过 `include_str!` 编译期嵌入。
+//! 与 Delphi `doConvertTCSC` 功能对应，但字典覆盖更完整且保证双向一致性。
 
 use std::collections::HashMap;
 use std::sync::OnceLock;
@@ -75,7 +75,7 @@ mod tests {
     #[test]
     fn test_load_pairs_coverage() {
         let pairs = load_pairs();
-        assert!(pairs.len() > 4000, "Expected >4000 pairs, got {}", pairs.len());
+        assert!(pairs.len() > 3900, "Expected >3900 pairs, got {}", pairs.len());
     }
 
     #[test]
