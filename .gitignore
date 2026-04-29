@@ -42,6 +42,10 @@ tests/fixtures/*.sst
 .DS_Store
 Thumbs.db
 
+# Worktrees
+.worktrees/
+worktrees/
+
 # 测试输出和日志
 test_output*.txt
 .waylog/
