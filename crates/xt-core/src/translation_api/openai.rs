@@ -1,18 +1,20 @@
 //! OpenAI 兼容翻译 Provider
 //!
-//! 支持 OpenAI、DeepSeek、任何兼容 Chat Completions API 的服务
+//! 支持 OpenAI、DeepSeek、任何兼容 Chat Completions API 的服务。
+//! 通过 ApiTranslator.txt 配置模型列表、查询模板、语言映射。
 
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
+use super::config::ApiTranslatorConfig;
+
 /// OpenAI 兼容翻译 Provider
-///
-/// 支持 OpenAI、DeepSeek、任何兼容 Chat Completions API 的服务
 pub struct OpenAIProvider {
     api_key: String,
     base_url: String,
     model: String,
+    config: Option<ApiTranslatorConfig>,
 }
 
 impl OpenAIProvider {
@@ -21,6 +23,7 @@ impl OpenAIProvider {
             api_key,
             base_url: "https://api.openai.com/v1".to_string(),
             model: "gpt-4o-mini".to_string(),
+            config: None,
         }
     }
 
@@ -34,38 +37,50 @@ impl OpenAIProvider {
         self
     }
 
-    /// 从环境变量创建，同时读取可选的 base_url 和 model
+    pub fn with_config(mut self, config: ApiTranslatorConfig) -> Self {
+        self.config = Some(config);
+        self
+    }
+
     pub fn from_env() -> Result<Self> {
         let api_key = std::env::var("XT_TRANSLATE_API_KEY")
             .map_err(|_| anyhow!("XT_TRANSLATE_API_KEY environment variable not set"))?;
-
         let mut provider = Self::new(api_key);
-
         if let Ok(url) = std::env::var("XT_TRANSLATE_API_BASE") {
             provider = provider.with_base_url(url);
         }
-
         if let Ok(model) = std::env::var("XT_TRANSLATE_API_MODEL") {
             provider = provider.with_model(model);
         }
-
         Ok(provider)
     }
 
-    /// 从 API key 字符串创建（前端传入），使用默认 base_url 和 model
     pub fn from_key(api_key: String) -> Self {
         let mut provider = Self::new(api_key);
-
-        // 仍然读取可选的环境变量覆盖
         if let Ok(url) = std::env::var("XT_TRANSLATE_API_BASE") {
             provider = provider.with_base_url(url);
         }
-
         if let Ok(model) = std::env::var("XT_TRANSLATE_API_MODEL") {
             provider = provider.with_model(model);
         }
-
         provider
+    }
+
+    fn build_query(&self, text: &str, dest_lang: &str) -> String {
+        if let Some(ref cfg) = self.config {
+            if let Some(oai) = cfg.get("OpenAI") {
+                if let Some(ref template) = oai.default_query {
+                    return template.replace("%lang_dest%", dest_lang)
+                        + "\n\n"
+                        + text;
+                }
+            }
+        }
+        // Fallback to built-in prompt
+        format!(
+            "Translate the following game text to {}. Keep tags and linebreaks exactly as they are:\n\n{}",
+            dest_lang, text
+        )
     }
 }
 
@@ -96,30 +111,24 @@ struct ChatChoice {
 
 #[async_trait]
 impl super::TranslationProvider for OpenAIProvider {
-    async fn translate(&self, text: &str, source_lang: &str, target_lang: &str) -> Result<String> {
-        // 构建系统提示
-        let system_prompt = format!(
-            "You are a professional game translator. Translate the following game text from {} to {}. \
-             Only output the translation, nothing else. Preserve any special formatting tokens like {{}} or {{}} exactly as they appear.",
-            source_lang, target_lang
-        );
+    async fn translate(&self, text: &str, _source_lang: &str, target_lang: &str) -> Result<String> {
+        let query = self.build_query(text, target_lang);
 
         let request = ChatRequest {
             model: self.model.clone(),
             messages: vec![
                 ChatMessage {
                     role: "system".to_string(),
-                    content: system_prompt,
+                    content: "You are a professional game translator.".to_string(),
                 },
                 ChatMessage {
                     role: "user".to_string(),
-                    content: text.to_string(),
+                    content: query,
                 },
             ],
             temperature: 0.3,
         };
 
-        // 异步 HTTP 请求
         let client = reqwest::Client::new();
         let url = format!("{}/chat/completions", self.base_url);
 

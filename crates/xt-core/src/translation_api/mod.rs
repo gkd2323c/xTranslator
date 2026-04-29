@@ -47,6 +47,10 @@ pub trait TranslationProvider: Send + Sync {
     async fn translate(&self, text: &str, source_lang: &str, target_lang: &str) -> Result<String>;
 }
 
+/// API 翻译器配置（解析 ApiTranslator.txt）
+pub mod config;
+pub use config::{ApiProviderConfig, ApiTranslatorConfig};
+
 /// OpenAI 兼容翻译 Provider
 pub mod openai;
 pub use openai::OpenAIProvider;

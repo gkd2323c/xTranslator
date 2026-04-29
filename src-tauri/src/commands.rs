@@ -8,6 +8,7 @@ use xt_core::pex::types::PexTranslatableString;
 use xt_core::sst::v8::SstDictionary;
 use xt_core::strings::CodepageTable;
 use xt_core::translation_api::{DeepLProvider, OpenAIProvider, ProviderType, TranslationProvider};
+use xt_core::translation_api::config::ApiTranslatorConfig;
 use xt_core::types::game_id::GameId;
 use xt_core::types::params::SkyStringParams;
 use xt_core::types::sky_string::SkyString;
@@ -47,15 +48,15 @@ pub struct AppState {
     pub current_provider: Mutex<ProviderType>,
     /// 是否有未保存的翻译修改
     pub is_dirty: Mutex<bool>,
+    /// ApiTranslator.txt 配置
+    pub api_config: ApiTranslatorConfig,
 }
 
 impl AppState {
-    pub fn new() -> Self {
-        // 尝试从环境变量读取 API Key
+    pub fn new(api_config: ApiTranslatorConfig) -> Self {
         let openai_env_key = std::env::var("XT_TRANSLATE_API_KEY").ok();
         let deepl_env_key = std::env::var("XT_DEEPL_API_KEY").ok();
 
-        // 默认为 OpenAI，或根据有哪个 key 自动选择
         let default_provider = if openai_env_key.is_some() {
             ProviderType::OpenAI
         } else if deepl_env_key.is_some() {
@@ -72,6 +73,7 @@ impl AppState {
             deepl_api_key: Mutex::new(deepl_env_key),
             current_provider: Mutex::new(default_provider),
             is_dirty: Mutex::new(false),
+            api_config,
         }
     }
 }
@@ -762,21 +764,27 @@ pub async fn translate_string(
     // 保持默认语言兜底，避免前端漏传参数导致请求失败。
     let source_lang = request.source_lang.unwrap_or_else(|| "EN".to_string());
     let target_lang = request.target_lang.unwrap_or_else(|| "ZH".to_string());
+
+    // Resolve language codes via ApiTranslator.txt config
+    let provider_name = provider_type.to_string();
+    let resolved_source = state.api_config.resolve_lang(&provider_name, &source_lang);
+    let resolved_target = state.api_config.resolve_lang(&provider_name, &target_lang);
+
     let text = request.text;
 
-    // 异步执行翻译
     let result = match provider_type {
         ProviderType::OpenAI => {
-            let provider = OpenAIProvider::from_key(api_key);
+            let provider = OpenAIProvider::from_key(api_key)
+                .with_config(state.api_config.clone());
             provider
-                .translate(&text, &source_lang, &target_lang)
+                .translate(&text, &resolved_source, &resolved_target)
                 .await
                 .map_err(|e| e.to_string())?
         }
         ProviderType::DeepL => {
             let provider = DeepLProvider::new(api_key);
             provider
-                .translate(&text, &source_lang, &target_lang)
+                .translate(&text, &resolved_source, &resolved_target)
                 .await
                 .map_err(|e| e.to_string())?
         }

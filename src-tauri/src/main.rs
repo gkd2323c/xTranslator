@@ -21,10 +21,14 @@ use commands::{
 use std::sync::Arc;
 
 fn main() {
+    let api_config = xt_core::translation_api::config::ApiTranslatorConfig::load_from_file(
+        std::path::Path::new("Misc/ApiTranslator.txt")
+    ).unwrap_or_default();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
-        .manage(Arc::new(AppState::new()))
+        .manage(Arc::new(AppState::new(api_config)))
         .manage(Arc::new(BatchExecutor::new()))
         .invoke_handler(tauri::generate_handler![
             query_strings_command,
