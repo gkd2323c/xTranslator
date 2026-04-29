@@ -217,5 +217,9 @@
     "undoFailed": "撤销失败",
     "redoFailed": "重做失败",
     "batchConflict": "批量任务中包含当前已加载的 ESP 文件"
+  },
+  "progress": {
+    "translated": "已翻译",
+    "total": "总计"
   }
 }

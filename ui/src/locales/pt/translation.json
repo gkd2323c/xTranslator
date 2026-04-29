@@ -212,5 +212,9 @@
     "undoFailed": "Undo failed",
     "redoFailed": "Redo failed",
     "batchConflict": "Batch includes the currently loaded ESP"
+  },
+  "progress": {
+    "translated": "Translated",
+    "total": "Total"
   }
 }

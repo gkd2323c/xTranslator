@@ -231,6 +231,12 @@ function applyFilterAndSort(
   return result;
 }
 
+export function computeTranslationProgress(allItems: SkyStringDTO[]): { translated: number; total: number } {
+  const total = allItems.length;
+  const translated = allItems.filter((s) => s.translation && s.translation.trim() !== '').length;
+  return { translated, total };
+}
+
 export const useAppStore = create<AppState>((set, get) => ({
   allItems: [],
   items: [],

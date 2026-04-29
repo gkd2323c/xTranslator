@@ -1,9 +1,10 @@
-import { useState, useEffect, useCallback } from "react";
-import { useAppStore } from "../stores/appStore";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import { useAppStore, computeTranslationProgress } from "../stores/appStore";
 import { updateTranslation, heuristicSearch, translateString, setApiKey, tcscConvert, type HeuristicMatchDTO } from "../api/strings";
 import { Save, X, Type, Search, Copy, Languages, Key } from "lucide-react";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
+import { ProgressBar } from "./ProgressBar";
 
 export function EditorPanel() {
   const { t } = useTranslation();
@@ -13,6 +14,9 @@ export function EditorPanel() {
   const targetLang = useAppStore((s) => s.targetLang);
   const updateItemTranslation = useAppStore((s) => s.updateItemTranslation);
   const setSelectedById = useAppStore((s) => s.setSelectedById);
+  const allItems = useAppStore((s) => s.allItems);
+
+  const translationProgress = useMemo(() => computeTranslationProgress(allItems), [allItems]);
 
   const [localTrans, setLocalTrans] = useState("");
   const [isSaving, setIsSaving] = useState(false);
@@ -235,6 +239,10 @@ export function EditorPanel() {
             </div>
           </div>
         )}
+      </div>
+
+      <div className="editor-footer">
+        <ProgressBar translated={translationProgress.translated} total={translationProgress.total} />
       </div>
 
       {showApiKeyDialog && (
