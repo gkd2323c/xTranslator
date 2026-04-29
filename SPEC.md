@@ -47,6 +47,12 @@ api: `export_xml` → `u32` (exported count, emits `xml-progress` events)
 api: `import_xml` → `XmlImportResponse { matched, unmatched, total, updated_ids }`
 api: `get_is_dirty` → `bool`
 api: `save_strings` → `SaveStringsResponse { strings_count, dlstrings_count, ilstrings_count, translated_count }`
+api: `compare_esp_files` → `EspCompareResultDto { identical_count, added_count, removed_count, modified_count, identical[], added[], removed[], modified[] }`
+api: `load_mcm_file` → `McmFileDto { path, entry_count, encoding, entries[] }`
+api: `save_mcm_file` → `()` (takes `McmSaveRequest { path, entries[] }`) 
+api: `compile_pex` → `String` (output path, takes pex_path, output_path, translations[])
+api: `list_ba2_files` → `BsaFileListDto` (reuses BSA DTOs)
+api: `extract_ba2_file` / `extract_ba2_folder` → same as BSA equivalents
 
 ### Events
 
@@ -133,6 +139,10 @@ T24|x|Strings write-back deduplication (shared data offsets, ~17% size reduction
 T25|x|Auto-backup (5-min timer, SST snapshots, rotate last 10)|G3
 T26|x|Undo/Redo (stack-based, Ctrl+Z/Y, max 100 depth)|G7
 T27|x|ESP parse result cache (SHA-256 key, bincode blob, auto-prune)|G7
+T28|x|MCM (Mod Configuration Menu) translation file support (UTF-16LE/BE/UTF-8, BOM, encoding preserve)|G1
+T29|x|ESP comparison engine (old/new diff with identical/modified/added/removed classification)|G1
+T30|x|BA2 archive support (Fallout 4 v0x01, Starfield v0x02, FO4B v0x08)|G8
+T31|x|PEX compile (in-place string table update with index preservation, binary roundtrip)|G1
 
 ## §B Bugs
 

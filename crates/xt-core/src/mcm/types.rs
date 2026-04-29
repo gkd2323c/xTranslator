@@ -48,6 +48,8 @@ pub struct McmFile {
     pub encoding: McmEncoding,
     /// 文件路径
     pub path: String,
+    /// 原始文件换行符风格："\r\n" 或 "\n"
+    pub line_ending: String,
 }
 
 /// MCM 文件编码

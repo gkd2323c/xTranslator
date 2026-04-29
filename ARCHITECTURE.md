@@ -165,9 +165,12 @@ Format: `CachePayload { version: u32, strings: Vec<SkyString>, compressed_record
 | Module | Responsibility |
 |--------|----------------|
 | `esp::parser` | ESP/ESM binary parser: record headers, GRUP nesting, compressed record decompression (zlib), subrecord extraction, codepage-aware string decoding |
+| `esp::compare` | ESP comparison engine: (str_id, rec, field) triple matching, identical/modified/added/removed classification |
 | `strings` | Bethesda `.STRINGS` (null-terminated), `.DLSTRINGS`/`.ILSTRINGS` (4-byte length prefix) read/write. Codepage fallback table (932/936/949/950/1250-1257) |
 | `bsa` | BSA v0x68/v0x69 archive parser and file extraction. SSE uses LZ4, Skyrim uses zlib. Supports `BSAhash64` lookup, `list_all_files`, `extract_file` |
-| `pex` | PEX (Papyrus) script parser: Header + StringTable + ObjectInfo parsing, translatable string extraction |
+| `ba2` | BA2 (Bethesda Archive 2) parser for Fallout 4/Starfield. GNRL type support, file listing and extraction |
+| `pex` | PEX (Papyrus) script parser + compiler: string table extraction, in-place translation update with index preservation |
+| `mcm` | MCM (Mod Configuration Menu) translation file parser: UTF-16LE/UTF-8/ANSI encoding detection, BOM handling, key-value extraction, save with original encoding+line endings |
 | `fuz` | FUZ audio container parser: FuzHeader + WAV extraction, Sound/Voice/ directory scanning, RESP/INFO association |
 | `sst::v8` | SST v8 dictionary format: read/write with Delphi-compatible UTF-16LE encoding, FNV-1a hashing, bidirectional roundtrip |
 | `xml` | Delphi xTranslator XML export/import: `parse_xml_export`, `write_xml_export`, `import_xml_to_sky_strings` |
@@ -260,7 +263,7 @@ Delphi xTranslator compatible:
 # Full backend build
 cargo build -p xtranslator-tauri
 
-# Core library unit tests (103 tests)
+# Core library unit tests (134 tests)
 cargo test -p xt-core --lib
 
 # End-to-end tests (requires Skyrim SE at D:\SteamLibrary\...)

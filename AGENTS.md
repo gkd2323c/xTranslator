@@ -38,7 +38,7 @@ Cargo workspace with 4 members:
 
 | Member | Role | Key Entrypoints |
 |--------|------|-----------------|
-| `crates/xt-core` | Core library: ESP parser, strings, SST, XML, heuristic search, translation API, ESP cache | `src/lib.rs` |
+| `crates/xt-core` | Core library: ESP parser, BA2, MCM, PEX compile, ESP compare, strings, SST, XML, BSA, heuristic search, translation API, ESP cache | `src/lib.rs` |
 | `crates/xt-shared` | IPC DTOs shared between backend and frontend | `src/dto.rs` |
 | `crates/xt-cli` | CLI tool (legacy, mostly superseded by Tauri UI) | `src/main.rs` |
 | `src-tauri` | Tauri 2.x desktop app backend | `src/main.rs`, `src/commands.rs` |

@@ -147,7 +147,7 @@ export function McmPanel() {
             </h3>
             <div style={{ maxHeight: 400, overflowY: "auto" }}>
               {filteredEntries.map((entry) => {
-                const originalIndex = entries.indexOf(entry);
+                const originalIndex = entries.findIndex((e) => e.line_index === entry.line_index);
                 return (
                   <div
                     key={originalIndex}

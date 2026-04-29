@@ -26,6 +26,7 @@ tests/fixtures/*.sst
 *~
 .claude/
 .codebuddy/
+.omx/
 .github/
 .gemini/
 .cursor/

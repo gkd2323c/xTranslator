@@ -58,6 +58,7 @@ impl StringKey {
 /// Compare two ESP files
 ///
 /// Returns an EspComparison with matched and unmatched string IDs.
+/// Strings files are loaded from each ESP's parent directory for accurate source display.
 pub fn compare_esp_files(
     old_esp_path: &str,
     new_esp_path: &str,
@@ -66,23 +67,38 @@ pub fn compare_esp_files(
 ) -> Result<EspComparison, String> {
     let data_path = Path::new(data_dir.unwrap_or("Data"));
 
-    // Parse old ESP
-    let mut old_parser = EspParser::with_game(data_path, game)
-        .map_err(|e| format!("Failed to create parser for old ESP: {}", e))?;
-    let old_file = std::fs::File::open(old_esp_path)
-        .map_err(|e| format!("Failed to open old ESP: {}", e))?;
-    old_parser.parse(&mut std::io::BufReader::new(old_file))
+    let old_strings = parse_esp_with_strings(old_esp_path, data_path, game)
         .map_err(|e| format!("Failed to parse old ESP: {}", e))?;
-
-    // Parse new ESP
-    let mut new_parser = EspParser::with_game(data_path, game)
-        .map_err(|e| format!("Failed to create parser for new ESP: {}", e))?;
-    let new_file = std::fs::File::open(new_esp_path)
-        .map_err(|e| format!("Failed to open new ESP: {}", e))?;
-    new_parser.parse(&mut std::io::BufReader::new(new_file))
+    let new_strings = parse_esp_with_strings(new_esp_path, data_path, game)
         .map_err(|e| format!("Failed to parse new ESP: {}", e))?;
 
-    Ok(build_comparison(old_parser.strings, new_parser.strings))
+    Ok(build_comparison(old_strings, new_strings))
+}
+
+fn parse_esp_with_strings(
+    esp_path: &str,
+    data_dir: &Path,
+    game: GameId,
+) -> Result<Vec<SkyString>, String> {
+    use crate::esp::parser::StringsFiles;
+    let mut parser = EspParser::with_game(data_dir, game)
+        .map_err(|e| format!("Failed to create parser: {}", e))?;
+
+    let base_name = Path::new(esp_path)
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("unknown");
+    let esp_dir = Path::new(esp_path)
+        .parent()
+        .unwrap_or_else(|| Path::new("."));
+    parser.load_strings_files(esp_dir, base_name);
+
+    let file = std::fs::File::open(esp_path)
+        .map_err(|e| format!("Failed to open ESP: {}", e))?;
+    parser.parse(&mut std::io::BufReader::new(file))
+        .map_err(|e| format!("Failed to parse ESP: {}", e))?;
+
+    Ok(parser.strings)
 }
 
 /// Compare two sets of SkyStrings (already parsed)

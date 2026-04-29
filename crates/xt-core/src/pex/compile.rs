@@ -294,25 +294,15 @@ mod tests {
         let mut reparse_cur = Cursor::new(std::fs::read(&tmp_path).unwrap());
         let reparsed = super::super::parser::parse_pex(&mut reparse_cur).unwrap();
 
-        // Verify: string table text updated
-        assert_eq!(reparsed.string_table[1].text, "英文文本");
-        // Verify: indices unchanged
-        assert_eq!(reparsed.string_table[1].index, 1);
+        // Verify: string table text updated, indices unchanged, bodies preserved
+        assert_eq!(reparsed.string_table.len(), 3);
         assert_eq!(reparsed.string_table[0].text, "TestObject");
+        assert_eq!(reparsed.string_table[1].text, "英文文本");
+        assert_eq!(reparsed.string_table[1].index, 1);
         assert_eq!(reparsed.string_table[2].text, "Another string");
-        // Verify: object bodies preserved verbatim
         assert_eq!(reparsed.object_bodies_raw.len(), 1);
         assert_eq!(reparsed.object_bodies_raw[0].len(), 16);
         assert_eq!(reparsed.object_bodies_raw[0], &[0u8; 16]);
-        // Core invariants: string table updated, indices unchanged, bodies preserved
-        assert_eq!(reparsed.string_table.len(), 3);
-        assert_eq!(reparsed.string_table[0].text, "TestObject");
-        assert_eq!(reparsed.string_table[1].text, "英文文本"); // translated
-        assert_eq!(reparsed.string_table[1].index, 1);        // index unchanged
-        assert_eq!(reparsed.string_table[2].text, "Another string");
-        assert_eq!(reparsed.object_bodies_raw.len(), 1);
-        assert_eq!(reparsed.object_bodies_raw[0].len(), 16);  // size unchanged
-        assert_eq!(reparsed.object_bodies_raw[0], &[0u8; 16]); // content unchanged
 
         let _ = std::fs::remove_file(&tmp_path);
     }

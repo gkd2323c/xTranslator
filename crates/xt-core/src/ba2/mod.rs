@@ -200,6 +200,7 @@ impl Ba2Archive {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Cursor;
 
     #[test]
     fn test_split_path() {
@@ -210,5 +211,69 @@ mod tests {
         let (folder, file) = Ba2Archive::split_path("filename.txt");
         assert_eq!(folder, "");
         assert_eq!(file, "filename.txt");
+    }
+
+    #[test]
+    fn test_header_parse_fo4() {
+        // BTDX + version=0x01 + GNRL + 3 files + offset=0x30
+        let mut buf = Vec::new();
+        buf.extend_from_slice(b"BTDX");
+        buf.extend_from_slice(&0x01u32.to_le_bytes());
+        buf.extend_from_slice(b"GNRL");
+        buf.extend_from_slice(&3u32.to_le_bytes());
+        buf.extend_from_slice(&0x30i64.to_le_bytes());
+
+        let header = Ba2Header::read_from(&mut Cursor::new(&buf)).unwrap();
+        assert_eq!(header.version, 0x01);
+        assert_eq!(&header.archive_type, b"GNRL");
+        assert_eq!(header.file_count, 3);
+        assert_eq!(header.file_table_offset, 0x30);
+        assert!(header.is_valid_version());
+        assert!(header.is_general_type());
+    }
+
+    #[test]
+    fn test_header_parse_starfield() {
+        let mut buf = Vec::new();
+        buf.extend_from_slice(b"BTDX");
+        buf.extend_from_slice(&0x02u32.to_le_bytes());
+        buf.extend_from_slice(b"GNRL");
+        buf.extend_from_slice(&1u32.to_le_bytes());
+        buf.extend_from_slice(&0x40i64.to_le_bytes());
+        // Starfield has 2 extra u32 fields
+        buf.extend_from_slice(&0u32.to_le_bytes());
+        buf.extend_from_slice(&0u32.to_le_bytes());
+
+        let header = Ba2Header::read_from(&mut Cursor::new(&buf)).unwrap();
+        assert_eq!(header.version, 0x02);
+        assert!(header.is_valid_version());
+    }
+
+    #[test]
+    fn test_header_reject_invalid_magic() {
+        let mut buf = Vec::new();
+        buf.extend_from_slice(b"XXXX");
+        buf.extend_from_slice(&0x01u32.to_le_bytes());
+
+        let result = Ba2Header::read_from(&mut Cursor::new(&buf));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_header_reject_unsupported_version() {
+        let mut buf = Vec::new();
+        buf.extend_from_slice(b"BTDX");
+        buf.extend_from_slice(&0x99u32.to_le_bytes());
+
+        let result = Ba2Header::read_from(&mut Cursor::new(&buf));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_archive_version_constants() {
+        use header::{BA2_VERSION_FO4, BA2_VERSION_SF, BA2_VERSION_FO4B};
+        assert_eq!(BA2_VERSION_FO4, 0x01);
+        assert_eq!(BA2_VERSION_SF, 0x02);
+        assert_eq!(BA2_VERSION_FO4B, 0x08);
     }
 }

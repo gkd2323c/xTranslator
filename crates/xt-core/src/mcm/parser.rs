@@ -19,15 +19,11 @@ fn read_file_with_encoding(path: &Path) -> io::Result<(Vec<u8>, McmEncoding)> {
         return Ok((buffer, McmEncoding::Utf8));
     }
 
-    // BOM 检测
     if buffer[0] == 0xFF && buffer[1] == 0xFE {
-        // UTF-16 LE BOM
         Ok((buffer, McmEncoding::Utf16Le))
     } else if buffer[0] == 0xFE && buffer[1] == 0xFF {
-        // UTF-16 BE BOM
         Ok((buffer, McmEncoding::Utf16Be))
     } else {
-        // 默认 UTF-8（也可能是 ANSI，实际由解析时的编码转换处理）
         Ok((buffer, McmEncoding::Utf8))
     }
 }
@@ -36,7 +32,6 @@ fn read_file_with_encoding(path: &Path) -> io::Result<(Vec<u8>, McmEncoding)> {
 fn decode_bytes(bytes: &[u8], encoding: &McmEncoding) -> String {
     match encoding {
         McmEncoding::Utf16Le => {
-            // encoding_rs 处理 UTF-16LE 编码（包括 BOM 检测和自动跳过）
             let (decoded, _, _) = encoding_rs::UTF_16LE.decode(bytes);
             decoded.into_owned()
         }
@@ -50,23 +45,85 @@ fn decode_bytes(bytes: &[u8], encoding: &McmEncoding) -> String {
     }
 }
 
+/// 计算一行在原始文件中的字节数（无换行符）
+fn line_byte_len(line: &str, encoding: &McmEncoding) -> usize {
+    match encoding {
+        McmEncoding::Utf8 | McmEncoding::Ansi(_) => line.as_bytes().len(),
+        McmEncoding::Utf16Le | McmEncoding::Utf16Be => {
+            line.encode_utf16().count() * 2
+        }
+    }
+}
+
+/// 原生 UTF-16LE 编码（不含 BOM）
+fn encode_utf16le(text: &str) -> Vec<u8> {
+    let mut out = Vec::with_capacity(text.len() * 2);
+    for cu in text.encode_utf16() {
+        out.extend_from_slice(&cu.to_le_bytes());
+    }
+    out
+}
+
+/// 原生 UTF-16BE 编码（不含 BOM）
+fn encode_utf16be(text: &str) -> Vec<u8> {
+    let mut out = Vec::with_capacity(text.len() * 2);
+    for cu in text.encode_utf16() {
+        out.extend_from_slice(&cu.to_be_bytes());
+    }
+    out
+}
+
 /// 编码字符串为字节（用于保存）
 pub fn encode_to_bytes(text: &str, encoding: &McmEncoding) -> Vec<u8> {
     match encoding {
         McmEncoding::Utf16Le => {
-            // encoding_rs 自动加上 BOM
-            let (encoded, _, _) = encoding_rs::UTF_16LE.encode(text);
-            encoded.into_owned()
+            let mut bytes = vec![0xFF, 0xFE];
+            bytes.extend_from_slice(&encode_utf16le(text));
+            bytes
         }
         McmEncoding::Utf16Be => {
-            let (encoded, _, _) = encoding_rs::UTF_16BE.encode(text);
-            encoded.into_owned()
+            let mut bytes = vec![0xFE, 0xFF];
+            bytes.extend_from_slice(&encode_utf16be(text));
+            bytes
         }
         McmEncoding::Utf8 => text.as_bytes().to_vec(),
-        McmEncoding::Ansi(_) => {
-            // ANSI 暂用 UTF-8 回退
+        McmEncoding::Ansi(cp) => {
+            eprintln!(
+                "Warning: MCM file saved with ANSI codepage {} -- falling back to UTF-8. \
+                 Some characters may be garbled.",
+                cp
+            );
             text.as_bytes().to_vec()
         }
+    }
+}
+
+/// 检测原始文件中的换行符风格："\r\n" 或 "\n"
+fn detect_line_ending(raw_bytes: &[u8]) -> String {
+    for i in 0..raw_bytes.len().saturating_sub(1) {
+        if raw_bytes[i] == b'\r' && i + 1 < raw_bytes.len() && raw_bytes[i + 1] == b'\n' {
+            return "\r\n".to_string();
+        }
+        if raw_bytes[i] == b'\n' {
+            return "\n".to_string();
+        }
+    }
+    "\n".to_string()
+}
+
+/// 根据编码计算 BOM 字节数
+fn bom_len(encoding: &McmEncoding) -> usize {
+    match encoding {
+        McmEncoding::Utf16Le | McmEncoding::Utf16Be => 2,
+        _ => 0,
+    }
+}
+
+/// 根据编码计算换行符的字节数
+fn newline_byte_len(line_ending: &str, encoding: &McmEncoding) -> usize {
+    match encoding {
+        McmEncoding::Utf8 | McmEncoding::Ansi(_) => line_ending.len(),
+        McmEncoding::Utf16Le | McmEncoding::Utf16Be => line_ending.len() * 2,
     }
 }
 
@@ -76,35 +133,38 @@ pub fn encode_to_bytes(text: &str, encoding: &McmEncoding) -> Vec<u8> {
 pub fn parse_mcm_file(path: &str) -> io::Result<McmFile> {
     let path = Path::new(path);
 
-    // 读取文件 + 编码检测
     let (raw_bytes, encoding) = read_file_with_encoding(path)?;
 
-    // 解码为字符串
-    let content = decode_bytes(&raw_bytes, &encoding);
+    let line_ending = detect_line_ending(&raw_bytes);
+    let nlb = newline_byte_len(&line_ending, &encoding);
 
-    // 按行处理
+    let content = decode_bytes(&raw_bytes, &encoding);
+    let content = content.trim_start_matches('\u{FEFF}');
+
+    let boms = bom_len(&encoding);
     let mut entries = Vec::new();
     let mut normalized_lines = Vec::new();
     let mut header_list = Vec::new();
-    let mut current_offset = 0usize;
+    let mut current_offset = boms;
 
     for (line_index, line) in content.lines().enumerate() {
         normalized_lines.push(line.to_string());
-        current_offset += line.len() + 1; // +1 for newline (approximation)
 
         if let Some((key, value)) = parse_mcm_line(line) {
+            let entry_byte_offset = current_offset;
             header_list.push(key.clone());
             entries.push(McmEntry {
                 id: key,
                 source: value,
                 translation: String::new(),
                 line_index,
-                byte_offset: current_offset,
+                byte_offset: entry_byte_offset,
             });
         } else {
-            // 非 MCM 行（如空行、注释），用空 key 占位
             header_list.push(String::new());
         }
+
+        current_offset += line_byte_len(line, &encoding) + nlb;
     }
 
     Ok(McmFile {
@@ -113,6 +173,7 @@ pub fn parse_mcm_file(path: &str) -> io::Result<McmFile> {
         header_list,
         encoding,
         path: path.to_string_lossy().to_string(),
+        line_ending,
     })
 }
 
@@ -123,28 +184,23 @@ pub fn parse_mcm_file(path: &str) -> io::Result<McmFile> {
 fn parse_mcm_line(line: &str) -> Option<(String, String)> {
     let line = line.trim();
 
-    // 跳过空行
     if line.is_empty() {
         return None;
     }
 
-    // 跳过注释行（Delphi 原版逻辑）
     if line.starts_with('#') || line.starts_with("//") {
         return None;
     }
 
-    // 查找 Tab 分隔符
     if let Some(tab_pos) = line.find('\t') {
         let key = line[..tab_pos].trim().to_string();
         let value = line[tab_pos + 1..].trim().to_string();
 
-        // Key 必须是 $ 开头（Delphi 原版要求）
         if key.starts_with('$') && !value.is_empty() {
             return Some((key, value));
         }
     }
 
-    // 备选：多 Tab（如有多个可翻译字段）
     let parts: Vec<&str> = line.splitn(3, '\t').collect();
     if parts.len() >= 2 {
         let key = parts[0].trim().to_string();
@@ -160,8 +216,16 @@ fn parse_mcm_line(line: &str) -> Option<(String, String)> {
 /// 保存 MCM 文件（将翻译填回）
 ///
 /// 将 entries 中的 translation 填入对应的行，然后编码写回。
-/// 策略：找到行中 `key<tab>source` 模式，替换 source → translation。
+/// 保留原文件的编码和换行符风格。
 pub fn save_mcm_file(path: &str, file: &McmFile) -> io::Result<()> {
+    if let McmEncoding::Ansi(cp) = &file.encoding {
+        eprintln!(
+            "Warning: saving MCM file originally in ANSI codepage {} as UTF-8. \
+             Re-encoding may cause character loss for non-ASCII text.",
+            cp
+        );
+    }
+
     let mut lines = file.normalized_lines.clone();
 
     for entry in &file.entries {
@@ -171,12 +235,10 @@ pub fn save_mcm_file(path: &str, file: &McmFile) -> io::Result<()> {
 
         let line = &mut lines[entry.line_index];
 
-        // 查找 key<tab> 后的原文并替换
         if let Some(tab_pos) = line.find('\t') {
-            let key_part = &line[..=tab_pos]; // include tab
+            let key_part = &line[..=tab_pos];
             let value_part = &line[tab_pos + 1..];
 
-            // 只替换值部分（如果原文匹配）
             if value_part.contains(&entry.source) {
                 let new_value = if entry.translation.is_empty() {
                     entry.source.clone()
@@ -188,8 +250,7 @@ pub fn save_mcm_file(path: &str, file: &McmFile) -> io::Result<()> {
         }
     }
 
-    // 合并行（保留原始换行符风格）
-    let final_text = lines.join("\n");
+    let final_text = lines.join(&file.line_ending);
     let bytes = encode_to_bytes(&final_text, &file.encoding);
     std::fs::write(path, &bytes)?;
 
@@ -204,8 +265,6 @@ pub fn build_normalized_text(entries: &[McmEntry]) -> String {
     let mut lines: Vec<String> = Vec::with_capacity(entries.len() * 2);
 
     for entry in entries {
-        // 每行格式：key<tab>{{xt=N}}
-        // N = entries 中的索引（不是 line_index）
         let line = format!("{}\t{}{}}}\t", entry.id, XTAG_PREFIX, entry.line_index);
         lines.push(line);
     }
@@ -236,8 +295,16 @@ mod tests {
         std::fs::write(&tmp, &bytes).unwrap();
 
         let mut file = parse_mcm_file(tmp.to_str().unwrap()).unwrap();
-        file.path = String::new(); // 抹掉临时路径
+        file.path = String::new();
+        let _ = std::fs::remove_file(&tmp);
         file
+    }
+
+    #[test]
+    fn test_encode_utf16le_native() {
+        let bytes = encode_utf16le("$sA");
+        // $ = U+0024, s = U+0073, A = U+0041
+        assert_eq!(bytes, vec![0x24, 0x00, 0x73, 0x00, 0x41, 0x00]);
     }
 
     #[test]
@@ -250,6 +317,35 @@ mod tests {
         assert_eq!(file.entries[0].source, "Hello World");
         assert_eq!(file.entries[1].id, "$sSetting2");
         assert_eq!(file.entries[1].source, "你好");
+    }
+
+    #[test]
+    fn test_byte_offset_utf16() {
+        let content = "$sA\tX\n$sB\tY\n";
+        let file = parse_test_string(content, McmEncoding::Utf16Le);
+        // BOM = 2 bytes; line 0: "$sA\tX" = 5 chars * 2 = 10 bytes; newline = 2 bytes
+        // offset[0] = 2; offset[1] = 2 + 10 + 2 = 14
+        assert_eq!(file.entries.len(), 2);
+        assert_eq!(file.entries[0].byte_offset, 2);
+        assert_eq!(file.entries[1].byte_offset, 14);
+    }
+
+    #[test]
+    fn test_byte_offset_utf8() {
+        let content = "$sA\tX\n$sB\tY\n";
+        let file = parse_test_string(content, McmEncoding::Utf8);
+
+        assert_eq!(file.entries.len(), 2);
+        assert_eq!(file.entries[0].byte_offset, 0);
+        assert_eq!(file.entries[1].byte_offset, 6);
+    }
+
+    #[test]
+    fn test_line_ending_crlf_preserved() {
+        let content = "$sA\tHello\r\n$sB\tWorld\r\n";
+        let file = parse_test_string(content, McmEncoding::Utf8);
+        assert_eq!(file.line_ending, "\r\n");
+        assert_eq!(file.entries.len(), 2);
     }
 
     #[test]
@@ -278,7 +374,7 @@ mod tests {
         assert_eq!(file.entries.len(), 2);
         assert_eq!(file.entries[0].id, "$sFirst");
         assert_eq!(file.entries[1].id, "$sSecond");
-        assert_eq!(file.header_list.len(), 4); // 2 entries + 2 empty
+        assert_eq!(file.header_list.len(), 4);
     }
 
     #[test]
@@ -286,14 +382,11 @@ mod tests {
         let content = "$sGreeting\tHello\n$sFarewell\tGoodbye\n";
         let tmp = std::env::temp_dir().join("test_mcm_save.txt");
 
-        // Write initial content
         let bytes = encode_to_bytes(content, &McmEncoding::Utf16Le);
         std::fs::write(&tmp, &bytes).unwrap();
 
-        // Parse
         let mut file = parse_mcm_file(tmp.to_str().unwrap()).unwrap();
 
-        // Apply translations
         for entry in &mut file.entries {
             if entry.source == "Hello" {
                 entry.translation = "你好".to_string();
@@ -303,10 +396,8 @@ mod tests {
             }
         }
 
-        // Save
         save_mcm_file(tmp.to_str().unwrap(), &file).unwrap();
 
-        // Re-parse and verify
         let reparsed = parse_mcm_file(tmp.to_str().unwrap()).unwrap();
         assert_eq!(reparsed.entries[0].source, "你好");
         assert_eq!(reparsed.entries[1].source, "再见");
