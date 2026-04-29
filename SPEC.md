@@ -143,6 +143,8 @@ T28|x|MCM (Mod Configuration Menu) translation file support (UTF-16LE/BE/UTF-8, 
 T29|x|ESP comparison engine (old/new diff with identical/modified/added/removed classification)|G1
 T30|x|BA2 archive support (Fallout 4 v0x01, Starfield v0x02, FO4B v0x08)|G8
 T31|x|PEX compile (in-place string table update with index preservation, binary roundtrip)|G1
+T32|x|Config persistence (JSON file, theme/language/API key survive restart)|G7
+T33|x|TCSC simplified/traditional Chinese conversion (character-pair mapping, ~140 pairs)|G7
 
 ## §B Bugs
 

@@ -130,15 +130,18 @@ export async function translateString(
 }
 
 export async function setOpenAiApiKey(apiKey: string): Promise<void> {
-  return invoke("set_openai_api_key", { apiKey });
+  await invoke("set_openai_api_key", { apiKey });
+  saveConfig({ openai_api_key: apiKey || undefined }).catch(() => {});
 }
 
 export async function setDeeplApiKey(apiKey: string): Promise<void> {
-  return invoke("set_deepl_api_key", { apiKey });
+  await invoke("set_deepl_api_key", { apiKey });
+  saveConfig({ deepl_api_key: apiKey || undefined }).catch(() => {});
 }
 
 export async function setTranslationProvider(provider: string): Promise<void> {
-  return invoke("set_translation_provider", { provider });
+  await invoke("set_translation_provider", { provider });
+  saveConfig({ current_provider: provider }).catch(() => {});
 }
 
 export async function getTranslationProviders(): Promise<TranslationProvidersResponse> {
@@ -493,6 +496,24 @@ export interface McmFileDto {
 export interface McmSaveRequest {
   path: string;
   entries: McmEntryDto[];
+}
+
+// ── Config ──────────────────────────────────────────────────────────
+
+export interface AppConfigDto {
+  openai_api_key?: string;
+  deepl_api_key?: string;
+  current_provider?: string;
+  theme?: string;
+  language?: string;
+}
+
+export async function loadConfig(): Promise<AppConfigDto> {
+  return invoke("load_config");
+}
+
+export async function saveConfig(config: AppConfigDto): Promise<void> {
+  return invoke("save_config", { config });
 }
 
 export async function loadMcmFile(mcmPath: string): Promise<McmFileDto> {

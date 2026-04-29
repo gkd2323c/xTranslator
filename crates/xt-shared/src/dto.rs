@@ -537,3 +537,19 @@ pub struct McmSaveRequest {
     pub path: String,
     pub entries: Vec<McmEntryDto>,
 }
+
+// ── Config DTOs ─────────────────────────────────────────────────────
+
+#[derive(Clone, Debug, Serialize, Deserialize, Default)]
+pub struct AppConfigDto {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub openai_api_key: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub deepl_api_key: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub current_provider: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub theme: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub language: Option<String>,
+}

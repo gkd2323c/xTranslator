@@ -80,7 +80,6 @@ fn parse_esp_with_strings(
     data_dir: &Path,
     game: GameId,
 ) -> Result<Vec<SkyString>, String> {
-    use crate::esp::parser::StringsFiles;
     let mut parser = EspParser::with_game(data_dir, game)
         .map_err(|e| format!("Failed to create parser: {}", e))?;
 

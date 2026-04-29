@@ -72,7 +72,8 @@ export function SidePanel() {
     );
   }
 
-  const progressPercent = espStats.total > 0 ? (translated / espStats.total) * 100 : 0;
+  const totalTranslatable = translated + incomplete;
+  const progressPercent = totalTranslatable > 0 ? (translated / totalTranslatable) * 100 : 0;
 
   return (
     <div className="sidepanel">

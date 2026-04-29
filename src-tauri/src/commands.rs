@@ -99,6 +99,20 @@ fn cache_dir() -> std::path::PathBuf {
     }
 }
 
+fn config_dir() -> std::path::PathBuf {
+    if cfg!(windows) {
+        std::env::var("LOCALAPPDATA")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|_| std::path::PathBuf::from("."))
+            .join("xTranslator")
+    } else {
+        std::env::var("HOME")
+            .map(|h| std::path::PathBuf::from(h).join(".config"))
+            .unwrap_or_else(|_| std::path::PathBuf::from("."))
+            .join("xTranslator")
+    }
+}
+
 fn status_string(sk: &SkyString) -> String {
     if sk.params.is_translated() {
         "translated"
@@ -1868,4 +1882,45 @@ pub async fn build_dialog_tree(
         .collect();
 
     Ok(DialogTreeDto { npcs })
+}
+
+// ── Config Commands ─────────────────────────────────────────────────
+
+use xt_shared::dto::AppConfigDto;
+
+fn config_to_dto(cfg: &xt_core::config::AppConfig) -> AppConfigDto {
+    AppConfigDto {
+        openai_api_key: cfg.openai_api_key.clone(),
+        deepl_api_key: cfg.deepl_api_key.clone(),
+        current_provider: cfg.current_provider.clone(),
+        theme: cfg.theme.clone(),
+        language: cfg.language.clone(),
+    }
+}
+
+fn dto_to_config(dto: &AppConfigDto) -> xt_core::config::AppConfig {
+    xt_core::config::AppConfig {
+        openai_api_key: dto.openai_api_key.clone(),
+        deepl_api_key: dto.deepl_api_key.clone(),
+        current_provider: dto.current_provider.clone(),
+        theme: dto.theme.clone(),
+        language: dto.language.clone(),
+    }
+}
+
+#[tauri::command]
+pub async fn load_config() -> Result<AppConfigDto, String> {
+    let dir = config_dir();
+    let cfg = xt_core::config::AppConfig::load(&dir)
+        .map_err(|e| format!("Failed to load config: {}", e))?;
+    Ok(config_to_dto(&cfg))
+}
+
+#[tauri::command]
+pub async fn save_config(config: AppConfigDto) -> Result<(), String> {
+    let dir = config_dir();
+    let mut existing = xt_core::config::AppConfig::load(&dir).unwrap_or_default();
+    existing.apply(&dto_to_config(&config));
+    existing.save(&dir)
+        .map_err(|e| format!("Failed to save config: {}", e))
 }

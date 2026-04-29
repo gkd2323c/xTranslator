@@ -3,6 +3,7 @@ import { Toaster } from "react-hot-toast";
 import toast from "react-hot-toast";
 import { Loader } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { setI18nLanguage } from "./i18n";
 import { useAppStore } from "./stores/appStore";
 import { MenuBar } from "./components/MenuBar";
 import { SidePanel } from "./components/SidePanel";
@@ -15,7 +16,7 @@ import { McmPanel } from "./components/McmPanel";
 import { EspComparePanel } from "./components/EspComparePanel";
 import { StringTable } from "./components/StringTable";
 import { EditorPanel } from "./components/EditorPanel";
-import { autoBackupSst } from "./api/strings";
+import { autoBackupSst, loadConfig, setOpenAiApiKey, setDeeplApiKey, setTranslationProvider } from "./api/strings";
 import "./App.css";
 
 const AUTO_BACKUP_INTERVAL_MS = 5 * 60 * 1000;
@@ -108,6 +109,16 @@ function App() {
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [setSelectedById, undo, redo]);
+
+  useEffect(() => {
+    loadConfig().then((cfg) => {
+      if (cfg.theme) useAppStore.getState().setTheme(cfg.theme as any);
+      if (cfg.language) setI18nLanguage(cfg.language);
+      if (cfg.openai_api_key) setOpenAiApiKey(cfg.openai_api_key);
+      if (cfg.deepl_api_key) setDeeplApiKey(cfg.deepl_api_key);
+      if (cfg.current_provider) setTranslationProvider(cfg.current_provider);
+    }).catch(() => {});
+  }, []);
 
   useEffect(() => {
     reapplyTheme();

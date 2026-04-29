@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import type { SkyStringDTO, LoadEspResponse, LoadSstResponse, BatchEntry, BatchStatus } from "../api/strings";
 import { getAllStrings, getStringsChunk, getStringsCount, queryStrings, updateTranslation } from "../api/strings";
+import { saveConfig } from "../api/strings";
 import toast from "react-hot-toast";
 
 export type Theme = "dark" | "light" | "gray" | "auto";
@@ -696,6 +697,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     try { localStorage.setItem(THEME_STORAGE_KEY, theme); } catch { /* ok */ }
     document.documentElement.setAttribute("data-theme", resolveTheme(theme));
     set({ theme, themeLabel: THEME_LABELS[theme] });
+    saveConfig({ theme }).catch(() => {});
   },
 
   cycleTheme: () => {

@@ -1,6 +1,7 @@
 pub mod ba2;
 pub mod bsa;
 pub mod cache;
+pub mod config;
 pub mod esp;
 pub mod fuz;
 pub mod heuristic;
@@ -10,6 +11,7 @@ pub mod normalization;
 pub mod pex;
 pub mod sst;
 pub mod strings;
+pub mod tcsc;
 pub mod testing;
 pub mod translation_api;
 pub mod types;

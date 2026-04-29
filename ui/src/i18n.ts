@@ -53,9 +53,12 @@ i18n.use(initReactI18next).init({
   interpolation: { escapeValue: false },
 });
 
+import { saveConfig } from "./api/strings";
+
 export function setI18nLanguage(lang: string) {
   try { localStorage.setItem(STORAGE_KEY, lang); } catch { /* ok */ }
   i18n.changeLanguage(lang);
+  saveConfig({ language: lang }).catch(() => {});
 }
 
 export default i18n;
