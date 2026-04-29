@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useAppStore, computeTranslationProgress } from "../stores/appStore";
-import { updateTranslation, heuristicSearch, translateString, setApiKey, tcscConvert, type HeuristicMatchDTO } from "../api/strings";
-import { Save, X, Type, Search, Copy, Languages, Key } from "lucide-react";
+import { updateTranslation, heuristicSearch, translateString, setApiKey, tcscConvert, checkAliases, type HeuristicMatchDTO, type AliasCheckResult } from "../api/strings";
+import { Save, X, Type, Search, Copy, Languages, Key, AlertTriangle, Loader } from "lucide-react";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import { ProgressBar } from "./ProgressBar";
@@ -22,6 +22,7 @@ export function EditorPanel() {
   const [isSaving, setIsSaving] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [isTranslating, setIsTranslating] = useState(false);
+  const [aliasResult, setAliasResult] = useState<AliasCheckResult | null>(null);
   const [matches, setMatches] = useState<HeuristicMatchDTO[]>([]);
   const [showApiKeyDialog, setShowApiKeyDialog] = useState(false);
   const [apiKeyInput, setApiKeyInput] = useState("");
@@ -29,6 +30,11 @@ export function EditorPanel() {
   useEffect(() => {
     setLocalTrans(selectedItem?.translation || "");
     setMatches([]);
+    setAliasResult(null);
+    // Check alias integrity when selecting a new string
+    if (selectedItem) {
+      checkAliases(selectedItem.id).then(setAliasResult).catch(() => {});
+    }
   }, [selectedId]);
 
   const handleSave = useCallback(async () => {
@@ -150,7 +156,7 @@ export function EditorPanel() {
           {selectedItem.status !== "translated" && (
             <>
               <button onClick={handleTranslate} disabled={isTranslating} className="btn btn-sm" title="Machine translate (OpenAI)">
-                <Languages size={14} />
+                {isTranslating ? <Loader size={14} style={{ animation: "spin 1s linear infinite" }} /> : <Languages size={14} />}
                 <span>{isTranslating ? "Translating..." : "Translate"}</span>
               </button>
               <button onClick={handleHeuristicSearch} disabled={isSearching} className="btn btn-sm" title="Find similar translations">
@@ -175,7 +181,14 @@ export function EditorPanel() {
           <div className="editor-source-text">{selectedItem.source}</div>
         </div>
         <div className="editor-translation">
-          <label>Translation</label>
+          <label>
+            Translation
+            {aliasResult && aliasResult.has_mismatch && (
+              <span style={{ marginLeft: 8, color: "#e74c3c", fontSize: 12, fontWeight: "normal" }} title={aliasResult.missing_in_trans.join(", ")}>
+                <AlertTriangle size={12} style={{ verticalAlign: "middle" }} /> Alias mismatch
+              </span>
+            )}
+          </label>
           <textarea
             value={localTrans}
             onChange={(e) => setLocalTrans(e.target.value)}

@@ -5,12 +5,14 @@ import { FileCode, FileUp } from "lucide-react";
 import toast from "react-hot-toast";
 import { parsePexStrings, exportXml } from "../api/strings";
 import type { PexScriptDto } from "../api/strings";
+import { useAppStore } from "../stores/appStore";
 
 export function PexPanel() {
   const { t } = useTranslation();
   const [script, setScript] = useState<PexScriptDto | null>(null);
   const [loading, setLoading] = useState(false);
   const [selectedType, setSelectedType] = useState<string | null>(null);
+  const language = useAppStore((s) => s.language);
 
   const types = [...new Set((script?.translatable ?? []).map((t) => t.string_type))];
   const filtered = selectedType
@@ -30,7 +32,7 @@ export function PexPanel() {
 
     setLoading(true);
     try {
-      const result = await parsePexStrings(path);
+      const result = await parsePexStrings(path, language === "english" ? "SkyrimSE" : undefined);
       setScript(result);
       toast.success(t("pex.foundStrings", { count: result.translatable.length }));
     } catch (e: any) {

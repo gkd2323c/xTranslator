@@ -3,8 +3,8 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { useTranslation } from "react-i18next";
 import { FileText, FileUp, Save } from "lucide-react";
 import toast from "react-hot-toast";
-import { loadMcmFile, saveMcmFile } from "../api/strings";
-import type { McmFileDto, McmEntryDto } from "../api/strings";
+import { loadMcmFile, saveMcmFile, mcmCompare } from "../api/strings";
+import type { McmFileDto, McmEntryDto, McmComparePolicy, McmCompareRequest } from "../api/strings";
 
 export function McmPanel() {
   const { t } = useTranslation();
@@ -13,6 +13,8 @@ export function McmPanel() {
   const [modified, setModified] = useState(false);
   const [entries, setEntries] = useState<McmEntryDto[]>([]);
   const [filter, setFilter] = useState("");
+  const [compareDialogOpen, setCompareDialogOpen] = useState(false);
+  const [comparePolicy, setComparePolicy] = useState<McmComparePolicy>("no_trans");
 
   const handleOpen = async () => {
     const path = await open({
@@ -56,6 +58,49 @@ export function McmPanel() {
     } catch (e: any) {
       toast.error(`${t("mcm.saveFailed")}: ${e}`);
     }
+  };
+
+  const handleCompare = async () => {
+    const refPath = await open({
+      multiple: false,
+      directory: false,
+      filters: [
+        { name: "MCM Translation", extensions: ["txt"] },
+        { name: "All", extensions: ["*"] },
+      ],
+    });
+    if (!refPath) return;
+
+    try {
+      const request: McmCompareRequest = {
+        entries,
+        reference_path: refPath as string,
+        policy: comparePolicy,
+      };
+      const result = await mcmCompare(request);
+
+      // Merge updated entries back into state
+      if (result.updated_entries.length > 0) {
+        const updatedMap = new Map(
+          result.updated_entries.map((e) => [e.line_index, e])
+        );
+        setEntries((prev) =>
+          prev.map((e) => updatedMap.get(e.line_index) || e)
+        );
+        setModified(true);
+      }
+
+      toast.success(
+        t("mcm.compareDone", {
+          matched: result.matched,
+          unmatched: result.unmatched,
+          updated: result.updated_entries.length,
+        })
+      );
+    } catch (e: any) {
+      toast.error(`${t("mcm.compareFailed")}: ${e}`);
+    }
+    setCompareDialogOpen(false);
   };
 
   const filteredEntries = filter
@@ -119,10 +164,69 @@ export function McmPanel() {
               >
                 <Save size={12} /> {t("mcm.save")}
               </button>
+              <button
+                onClick={() => setCompareDialogOpen(true)}
+                className="btn btn-sm"
+                style={{ flex: 1 }}
+              >
+                <FileText size={12} /> {t("mcm.compare")}
+              </button>
             </div>
             {modified && (
               <div className="badge badge-warning" style={{ marginTop: 6, width: "100%", textAlign: "center" }}>
                 {t("mcm.unsaved")}
+              </div>
+            )}
+
+            {/* Compare dialog */}
+            {compareDialogOpen && (
+              <div
+                style={{
+                  marginTop: 8,
+                  padding: 8,
+                  border: "1px solid var(--border-color)",
+                  borderRadius: 4,
+                  background: "var(--bg-elevated)",
+                }}
+              >
+                <div style={{ marginBottom: 8, fontSize: 12 }}>
+                  {t("mcm.comparePolicy")}
+                </div>
+                <select
+                  value={comparePolicy}
+                  onChange={(e) => setComparePolicy(e.target.value as McmComparePolicy)}
+                  className="policy-select"
+                  style={{
+                    width: "100%",
+                    padding: "4px 8px",
+                    borderRadius: 4,
+                    border: "1px solid var(--border-color)",
+                    background: "var(--bg-base)",
+                    color: "var(--text-primary)",
+                    marginBottom: 8,
+                  }}
+                >
+                  <option value="all">{t("mcm.policyAll")}</option>
+                  <option value="no_trans">{t("mcm.policyNoTrans")}</option>
+                  <option value="no_trans_and_partial">{t("mcm.policyNoTransAndPartial")}</option>
+                  <option value="partial_only">{t("mcm.policyPartialOnly")}</option>
+                </select>
+                <div style={{ display: "flex", gap: 4 }}>
+                  <button
+                    onClick={handleCompare}
+                    className="btn btn-sm btn-primary"
+                    style={{ flex: 1 }}
+                  >
+                    {t("mcm.compare")}
+                  </button>
+                  <button
+                    onClick={() => setCompareDialogOpen(false)}
+                    className="btn btn-sm"
+                    style={{ flex: 1 }}
+                  >
+                    {t("common.cancel")}
+                  </button>
+                </div>
               </div>
             )}
           </div>

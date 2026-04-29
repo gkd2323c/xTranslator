@@ -4,6 +4,7 @@ use crate::types::esp_pointer::{string_hash, EspPointer};
 use crate::types::game_id::GameId;
 use crate::types::params::SkyStringParams;
 use crate::types::sky_string::SkyString;
+use crate::vmad::VmadDecoder;
 use std::io::{Cursor, Read, Result};
 use std::path::Path;
 
@@ -844,10 +845,60 @@ impl EspParser {
                 }
             }
 
+            // 处理 VMAD 字段中的脚本字符串
+            if &field_header.name == b"VMAD" && !field_data.is_empty() {
+                self.parse_vmad_strings(record_sig, form_id, &field_data, field_index);
+            }
+
             field_index += 1;
         }
 
         Ok(())
+    }
+
+    /// 解析 VMAD 字段中的脚本字符串
+    fn parse_vmad_strings(&mut self, record_sig: &[u8; 4], form_id: u32, data: &[u8], field_index: u16) {
+        use crate::types::esp_pointer::string_hash;
+
+        let decoder = VmadDecoder::new(data, 5);
+        let vmad_strings = decoder.decode();
+
+        for vmad_str in vmad_strings {
+            if vmad_str.value.is_empty() {
+                continue;
+            }
+
+            let mut sk = SkyString::new(
+                self.strings.len() as u32,
+                vmad_str.value.clone(),
+                String::new(),
+                *record_sig,
+                *b"VMAD",
+            );
+
+            // VMAD 信息编码到 esp_ptr:
+            // - str_id: 负偏移量，标识 VMAD 字符串（后续写回时使用）
+            // - index: field_index（原始字段索引）
+            // - index_max: vmad_length（字符串长度，用于写回验证）
+            // - edid_hash: script_name + prop_name 的组合哈希（用于标识）
+            let script_prop_key = format!("{}\0{}", vmad_str.script_name, vmad_str.prop_name);
+            sk.esp_ptr = EspPointer {
+                str_id: -(vmad_str.offset as i32),
+                form_id,
+                record_sig: *record_sig,
+                field_sig: *b"VMAD",
+                index: field_index,
+                index_max: vmad_str.length as u16,
+                edid_hash: string_hash(&script_prop_key),
+            };
+
+            sk.internal_params.set(crate::types::params::SkyStringInternalParams::IS_VMAD_STRING, true);
+            sk.list_index = 0;
+            sk.params.set(SkyStringParams::INCOMPLETE_TRANS, true);
+            sk.parent_form_id = self.current_parent_form_id;
+
+            self.strings.push(sk);
+        }
     }
 
     fn find_def(&self, record_sig: &[u8; 4], field_sig: &[u8; 4]) -> Option<&TranslatableField> {

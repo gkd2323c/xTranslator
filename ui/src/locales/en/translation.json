@@ -60,8 +60,17 @@
     "tcsc_traditional": "繁"
   },
   "menu": {
-    "tcsc_simplified": "To Simplified Chinese",
-    "tcsc_traditional": "To Traditional Chinese"
+    "tcsc_simplified": "To Simplified",
+    "tcsc_traditional": "To Traditional",
+    "tcsc_batch_simplified": "SC↹",
+    "tcsc_batch_traditional": "TC↹",
+    "tcsc_batch_confirm_simplified": "Convert ALL {{count}} translations to Simplified Chinese?",
+    "tcsc_batch_confirm_traditional": "Convert ALL {{count}} translations to Traditional Chinese?",
+    "tcsc_batch_done": "Converted {{count}} translations",
+    "compare_diff": "Tag: source ≠ translation",
+    "compare_same": "Tag: source = translation",
+    "compare_diff_done": "Tagged {{count}} strings where source ≠ translation",
+    "compare_same_done": "Tagged {{count}} strings where source = translation"
   },
   "batch": {
     "title": "Batch Processor",
@@ -178,7 +187,15 @@
     "saved": "MCM file saved",
     "savedAs": "Saved to {{path}}",
     "saveFailed": "Failed to save MCM file",
-    "unsaved": "Unsaved changes"
+    "unsaved": "Unsaved changes",
+    "compare": "Compare",
+    "comparePolicy": "Compare Policy",
+    "policyAll": "Overwrite all",
+    "policyNoTrans": "Only if untranslated",
+    "policyNoTransAndPartial": "Untranslated + partial",
+    "policyPartialOnly": "Partial only",
+    "compareDone": "Compared: {{matched}} matched, {{unmatched}} unmatched, {{updated}} updated",
+    "compareFailed": "Compare failed"
   },
   "espCompare": {
     "title": "ESP Compare",
@@ -241,5 +258,23 @@
     "outputFiles": "Output Files",
     "success": "Exported {translated} of {total} strings",
     "failed": "Finalize failed"
+  },
+  "settings": {
+    "title": "Settings",
+    "apiKeys": "Translation API",
+    "provider": "Provider",
+    "apiKeyHint": "Supports OpenAI-compatible APIs (OpenAI, DeepSeek, etc.). Also settable via XT_TRANSLATE_API_KEY env var.",
+    "deeplPlaceholder": "DeepL API key (free: xxx:fx, pro: xxx)",
+    "proxy": "HTTP Proxy",
+    "proxyServer": "Proxy Server",
+    "proxyServerPlaceholder": "e.g. proxy.example.com (leave empty to disable)",
+    "proxyPort": "Port",
+    "proxyUsername": "Username (optional)",
+    "proxyPassword": "Password (optional)",
+    "proxyAuthPlaceholder": "Leave empty if no auth",
+    "proxyHint": "Proxy settings apply to OpenAI and DeepL translation requests. Saved to config file.",
+    "saved": "Settings saved",
+    "saveFailed": "Failed to save settings",
+    "saving": "Saving..."
   }
 }

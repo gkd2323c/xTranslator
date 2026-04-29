@@ -16,6 +16,7 @@ serde_json = "1.0"
 xt-core = { path = "../crates/xt-core" }
 xt-shared = { path = "../crates/xt-shared" }
 reqwest = { workspace = true }
+regex = "1"
 
 [features]
 custom-protocol = ["tauri/custom-protocol"]

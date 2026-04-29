@@ -390,8 +390,8 @@ export interface PexScriptDto {
   translatable: PexTranslatableDto[];
 }
 
-export async function parsePexStrings(pexPath: string): Promise<PexScriptDto> {
-  return invoke("parse_pex_strings", { pexPath });
+export async function parsePexStrings(pexPath: string, game?: string): Promise<PexScriptDto> {
+  return invoke("parse_pex_strings", { pexPath, game });
 }
 
 // ── FUZ Types ───────────────────────────────────────────────────────
@@ -548,10 +548,48 @@ export async function saveMcmFile(request: McmSaveRequest): Promise<void> {
   return invoke("save_mcm_file", { request });
 }
 
+export type McmComparePolicy = "all" | "no_trans" | "no_trans_and_partial" | "partial_only";
+
+export interface McmCompareRequest {
+  entries: McmEntryDto[];
+  reference_path: string;
+  policy: McmComparePolicy;
+}
+
+export interface McmCompareResult {
+  matched: number;
+  unmatched: number;
+  updated_entries: McmEntryDto[];
+}
+
+export async function mcmCompare(request: McmCompareRequest): Promise<McmCompareResult> {
+  return invoke("mcm_compare", { request });
+}
+
 // ── TCSC ─────────────────────────────────────────────────────────────
 
 export async function tcscConvert(text: string, direction: "to_simplified" | "to_traditional"): Promise<string> {
   return invoke("tcsc_convert", { text, direction });
+}
+
+export async function tcscBatchConvert(direction: "to_simplified" | "to_traditional", ids?: number[]): Promise<number[]> {
+  return invoke("tcsc_batch_convert", { direction, ids });
+}
+
+// ── Vocabulary Types ────────────────────────────────────────────────
+
+export interface VocabularyInfo {
+  pair_count: number;
+  base_names: string[];
+}
+
+export async function loadVocabulary(
+  stringsDir: string,
+  sourceLang: string,
+  targetLang: string,
+  game?: string,
+): Promise<VocabularyInfo> {
+  return invoke("load_vocabulary", { stringsDir, sourceLang, targetLang, game });
 }
 
 // ── Finalize Types ──────────────────────────────────────────────────
@@ -576,4 +614,48 @@ export interface FinalizeResponse {
 
 export async function finalize(request: FinalizeRequest): Promise<FinalizeResponse> {
   return invoke("finalize", { request });
+}
+
+// ── Source/Dest Compare Types ────────────────────────────────────────
+
+export async function compareSourceDest(mode: "diff" | "same"): Promise<number> {
+  return invoke("compare_source_dest", { mode });
+}
+
+// ── Alias Check Types ────────────────────────────────────────────────
+
+export interface AliasCheckResult {
+  source_aliases: string[];
+  trans_aliases: string[];
+  missing_in_trans: string[];
+  extra_in_trans: string[];
+  has_mismatch: boolean;
+}
+
+export async function checkAliases(id: number): Promise<AliasCheckResult> {
+  return invoke("check_aliases", { id });
+}
+
+// ── Data Config Types ────────────────────────────────────────────────
+
+export interface CtdaFuncDto {
+  id: number;
+  name: string;
+  params: string;
+}
+
+export interface FieldSizeInfoDto {
+  max_size: number;
+  can_wrap: boolean;
+}
+
+export interface DataConfigsDto {
+  ctda_funcs: CtdaFuncDto[];
+  field_size_ref: Record<string, FieldSizeInfoDto>;
+  dial_sub_type: Record<string, string>;
+  emote_definition: Record<string, string>;
+}
+
+export async function loadDataConfigs(game: string): Promise<DataConfigsDto> {
+  return invoke("load_data_configs", { game });
 }

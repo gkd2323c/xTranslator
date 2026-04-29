@@ -8,7 +8,9 @@ Parses ESP/ESM files (Skyrim SE, Fallout 4, Starfield, etc.), extracts translata
 
 ## Current Status
 
-**All 33 spec tasks complete — v1.0.** The app can load ESP+Strings, display 76K+ strings in a virtual-scrolled table, edit translations, translate via API, browse BSA/BA2 archives, translate PEX and MCM files, map FUZ audio, view NPC dialogs, compare ESP files, import XML dictionaries with multi-tier enhanced matching (exact→EDID→normalized→vocab), switch between 10 UI languages, persist config across restarts, and convert between simplified/traditional Chinese.
+**All 33 spec tasks complete — v1.0.** The app can load ESP+Strings, display 76K+ strings in a virtual-scrolled table, edit translations, translate via API, browse BSA/BA2 archives, translate PEX and MCM files, map FUZ audio, view NPC dialogs, compare ESP files, import XML dictionaries with multi-tier enhanced matching (exact→EDID→normalized→vocab), switch between 10 UI languages, persist config across restarts, convert between simplified/traditional Chinese, and finalize translations in one step.
+
+**v1.1 in progress** — Phase 1 complete. Phase 2: Strings Compare + Alias Check done.
 
 ### Implemented
 
@@ -42,9 +44,17 @@ Parses ESP/ESM files (Skyrim SE, Fallout 4, Starfield, etc.), extracts translata
 | MCM translation | Done | UTF-16LE/UTF-8/ANSI parser + save path + McmPanel UI |
 | ESPCompare | Done | StringKey triple compare + identical/added/removed/modified UI |
 | Config persistence | Done | `AppConfig` JSON file, load/save IPC, theme/language/API key survive restart |
-| TCSC (繁简转换) | Done | OpenCC 3960 pairs + Delphi 2552 pairs fallback, compile-time embedded (core library) |
+| TCSC (繁简转换) | Done | OpenCC 3960 pairs + Delphi 2552 pairs fallback, compile-time embedded, IPC + MenuBar + EditorPanel buttons |
+| Proxy settings UI | Done | Frontend SettingsDialog with proxy server/port/user/pass fields + MenuBar Settings button |
+| Batch TCSC conversion | Done | `tcsc_batch_convert` IPC + MenuBar batch buttons (简↹/繁↹) |
 | API config | Done | Parse Delphi `ApiTranslator.txt`, language code resolution, provider metadata IPC |
 | CRLF protection | Done | `<L_F>` tag protect/restore in both OpenAI and DeepL providers |
+| vocabulary.txt integration | Done | `vocabulary.rs` module + `load_vocabulary` IPC + auto-load on ESP + heuristic search enrichment |
+| pexNoTransProc.txt filtering | Done | Parse procedure list, filter non-translatable PEX string parameters |
+| HiDPI support | Done | Tauri 2.x native HiDPI + decorations/dragDrop config |
+| Drag-drop extension | Done | Route BSA/BA2, PEX, FUZ drops to correct handlers |
+| Strings Compare (源/译文哈希) | Done | `compare_source_dest` IPC + MenuBar ≠/＝ 按钮，标记 diff/same 为 incomplete |
+| Alias integrity check | Done | `check_aliases` IPC + EditorPanel alias 不匹配提示 |
 
 ### All Spec Tasks Complete
 

@@ -18,10 +18,10 @@ use xt_core::xml::{
 };
 use xt_shared::dto::{
     AutoBackupRequest, AutoBackupResponse, BatchConfig, BatchEntry, BatchStatus, BsaFileEntryDto,
-    BsaFileListDto, DialogInfoDto, DialogTreeDto, EspComparePairDto, EspCompareResultDto,
-    EspLoadProgress, FinalizeRequest, FinalizeResponse, FuzMapping, FuzScanResponse,
+    BsaFileListDto, CtdaFuncDto, DataConfigsDto, DialogInfoDto, DialogTreeDto, EspComparePairDto, EspCompareResultDto,
+    EspLoadProgress, FieldSizeInfoDto, FinalizeRequest, FinalizeResponse, FuzMapping, FuzScanResponse,
     HeuristicMatchDTO, HeuristicSearchRequest, LoadEspResponse, LoadSstResponse, McmEntryDto,
-    McmFileDto, McmSaveRequest, NpcDialogDto, PexScriptDto, PexTranslatableDto, QueryRequest,
+    McmComparePolicy, McmCompareRequest, McmCompareResult, McmFileDto, McmSaveRequest, NpcDialogDto, PexScriptDto, PexTranslatableDto, QueryRequest,
     QueryResponse, SaveStringsRequest, SaveStringsResponse, SkyStringDTO, TranslateRequest,
     XmlExportRequest, XmlImportResponse, XmlProgress,
 };
@@ -50,6 +50,8 @@ pub struct AppState {
     pub is_dirty: Mutex<bool>,
     /// ApiTranslator.txt 配置
     pub api_config: ApiTranslatorConfig,
+    /// Vocabulary: source→translation pairs from game Strings files
+    pub vocabulary: Mutex<Vec<(String, String)>>,
 }
 
 impl AppState {
@@ -74,6 +76,7 @@ impl AppState {
             current_provider: Mutex::new(default_provider),
             is_dirty: Mutex::new(false),
             api_config,
+            vocabulary: Mutex::new(Vec::new()),
         }
     }
 }
@@ -682,19 +685,24 @@ pub async fn get_stats(state: tauri::State<'_, Arc<AppState>>) -> Result<String,
 }
 
 /// 对给定源文本执行启发式相似匹配，返回候选译文。
+/// 候选集包括当前已翻译字符串 + vocabulary 词汇对。
 #[tauri::command]
 pub async fn heuristic_search(
     state: tauri::State<'_, Arc<AppState>>,
     request: HeuristicSearchRequest,
 ) -> Result<Vec<HeuristicMatchDTO>, String> {
     let data = state.strings.lock().map_err(|e| e.to_string())?;
+    let vocab = state.vocabulary.lock().map_err(|e| e.to_string())?;
 
-    // 候选集仅来自“已翻译”条目；未翻译条目没有可用目标文本。
-    let candidates: Vec<(String, String)> = data
+    // 候选集仅来自"已翻译"条目；未翻译条目没有可用目标文本。
+    let mut candidates: Vec<(String, String)> = data
         .iter()
         .filter(|sk| sk.params.is_translated() && !sk.source.is_empty())
         .map(|sk| (sk.source.clone(), sk.translation.clone()))
         .collect();
+
+    // Merge vocabulary pairs (additional source→translation corpus from game Strings files)
+    candidates.extend(vocab.iter().cloned());
 
     if candidates.is_empty() {
         return Ok(Vec::new());
@@ -1519,7 +1527,7 @@ pub async fn extract_ba2_folder(
 
 /// Parse a PEX file and extract translatable strings
 #[tauri::command]
-pub async fn parse_pex_strings(pex_path: String) -> Result<PexScriptDto, String> {
+pub async fn parse_pex_strings(pex_path: String, game: Option<String>) -> Result<PexScriptDto, String> {
     let mut file =
         std::fs::File::open(&pex_path).map_err(|e| format!("Failed to open PEX: {}", e))?;
 
@@ -1532,9 +1540,22 @@ pub async fn parse_pex_strings(pex_path: String) -> Result<PexScriptDto, String>
         .unwrap_or("unknown")
         .to_string();
 
+    // Load pexNoTransProc.txt filter for the game
+    let no_trans_procs = load_no_trans_procs(game.as_deref());
+
     let translatable: Vec<PexTranslatableDto> = script
         .translatable
         .iter()
+        .filter(|t| {
+            // Filter out strings from non-translatable procedures
+            if !t.function_name.is_empty() {
+                let fn_lower = t.function_name.to_lowercase();
+                if no_trans_procs.contains(&fn_lower) {
+                    return false;
+                }
+            }
+            true
+        })
         .map(|t| PexTranslatableDto {
             object_name: t.object_name.clone(),
             state_name: t.state_name.clone(),
@@ -1553,6 +1574,39 @@ pub async fn parse_pex_strings(pex_path: String) -> Result<PexScriptDto, String>
         string_count: script.string_table.len() as u32,
         translatable,
     })
+}
+
+/// Load pexNoTransProc.txt for the given game, returning a set of
+/// lowercase procedure names that should be excluded from translation.
+fn load_no_trans_procs(game: Option<&str>) -> std::collections::HashSet<String> {
+    let game_subdir = match game.unwrap_or("SkyrimSE") {
+        "Skyrim" => "Skyrim",
+        "SkyrimSE" => "SkyrimSE",
+        "Fallout4" => "Fallout4",
+        "FalloutNV" => "FalloutNV",
+        "Fallout76" => "Fallout76",
+        "Starfield" => "Starfield",
+        _ => "SkyrimSE",
+    };
+    let path = std::path::Path::new("Data").join(game_subdir).join("pexNoTransProc.txt");
+    if !path.exists() {
+        return std::collections::HashSet::new();
+    }
+    let content = match std::fs::read_to_string(&path) {
+        Ok(c) => c,
+        Err(_) => return std::collections::HashSet::new(),
+    };
+    content
+        .lines()
+        .filter_map(|line| {
+            let trimmed = line.trim().to_lowercase();
+            if trimmed.is_empty() || trimmed.starts_with('#') {
+                None
+            } else {
+                Some(trimmed)
+            }
+        })
+        .collect()
 }
 
 /// Compile a PEX file with updated translations
@@ -1751,6 +1805,178 @@ pub async fn save_mcm_file(request: McmSaveRequest) -> Result<(), String> {
     Ok(())
 }
 
+/// Compare current MCM entries with a reference MCM file and apply translations
+/// based on the specified overwrite policy.
+#[tauri::command]
+pub async fn mcm_compare(request: McmCompareRequest) -> Result<McmCompareResult, String> {
+    use std::collections::HashMap;
+
+    // Parse the reference MCM file
+    let reference_file = mcm::parse_mcm_file(&request.reference_path)
+        .map_err(|e| format!("Failed to parse reference MCM file: {}", e))?;
+
+    // Build HashMap from reference entries by id for O(1) lookup
+    let reference_by_id: HashMap<&str, &xt_core::mcm::McmEntry> = reference_file
+        .entries
+        .iter()
+        .map(|e| (e.id.as_str(), e))
+        .collect();
+
+    let mut matched: u32 = 0;
+    let mut unmatched: u32 = 0;
+    let mut updated_entries: Vec<McmEntryDto> = Vec::new();
+
+    // Heuristic: a translation is "partial" if it's non-empty, differs from source,
+    // and is significantly shorter (less than 30% of source length)
+    fn is_partial(source: &str, translation: &str) -> bool {
+        if translation.is_empty() {
+            return false;
+        }
+        if translation == source {
+            return false;
+        }
+        let ratio = translation.len() as f32 / source.len().max(1) as f32;
+        ratio < 0.3
+    }
+
+    fn should_update(
+        current_trans: &str,
+        policy: &McmComparePolicy,
+        source: &str,
+    ) -> bool {
+        match policy {
+            McmComparePolicy::All => true,
+            McmComparePolicy::NoTrans => current_trans.is_empty(),
+            McmComparePolicy::NoTransAndPartial => {
+                current_trans.is_empty() || is_partial(source, current_trans)
+            }
+            McmComparePolicy::PartialOnly => is_partial(source, current_trans),
+        }
+    }
+
+    for entry in &request.entries {
+        if let Some(ref_entry) = reference_by_id.get(entry.id.as_str()) {
+            matched += 1;
+
+            if should_update(&entry.translation, &request.policy, &entry.source) {
+                // Copy translation from reference
+                updated_entries.push(McmEntryDto {
+                    id: entry.id.clone(),
+                    source: entry.source.clone(),
+                    translation: ref_entry.translation.clone(),
+                    line_index: entry.line_index,
+                    byte_offset: entry.byte_offset,
+                });
+            }
+        } else {
+            unmatched += 1;
+        }
+    }
+
+    Ok(McmCompareResult {
+        matched,
+        unmatched,
+        updated_entries,
+    })
+}
+
+// ── Data Config Commands ─────────────────────────────────────────────
+
+use xt_core::data_config::{
+    parse_ctda_func, parse_dial_sub_type, parse_emote_definition, parse_field_size_ref,
+};
+
+/// Map game string to Data/<Game> subdirectory name
+fn game_to_data_dir(game: &str) -> &'static str {
+    match game.to_lowercase().as_str() {
+        "skyrim" => "Skyrim",
+        "skyrimse" | "skyrim se" => "SkyrimSE",
+        "fallout4" | "fo4" => "Fallout4",
+        "falloutnv" | "fonv" => "FalloutNV",
+        "fallout76" | "fo76" => "Fallout76",
+        "starfield" | "sf" => "Starfield",
+        _ => "SkyrimSE",
+    }
+}
+
+/// Load and parse Data/<Game>/ 配置文件
+#[tauri::command]
+pub async fn load_data_configs(game: String) -> Result<DataConfigsDto, String> {
+    let data_dir = std::path::Path::new("Data");
+    let game_dir = data_dir.join(game_to_data_dir(&game));
+
+    // Parse ctdaFunc.txt
+    let ctda_funcs: Vec<CtdaFuncDto> = {
+        let path = game_dir.join("ctdaFunc.txt");
+        if path.exists() {
+            parse_ctda_func(&path)
+                .into_iter()
+                .map(|(id, func)| CtdaFuncDto {
+                    id,
+                    name: func.name,
+                    params: func.params,
+                })
+                .collect()
+        } else {
+            Vec::new()
+        }
+    };
+
+    // Parse fieldSizeRef.txt
+    let field_size_ref: HashMap<String, FieldSizeInfoDto> = {
+        let path = game_dir.join("fieldSizeRef.txt");
+        if path.exists() {
+            parse_field_size_ref(&path)
+                .into_iter()
+                .map(|(key, info)| {
+                    (
+                        key,
+                        FieldSizeInfoDto {
+                            max_size: info.max_size,
+                            can_wrap: info.can_wrap,
+                        },
+                    )
+                })
+                .collect()
+        } else {
+            HashMap::new()
+        }
+    };
+
+    // Parse DialSubType.txt
+    let dial_sub_type: HashMap<String, String> = {
+        let path = game_dir.join("DialSubType.txt");
+        if path.exists() {
+            parse_dial_sub_type(&path)
+                .into_iter()
+                .map(|(id, name)| (format!("{:08X}", id), name))
+                .collect()
+        } else {
+            HashMap::new()
+        }
+    };
+
+    // Parse EmoteDefinition.txt
+    let emote_definition: HashMap<String, String> = {
+        let path = game_dir.join("EmoteDefinition.txt");
+        if path.exists() {
+            parse_emote_definition(&path)
+                .into_iter()
+                .map(|(id, name)| (format!("{:08X}", id), name))
+                .collect()
+        } else {
+            HashMap::new()
+        }
+    };
+
+    Ok(DataConfigsDto {
+        ctda_funcs,
+        field_size_ref,
+        dial_sub_type,
+        emote_definition,
+    })
+}
+
 // ── FUZ Commands ────────────────────────────────────────────────────
 
 #[tauri::command]
@@ -1899,6 +2125,93 @@ pub async fn build_dialog_tree(
 
 use xt_core::tcsc;
 
+/// Load vocabulary from vocabulary.txt and game Strings files.
+///
+/// Returns source→translation pairs count and makes them available
+/// for heuristic search enrichment.
+#[tauri::command]
+pub async fn load_vocabulary(
+    state: tauri::State<'_, Arc<AppState>>,
+    strings_dir: String,
+    source_lang: String,
+    target_lang: String,
+    game: Option<String>,
+) -> Result<VocabularyInfo, String> {
+    let game_id = match game.as_deref() {
+        Some("Skyrim") => GameId::Skyrim,
+        Some("SkyrimSE") | None => GameId::SkyrimSE,
+        Some("Fallout4") => GameId::Fallout4,
+        Some("FalloutNV") => GameId::FalloutNV,
+        Some("Fallout76") => GameId::Fallout76,
+        Some("Starfield") => GameId::Starfield,
+        Some(g) => return Err(format!("Unknown game: {}", g)),
+    };
+
+    let state_clone = state.inner().clone();
+    let result = tokio::task::spawn_blocking(move || {
+        let data_dir = std::path::Path::new("Data");
+        let game_dir = data_dir.join(match game_id {
+            GameId::Skyrim => "Skyrim",
+            GameId::SkyrimSE => "SkyrimSE",
+            GameId::Fallout4 => "Fallout4",
+            GameId::FalloutNV => "FalloutNV",
+            GameId::Fallout76 => "Fallout76",
+            GameId::Starfield => "Starfield",
+        });
+
+        let vocab_path = game_dir.join("vocabulary.txt");
+        if !vocab_path.exists() {
+            return Ok(VocabularyInfo {
+                pair_count: 0,
+                base_names: vec![],
+            });
+        }
+
+        let names = xt_core::vocabulary::parse_vocabulary_file(&vocab_path)
+            .map_err(|e| format!("Failed to parse vocabulary.txt: {}", e))?;
+        let base_names = names.clone();
+
+        let codepage_path = game_dir.join("codepage.txt");
+        let codepage_table = if codepage_path.exists() {
+            CodepageTable::load_from_file(&codepage_path).ok()
+        } else {
+            None
+        };
+
+        let strings_dir_path = std::path::Path::new(&strings_dir);
+        let vocab = xt_core::vocabulary::Vocabulary::load(
+            &names,
+            strings_dir_path,
+            &source_lang,
+            &target_lang,
+            codepage_table.as_ref(),
+        );
+
+        let pair_count = vocab.len();
+        let pairs = vocab.pairs().to_vec();
+
+        // Store vocabulary in AppState for heuristic search enrichment
+        *state_clone.vocabulary.lock().map_err(|e| e.to_string())? = pairs;
+
+        Ok(VocabularyInfo {
+            pair_count,
+            base_names,
+        })
+    })
+    .await
+    .map_err(|e| format!("Vocabulary loading task failed: {}", e))?
+    .map_err(|e: String| e)?;
+
+    Ok(result)
+}
+
+/// Result of loading a vocabulary
+#[derive(serde::Serialize)]
+pub struct VocabularyInfo {
+    pub pair_count: usize,
+    pub base_names: Vec<String>,
+}
+
 /// Convert text between Simplified and Traditional Chinese
 #[tauri::command]
 pub async fn tcsc_convert(text: String, direction: String) -> Result<String, String> {
@@ -1908,6 +2221,156 @@ pub async fn tcsc_convert(text: String, direction: String) -> Result<String, Str
         _ => return Err("Invalid direction: use 'to_simplified' or 'to_traditional'".into()),
     };
     Ok(result)
+}
+
+/// Batch convert translations for all (or specified) strings.
+///
+/// Converts the `translation` field of each matching string in-place.
+/// Returns the list of updated string IDs.
+#[tauri::command]
+pub async fn tcsc_batch_convert(
+    state: tauri::State<'_, Arc<AppState>>,
+    direction: String,
+    ids: Option<Vec<u32>>,
+) -> Result<Vec<u32>, String> {
+    let dir_fn: fn(&str) -> String = match direction.as_str() {
+        "to_simplified" => tcsc::to_simplified,
+        "to_traditional" => tcsc::to_traditional,
+        _ => return Err("Invalid direction: use 'to_simplified' or 'to_traditional'".into()),
+    };
+
+    let mut strings = state.strings.lock().map_err(|e| e.to_string())?;
+    let mut updated = Vec::new();
+
+    for sk in strings.iter_mut() {
+        // If specific IDs provided, only convert those; otherwise convert all non-empty translations
+        if let Some(ref filter_ids) = ids {
+            if !filter_ids.contains(&sk.id) {
+                continue;
+            }
+        }
+        if sk.translation.is_empty() {
+            continue;
+        }
+        let converted = dir_fn(&sk.translation);
+        if converted != sk.translation {
+            sk.translation = converted;
+            sk.params.set(SkyStringParams::TRANSLATED, true);
+            updated.push(sk.id);
+        }
+    }
+
+    if !updated.is_empty() {
+        *state.is_dirty.lock().map_err(|e| e.to_string())? = true;
+    }
+
+    Ok(updated)
+}
+
+/// Compare source vs destination (translation) strings.
+///
+/// Modes:
+/// - "diff": mark strings where source != translation (hash mismatch) as incomplete
+/// - "same": mark strings where source == translation (hash match) as incomplete
+///
+/// Only affects strings that are currently translated or validated.
+/// Returns the count of tagged strings.
+#[tauri::command]
+pub async fn compare_source_dest(
+    state: tauri::State<'_, Arc<AppState>>,
+    mode: String,
+) -> Result<u32, String> {
+    let is_diff = match mode.as_str() {
+        "diff" => true,
+        "same" => false,
+        _ => return Err("Invalid mode: use 'diff' or 'same'".into()),
+    };
+
+    let mut strings = state.strings.lock().map_err(|e| e.to_string())?;
+    let mut count = 0u32;
+
+    for sk in strings.iter_mut() {
+        // Only process translated or validated strings (matching Delphi behavior)
+        if !sk.params.is_translated() && !sk.params.is_validated() {
+            continue;
+        }
+        let matches = if is_diff {
+            sk.hash != sk.hash_trans
+        } else {
+            sk.hash == sk.hash_trans
+        };
+        if matches {
+            sk.params.set(SkyStringParams::INCOMPLETE_TRANS, true);
+            sk.params.set(SkyStringParams::TRANSLATED, false);
+            sk.params.set(SkyStringParams::VALIDATED, false);
+            count += 1;
+        }
+    }
+
+    if count > 0 {
+        *state.is_dirty.lock().map_err(|e| e.to_string())? = true;
+    }
+
+    Ok(count)
+}
+
+/// Check alias integrity between source and translation.
+///
+/// Extracts `<Alias=...>` style tags from both source and translation,
+/// returns mismatch info for the frontend to display.
+#[tauri::command]
+pub async fn check_aliases(
+    state: tauri::State<'_, Arc<AppState>>,
+    id: u32,
+) -> Result<AliasCheckResult, String> {
+    let strings = state.strings.lock().map_err(|e| e.to_string())?;
+    let sk = strings.iter().find(|s| s.id == id)
+        .ok_or_else(|| format!("String with id {} not found", id))?;
+
+    let source_aliases = extract_aliases(&sk.source);
+    let trans_aliases = extract_aliases(&sk.translation);
+
+    // Check: source aliases that are missing from translation
+    let missing_in_trans: Vec<String> = source_aliases.iter()
+        .filter(|a| !trans_aliases.iter().any(|t| t.eq_ignore_ascii_case(a)))
+        .cloned()
+        .collect();
+
+    // Check: translation aliases that are not in source
+    let extra_in_trans: Vec<String> = trans_aliases.iter()
+        .filter(|a| !source_aliases.iter().any(|t| t.eq_ignore_ascii_case(a)))
+        .cloned()
+        .collect();
+
+    let has_mismatch = !missing_in_trans.is_empty() || !extra_in_trans.is_empty();
+
+    Ok(AliasCheckResult {
+        source_aliases,
+        trans_aliases,
+        missing_in_trans,
+        extra_in_trans,
+        has_mismatch,
+    })
+}
+
+/// Result of an alias integrity check
+#[derive(serde::Serialize)]
+pub struct AliasCheckResult {
+    pub source_aliases: Vec<String>,
+    pub trans_aliases: Vec<String>,
+    pub missing_in_trans: Vec<String>,
+    pub extra_in_trans: Vec<String>,
+    pub has_mismatch: bool,
+}
+
+/// Extract alias-style tags from text.
+/// Matches Delphi's rxPatternAliasStrict: `<alias...>`, `<global...>`, `<relat...>`,
+/// `<basename...>`, `<token...>`, `<repetitions>`, `</?font...>`, `<mag>`, `<dur>`
+fn extract_aliases(text: &str) -> Vec<String> {
+    let re = regex::Regex::new(
+        r"<alias[^>]*>|<global[^>]*>|<relat[^>]*>|<basename[^>]*>|<token[^>]*>|<repetitions>|</?font[^>]*>|<mag>|<dur>"
+    ).unwrap();
+    re.find_iter(text).map(|m| m.as_str().to_string()).collect()
 }
 
 // ── Config Commands ─────────────────────────────────────────────────

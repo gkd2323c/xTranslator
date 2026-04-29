@@ -613,6 +613,11 @@ body::after {
   to { transform: rotate(360deg); filter: drop-shadow(0 0 5px var(--accent-cyan)); }
 }
 
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 /* Virtual table header */
 .virtual-table-header {
   display: flex;
@@ -1036,6 +1041,57 @@ body::after {
   justify-content: flex-end;
   gap: 10px;
   margin-top: 16px;
+}
+
+.dialog-wide {
+  min-width: 480px;
+  max-width: 560px;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.dialog-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.dialog-header h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+
+.dialog-section {
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.dialog-section:last-of-type {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.dialog-section h4 {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: var(--accent-cyan);
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+
+.dialog-label {
+  display: block;
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin: 10px 0 4px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
 }
 
 /* === App Overlay (locks UI during critical operations) === */

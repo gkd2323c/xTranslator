@@ -70,7 +70,7 @@
 | **最终化 (finalize)** | ✅ 导出翻译结果 | ⚠️ XML 导出可用 | ~40% | XML 导出已就绪，Strings 最终化待整合 |
 | **批量处理器** | ✅ 命令式批处理 | ✅ BatchExecutor + BatchPanel | ~70% | Multi-file translate/export, progress events, cancel, error recovery |
 | **RTL 支持 (阿拉伯语)** | ✅ RTL 标签+字符串反向 | ❌ | 0% | `TESVT_TranslateFunc.pas` 中的 RTL 处理 |
-| **中文繁简转换** | ✅ SC↔TC 字符映射 | ⚠️ 核心库完成 | ~50% | `tcsc.rs`：OpenCC 主字典(3960对)+Delphi 字典回退(2552对)，编译时嵌入；IPC 命令和 UI 未集成 |
+| **中文繁简转换** | ✅ SC↔TC 字符映射 | ✅ IPC + MenuBar + EditorPanel 按钮 | ~90% | `tcsc.rs`：OpenCC 主字典(3960对)+Delphi 字典回退(2552对)，编译时嵌入；IPC 命令+MenuBar 按钮+EditorPanel 内转换按钮均已集成；批量转换待实现 |
 
 ---
 
@@ -79,10 +79,10 @@
 | 功能 | 原版 | Rust 重写 | 覆盖度 | 说明 |
 |------|------|----------|--------|------|
 | **ESPCompare** | ✅ 两 ESP 建立字符串对 | ✅ StringKey 三元组匹配，EspComparePanel UI，含四标签页+文本过滤 | ~80% | 后端 `esp/compare.rs` 引擎 + Tauri 命令；前端 `EspComparePanel` 含加载/重比/标签页/过滤 |
-| **Strings Compare** | ✅ .Strings 文件对比 | ❌ | 0% | - |
+| **Strings Compare** | ✅ .Strings 文件对比 | ✅ 源/译文哈希比较+标记 | ~70% | `compare_source_dest` IPC，标记"源≠译"或"源=译"为 incomplete |
 | **MCM Compare** | ✅ | ❌ | 0% | - |
-| **别名检查** | ✅ 源/翻译 Alias 完整性 | ❌ | 0% | - |
-| **中文繁简转换** | ✅ | ⚠️ 核心库完成 | ~50% | `tcsc.rs` 双向转换（to_simplified/to_traditional），IPC+UI 未集成 |
+| **别名检查** | ✅ 源/翻译 Alias 完整性 | ✅ Alias 标签提取+不匹配提示 | ~80% | `check_aliases` IPC，EditorPanel 内提示 alias 不匹配 |
+| **中文繁简转换** | ✅ | ✅ IPC + MenuBar + EditorPanel + 批量 | ~95% | `tcsc.rs` 双向转换，单条+批量转换均已集成 |
 
 ---
 
@@ -92,11 +92,11 @@
 |------|------|----------|--------|------|
 | **ESM 缓存** | ✅ SQLite 缓存加速重载 | ⚠️ ESP 解析结果缓存已实现 | ~40% | Rust 已有 SHA-256+bincode 解析缓存；Delphi 风格 SQLite ESM 缓存仍未实现 |
 | **自动备份** | ✅ 定时字典备份 | ✅ 5-min SST snapshots | ~80% | SST 快照，保留 10 份，静默失败 |
-| **配置系统** | ✅ res.ini+注册表 | ✅ JSON 配置持久化 | ~60% | `AppConfig` JSON 持久化（theme/language/API key/proxy），`load_config`/`save_config` IPC 命令，启动时自动加载；HTTP proxy 字段已定义但未接入 reqwest Client（死代码）；无 proxy 设置 UI |
-| **vocabulary.txt** | ✅ 词汇列表 | ✅ Data/*/vocabulary.txt 存在 | ~20% | 文件存在但未在代码中使用 |
+| **配置系统** | ✅ res.ini+注册表 | ✅ JSON 配置持久化 + Proxy UI | ~80% | `AppConfig` JSON 持久化（theme/language/API key/proxy），`load_config`/`save_config` IPC 命令，启动时自动加载；HTTP proxy 后端已接入 `build_client()`，前端 Proxy 设置对话框待实现 |
+| **vocabulary.txt** | ✅ 词汇列表 | ✅ 解析+加载+启发式搜索增强 | ~80% | `vocabulary.rs` 解析 STRINGS=Name 条目，加载 source+target Strings 文件，按 str_id 匹配，合并到启发式搜索候选集 |
 | **ctdaFunc.txt** | ✅ 条件函数定义 | ✅ 文件存在 | ~10% | 未解析 |
 | **fieldSizeRef.txt** | ✅ 字段大小参考 | ✅ 文件存在 | ~10% | 未解析 |
-| **pexNoTransProc.txt** | ✅ PEX 不可翻译过程 | ✅ 文件存在 | ~10% | 未解析 |
+| **pexNoTransProc.txt** | ✅ PEX 不可翻译过程 | ✅ 解析+过滤 | ~80% | 已解析并用于 PEX 字符串提取过滤 |
 | **DialSubType.txt** | ✅ 对话子类型 | ✅ 文件存在 | ~10% | 未解析 |
 | **EmoteDefinition.txt** | ✅ 表情定义 | ✅ 文件存在 | ~10% | 未解析 |
 
@@ -114,7 +114,7 @@
 | **筛选/搜索栏** | ✅ 多维度筛选 | ✅ 实时筛选 + 正则 | ~80% | 文本搜索 + Regex toggle + 状态筛选 + Record 类型筛选 + 排序，客户端零延迟，虚拟滚动 |
 | **主题支持** | ✅ 默认/亮/灰/暗 | ✅ Dark/Light/Gray/Auto | ~90% | CSS variables + Zustand + localStorage, system follow via matchMedia |
 | **UI 多语言** | ✅ 10+ 语言 | ✅ react-i18next 10 语言 | ~80% | zh-CN/en/de/es/fr/ja/ko/pl/pt/ru locales，MenuBar 切换 + localStorage 持久化 |
-| **高分辨率 DPI** | ✅ DPI 感知 | ❌ | 0% | - |
+| **高分辨率 DPI** | ✅ DPI 感知 | ✅ Tauri 2.x 原生 | ~90% | Tauri 2.x 自动处理 HiDPI 缩放 |
 | **拖放加载** | ✅ XML 拖放 | ✅ 基础拖放 | ~40% | 支持拖放 ESP/ESM、SST、XML 到主窗口；BSA/PEX/FUZ 拖放仍可后续补 |
 
 ---
@@ -169,21 +169,25 @@
 |------|------|-----------|
 | ~~批量处理器~~ | ✅ BatchExecutor + BatchPanel | Done |
 | ~~配置持久化~~ | ✅ `AppConfig` JSON 持久化 + `load_config`/`save_config` IPC + 启动自动加载 | Done |
-| ~~中文繁简转换~~ | ✅ `tcsc.rs` 核心库（OpenCC 3960对 + Delphi 2552对回退） | Done（核心库） |
+| ~~中文繁简转换~~ | ✅ `tcsc.rs` 核心库（OpenCC 3960对 + Delphi 2552对回退）+ IPC + MenuBar + EditorPanel 按钮 | Done |
+| Proxy 设置 UI | 前端 Settings Dialog 包含 proxy server/port/user/pass | Done |
+| Batch TCSC | `tcsc_batch_convert` IPC + MenuBar 按钮 | Done |
 | ~~CRLF 保护~~ | ✅ 翻译 API `<L_F>` 标签保护/恢复，两个 provider 均已集成 | Done |
 | Header 处理器 | ESP 头部修改 | 1 周 |
 | ~~主题系统~~ | ✅ Dark/Light/Gray/Auto | Done |
 | ~~UI 多语言~~ | ✅ react-i18next 10 languages | Done |
 | ~~自动备份~~ | ✅ 5-min SST snapshots | Done |
-| 高 DPI 支持 | Tauri 原生处理 | 1-2 天 |
-| ~~拖放加载~~ | ✅ ESP/ESM、SST、XML 文件拖放 | Done |
+| ~~高 DPI 支持~~ | ✅ Tauri 2.x 原生 HiDPI + decorations/dragDrop 窗口配置 | Done |
+| ~~拖放加载~~ | ✅ ESP/ESM、SST、XML、BSA/BA2、PEX、FUZ 全类型拖放 | Done |
 
 ### 技术债务
 
 | 问题 | 影响 | 建议 |
 |------|------|------|
-| HTTP proxy 未接入 | `build_proxy()`/`build_client()` 已定义但翻译 provider 使用 `Client::new()`，proxy 配置为死代码 | 将 `AppConfig` 传入 provider 构造，替换 `Client::new()` 为 `build_client()` |
-| TCSC 未集成到 UI | 核心库完成但无 IPC 命令和前端面板 | 添加 `tcsc_convert` 命令 + MenuBar 按钮 |
+| ~~HTTP proxy 未接入 UI~~ | ✅ `build_proxy()`/`build_client()` + SettingsDialog proxy 字段 + MenuBar Settings 按钮 | Done |
+| ~~TCSC 批量转换未实现~~ | ✅ `tcsc_batch_convert` IPC + MenuBar 批量按钮（简↹/繁↹） | Done |
+| ~~vocabulary.txt 未使用~~ | ✅ `vocabulary.rs` 解析+加载+启发式搜索增强 | Done |
+| ~~pexNoTransProc.txt 未解析~~ | ✅ 已解析并用于 PEX 过滤 | Done |
 | 嵌套 GRUP 验证 | CELL/WRLD 内的子 GRUP 可能跳过部分字符串 | 需真实数据验证 diff 一致性 |
 | Delphi 交叉验证 | 无法确认 99% 一致率 | 需 Delphi 环境生成对照文件 |
 | SST 旧版本兼容 | 无法读取 v1-v7 SST | 低优先级，v8 是主流格式 |

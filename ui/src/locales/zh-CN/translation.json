@@ -61,7 +61,16 @@
   },
   "menu": {
     "tcsc_simplified": "转简体中文",
-    "tcsc_traditional": "转繁体中文"
+    "tcsc_traditional": "转繁体中文",
+    "tcsc_batch_simplified": "简↹",
+    "tcsc_batch_traditional": "繁↹",
+    "tcsc_batch_confirm_simplified": "确认将全部 {{count}} 条翻译转为简体中文？",
+    "tcsc_batch_confirm_traditional": "确认将全部 {{count}} 条翻译转为繁体中文？",
+    "tcsc_batch_done": "已转换 {{count}} 条翻译",
+    "compare_diff": "标记：源≠译文",
+    "compare_same": "标记：源=译文",
+    "compare_diff_done": "已标记 {{count}} 条源≠译文的字符串",
+    "compare_same_done": "已标记 {{count}} 条源=译文的字符串"
   },
   "batch": {
     "title": "批量处理",
@@ -178,7 +187,15 @@
     "saved": "MCM 文件已保存",
     "savedAs": "已保存到 {{path}}",
     "saveFailed": "MCM 文件保存失败",
-    "unsaved": "有未保存的更改"
+    "unsaved": "有未保存的更改",
+    "compare": "对比",
+    "comparePolicy": "对比策略",
+    "policyAll": "覆盖所有",
+    "policyNoTrans": "仅未翻译的",
+    "policyNoTransAndPartial": "未翻译 + 部分翻译",
+    "policyPartialOnly": "仅部分翻译",
+    "compareDone": "对比完成：{{matched}} 匹配，{{unmatched}} 未匹配，{{updated}} 更新",
+    "compareFailed": "对比失败"
   },
   "espCompare": {
     "title": "ESP 对比",
@@ -241,5 +258,23 @@
     "outputFiles": "输出文件",
     "success": "已导出 {strings} + {dlstrings} + {ilstrings} 个文件",
     "failed": "完成导出失败"
+  },
+  "settings": {
+    "title": "设置",
+    "apiKeys": "翻译 API",
+    "provider": "翻译引擎",
+    "apiKeyHint": "支持 OpenAI 兼容 API（OpenAI、DeepSeek 等）。也可通过 XT_TRANSLATE_API_KEY 环境变量设置。",
+    "deeplPlaceholder": "DeepL API Key（免费版: xxx:fx，专业版: xxx）",
+    "proxy": "HTTP 代理",
+    "proxyServer": "代理服务器",
+    "proxyServerPlaceholder": "例如 proxy.example.com（留空禁用）",
+    "proxyPort": "端口",
+    "proxyUsername": "用户名（可选）",
+    "proxyPassword": "密码（可选）",
+    "proxyAuthPlaceholder": "无需认证则留空",
+    "proxyHint": "代理设置应用于 OpenAI 和 DeepL 翻译请求，保存到配置文件。",
+    "saved": "设置已保存",
+    "saveFailed": "保存设置失败",
+    "saving": "保存中..."
   }
 }

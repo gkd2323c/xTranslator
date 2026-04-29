@@ -1,14 +1,15 @@
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useAppStore } from "../stores/appStore";
-import { loadEsp, loadSst, saveSst, exportXml, importXml, saveStrings, tcscConvert, updateTranslation } from "../api/strings";
+import { loadEsp, loadSst, saveSst, exportXml, importXml, saveStrings, tcscConvert, tcscBatchConvert, updateTranslation, loadVocabulary, compareSourceDest, type BatchProgress } from "../api/strings";
 import type { LoadSstResponse, XmlImportResponse } from "../api/strings";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
-import { FolderOpen, FileUp, FileDown, FileCode, Save, RotateCcw, RefreshCw, FileArchive, Braces, Volume2, MessagesSquare, FileText, GitCompare, CheckCircle } from "lucide-react";
+import { FolderOpen, FileUp, FileDown, FileCode, Save, RotateCcw, RefreshCw, FileArchive, Braces, Volume2, MessagesSquare, FileText, GitCompare, CheckCircle, Settings, ArrowLeftRight } from "lucide-react";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import { setI18nLanguage, SUPPORTED_LANGS } from "../i18n";
+import { SettingsDialog } from "./SettingsDialog";
 
 type ApplyStats = Pick<
   LoadSstResponse | XmlImportResponse,
@@ -56,6 +57,7 @@ function formatApplyStats(stats: ApplyStats): string {
 
 export function MenuBar() {
   const { t, i18n } = useTranslation();
+  const [showSettings, setShowSettings] = useState(false);
   const isParsing = useAppStore((s) => s.isParsing);
   const isLoading = useAppStore((s) => s.isLoading);
   const espPath = useAppStore((s) => s.espPath);
@@ -91,6 +93,7 @@ export function MenuBar() {
   const showFinalizePanel = useAppStore((s) => s.showFinalizePanel);
   const setShowFinalizePanel = useAppStore((s) => s.setShowFinalizePanel);
   const batchEntries = useAppStore((s) => s.batchEntries);
+  const [batchProgress, setBatchProgress] = useState<BatchProgress | null>(null);
 
   const warnIfBatchFile = useCallback((path: string) => {
     const normalizedPath = path.replace(/\\/g, "/").toLowerCase();
@@ -128,6 +131,15 @@ export function MenuBar() {
         await loadAllStrings();
         setIsDirty(false);
         toast.success(`Loaded ${stats.total.toLocaleString()} ${t('sidebar.totalStrings').toLowerCase()}`);
+
+        // Auto-load vocabulary for heuristic search enrichment
+        loadVocabulary(stringsDir, language, useAppStore.getState().targetLang, useAppStore.getState().language === "english" ? "SkyrimSE" : undefined)
+          .then((info) => {
+            if (info.pair_count > 0) {
+              toast(`Vocabulary loaded: ${info.pair_count.toLocaleString()} pairs from ${info.base_names.length} files`, { duration: 3000 });
+            }
+          })
+          .catch(() => {});
       } finally {
         unlisten();
       }
@@ -317,9 +329,24 @@ export function MenuBar() {
       void importXmlFromPath(path);
       return;
     }
+    if (ext === "bsa" || ext === "ba2") {
+      setShowBsaBrowser(true);
+      toast(t("menu.dragDropBsa", { defaultValue: "BSA/BA2 file detected — use the BSA Browser panel to open it" }), { icon: "📦", duration: 3000 });
+      return;
+    }
+    if (ext === "pex") {
+      setShowPexPanel(true);
+      toast(t("menu.dragDropPex", { defaultValue: "PEX file detected — use the PEX panel to open it" }), { icon: "📜", duration: 3000 });
+      return;
+    }
+    if (ext === "fuz") {
+      setShowFuzPanel(true);
+      toast(t("menu.dragDropFuz", { defaultValue: "FUZ file detected — use the Voice panel to scan" }), { icon: "🔊", duration: 3000 });
+      return;
+    }
 
-    toast.error("Drop an ESP/ESM, SST, or XML file.");
-  }, [importXmlFromPath, loadEspFromPath, loadSstFromPath]);
+    toast.error("Unsupported file type. Drop an ESP/ESM, SST, XML, BSA/BA2, PEX, or FUZ file.");
+  }, [importXmlFromPath, loadEspFromPath, loadSstFromPath, setShowBsaBrowser, setShowFuzPanel, setShowPexPanel, t]);
 
   useEffect(() => {
     let disposed = false;
@@ -357,6 +384,25 @@ export function MenuBar() {
       unlistenDragDrop?.();
     };
   }, [routeDroppedPath]);
+
+  // Listen to batch progress events
+  useEffect(() => {
+    let disposed = false;
+    let unlisten: (() => void) | null = null;
+
+    listen<BatchProgress>("batch-progress", (event) => {
+      if (!disposed) {
+        setBatchProgress(event.payload);
+      }
+    }).then((u) => {
+      unlisten = u;
+    });
+
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, []);
 
   const handleSaveStrings = async () => {
     const outputDir = await open({
@@ -481,6 +527,110 @@ export function MenuBar() {
           >
             <span>{t("menu.tcsc_traditional")}</span>
           </button>
+          <button
+            type="button"
+            onClick={async () => {
+              const allItems = useAppStore.getState().allItems;
+              const hasTranslations = allItems.some((item) => item.translation && item.translation.trim() !== "");
+              if (!hasTranslations) {
+                toast.error("No translations to convert");
+                return;
+              }
+              const confirmed = window.confirm(
+                t("menu.tcsc_batch_confirm_simplified", {
+                  defaultValue: `Convert ALL ${allItems.filter((i) => i.translation).length} translations to Simplified Chinese?`,
+                })
+              );
+              if (!confirmed) return;
+              try {
+                const updatedIds = await tcscBatchConvert("to_simplified");
+                await useAppStore.getState().loadAllStrings();
+                toast.success(
+                  t("menu.tcsc_batch_done", { defaultValue: `Converted ${updatedIds.length} translations` })
+                );
+              } catch (e: any) {
+                toast.error(`Batch TCSC failed: ${e}`);
+              }
+            }}
+            disabled={isLoading || !espPath}
+            className="btn btn-ghost"
+            title={t("menu.tcsc_batch_simplified", { defaultValue: "Batch: Convert all to Simplified Chinese" })}
+          >
+            <span>{t("menu.tcsc_batch_simplified", { defaultValue: "简↹" })}</span>
+          </button>
+          <button
+            type="button"
+            onClick={async () => {
+              const allItems = useAppStore.getState().allItems;
+              const hasTranslations = allItems.some((item) => item.translation && item.translation.trim() !== "");
+              if (!hasTranslations) {
+                toast.error("No translations to convert");
+                return;
+              }
+              const confirmed = window.confirm(
+                t("menu.tcsc_batch_confirm_traditional", {
+                  defaultValue: `Convert ALL ${allItems.filter((i) => i.translation).length} translations to Traditional Chinese?`,
+                })
+              );
+              if (!confirmed) return;
+              try {
+                const updatedIds = await tcscBatchConvert("to_traditional");
+                await useAppStore.getState().loadAllStrings();
+                toast.success(
+                  t("menu.tcsc_batch_done", { defaultValue: `Converted ${updatedIds.length} translations` })
+                );
+              } catch (e: any) {
+                toast.error(`Batch TCSC failed: ${e}`);
+              }
+            }}
+            disabled={isLoading || !espPath}
+            className="btn btn-ghost"
+            title={t("menu.tcsc_batch_traditional", { defaultValue: "Batch: Convert all to Traditional Chinese" })}
+          >
+            <span>{t("menu.tcsc_batch_traditional", { defaultValue: "繁↹" })}</span>
+          </button>
+          <button
+            type="button"
+            onClick={async () => {
+              if (!espPath) return;
+              try {
+                const count = await compareSourceDest("diff");
+                await useAppStore.getState().loadAllStrings();
+                toast.success(
+                  t("menu.compare_diff_done", { defaultValue: `Tagged ${count} strings where source ≠ translation` })
+                );
+              } catch (e: any) {
+                toast.error(String(e));
+              }
+            }}
+            disabled={isLoading || !espPath}
+            className="btn btn-ghost"
+            title={t("menu.compare_diff", { defaultValue: "Tag: source ≠ translation" })}
+          >
+            <ArrowLeftRight size={16} />
+            <span style={{ fontSize: 11 }}>≠</span>
+          </button>
+          <button
+            type="button"
+            onClick={async () => {
+              if (!espPath) return;
+              try {
+                const count = await compareSourceDest("same");
+                await useAppStore.getState().loadAllStrings();
+                toast.success(
+                  t("menu.compare_same_done", { defaultValue: `Tagged ${count} strings where source = translation` })
+                );
+              } catch (e: any) {
+                toast.error(String(e));
+              }
+            }}
+            disabled={isLoading || !espPath}
+            className="btn btn-ghost"
+            title={t("menu.compare_same", { defaultValue: "Tag: source = translation" })}
+          >
+            <ArrowLeftRight size={16} />
+            <span style={{ fontSize: 11 }}>＝</span>
+          </button>
         </div>
 
         <div className="toolbar-group toolbar-icon-group" role="group" aria-label="Tool panels">
@@ -603,6 +753,15 @@ export function MenuBar() {
           </select>
           <button
             type="button"
+            onClick={() => setShowSettings(true)}
+            className="btn btn-ghost"
+            title={t("settings.title", { defaultValue: "Settings" })}
+            aria-label={t("settings.title", { defaultValue: "Settings" })}
+          >
+            <Settings size={16} />
+          </button>
+          <button
+            type="button"
             onClick={() => {
               if (isDirty && !confirm("You have unsaved changes. Reset anyway?")) return;
               reset();
@@ -618,6 +777,12 @@ export function MenuBar() {
       {isParsing && <span className="menubar-status parsing">Parsing ESP...</span>}
       {isLoading && <span className="menubar-status loading">Loading...</span>}
       {isDirty && <span className="menubar-status dirty" title="Unsaved changes">●</span>}
+      {batchProgress && batchProgress.total_files > 0 && (
+        <span className="menubar-status batch-progress" title={`${batchProgress.message}`}>
+          Batch: {batchProgress.strings_translated}/{batchProgress.total_strings} ({batchProgress.current_file}/{batchProgress.total_files} files)
+        </span>
+      )}
+      <SettingsDialog open={showSettings} onClose={() => setShowSettings(false)} />
     </div>
   );
 }

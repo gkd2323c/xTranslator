@@ -538,6 +538,68 @@ pub struct McmSaveRequest {
     pub entries: Vec<McmEntryDto>,
 }
 
+/// MCM Compare 覆盖策略（对应 Delphi RadioGroup1）
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum McmComparePolicy {
+    /// 覆盖所有匹配项
+    All,
+    /// 仅覆盖未翻译的项
+    NoTrans,
+    /// 覆盖未翻译 + 部分翻译
+    NoTransAndPartial,
+    /// 仅覆盖部分翻译
+    PartialOnly,
+}
+
+/// MCM Compare 请求
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct McmCompareRequest {
+    /// 当前 McmPanel 中的条目
+    pub entries: Vec<McmEntryDto>,
+    /// 参考 MCM 文件路径
+    pub reference_path: String,
+    /// 覆盖策略
+    pub policy: McmComparePolicy,
+}
+
+/// MCM Compare 结果
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct McmCompareResult {
+    /// 匹配到的条目数
+    pub matched: u32,
+    /// 未匹配的条目数
+    pub unmatched: u32,
+    /// 更新后的条目（带新译文）
+    pub updated_entries: Vec<McmEntryDto>,
+}
+
+// ── Data Config DTOs ────────────────────────────────────────────────
+
+/// CTDA 函数信息
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct CtdaFuncDto {
+    pub id: u32,
+    pub name: String,
+    pub params: String,
+}
+
+/// 字段大小信息
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct FieldSizeInfoDto {
+    pub max_size: u32,
+    pub can_wrap: bool,
+}
+
+/// Data 配置文件摘要
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct DataConfigsDto {
+    pub ctda_funcs: Vec<CtdaFuncDto>,
+    pub field_size_ref: HashMap<String, FieldSizeInfoDto>,
+    pub dial_sub_type: HashMap<String, String>,
+    pub emote_definition: HashMap<String, String>,
+}
+
 // ── API Config DTOs ──────────────────────────────────────────────────
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

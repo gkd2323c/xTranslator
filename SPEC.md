@@ -56,6 +56,10 @@ api: `extract_ba2_file` / `extract_ba2_folder` → same as BSA equivalents
 api: `load_config` → `AppConfigDto` (persisted JSON config: theme, language, API keys, proxy)
 api: `save_config` → `()` (takes `AppConfigDto`, merge-only update, writes to disk)
 api: `get_api_config` → `ApiConfigResponse { providers: Vec<ApiProviderInfo> }` (parsed from `Misc/ApiTranslator.txt`)
+api: `tcsc_batch_convert` → `Vec<u32>` (batch convert all filtered translations, takes direction + optional ids) — direction: "to_simplified"|"to_traditional", returns updated IDs
+api: `load_vocabulary` → `VocabularyInfo { pair_count, base_names }` (parse vocabulary.txt, load Strings pairs, store in AppState, enrich heuristic search)
+api: `compare_source_dest` → `u32` (compare source vs translation hashes; mode: "diff" or "same", returns tagged count)
+api: `check_aliases` → `AliasCheckResult { source_aliases, trans_aliases, missing_in_trans, extra_in_trans, has_mismatch }` (alias integrity check for a single string by id)
 
 ### Events
 
@@ -114,6 +118,9 @@ V22: ∀ parse_record_debug on GRUP → decrement record_count saturatingly; nes
 V23: ∀ translate_string → protect_crlf(source) before API call, restore_crlf(response) after; `\r\n` and `\n` both become `<L_F>` tag, restored to `\r\n`
 V24: ∀ AppConfig.save → merge-only: only `Some` fields in the input DTO overwrite existing config; `None` fields leave the stored value unchanged
 V25: ∀ TCSC conversion → OpenCC dictionary (primary, 3960 pairs) + Delphi Charset_SCTC.txt (fallback, 2552 pairs); both embedded at compile time via `include_str!`
+V26: ∀ proxy settings UI → fields map directly to `AppConfig` proxy_server/proxy_port/proxy_username/proxy_password; `save_config` persists to disk; `translate_string` reads config on each call
+V27: ∀ vocabulary loading → parse `Data/<Game>/vocabulary.txt` for STRINGS=Name entries, load source+target Strings files, match by str_id; pairs merged into heuristic search candidate set
+V28: ∀ PEX string extraction → filter parameters of procedures listed in `Data/<Game>/pexNoTransProc.txt`; only translatable strings returned
 
 ## §T Tasks
 
@@ -151,6 +158,14 @@ T30|x|BA2 archive support (Fallout 4 v0x01, Starfield v0x02, FO4B v0x08)|G8
 T31|x|PEX compile (in-place string table update with index preservation, binary roundtrip)|G1
 T32|x|Config persistence (JSON file, theme/language/API key survive restart)|G7
 T33|x|TCSC simplified/traditional Chinese conversion (character-pair mapping, OpenCC 3960 + Delphi 2552 fallback)|G7
+T34|x|Proxy settings UI (settings dialog with proxy server/port/username/password fields, integrates with build_client)|G7
+T35|x|Batch TCSC conversion (convert all filtered translations at once, not just selected item)|G7
+T36|x|vocabulary.txt integration (parse STRINGS=Name entries, load source+target Strings, match by str_id, enrich heuristic search candidates)|G5
+T37|x|pexNoTransProc.txt filtering (parse procedure names, filter non-translatable PEX string parameters)|G1
+T38|x|HiDPI support (Tauri 2.x native HiDPI + decorations/dragDrop window config)|G7
+T39|x|Drag-drop extension (route BSA/BA2, PEX, FUZ file drops to correct handlers)|G7
+T40|x|Source/Dest compare (compare source hash vs translation hash, tag diff/same as incomplete)|G7
+T41|x|Alias integrity check (extract <Alias=...> tags, compare source vs translation, highlight mismatches in EditorPanel)|G7
 
 ## §B Bugs
 
