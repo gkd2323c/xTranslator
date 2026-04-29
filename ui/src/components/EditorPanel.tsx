@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback } from "react";
 import { useAppStore } from "../stores/appStore";
-import { updateTranslation, heuristicSearch, translateString, setApiKey, type HeuristicMatchDTO } from "../api/strings";
+import { updateTranslation, heuristicSearch, translateString, setApiKey, tcscConvert, type HeuristicMatchDTO } from "../api/strings";
 import { Save, X, Type, Search, Copy, Languages, Key } from "lucide-react";
 import toast from "react-hot-toast";
+import { useTranslation } from "react-i18next";
 
 export function EditorPanel() {
+  const { t } = useTranslation();
   const selectedItem = useAppStore((s) => s.selectedItem);
   const selectedId = useAppStore((s) => s.selectedId);
   const language = useAppStore((s) => s.language);
@@ -179,6 +181,42 @@ export function EditorPanel() {
             placeholder="Enter translation..."
             autoFocus
           />
+          <div className="editor-tcsc-buttons">
+            <button
+              type="button"
+              onClick={async () => {
+                if (!localTrans) return;
+                try {
+                  const result = await tcscConvert(localTrans, "to_simplified");
+                  setLocalTrans(result);
+                  toast.success("Converted to Simplified Chinese");
+                } catch (e: any) {
+                  toast.error(`TCSC failed: ${e}`);
+                }
+              }}
+              className="btn btn-ghost btn-xs"
+              title={t("editor.tcsc_simplified")}
+            >
+              {t("editor.tcsc_simplified")}
+            </button>
+            <button
+              type="button"
+              onClick={async () => {
+                if (!localTrans) return;
+                try {
+                  const result = await tcscConvert(localTrans, "to_traditional");
+                  setLocalTrans(result);
+                  toast.success("Converted to Traditional Chinese");
+                } catch (e: any) {
+                  toast.error(`TCSC failed: ${e}`);
+                }
+              }}
+              className="btn btn-ghost btn-xs"
+              title={t("editor.tcsc_traditional")}
+            >
+              {t("editor.tcsc_traditional")}
+            </button>
+          </div>
         </div>
         {matches.length > 0 && (
           <div className="editor-matches">

@@ -547,3 +547,9 @@ export async function loadMcmFile(mcmPath: string): Promise<McmFileDto> {
 export async function saveMcmFile(request: McmSaveRequest): Promise<void> {
   return invoke("save_mcm_file", { request });
 }
+
+// ── TCSC ─────────────────────────────────────────────────────────────
+
+export async function tcscConvert(text: string, direction: "to_simplified" | "to_traditional"): Promise<string> {
+  return invoke("tcsc_convert", { text, direction });
+}

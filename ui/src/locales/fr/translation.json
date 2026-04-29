@@ -55,7 +55,13 @@
     "apiKey": "API Key",
     "setApiKey": "Set API Key",
     "apiKeyHint": "API Key is stored in memory for the current session only. Can also be set via environment variables.",
-    "notTranslated": "Not translated"
+    "notTranslated": "Not translated",
+    "tcsc_simplified": "简",
+    "tcsc_traditional": "繁"
+  },
+  "menu": {
+    "tcsc_simplified": "To Simplified Chinese",
+    "tcsc_traditional": "To Traditional Chinese"
   },
   "batch": {
     "title": "Batch Processor",

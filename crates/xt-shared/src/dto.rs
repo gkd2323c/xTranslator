@@ -556,6 +556,14 @@ pub struct ApiConfigResponse {
     pub providers: Vec<ApiProviderInfo>,
 }
 
+// ── TCSC Types ────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum TcscDirection {
+    ToSimplified,
+    ToTraditional,
+}
+
 // ── Config DTOs ─────────────────────────────────────────────────────
 
 #[derive(Clone, Debug, Serialize, Deserialize, Default)]

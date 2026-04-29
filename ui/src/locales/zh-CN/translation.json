@@ -55,7 +55,13 @@
     "apiKey": "API Key",
     "setApiKey": "设置 API Key",
     "apiKeyHint": "API Key 仅在当前会话保存在内存中，也可通过环境变量设置",
-    "notTranslated": "未翻译"
+    "notTranslated": "未翻译",
+    "tcsc_simplified": "简",
+    "tcsc_traditional": "繁"
+  },
+  "menu": {
+    "tcsc_simplified": "转简体中文",
+    "tcsc_traditional": "转繁体中文"
   },
   "batch": {
     "title": "批量处理",

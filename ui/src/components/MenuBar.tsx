@@ -1,6 +1,6 @@
 import { useCallback, useEffect } from "react";
 import { useAppStore } from "../stores/appStore";
-import { loadEsp, loadSst, saveSst, exportXml, importXml, saveStrings } from "../api/strings";
+import { loadEsp, loadSst, saveSst, exportXml, importXml, saveStrings, tcscConvert, updateTranslation } from "../api/strings";
 import type { LoadSstResponse, XmlImportResponse } from "../api/strings";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { listen } from "@tauri-apps/api/event";
@@ -416,6 +416,55 @@ export function MenuBar() {
           <button type="button" onClick={handleImportXml} disabled={isLoading || !espPath} className="btn">
             <FileCode size={16} />
             <span>{t("common.importXml")}</span>
+          </button>
+        </div>
+
+        <div className="toolbar-group" role="group" aria-label="TCSC conversion">
+          <button
+            type="button"
+            onClick={async () => {
+              const selectedItem = useAppStore.getState().selectedItem;
+              if (!selectedItem?.translation) {
+                toast.error("No translation to convert");
+                return;
+              }
+              try {
+                const result = await tcscConvert(selectedItem.translation, "to_simplified");
+                await updateTranslation(selectedItem.id, result);
+                useAppStore.getState().updateItemTranslation(selectedItem.id, result);
+                toast.success(t("menu.tcsc_simplified"));
+              } catch (e: any) {
+                toast.error(`TCSC failed: ${e}`);
+              }
+            }}
+            disabled={isLoading}
+            className="btn"
+            title={t("menu.tcsc_simplified")}
+          >
+            <span>{t("menu.tcsc_simplified")}</span>
+          </button>
+          <button
+            type="button"
+            onClick={async () => {
+              const selectedItem = useAppStore.getState().selectedItem;
+              if (!selectedItem?.translation) {
+                toast.error("No translation to convert");
+                return;
+              }
+              try {
+                const result = await tcscConvert(selectedItem.translation, "to_traditional");
+                await updateTranslation(selectedItem.id, result);
+                useAppStore.getState().updateItemTranslation(selectedItem.id, result);
+                toast.success(t("menu.tcsc_traditional"));
+              } catch (e: any) {
+                toast.error(`TCSC failed: ${e}`);
+              }
+            }}
+            disabled={isLoading}
+            className="btn"
+            title={t("menu.tcsc_traditional")}
+          >
+            <span>{t("menu.tcsc_traditional")}</span>
           </button>
         </div>
 

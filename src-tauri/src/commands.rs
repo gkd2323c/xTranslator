@@ -1895,6 +1895,21 @@ pub async fn build_dialog_tree(
     Ok(DialogTreeDto { npcs })
 }
 
+// ── TCSC Commands ───────────────────────────────────────────────────
+
+use xt_core::tcsc;
+
+/// Convert text between Simplified and Traditional Chinese
+#[tauri::command]
+pub async fn tcsc_convert(text: String, direction: String) -> Result<String, String> {
+    let result = match direction.as_str() {
+        "to_simplified" => tcsc::to_simplified(&text),
+        "to_traditional" => tcsc::to_traditional(&text),
+        _ => return Err("Invalid direction: use 'to_simplified' or 'to_traditional'".into()),
+    };
+    Ok(result)
+}
+
 // ── Config Commands ─────────────────────────────────────────────────
 
 use xt_shared::dto::AppConfigDto;
