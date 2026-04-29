@@ -74,9 +74,12 @@ impl DeepLProvider {
 
 #[async_trait::async_trait]
 impl super::TranslationProvider for DeepLProvider {
-    async fn translate(&self, text: &str, source_lang: &str, target_lang: &str) -> Result<String> {
+    async fn translate(&self, text: &str, source_lang: &str, target_lang: &str, proxy: Option<&crate::config::AppConfig>) -> Result<String> {
         let protected = super::protect_crlf(text);
-        let client = reqwest::Client::new();
+        let client = match proxy {
+            Some(cfg) => super::build_client(cfg),
+            None => reqwest::Client::new(),
+        };
         let url = self.get_endpoint();
 
         let mut params = vec![("text", protected.as_str()), ("target_lang", target_lang)];

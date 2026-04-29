@@ -111,7 +111,7 @@ struct ChatChoice {
 
 #[async_trait]
 impl super::TranslationProvider for OpenAIProvider {
-    async fn translate(&self, text: &str, _source_lang: &str, target_lang: &str) -> Result<String> {
+    async fn translate(&self, text: &str, _source_lang: &str, target_lang: &str, proxy: Option<&crate::config::AppConfig>) -> Result<String> {
         let protected = super::protect_crlf(text);
         let query = self.build_query(&protected, target_lang);
 
@@ -130,7 +130,10 @@ impl super::TranslationProvider for OpenAIProvider {
             temperature: 0.3,
         };
 
-        let client = reqwest::Client::new();
+        let client = match proxy {
+            Some(cfg) => super::build_client(cfg),
+            None => reqwest::Client::new(),
+        };
         let url = format!("{}/chat/completions", self.base_url);
 
         let response = client

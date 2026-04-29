@@ -1,6 +1,7 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use tauri::Emitter;
+use xt_core::config::AppConfig;
 use xt_core::esp::parser::{EspParser, StringsFiles};
 use xt_core::strings::CodepageTable;
 use xt_core::translation_api::{DeepLProvider, OpenAIProvider, ProviderType, TranslationProvider};
@@ -548,9 +549,10 @@ async fn run_batch_translate(
                     if api_key.is_empty() {
                         Err("OpenAI API key not set".to_string())
                     } else {
+                        let proxy_config = AppConfig::load(&crate::commands::config_dir()).ok();
                         let provider = OpenAIProvider::from_key(api_key.clone());
                         provider
-                            .translate(source_text, source_api_code, target_api_code)
+                            .translate(source_text, source_api_code, target_api_code, proxy_config.as_ref())
                             .await
                             .map_err(|e| e.to_string())
                     }
@@ -559,9 +561,10 @@ async fn run_batch_translate(
                     if api_key.is_empty() {
                         Err("DeepL API key not set".to_string())
                     } else {
+                        let proxy_config = AppConfig::load(&crate::commands::config_dir()).ok();
                         let provider = DeepLProvider::new(api_key.clone());
                         provider
-                            .translate(source_text, source_api_code, target_api_code)
+                            .translate(source_text, source_api_code, target_api_code, proxy_config.as_ref())
                             .await
                             .map_err(|e| e.to_string())
                     }

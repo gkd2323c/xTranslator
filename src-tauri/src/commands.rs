@@ -101,7 +101,7 @@ fn cache_dir() -> std::path::PathBuf {
     }
 }
 
-fn config_dir() -> std::path::PathBuf {
+pub fn config_dir() -> std::path::PathBuf {
     if cfg!(windows) {
         std::env::var("LOCALAPPDATA")
             .map(std::path::PathBuf::from)
@@ -770,6 +770,9 @@ pub async fn translate_string(
     let resolved_source = state.api_config.resolve_lang(&provider_name, &source_lang);
     let resolved_target = state.api_config.resolve_lang(&provider_name, &target_lang);
 
+    // Load proxy config from disk
+    let proxy_config = xt_core::config::AppConfig::load(&config_dir()).ok();
+
     let text = request.text;
 
     let result = match provider_type {
@@ -777,14 +780,14 @@ pub async fn translate_string(
             let provider = OpenAIProvider::from_key(api_key)
                 .with_config(state.api_config.clone());
             provider
-                .translate(&text, &resolved_source, &resolved_target)
+                .translate(&text, &resolved_source, &resolved_target, proxy_config.as_ref())
                 .await
                 .map_err(|e| e.to_string())?
         }
         ProviderType::DeepL => {
             let provider = DeepLProvider::new(api_key);
             provider
-                .translate(&text, &resolved_source, &resolved_target)
+                .translate(&text, &resolved_source, &resolved_target, proxy_config.as_ref())
                 .await
                 .map_err(|e| e.to_string())?
         }

@@ -89,6 +89,55 @@ mod tests {
         assert_eq!(protect_crlf("Hello World"), "Hello World");
         assert_eq!(restore_crlf("Hello World"), "Hello World");
     }
+
+    #[test]
+    fn test_build_proxy_with_auth() {
+        use crate::config::AppConfig;
+        let config = AppConfig {
+            proxy_server: Some("proxy.example.com".to_string()),
+            proxy_port: Some(8080),
+            proxy_username: Some("user".to_string()),
+            proxy_password: Some("pass".to_string()),
+            ..Default::default()
+        };
+        let proxy = build_proxy(&config);
+        assert!(proxy.is_some());
+    }
+
+    #[test]
+    fn test_build_proxy_without_auth() {
+        use crate::config::AppConfig;
+        let config = AppConfig {
+            proxy_server: Some("proxy.example.com".to_string()),
+            proxy_port: Some(8080),
+            ..Default::default()
+        };
+        let proxy = build_proxy(&config);
+        assert!(proxy.is_some());
+    }
+
+    #[test]
+    fn test_build_proxy_no_server() {
+        use crate::config::AppConfig;
+        let config = AppConfig::default();
+        let proxy = build_proxy(&config);
+        assert!(proxy.is_none());
+    }
+
+    #[test]
+    fn test_build_client_with_proxy() {
+        use crate::config::AppConfig;
+        let config = AppConfig {
+            proxy_server: Some("proxy.example.com".to_string()),
+            proxy_port: Some(8080),
+            proxy_username: Some("user".to_string()),
+            proxy_password: Some("pass".to_string()),
+            ..Default::default()
+        };
+        let _client = build_client(&config);
+        // Just verify it builds without panicking
+        assert!(true);
+    }
 }
 
 /// 翻译 Provider 类型
@@ -128,7 +177,8 @@ impl ProviderType {
 #[async_trait::async_trait]
 pub trait TranslationProvider: Send + Sync {
     /// 翻译文本（异步）
-    async fn translate(&self, text: &str, source_lang: &str, target_lang: &str) -> Result<String>;
+    /// proxy: Optional AppConfig with proxy settings
+    async fn translate(&self, text: &str, source_lang: &str, target_lang: &str, proxy: Option<&crate::config::AppConfig>) -> Result<String>;
 }
 
 /// API 翻译器配置（解析 ApiTranslator.txt）
