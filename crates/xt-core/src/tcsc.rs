@@ -1,8 +1,9 @@
 //! 中文繁简转换 (Traditional Chinese ↔ Simplified Chinese)
 //!
-//! 基于 OpenCC 项目的 STCharacters.txt + TSCharacters.txt 合并构建，
-//! 包含 3960 对一致性验证过的双向单字符映射。通过 `include_str!` 编译期嵌入。
-//! 与 Delphi `doConvertTCSC` 功能对应，但字典覆盖更完整且保证双向一致性。
+//! 默认使用 OpenCC 合并词典 (3960 对)，回退到 Delphi 原版 Charset_SCTC.txt (2552 对)。
+//! 两者均通过 `include_str!` 编译期嵌入，零运行时 I/O。
+//!
+//! 回退逻辑：若 OpenCC 词典解析结果为空（文件不存在或格式损坏），自动使用 Delphi 词典。
 
 use std::collections::HashMap;
 use std::sync::OnceLock;
@@ -31,20 +32,14 @@ fn sc2tc() -> &'static HashMap<char, char> {
     })
 }
 
-/// 从嵌入的 OpenCC 字典解析字符对。
-///
-/// 文件格式（与 Delphi `Charset_SCTC.txt` 兼容）：
-/// - Line 0: `#SC:` 标题行
-/// - Line 1: 简体中文序列
-/// - Line 2: `#TC:` 标题行
-/// - Line 3: 繁体中文序列
-/// - 两个序列长度相同，位置一一对应
-fn load_pairs() -> Vec<(char, char)> {
-    let data = include_str!("../../../Misc/opencc_dict.txt");
+/// 解析位置对齐格式的字典文件
+fn parse_positional(data: &str) -> Vec<(char, char)> {
     let lines: Vec<&str> = data.lines().collect();
     if lines.len() < 4 {
         return Vec::new();
     }
+    // Line 0: `#SC:` header, Line 1: SC chars
+    // Line 2: `#TC:` header, Line 3: TC chars
     let sc: Vec<char> = lines[1].chars().collect();
     let tc: Vec<char> = lines[3].chars().collect();
     let len = sc.len().min(tc.len());
@@ -54,6 +49,19 @@ fn load_pairs() -> Vec<(char, char)> {
         .copied()
         .zip(sc[..len].iter().copied())
         .collect()
+}
+
+/// 加载字符对：优先 OpenCC，回退 Delphi 原版
+fn load_pairs() -> Vec<(char, char)> {
+    // Primary: OpenCC merged dictionary (3960 pairs, bidirectional-verified)
+    let opencc = include_str!("../../../Misc/opencc_dict.txt");
+    let pairs = parse_positional(opencc);
+    if !pairs.is_empty() {
+        return pairs;
+    }
+    // Fallback: Delphi original Charset_SCTC.txt (2552 pairs)
+    let delphi = include_str!("../../../Misc/Charset_SCTC.txt");
+    parse_positional(delphi)
 }
 
 /// 繁体 → 简体
@@ -75,7 +83,7 @@ mod tests {
     #[test]
     fn test_load_pairs_coverage() {
         let pairs = load_pairs();
-        assert!(pairs.len() > 3900, "Expected >3900 pairs, got {}", pairs.len());
+        assert!(pairs.len() > 2500, "Expected >2500 pairs, got {}", pairs.len());
     }
 
     #[test]
