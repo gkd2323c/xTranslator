@@ -1,11 +1,4 @@
 //! 应用配置持久化
-//!
-//! 存储位置：
-//! - Windows: `%LOCALAPPDATA%/xTranslator/config.json`
-//! - Linux: `~/.config/xTranslator/config.json`
-//! - macOS: `~/Library/Application Support/xTranslator/config.json`
-//!
-//! 安全：API Key 不暴露到日志，不写入 git。
 
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -24,6 +17,14 @@ pub struct AppConfig {
     pub theme: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub language: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub proxy_server: Option<String>,
+    #[serde(default)]
+    pub proxy_port: Option<u16>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub proxy_username: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub proxy_password: Option<String>,
 }
 
 impl AppConfig {
@@ -48,23 +49,16 @@ impl AppConfig {
         std::fs::write(&path, json)
     }
 
-    /// Merge overrides from another config (Only Some values override)
     pub fn apply(&mut self, other: &Self) {
-        if other.openai_api_key.is_some() {
-            self.openai_api_key = other.openai_api_key.clone();
-        }
-        if other.deepl_api_key.is_some() {
-            self.deepl_api_key = other.deepl_api_key.clone();
-        }
-        if other.current_provider.is_some() {
-            self.current_provider = other.current_provider.clone();
-        }
-        if other.theme.is_some() {
-            self.theme = other.theme.clone();
-        }
-        if other.language.is_some() {
-            self.language = other.language.clone();
-        }
+        if other.openai_api_key.is_some() { self.openai_api_key = other.openai_api_key.clone(); }
+        if other.deepl_api_key.is_some() { self.deepl_api_key = other.deepl_api_key.clone(); }
+        if other.current_provider.is_some() { self.current_provider = other.current_provider.clone(); }
+        if other.theme.is_some() { self.theme = other.theme.clone(); }
+        if other.language.is_some() { self.language = other.language.clone(); }
+        if other.proxy_server.is_some() { self.proxy_server = other.proxy_server.clone(); }
+        if other.proxy_port.is_some() { self.proxy_port = other.proxy_port; }
+        if other.proxy_username.is_some() { self.proxy_username = other.proxy_username.clone(); }
+        if other.proxy_password.is_some() { self.proxy_password = other.proxy_password.clone(); }
     }
 }
 
@@ -85,7 +79,6 @@ mod tests {
     fn test_save_and_load() {
         let dir = std::env::temp_dir().join("xt_config_test_roundtrip");
         let _ = std::fs::remove_dir_all(&dir);
-
         let config = AppConfig {
             openai_api_key: Some("sk-test".to_string()),
             theme: Some("dark".to_string()),
@@ -93,13 +86,11 @@ mod tests {
             ..Default::default()
         };
         config.save(&dir).unwrap();
-
         let loaded = AppConfig::load(&dir).unwrap();
         assert_eq!(loaded.openai_api_key.as_deref(), Some("sk-test"));
         assert_eq!(loaded.theme.as_deref(), Some("dark"));
         assert_eq!(loaded.language.as_deref(), Some("zh-CN"));
         assert!(loaded.deepl_api_key.is_none());
-
         let _ = std::fs::remove_dir_all(&dir);
     }
 

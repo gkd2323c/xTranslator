@@ -1903,6 +1903,10 @@ fn config_to_dto(cfg: &xt_core::config::AppConfig) -> AppConfigDto {
         current_provider: cfg.current_provider.clone(),
         theme: cfg.theme.clone(),
         language: cfg.language.clone(),
+        proxy_server: cfg.proxy_server.clone(),
+        proxy_port: cfg.proxy_port,
+        proxy_username: cfg.proxy_username.clone(),
+        proxy_password: cfg.proxy_password.clone(),
     }
 }
 
@@ -1913,6 +1917,10 @@ fn dto_to_config(dto: &AppConfigDto) -> xt_core::config::AppConfig {
         current_provider: dto.current_provider.clone(),
         theme: dto.theme.clone(),
         language: dto.language.clone(),
+        proxy_server: dto.proxy_server.clone(),
+        proxy_port: dto.proxy_port,
+        proxy_username: dto.proxy_username.clone(),
+        proxy_password: dto.proxy_password.clone(),
     }
 }
 

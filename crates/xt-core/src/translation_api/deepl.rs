@@ -75,11 +75,11 @@ impl DeepLProvider {
 #[async_trait::async_trait]
 impl super::TranslationProvider for DeepLProvider {
     async fn translate(&self, text: &str, source_lang: &str, target_lang: &str) -> Result<String> {
+        let protected = super::protect_crlf(text);
         let client = reqwest::Client::new();
         let url = self.get_endpoint();
 
-        // Build request parameters
-        let mut params = vec![("text", text), ("target_lang", target_lang)];
+        let mut params = vec![("text", protected.as_str()), ("target_lang", target_lang)];
 
         // Add source language if specified and not empty
         if !source_lang.is_empty() {
@@ -114,7 +114,7 @@ impl super::TranslationProvider for DeepLProvider {
             .translations
             .first()
             .ok_or_else(|| anyhow::anyhow!("No translation in DeepL API response"))
-            .map(|t| t.text.clone())
+            .map(|t| super::restore_crlf(&t.text))
     }
 }
 

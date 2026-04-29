@@ -112,7 +112,8 @@ struct ChatChoice {
 #[async_trait]
 impl super::TranslationProvider for OpenAIProvider {
     async fn translate(&self, text: &str, _source_lang: &str, target_lang: &str) -> Result<String> {
-        let query = self.build_query(text, target_lang);
+        let protected = super::protect_crlf(text);
+        let query = self.build_query(&protected, target_lang);
 
         let request = ChatRequest {
             model: self.model.clone(),
@@ -155,7 +156,7 @@ impl super::TranslationProvider for OpenAIProvider {
         chat_response
             .choices
             .first()
-            .map(|c| c.message.content.trim().to_string())
+            .map(|c| super::restore_crlf(c.message.content.trim()))
             .ok_or_else(|| anyhow!("No translation in API response"))
     }
 }
