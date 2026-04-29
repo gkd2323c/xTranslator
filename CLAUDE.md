@@ -12,8 +12,10 @@ xTranslator is a tool for translating Bethesda game mods (Skyrim, Fallout 4, Sta
 - SST dictionary format (bidirectional compatibility with Delphi xTranslator)
 - XML import/export for translation exchange
 - Heuristic search with translation suggestions
-- Translation API integration (OpenAI, DeepL, etc.)
+- Translation API integration (OpenAI, DeepL, etc.) with API config parsing (ApiTranslator.txt) and CRLF protection
 - Virtual scrolling with client-side filtering
+- Traditional/Simplified Chinese conversion (TCSC, OpenCC + Delphi dictionaries)
+- Config persistence (JSON, theme/language/API keys/proxy survive restart)
 
 ## Project Structure
 
@@ -26,7 +28,9 @@ xTranslator/
 │   │   ├── src/sst/      # SST dictionary v8 format
 │   │   ├── src/xml/      # Delphi XML export format parser
 │   │   ├── src/heuristic/ # Similarity search algorithms
-│   │   ├── src/translation_api/ # Translation providers
+│   │   ├── src/translation_api/ # Translation providers + API config + CRLF protection
+│   │   ├── src/tcsc.rs   # Traditional/Simplified Chinese conversion
+│   │   ├── src/config.rs # App config persistence (JSON)
 │   │   └── src/types/    # Core types (SkyString, EspPointer, etc.)
 │   ├── xt-shared/        # IPC DTOs shared between Tauri backend/frontend
 │   └── xt-cli/           # CLI tool for testing and batch operations
@@ -170,6 +174,8 @@ Commands are registered in `src-tauri/src/main.rs` and implemented in `commands.
 - `load_fuz_mapping(espDir)` - FUZ audio mapping
 - `build_dialog_tree()` - Dialog/NPC view
 - `start_batch_translate(files)` / `start_batch_export(files)` - Batch processing
+- `load_config()` / `save_config(dto)` - Config persistence (JSON, theme/language/API key/proxy)
+- `get_api_config()` - Provider metadata from ApiTranslator.txt
 
 ### State Management
 - **Backend**: `AppState` in `src-tauri/src/main.rs` holds `Vec<SkyString>`
@@ -217,6 +223,9 @@ Commands are registered in `src-tauri/src/main.rs` and implemented in `commands.
 | `crates/xt-core/src/sst/v8.rs` | SST dictionary format |
 | `crates/xt-core/src/xml/mod.rs` | XML import/export |
 | `crates/xt-core/src/heuristic/mod.rs` | Similarity search algorithms |
+| `crates/xt-core/src/tcsc.rs` | Traditional/Simplified Chinese conversion |
+| `crates/xt-core/src/config.rs` | App config persistence (JSON) |
+| `crates/xt-core/src/translation_api/config.rs` | API translator config (ApiTranslator.txt) |
 | `crates/xt-shared/src/dto.rs` | IPC data transfer objects |
 | `src-tauri/src/commands.rs` | All Tauri command implementations |
 | `ui/src/stores/appStore.ts` | Frontend state management |
@@ -271,10 +280,12 @@ Commands are registered in `src-tauri/src/main.rs` and implemented in `commands.
 | ESP Parsing | ✅ 76k+ strings from Skyrim.esm |
 | XML Import/Export | ✅ Delphi-compatible |
 | Heuristic Search | ✅ Levenshtein + LCS + LCP |
-| Translation API | ✅ OpenAI + DeepL |
+| Translation API | ✅ OpenAI + DeepL + API config |
 | PEX String Extraction | ✅ Parser + PexPanel, write-back v2 |
 | BSA/BA2 Archive Browser | ✅ BsaBrowser + list_all_files + extract |
 | FUZ Audio Mapping | ✅ FuzFile parse + WAV playback |
 | Dialog/NPC View | ✅ DialogView component |
 | UI i18n | ✅ 10 languages (react-i18next) |
 | Batch Processor | ✅ BatchExecutor + BatchPanel |
+| Config Persistence | ✅ JSON config (theme/language/API key/proxy) |
+| TCSC Conversion | ✅ Core library (OpenCC + Delphi dicts), IPC+UI pending |

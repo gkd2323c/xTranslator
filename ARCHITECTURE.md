@@ -45,7 +45,7 @@ xTranslator/
 
 | Member | Role | Key Files |
 |--------|------|-----------|
-| `xt-core` | Domain logic: ESP parsing, Bethesda strings formats, SST v8 read/write, XML import/export, BSA v0x68/v0x69 archive support, PEX script parsing, FUZ audio, heuristic similarity search, translation API providers, ESP cache | `src/lib.rs`, `src/esp/`, `src/strings/`, `src/sst/`, `src/xml/`, `src/bsa/`, `src/pex/`, `src/fuz/`, `src/heuristic/`, `src/translation_api/`, `src/cache.rs` |
+| `xt-core` | Domain logic: ESP parsing, Bethesda strings formats, SST v8 read/write, XML import/export, BSA v0x68/v0x69 archive support, PEX script parsing, FUZ audio, TCSC conversion, config persistence, heuristic similarity search, translation API providers (with CRLF protection, API config parsing, proxy builder), ESP cache | `src/lib.rs`, `src/esp/`, `src/strings/`, `src/sst/`, `src/xml/`, `src/bsa/`, `src/pex/`, `src/fuz/`, `src/tcsc.rs`, `src/config.rs`, `src/heuristic/`, `src/translation_api/`, `src/cache.rs` |
 | `xt-shared` | Serializable DTOs for IPC. Source of truth for data shapes. | `src/dto.rs` |
 | `xt-cli` | Legacy CLI for testing core functionality without UI. | `src/main.rs` |
 | `src-tauri` | Tauri backend: holds `AppState`, exposes commands to frontend. | `src/main.rs`, `src/commands.rs` |
@@ -172,12 +172,14 @@ Format: `CachePayload { version: u32, strings: Vec<SkyString>, compressed_record
 | `pex` | PEX (Papyrus) script parser + compiler: string table extraction, in-place translation update with index preservation |
 | `mcm` | MCM (Mod Configuration Menu) translation file parser: UTF-16LE/UTF-8/ANSI encoding detection, BOM handling, key-value extraction, save with original encoding+line endings |
 | `fuz` | FUZ audio container parser: FuzHeader + WAV extraction, Sound/Voice/ directory scanning, RESP/INFO association |
+| `tcsc` | Traditional/Simplified Chinese conversion: OpenCC dictionary (primary, 3960 pairs) + Delphi Charset_SCTC.txt (fallback, 2552 pairs), compile-time embedded, `to_simplified()` / `to_traditional()` |
+| `config` | App configuration persistence: `AppConfig` (theme, language, API keys, proxy), JSON load/save, merge-only updates |
 | `sst::v8` | SST v8 dictionary format: read/write with Delphi-compatible UTF-16LE encoding, FNV-1a hashing, bidirectional roundtrip |
 | `xml` | Delphi xTranslator XML export/import: `parse_xml_export`, `write_xml_export`, `import_xml_to_sky_strings` |
 | `heuristic` | Similarity search for translation suggestions: Levenshtein distance, longest common substring (LCS), longest common prefix (LCP) |
 | `normalization` | String normalization (case-folding, punctuation stripping, whitespace compression) for heuristic search and dictionary matching |
 | `cache` | ESP parse result cache (SHA-256 keyed, bincode blob, auto-prune oldest) |
-| `translation_api` | Translation provider trait; OpenAI + DeepL implementations. Supports API key via env var or runtime, provider switching |
+| `translation_api` | Translation provider trait; OpenAI + DeepL implementations. API config parsing (ApiTranslator.txt), language code resolution, CRLF protection (`<L_F>` tag), HTTP proxy builder (not yet wired). Supports API key via env var, runtime, or config persistence, provider switching |
 | `types` | Core types: `SkyString`, `EspPointer`, `SkyStringParams`, `GameId` |
 
 ### src-tauri
@@ -185,7 +187,7 @@ Format: `CachePayload { version: u32, strings: Vec<SkyString>, compressed_record
 | File | Responsibility |
 |------|----------------|
 | `main.rs` | Tauri app builder: plugin initialization (`shell`, `dialog`), `AppState` management, command handler registration |
-| `commands.rs` | IPC command implementations: `load_esp`, `load_sst`, `save_sst`, `update_translation`, `get_strings_chunk`, `query_strings_command`, `get_stats`, `heuristic_search`, `translate_string`, `set_api_key`, `export_xml`, `import_xml`, `save_strings`, `list_bsa_files`, `extract_bsa_file`, `parse_pex_strings`, `load_fuz_mapping`, `build_dialog_tree`, `start_batch_translate`, `start_batch_export`, `cancel_batch_job` |
+| `commands.rs` | IPC command implementations: `load_esp`, `load_sst`, `save_sst`, `update_translation`, `get_strings_chunk`, `query_strings_command`, `get_stats`, `heuristic_search`, `translate_string`, `set_api_key`, `export_xml`, `import_xml`, `save_strings`, `list_bsa_files`, `extract_bsa_file`, `parse_pex_strings`, `load_fuz_mapping`, `build_dialog_tree`, `start_batch_translate`, `start_batch_export`, `cancel_batch_job`, `load_config`, `save_config`, `get_api_config` |
 | `batch.rs` | Batch processor: sequential ESP file processing, cooperative cancellation, Tauri event emission |
 
 ### ui
@@ -263,7 +265,7 @@ Delphi xTranslator compatible:
 # Full backend build
 cargo build -p xtranslator-tauri
 
-# Core library unit tests (134 tests)
+# Core library unit tests (153 tests)
 cargo test -p xt-core --lib
 
 # End-to-end tests (requires Skyrim SE at D:\SteamLibrary\...)

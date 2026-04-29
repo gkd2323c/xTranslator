@@ -1,7 +1,0 @@
-﻿*tip: use Search=Replace
-*ex: Sarcastic=Sarcasm
-Sarcastic
-Barter
-Flirt
-Romance
-Relationship

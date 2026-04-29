@@ -8,7 +8,7 @@ Parses ESP/ESM files (Skyrim SE, Fallout 4, Starfield, etc.), extracts translata
 
 ## Current Status
 
-**All 27 spec tasks complete — v1.0.** The app can load ESP+Strings, display 76K+ strings in a virtual-scrolled table, edit translations, translate via API, browse BSA/BA2 archives, translate PEX and MCM files, map FUZ audio, view NPC dialogs, compare ESP files, import XML dictionaries with multi-tier enhanced matching (exact→EDID→normalized→vocab), and switch between 10 UI languages.
+**All 33 spec tasks complete — v1.0.** The app can load ESP+Strings, display 76K+ strings in a virtual-scrolled table, edit translations, translate via API, browse BSA/BA2 archives, translate PEX and MCM files, map FUZ audio, view NPC dialogs, compare ESP files, import XML dictionaries with multi-tier enhanced matching (exact→EDID→normalized→vocab), switch between 10 UI languages, persist config across restarts, and convert between simplified/traditional Chinese.
 
 ### Implemented
 
@@ -41,10 +41,14 @@ Parses ESP/ESM files (Skyrim SE, Fallout 4, Starfield, etc.), extracts translata
 | Enhanced dictionary matching | Done | Multi-tier XML/SST import: exact→EDID→normalized→vocab, with Delphi-style pending/oldData/warning semantics |
 | MCM translation | Done | UTF-16LE/UTF-8/ANSI parser + save path + McmPanel UI |
 | ESPCompare | Done | StringKey triple compare + identical/added/removed/modified UI |
+| Config persistence | Done | `AppConfig` JSON file, load/save IPC, theme/language/API key survive restart |
+| TCSC (繁简转换) | Done | OpenCC 3960 pairs + Delphi 2552 pairs fallback, compile-time embedded (core library) |
+| API config | Done | Parse Delphi `ApiTranslator.txt`, language code resolution, provider metadata IPC |
+| CRLF protection | Done | `<L_F>` tag protect/restore in both OpenAI and DeepL providers |
 
 ### All Spec Tasks Complete
 
-All 27 SPEC.md tasks (§T) now marked `x`. See [`docs/feature_comparison.md`](docs/feature_comparison.md) for remaining gap analysis vs Delphi original (direct ESP editing, Delphi-style ESM cache, Strings/MCM compare, RTL, and advanced validation tools).
+All 33 SPEC.md tasks (§T) now marked `x`. See [`docs/feature_comparison.md`](docs/feature_comparison.md) for remaining gap analysis vs Delphi original (direct ESP editing, Delphi-style ESM cache, Strings/MCM compare, RTL, proxy UI, and advanced validation tools).
 
 ## Quick Start
 
@@ -63,7 +67,7 @@ cargo build -p xtranslator-tauri --release
 ## Test
 
 ```bash
-# Rust unit tests (125 tests)
+# Rust unit tests (153 tests)
 cargo test -p xt-core
 
 # E2E tests (requires Skyrim SE at D:\SteamLibrary\...)

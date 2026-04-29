@@ -49,10 +49,13 @@ api: `get_is_dirty` → `bool`
 api: `save_strings` → `SaveStringsResponse { strings_count, dlstrings_count, ilstrings_count, translated_count }`
 api: `compare_esp_files` → `EspCompareResultDto { identical_count, added_count, removed_count, modified_count, identical[], added[], removed[], modified[] }`
 api: `load_mcm_file` → `McmFileDto { path, entry_count, encoding, entries[] }`
-api: `save_mcm_file` → `()` (takes `McmSaveRequest { path, entries[] }`) 
+api: `save_mcm_file` → `()` (takes `McmSaveRequest { path, entries[] }`)
 api: `compile_pex` → `String` (output path, takes pex_path, output_path, translations[])
 api: `list_ba2_files` → `BsaFileListDto` (reuses BSA DTOs)
 api: `extract_ba2_file` / `extract_ba2_folder` → same as BSA equivalents
+api: `load_config` → `AppConfigDto` (persisted JSON config: theme, language, API keys, proxy)
+api: `save_config` → `()` (takes `AppConfigDto`, merge-only update, writes to disk)
+api: `get_api_config` → `ApiConfigResponse { providers: Vec<ApiProviderInfo> }` (parsed from `Misc/ApiTranslator.txt`)
 
 ### Events
 
@@ -108,6 +111,9 @@ V19: ∀ loadAllStrings → get_strings_chunk primary (10K/batch); get_all_strin
 V20: ∀ load_esp → before parsing, check EsmCache via SHA-256 of ESP file in `%LOCALAPPDATA%/xTranslator/cache/`; on hit return cached bincode blob; on miss parse then store
 V21: ∀ tests that mutate/read `XT_TRANSLATE_API_*` → isolate env changes under shared lock and restore prior values; assertions must not depend on the caller's ambient env
 V22: ∀ parse_record_debug on GRUP → decrement record_count saturatingly; nested/empty GRUPs must never underflow the unsigned counter
+V23: ∀ translate_string → protect_crlf(source) before API call, restore_crlf(response) after; `\r\n` and `\n` both become `<L_F>` tag, restored to `\r\n`
+V24: ∀ AppConfig.save → merge-only: only `Some` fields in the input DTO overwrite existing config; `None` fields leave the stored value unchanged
+V25: ∀ TCSC conversion → OpenCC dictionary (primary, 3960 pairs) + Delphi Charset_SCTC.txt (fallback, 2552 pairs); both embedded at compile time via `include_str!`
 
 ## §T Tasks
 
@@ -144,7 +150,7 @@ T29|x|ESP comparison engine (old/new diff with identical/modified/added/removed 
 T30|x|BA2 archive support (Fallout 4 v0x01, Starfield v0x02, FO4B v0x08)|G8
 T31|x|PEX compile (in-place string table update with index preservation, binary roundtrip)|G1
 T32|x|Config persistence (JSON file, theme/language/API key survive restart)|G7
-T33|x|TCSC simplified/traditional Chinese conversion (character-pair mapping, ~140 pairs)|G7
+T33|x|TCSC simplified/traditional Chinese conversion (character-pair mapping, OpenCC 3960 + Delphi 2552 fallback)|G7
 
 ## §B Bugs
 

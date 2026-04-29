@@ -15,6 +15,10 @@ A modern Rust-based translator for Bethesda game mods (Skyrim, Skyrim SE, Fallou
 - **Heuristic Search**: Find similar translated strings using Levenshtein distance, LCS, and LCP algorithms
 - **Codepage Fallback**: UTF-8 primary with Windows codepage fallback (932/936/949/950/1250-1257)
 - **Text Normalization**: String normalization (NFKC) and tokenization for heuristic search and translation consistency
+- **TCSC Conversion**: Traditional/Simplified Chinese conversion with OpenCC dictionary (3960 pairs) + Delphi fallback (2552 pairs)
+- **Config Persistence**: JSON config file survives restart (theme, language, API keys, proxy)
+- **API Config**: Parse Delphi `ApiTranslator.txt` for provider metadata, language code resolution, and query templates
+- **CRLF Protection**: `<L_F>` tag protect/restore cycle for translation API calls
 
 ### Translation APIs
 - **DeepL**: Free and Pro API support (auto-detected from API key)

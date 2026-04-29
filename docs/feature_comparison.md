@@ -1,8 +1,8 @@
 # xTranslator 功能对比：Delphi 原版 vs Rust 重写
 
-> **更新日期**：2026-04-28
+> **更新日期**：2026-04-29
 > **原版版本**：xTranslator 1.6.0（Delphi 12.1 CE，~6.7 万行代码，10+ 年迭代）
-> **重写版本**：v1.0 — 全部 27 项 SPEC 任务完成（xt-core 125 个单元测试通过，0 警告）
+> **重写版本**：v1.0 — 全部 33 项 SPEC 任务完成（xt-core 153 个单元测试通过，0 警告）
 
 ---
 
@@ -10,7 +10,7 @@
 
 | 维度 | 原版 Delphi | Rust 重写 | 覆盖度 |
 |------|------------|----------|--------|
-| 代码量 | ~67,000 行 | ~10,400 行 | - |
+| 代码量 | ~67,000 行 | ~15,900 行 Rust + ~4,700 行 TS | - |
 | 开发时间 | 10+ 年 | ~10 周 | - |
 | 数据格式解析 | 全格式 | 核心格式 | ~95% |
 | 编码系统 | 完整 | 完整 | ~90% |
@@ -61,7 +61,7 @@
 |------|------|----------|--------|------|
 | **字典应用 (apply)** | ✅ ID+EDID+词汇匹配+状态语义 | ✅ 共享 matcher + Delphi 状态语义 | ~90% | exact/EDID/normalized/vocab 已实现；pending、oldData、warning、tagOnly、stringID 语义有回归测试覆盖；仍需 Delphi 实机对照确认 |
 | **启发式搜索** | ✅ Levenshtein/LCS | ✅ | ~80% | xt-core heuristic 模块，Levenshtein+LCS+LCP，IPC+UI 已集成 |
-| **翻译 API** | ✅ DeepL/MS/Google/OpenAI/Youdao/Baidu | ✅ OpenAI + DeepL 已实现，其他 provider 仅作为原版对比 | ~60% | OpenAIProvider + DeepLProvider 已就绪，支持运行时切换 |
+| **翻译 API** | ✅ DeepL/MS/Google/OpenAI/Youdao/Baidu | ✅ OpenAI + DeepL + API config | ~70% | OpenAIProvider + DeepLProvider 已就绪；ApiTranslator.txt 配置解析 + 语言代码映射 + provider 元数据 IPC；CRLF 保护（`<L_F>` 标签）已集成到两个 provider |
 | **字符串编辑** | ✅ 行内+窗口编辑 | ⚠️ 基础编辑 | ~70% | EditorPanel：文本编辑、Ctrl+Enter 保存、状态切换、启发式搜索、翻译 API |
 | **正则搜索/替换** | ✅ PCRE+批量 | ✅ Regex filter toggle + Replace All | ~80% | Regex toggle + Replace All with confirmation + capture groups ($1/$2) |
 | **直接搜索** | ✅ | ✅ 实时筛选 | ~80% | 客户端 filter+sort：文本/Regex/状态/Record 类型/排序，零延迟，76K+ 条 |
@@ -70,7 +70,7 @@
 | **最终化 (finalize)** | ✅ 导出翻译结果 | ⚠️ XML 导出可用 | ~40% | XML 导出已就绪，Strings 最终化待整合 |
 | **批量处理器** | ✅ 命令式批处理 | ✅ BatchExecutor + BatchPanel | ~70% | Multi-file translate/export, progress events, cancel, error recovery |
 | **RTL 支持 (阿拉伯语)** | ✅ RTL 标签+字符串反向 | ❌ | 0% | `TESVT_TranslateFunc.pas` 中的 RTL 处理 |
-| **中文繁简转换** | ✅ SC↔TC 字符映射 | ❌ | 0% | `buildTCSCList`/`doConvertTCSC` |
+| **中文繁简转换** | ✅ SC↔TC 字符映射 | ⚠️ 核心库完成 | ~50% | `tcsc.rs`：OpenCC 主字典(3960对)+Delphi 字典回退(2552对)，编译时嵌入；IPC 命令和 UI 未集成 |
 
 ---
 
@@ -82,7 +82,7 @@
 | **Strings Compare** | ✅ .Strings 文件对比 | ❌ | 0% | - |
 | **MCM Compare** | ✅ | ❌ | 0% | - |
 | **别名检查** | ✅ 源/翻译 Alias 完整性 | ❌ | 0% | - |
-| **中文繁简转换** | ✅ | ❌ | 0% | - |
+| **中文繁简转换** | ✅ | ⚠️ 核心库完成 | ~50% | `tcsc.rs` 双向转换（to_simplified/to_traditional），IPC+UI 未集成 |
 
 ---
 
@@ -92,7 +92,7 @@
 |------|------|----------|--------|------|
 | **ESM 缓存** | ✅ SQLite 缓存加速重载 | ⚠️ ESP 解析结果缓存已实现 | ~40% | Rust 已有 SHA-256+bincode 解析缓存；Delphi 风格 SQLite ESM 缓存仍未实现 |
 | **自动备份** | ✅ 定时字典备份 | ✅ 5-min SST snapshots | ~80% | SST 快照，保留 10 份，静默失败 |
-| **配置系统** | ✅ res.ini+注册表 | ⚠️ Cargo.toml 配置 | ~5% | 跨平台配置方案设计过，未实现 |
+| **配置系统** | ✅ res.ini+注册表 | ✅ JSON 配置持久化 | ~60% | `AppConfig` JSON 持久化（theme/language/API key/proxy），`load_config`/`save_config` IPC 命令，启动时自动加载；HTTP proxy 字段已定义但未接入 reqwest Client（死代码）；无 proxy 设置 UI |
 | **vocabulary.txt** | ✅ 词汇列表 | ✅ Data/*/vocabulary.txt 存在 | ~20% | 文件存在但未在代码中使用 |
 | **ctdaFunc.txt** | ✅ 条件函数定义 | ✅ 文件存在 | ~10% | 未解析 |
 | **fieldSizeRef.txt** | ✅ 字段大小参考 | ✅ 文件存在 | ~10% | 未解析 |
@@ -160,6 +160,7 @@
 | ~~FUZ 音频映射~~ | ✅ FuzFile parse + scan + FuzPanel | Done |
 | ~~MCM 翻译~~ | ✅ MCM parser (UTF-16LE/UTF-8/ANSI) + types + IPC命令 + McmPanel UI（加载/保存/编辑/过滤） | Done |
 | ~~ESPCompare~~ | ✅ `esp/compare.rs` 引擎 + Tauri 命令 + EspComparePanel UI（identical/added/removed/modified 四类，含标签页+过滤） | ✅ 完成 |
+| ~~API 配置解析~~ | ✅ `translation_api/config.rs` — 解析 Delphi `ApiTranslator.txt`，语言代码映射，provider 元数据 IPC（`get_api_config`） | Done |
 | ESM 缓存 | SQLite 缓存加速重载 | 3-5 天 |
 
 ### P3 - 体验优化
@@ -167,6 +168,9 @@
 | 差距 | 说明 | 预估工作量 |
 |------|------|-----------|
 | ~~批量处理器~~ | ✅ BatchExecutor + BatchPanel | Done |
+| ~~配置持久化~~ | ✅ `AppConfig` JSON 持久化 + `load_config`/`save_config` IPC + 启动自动加载 | Done |
+| ~~中文繁简转换~~ | ✅ `tcsc.rs` 核心库（OpenCC 3960对 + Delphi 2552对回退） | Done（核心库） |
+| ~~CRLF 保护~~ | ✅ 翻译 API `<L_F>` 标签保护/恢复，两个 provider 均已集成 | Done |
 | Header 处理器 | ESP 头部修改 | 1 周 |
 | ~~主题系统~~ | ✅ Dark/Light/Gray/Auto | Done |
 | ~~UI 多语言~~ | ✅ react-i18next 10 languages | Done |
@@ -178,6 +182,8 @@
 
 | 问题 | 影响 | 建议 |
 |------|------|------|
+| HTTP proxy 未接入 | `build_proxy()`/`build_client()` 已定义但翻译 provider 使用 `Client::new()`，proxy 配置为死代码 | 将 `AppConfig` 传入 provider 构造，替换 `Client::new()` 为 `build_client()` |
+| TCSC 未集成到 UI | 核心库完成但无 IPC 命令和前端面板 | 添加 `tcsc_convert` 命令 + MenuBar 按钮 |
 | 嵌套 GRUP 验证 | CELL/WRLD 内的子 GRUP 可能跳过部分字符串 | 需真实数据验证 diff 一致性 |
 | Delphi 交叉验证 | 无法确认 99% 一致率 | 需 Delphi 环境生成对照文件 |
 | SST 旧版本兼容 | 无法读取 v1-v7 SST | 低优先级，v8 是主流格式 |
@@ -199,7 +205,7 @@
 | TESVT_scriptPex.pas | ⚠️ 已分析 | ✅ PEX 解析器完成 |
 | TESVT_TranslateFunc.pas | ✅ 已分析 apply 核心路径 | ✅ matcher 与 apply 状态语义已实现 |
 | TESVT_MainLoader.pas | ✅ 已分析 SST/XML/PEX/缓存关键路径 | ⚠️ Rust 以 Tauri commands + AppState 分拆实现 |
-| TESVT_TranslatorApi.pas | ⚠️ 已分析 | ✅ OpenAI + DeepL 已实现 |
+| TESVT_TranslatorApi.pas | ✅ 已分析 | ✅ OpenAI + DeepL + API config 解析 |
 
 ---
 
