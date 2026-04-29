@@ -1,0 +1,25 @@
+You need one (or more) dictionary:
+-Go to one of these pages: (you can open them in FireFox, Chrome etc...)
+ftp://sunsite.informatik.rwth-aachen.de/pub/mirror/OpenOffice/contrib/dictionaries/
+ftp://ftp.snt.utwente.nl/pub/software/openoffice/contrib/dictionaries/
+ftp://gd.tuwien.ac.at/office/openoffice/contrib/dictionaries/
+and look for a dictionary zip for your language and download it (right click --> save as)
+
+For example
+french: 		fr_FR*.zip
+english(GB): 	en-GB*.zip 
+etc.
+
+-Extract the zip in the fallout4Translator\spellCheck\ dictionaries folder:
+Each language comes with 2 files:
+-YourLanguage.dic
+-YourLanguage.aff
+And both file MUST stay together, directly here and *NOT* in a subfolder.
+
+The tree should look like this:
+Fallout4Translator.exe
+\SpellCheck\
+\SpellCheck\libhunspell.dll
+\SpellCheck\dictionaries\YourLanguage.dic
+\SpellCheck\dictionaries\YourLanguage.aff
+		
