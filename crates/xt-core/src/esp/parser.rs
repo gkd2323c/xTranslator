@@ -22,7 +22,7 @@ use std::path::Path;
 ///
 /// # 返回
 /// 解压后的数据，或错误
-fn decompress_bethesda_record(data: &[u8]) -> Result<Vec<u8>> {
+pub(crate) fn decompress_bethesda_record(data: &[u8]) -> Result<Vec<u8>> {
     use flate2::read::ZlibDecoder;
 
     // 至少需要4字节的大小头

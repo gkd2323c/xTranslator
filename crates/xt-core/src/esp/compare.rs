@@ -2,29 +2,39 @@
 //!
 //! Compares two ESP/ESM files and produces a mapping of string pairs:
 //! - identical: strings match exactly
-//! - modified: same str_id but different text
+//! - modified: same match location but different text
 //! - added: present in new but not in old
 //! - removed: present in old but not in new
 //!
-//! The comparison is based on (str_id, record_sig, field_sig) triple, which
-//! matches the Delphi xTranslator XML import matching strategy.
+//! The comparison follows the original Delphi xTranslator ESPCompare path:
+//! stream records, keep only string fields, and match by FormID + field
+//! occurrence where possible. Synthetic/no-FormID data falls back to the
+//! legacy (str_id, record_sig, field_sig) triple used by existing tests.
 //!
 //! Uses a lightweight compare-specific cache (avoids storing full SkyString
 //! with normalization/hashes/etc.) for fast deserialization.
 
 use std::collections::{HashMap, HashSet};
-use std::io::Read;
+use std::io::{BufReader, Cursor, ErrorKind, Read, Result as IoResult};
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-use crate::esp::parser::EspParser;
+use crate::esp::header::{FieldHeader, GenericHeader, GrupHeader, RecordHeaderData};
+use crate::esp::parser::{
+    decompress_bethesda_record, load_game_record_defs, parse_record_defs, StringsFiles,
+    TranslatableField,
+};
+use crate::types::esp_pointer::string_hash;
 use crate::types::game_id::GameId;
 use crate::types::sky_string::SkyString;
+use crate::vmad::VmadDecoder;
 
-/// Lightweight entry for comparison — stores only the fields needed
-/// for StringKey matching and source comparison. Much smaller and faster
-/// to deserialize than full SkyString (~200ms vs ~1500ms for 75K entries).
+/// Lightweight entry for comparison.
+///
+/// Stores only the location and source text needed by ESPCompare. The
+/// extractor creates these directly from ESP fields instead of allocating full
+/// SkyString values and their search indexes.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CompareEntry {
     pub id: u32,
@@ -33,6 +43,12 @@ pub struct CompareEntry {
     pub record_sig: [u8; 4],
     pub field_sig: [u8; 4],
     pub form_id: u32,
+    pub form_owner_hash: u32,
+    pub local_form_id: u32,
+    pub field_index: u16,
+    pub field_index_max: u16,
+    pub edid_hash: u32,
+    pub source_hash: u32,
 }
 
 impl CompareEntry {
@@ -44,6 +60,12 @@ impl CompareEntry {
             record_sig: s.esp_ptr.record_sig,
             field_sig: s.esp_ptr.field_sig,
             form_id: s.esp_ptr.form_id,
+            form_owner_hash: 0,
+            local_form_id: s.esp_ptr.form_id,
+            field_index: s.esp_ptr.index,
+            field_index_max: s.esp_ptr.index_max,
+            edid_hash: s.esp_ptr.edid_hash,
+            source_hash: string_hash(&s.source),
         }
     }
 }
@@ -67,27 +89,65 @@ pub struct EspComparison {
     pub modified_pairs: HashMap<u32, u32>,
 }
 
-/// Key used for matching strings between ESP files
+/// Key used for matching strings between ESP files.
 ///
-/// Matches Delphi xTranslator's (str_id, record_sig, field_sig) triple.
+/// Original xTranslator sorts compare records by pure FormID, then matches the
+/// first unused string field with the same field signature. `field_index`
+/// models that duplicate-field occurrence. When FormID is absent (unit tests,
+/// imported synthetic sets), we keep the previous string-id triple behavior.
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct StringKey {
     pub str_id: i32,
+    pub form_owner_hash: u32,
+    pub local_form_id: u32,
     pub record_sig: [u8; 4],
     pub field_sig: [u8; 4],
+    pub field_index: u16,
+    pub edid_hash: u32,
 }
 
 impl StringKey {
     fn from_compare_entry(e: &CompareEntry) -> Self {
+        if e.form_id == 0 {
+            return Self {
+                str_id: e.str_id,
+                form_owner_hash: 0,
+                local_form_id: 0,
+                record_sig: e.record_sig,
+                field_sig: e.field_sig,
+                field_index: 0,
+                edid_hash: 0,
+            };
+        }
+
         Self {
-            str_id: e.str_id,
+            str_id: 0,
+            form_owner_hash: e.form_owner_hash,
+            local_form_id: if e.form_owner_hash == 0 {
+                e.form_id
+            } else {
+                e.local_form_id
+            },
             record_sig: e.record_sig,
             field_sig: e.field_sig,
+            field_index: e.field_index,
+            edid_hash: if &e.field_sig == b"VMAD" {
+                e.edid_hash
+            } else {
+                0
+            },
         }
     }
 }
 
-const COMPARE_CACHE_VERSION: u32 = 1;
+const COMPARE_CACHE_VERSION: u32 = 3;
+
+#[derive(Serialize, Deserialize)]
+struct CompareCachePayload {
+    version: u32,
+    game: String,
+    entries: Vec<CompareEntry>,
+}
 
 fn compare_cache_dir() -> PathBuf {
     if cfg!(windows) {
@@ -120,34 +180,483 @@ fn file_hash(path: &Path) -> Option<String> {
     Some(format!("{:x}", hasher.finalize()))
 }
 
-fn cache_path(hash: &str) -> PathBuf {
-    compare_cache_dir().join(format!("{}.compare", hash))
+fn game_cache_key(game: GameId) -> &'static str {
+    match game {
+        GameId::Skyrim => "skyrim",
+        GameId::SkyrimSE => "skyrimse",
+        GameId::Fallout4 => "fallout4",
+        GameId::FalloutNV => "falloutnv",
+        GameId::Fallout76 => "fallout76",
+        GameId::Starfield => "starfield",
+    }
+}
+
+fn cache_path(hash: &str, game: GameId) -> PathBuf {
+    compare_cache_dir().join(format!("{}_{}.compare", hash, game_cache_key(game)))
 }
 
 /// Load cached CompareEntries from disk (if available and valid)
-fn load_cached_entries(hash: &str) -> Option<Vec<CompareEntry>> {
-    let path = cache_path(hash);
+fn load_cached_entries(hash: &str, game: GameId) -> Option<Vec<CompareEntry>> {
+    let path = cache_path(hash, game);
     if !path.exists() {
         return None;
     }
     let data = std::fs::read(&path).ok()?;
-    let (version, entries): (u32, Vec<CompareEntry>) = bincode::deserialize(&data).ok()?;
-    if version != COMPARE_CACHE_VERSION {
+    let payload: CompareCachePayload = match bincode::deserialize(&data) {
+        Ok(payload) => payload,
+        Err(_) => {
+            let _ = std::fs::remove_file(&path);
+            return None;
+        }
+    };
+    if payload.version != COMPARE_CACHE_VERSION || payload.game != game_cache_key(game) {
         let _ = std::fs::remove_file(&path);
         return None;
     }
-    Some(entries)
+    Some(payload.entries)
 }
 
 /// Store CompareEntries to disk for future fast loading
-fn store_cached_entries(hash: &str, entries: &[CompareEntry]) {
+fn store_cached_entries(hash: &str, game: GameId, entries: &[CompareEntry]) {
     let dir = compare_cache_dir();
     let _ = std::fs::create_dir_all(&dir);
-    let data = match bincode::serialize(&(COMPARE_CACHE_VERSION, entries)) {
+    let payload = CompareCachePayload {
+        version: COMPARE_CACHE_VERSION,
+        game: game_cache_key(game).to_string(),
+        entries: entries.to_vec(),
+    };
+    let data = match bincode::serialize(&payload) {
         Ok(d) => d,
         Err(_) => return,
     };
-    let _ = std::fs::write(cache_path(hash), &data);
+    let _ = std::fs::write(cache_path(hash, game), &data);
+}
+
+#[derive(Debug)]
+struct PendingCompareEntry {
+    str_id: i32,
+    source: String,
+    record_sig: [u8; 4],
+    field_sig: [u8; 4],
+    form_id: u32,
+    form_owner_hash: u32,
+    local_form_id: u32,
+    field_index: u16,
+    field_index_max: u16,
+    edid_hash: u32,
+    source_hash: u32,
+}
+
+impl PendingCompareEntry {
+    fn finish(self, id: u32) -> CompareEntry {
+        CompareEntry {
+            id,
+            str_id: self.str_id,
+            source: self.source,
+            record_sig: self.record_sig,
+            field_sig: self.field_sig,
+            form_id: self.form_id,
+            form_owner_hash: self.form_owner_hash,
+            local_form_id: self.local_form_id,
+            field_index: self.field_index,
+            field_index_max: self.field_index_max,
+            edid_hash: self.edid_hash,
+            source_hash: self.source_hash,
+        }
+    }
+}
+
+struct CompareExtractor {
+    record_defs: Vec<TranslatableField>,
+    def_map: HashMap<([u8; 4], [u8; 4]), usize>,
+    strings_files: StringsFiles,
+    master_owner_hashes: Vec<u32>,
+    self_owner_hash: u32,
+    entries: Vec<CompareEntry>,
+}
+
+impl CompareExtractor {
+    fn new(data_dir: &Path, game: GameId, strings_dir: &Path, base_name: &str) -> Self {
+        let record_defs = load_game_record_defs(data_dir, game)
+            .unwrap_or_else(|_| parse_record_defs(include_str!("../esp_default_defs.txt")));
+        let def_map = build_def_map(&record_defs);
+        let strings_files = StringsFiles::load_from_dir(strings_dir, base_name);
+        Self {
+            record_defs,
+            def_map,
+            strings_files,
+            master_owner_hashes: Vec::new(),
+            self_owner_hash: string_hash("\0compare-self\0"),
+            entries: Vec::new(),
+        }
+    }
+
+    fn parse_reader<R: Read>(&mut self, reader: &mut R) -> IoResult<()> {
+        loop {
+            let header = match GenericHeader::read_from(reader) {
+                Ok(header) => header,
+                Err(e) if e.kind() == ErrorKind::UnexpectedEof => break,
+                Err(e) => return Err(e),
+            };
+
+            if header.is_grup() {
+                // Delphi ESPCompare reads only the GRUP header and then keeps
+                // streaming; child records follow immediately in file order.
+                let _ = GrupHeader::read_from(reader)?;
+                continue;
+            }
+
+            let record_header = RecordHeaderData::read_from(reader)?;
+            let mut record_data = vec![0u8; header.dsize as usize];
+            reader.read_exact(&mut record_data)?;
+
+            let fields = if record_header.is_compressed() {
+                match decompress_bethesda_record(&record_data) {
+                    Ok(decompressed) => decompressed,
+                    Err(_) => continue,
+                }
+            } else {
+                record_data
+            };
+
+            if header.is_tes4() {
+                self.capture_tes4_masters(&fields)?;
+            }
+            self.parse_record_fields(&header.name, record_header.form_id, &fields)?;
+        }
+
+        Ok(())
+    }
+
+    fn parse_record_fields(
+        &mut self,
+        record_sig: &[u8; 4],
+        form_id: u32,
+        data: &[u8],
+    ) -> IoResult<()> {
+        if data.is_empty() {
+            return Ok(());
+        }
+
+        let mut cursor = Cursor::new(data);
+        let (form_owner_hash, local_form_id) = self.normalize_form_identity(form_id);
+        let mut next_field_size: u32 = 0;
+        let mut edid: Option<String> = None;
+        let mut pending = Vec::new();
+        let mut occurrence_by_field: HashMap<[u8; 4], u16> = HashMap::new();
+        let mut absolute_field_index = 0u16;
+
+        while cursor.position() < data.len() as u64 {
+            let field_header = match FieldHeader::read_from(&mut cursor) {
+                Ok(header) => header,
+                Err(e) if e.kind() == ErrorKind::UnexpectedEof => break,
+                Err(e) => return Err(e),
+            };
+
+            let data_size = if next_field_size > 0 {
+                let size = next_field_size;
+                next_field_size = 0;
+                size
+            } else {
+                field_header.dsize as u32
+            };
+
+            let remaining = data.len() as u64 - cursor.position();
+            if data_size as u64 > remaining {
+                break;
+            }
+
+            let mut field_data = vec![0u8; data_size as usize];
+            cursor.read_exact(&mut field_data)?;
+
+            if field_header.is_xxxx() {
+                if field_data.len() >= 4 {
+                    next_field_size = u32::from_le_bytes([
+                        field_data[0],
+                        field_data[1],
+                        field_data[2],
+                        field_data[3],
+                    ]);
+                }
+                continue;
+            }
+
+            if &field_header.name == b"EDID" && !field_data.is_empty() {
+                let len = field_data
+                    .iter()
+                    .position(|&b| b == 0)
+                    .unwrap_or(field_data.len());
+                edid = Some(String::from_utf8_lossy(&field_data[..len]).to_string());
+            }
+
+            if let Some(def) = self.find_def(record_sig, &field_header.name) {
+                if record_sig == b"GMST" && &field_header.name == b"DATA" {
+                    let is_string_gmst = edid.as_ref().map(|e| e.starts_with('s')).unwrap_or(false);
+                    if !is_string_gmst {
+                        absolute_field_index = absolute_field_index.saturating_add(1);
+                        continue;
+                    }
+                }
+
+                if field_data.len() >= 4 {
+                    let string_id = u32::from_le_bytes([
+                        field_data[0],
+                        field_data[1],
+                        field_data[2],
+                        field_data[3],
+                    ]);
+                    let source = self
+                        .strings_files
+                        .get(def.list_index, string_id)
+                        .cloned()
+                        .unwrap_or_else(|| format!("<ID:{}>", string_id));
+
+                    if !source.is_empty() {
+                        let occurrence = occurrence_by_field.entry(field_header.name).or_insert(0);
+                        let field_index = *occurrence;
+                        *occurrence = (*occurrence).saturating_add(1);
+
+                        pending.push(PendingCompareEntry {
+                            str_id: string_id as i32,
+                            source_hash: string_hash(&source),
+                            source,
+                            record_sig: *record_sig,
+                            field_sig: field_header.name,
+                            form_id,
+                            form_owner_hash,
+                            local_form_id,
+                            field_index,
+                            field_index_max: 0,
+                            edid_hash: edid.as_ref().map_or(0, |s| string_hash(s)),
+                        });
+                    }
+                }
+            }
+
+            if &field_header.name == b"VMAD" && !field_data.is_empty() {
+                self.parse_vmad_entries(
+                    record_sig,
+                    form_id,
+                    form_owner_hash,
+                    local_form_id,
+                    absolute_field_index,
+                    &field_data,
+                    &mut pending,
+                    &mut occurrence_by_field,
+                );
+            }
+
+            absolute_field_index = absolute_field_index.saturating_add(1);
+        }
+
+        apply_field_index_max(&mut pending, &occurrence_by_field);
+        self.entries.reserve(pending.len());
+        for entry in pending {
+            let id = self.entries.len() as u32;
+            self.entries.push(entry.finish(id));
+        }
+
+        Ok(())
+    }
+
+    fn parse_vmad_entries(
+        &self,
+        record_sig: &[u8; 4],
+        form_id: u32,
+        form_owner_hash: u32,
+        local_form_id: u32,
+        absolute_field_index: u16,
+        data: &[u8],
+        pending: &mut Vec<PendingCompareEntry>,
+        occurrence_by_field: &mut HashMap<[u8; 4], u16>,
+    ) {
+        if data.len() < 2 {
+            return;
+        }
+
+        let vmad_version = i16::from_le_bytes([data[0], data[1]]);
+        let decoder = VmadDecoder::new(data, vmad_version);
+
+        for vmad_str in decoder.decode() {
+            if vmad_str.value.is_empty() {
+                continue;
+            }
+
+            let occurrence = occurrence_by_field.entry(*b"VMAD").or_insert(0);
+            let field_index = *occurrence;
+            *occurrence = (*occurrence).saturating_add(1);
+            let script_prop_key = format!("{}\0{}", vmad_str.script_name, vmad_str.prop_name);
+
+            pending.push(PendingCompareEntry {
+                str_id: -(vmad_str.offset as i32),
+                source_hash: string_hash(&vmad_str.value),
+                source: vmad_str.value,
+                record_sig: *record_sig,
+                field_sig: *b"VMAD",
+                form_id,
+                form_owner_hash,
+                local_form_id,
+                field_index,
+                field_index_max: absolute_field_index,
+                edid_hash: string_hash(&script_prop_key),
+            });
+        }
+    }
+
+    fn capture_tes4_masters(&mut self, data: &[u8]) -> IoResult<()> {
+        let mut cursor = Cursor::new(data);
+        let mut next_field_size: u32 = 0;
+        self.master_owner_hashes.clear();
+
+        while cursor.position() < data.len() as u64 {
+            let field_header = match FieldHeader::read_from(&mut cursor) {
+                Ok(header) => header,
+                Err(e) if e.kind() == ErrorKind::UnexpectedEof => break,
+                Err(e) => return Err(e),
+            };
+
+            let data_size = if next_field_size > 0 {
+                let size = next_field_size;
+                next_field_size = 0;
+                size
+            } else {
+                field_header.dsize as u32
+            };
+
+            let remaining = data.len() as u64 - cursor.position();
+            if data_size as u64 > remaining {
+                break;
+            }
+
+            let mut field_data = vec![0u8; data_size as usize];
+            cursor.read_exact(&mut field_data)?;
+
+            if field_header.is_xxxx() {
+                if field_data.len() >= 4 {
+                    next_field_size = u32::from_le_bytes([
+                        field_data[0],
+                        field_data[1],
+                        field_data[2],
+                        field_data[3],
+                    ]);
+                }
+                continue;
+            }
+
+            if &field_header.name == b"MAST" && !field_data.is_empty() {
+                let len = field_data
+                    .iter()
+                    .position(|&b| b == 0)
+                    .unwrap_or(field_data.len());
+                let master_name = String::from_utf8_lossy(&field_data[..len])
+                    .trim()
+                    .to_ascii_lowercase();
+                self.master_owner_hashes.push(string_hash(&master_name));
+            }
+        }
+
+        Ok(())
+    }
+
+    fn normalize_form_identity(&self, form_id: u32) -> (u32, u32) {
+        if form_id == 0 {
+            return (0, 0);
+        }
+
+        let (owner_index, local_form_id) = split_form_id(form_id);
+        let owner_hash = self.owner_hash_for_index(owner_index);
+
+        if owner_hash == 0 {
+            (0, form_id)
+        } else {
+            (owner_hash, local_form_id)
+        }
+    }
+
+    fn owner_hash_for_index(&self, owner_index: usize) -> u32 {
+        if owner_index < self.master_owner_hashes.len() {
+            self.master_owner_hashes[owner_index]
+        } else if owner_index == self.master_owner_hashes.len() {
+            self.self_owner_hash
+        } else {
+            0
+        }
+    }
+
+    fn find_def(&self, record_sig: &[u8; 4], field_sig: &[u8; 4]) -> Option<&TranslatableField> {
+        let key = (*record_sig, *field_sig);
+        if let Some(&idx) = self.def_map.get(&key) {
+            return Some(&self.record_defs[idx]);
+        }
+        let wildcard_key = (*b"****", *field_sig);
+        self.def_map
+            .get(&wildcard_key)
+            .map(|&idx| &self.record_defs[idx])
+    }
+}
+
+fn build_def_map(defs: &[TranslatableField]) -> HashMap<([u8; 4], [u8; 4]), usize> {
+    let mut map = HashMap::new();
+    for (i, def) in defs.iter().enumerate() {
+        if !def.ignored {
+            map.insert((def.record_sig, def.field_sig), i);
+        }
+    }
+    map
+}
+
+fn split_form_id(form_id: u32) -> (usize, u32) {
+    let high = (form_id >> 24) as u8;
+
+    if high == 0xFE {
+        let owner_index = ((form_id >> 12) & 0x0FFF) as usize;
+        let local_form_id = 0xFE00_0000 | (form_id & 0x0000_0FFF);
+        (owner_index, local_form_id)
+    } else if high == 0xFD {
+        let owner_index = ((form_id >> 16) & 0x00FF) as usize;
+        let local_form_id = 0xFD00_0000 | (form_id & 0x0000_FFFF);
+        (owner_index, local_form_id)
+    } else {
+        let owner_index = high as usize;
+        let local_form_id = form_id & 0x00FF_FFFF;
+        (owner_index, local_form_id)
+    }
+}
+
+fn apply_field_index_max(
+    entries: &mut [PendingCompareEntry],
+    occurrence_by_field: &HashMap<[u8; 4], u16>,
+) {
+    for entry in entries {
+        let max_index = occurrence_by_field
+            .get(&entry.field_sig)
+            .copied()
+            .unwrap_or(0)
+            .saturating_sub(1);
+        if max_index > 0 {
+            entry.field_index_max = max_index;
+        }
+    }
+}
+
+fn extract_compare_entries(
+    esp_path: &Path,
+    data_dir: &Path,
+    game: GameId,
+) -> Result<Vec<CompareEntry>, String> {
+    let base_name = esp_path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("unknown");
+    let esp_dir = esp_path.parent().unwrap_or_else(|| Path::new("."));
+
+    let mut extractor = CompareExtractor::new(data_dir, game, esp_dir, base_name);
+    let file = std::fs::File::open(esp_path).map_err(|e| format!("Failed to open ESP: {}", e))?;
+    extractor
+        .parse_reader(&mut BufReader::new(file))
+        .map_err(|e| format!("Failed to parse ESP: {}", e))?;
+
+    Ok(extractor.entries)
 }
 
 /// Parse ESP and load strings, using lightweight compare cache
@@ -161,36 +670,15 @@ fn parse_esp_with_entries(
 
     // 先尝试从轻量对比缓存加载（~200ms vs ~2.5s for full cache）
     if let Some(hash) = hash.as_deref() {
-        if let Some(cached) = load_cached_entries(hash) {
+        if let Some(cached) = load_cached_entries(hash, game) {
             return Ok(cached);
         }
     }
 
-    // 缓存未命中，完整解析
-    let mut parser = EspParser::with_game(data_dir, game)
-        .map_err(|e| format!("Failed to create parser: {}", e))?;
-    parser.set_build_search_index(false);
-
-    let base_name = esp_path_ref
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or("unknown");
-    let esp_dir = esp_path_ref.parent().unwrap_or_else(|| Path::new("."));
-    parser.load_strings_files(esp_dir, base_name);
-
-    let file = std::fs::File::open(esp_path).map_err(|e| format!("Failed to open ESP: {}", e))?;
-    parser
-        .parse(&mut std::io::BufReader::new(file))
-        .map_err(|e| format!("Failed to parse ESP: {}", e))?;
-
-    // Store lightweight compare entries to cache
-    let entries: Vec<CompareEntry> = parser
-        .strings
-        .iter()
-        .map(CompareEntry::from_sky_string)
-        .collect();
+    // 缓存未命中，按原版 ESPCompare 思路只抽取可比较字符串字段。
+    let entries = extract_compare_entries(esp_path_ref, data_dir, game)?;
     if let Some(hash) = hash.as_deref() {
-        store_cached_entries(hash, &entries);
+        store_cached_entries(hash, game, &entries);
     }
 
     Ok(entries)
@@ -282,7 +770,7 @@ fn build_comparison_from_entries(
         if let Some(&old_index) = old_by_key.get(&key) {
             matched_old_indexes[old_index] = true;
             let old_e = &old_entries[old_index];
-            if old_e.source == new_e.source {
+            if old_e.source_hash == new_e.source_hash && old_e.source == new_e.source {
                 // Exact match
                 matched_pairs.insert(new_e.id, old_e.id);
             } else {
@@ -369,7 +857,24 @@ mod tests {
     use crate::types::esp_pointer::EspPointer;
     use crate::types::sky_string::SkyString;
 
+    fn push_field(data: &mut Vec<u8>, sig: &[u8; 4], value: u32) {
+        data.extend_from_slice(sig);
+        data.extend_from_slice(&4u16.to_le_bytes());
+        data.extend_from_slice(&value.to_le_bytes());
+    }
+
     fn make_test_string(id: u32, str_id: i32, source: &str, record_sig: &[u8; 4]) -> SkyString {
+        make_test_string_with_pointer(id, str_id, source, record_sig, 0, 0)
+    }
+
+    fn make_test_string_with_pointer(
+        id: u32,
+        str_id: i32,
+        source: &str,
+        record_sig: &[u8; 4],
+        form_id: u32,
+        field_index: u16,
+    ) -> SkyString {
         SkyString {
             id,
             source: source.to_string(),
@@ -378,10 +883,10 @@ mod tests {
             field_sig: *b"TEST",
             esp_ptr: EspPointer {
                 str_id,
-                form_id: 0,
+                form_id,
                 record_sig: *record_sig,
                 field_sig: *b"TEST",
-                index: 0,
+                index: field_index,
                 index_max: 0,
                 edid_hash: 0,
             },
@@ -400,6 +905,30 @@ mod tests {
             rec_refs: Vec::new(),
             parent_form_id: 0,
             tag_hash: 0,
+        }
+    }
+
+    fn make_compare_entry(
+        id: u32,
+        source: &str,
+        form_id: u32,
+        form_owner_hash: u32,
+        local_form_id: u32,
+        field_index: u16,
+    ) -> CompareEntry {
+        CompareEntry {
+            id,
+            str_id: 0,
+            source: source.to_string(),
+            record_sig: *b"TEST",
+            field_sig: *b"FULL",
+            form_id,
+            form_owner_hash,
+            local_form_id,
+            field_index,
+            field_index_max: 0,
+            edid_hash: 0,
+            source_hash: string_hash(source),
         }
     }
 
@@ -446,6 +975,109 @@ mod tests {
 
         assert_eq!(comp.identical_count(), 0);
         assert_eq!(comp.modified_count(), 1);
+        assert_eq!(comp.added_count(), 0);
+        assert_eq!(comp.removed_count(), 0);
+    }
+
+    #[test]
+    fn test_compare_prefers_form_id_over_shared_string_id() {
+        let old = vec![make_test_string_with_pointer(
+            0,
+            1,
+            "Hello",
+            b"TEST",
+            0x0100_0001,
+            0,
+        )];
+        let new = vec![make_test_string_with_pointer(
+            10,
+            1,
+            "Hola",
+            b"TEST",
+            0x0100_0002,
+            0,
+        )];
+
+        let comp = compare_string_sets(&old, &new);
+
+        assert_eq!(comp.identical_count(), 0);
+        assert_eq!(comp.modified_count(), 0);
+        assert_eq!(comp.added_count(), 1);
+        assert_eq!(comp.removed_count(), 1);
+    }
+
+    #[test]
+    fn test_compare_uses_duplicate_field_occurrence() {
+        let old = vec![
+            make_test_string_with_pointer(0, 1, "First", b"TEST", 0x0100_0001, 0),
+            make_test_string_with_pointer(1, 2, "Second", b"TEST", 0x0100_0001, 1),
+        ];
+        let new = vec![
+            make_test_string_with_pointer(10, 1, "First", b"TEST", 0x0100_0001, 0),
+            make_test_string_with_pointer(11, 2, "Second changed", b"TEST", 0x0100_0001, 1),
+        ];
+
+        let comp = compare_string_sets(&old, &new);
+
+        assert_eq!(comp.identical_count(), 1);
+        assert_eq!(comp.modified_count(), 1);
+        assert_eq!(comp.added_count(), 0);
+        assert_eq!(comp.removed_count(), 0);
+    }
+
+    #[test]
+    fn test_compare_extractor_keeps_only_string_fields_with_occurrence_indexes() {
+        let record_defs = vec![TranslatableField::new(*b"TEST", *b"FULL", 0)];
+        let def_map = build_def_map(&record_defs);
+        let mut extractor = CompareExtractor {
+            record_defs,
+            def_map,
+            strings_files: StringsFiles::default(),
+            master_owner_hashes: Vec::new(),
+            self_owner_hash: string_hash("\0compare-self\0"),
+            entries: Vec::new(),
+        };
+        let mut data = Vec::new();
+        push_field(&mut data, b"FULL", 1);
+        push_field(&mut data, b"EDID", 99);
+        push_field(&mut data, b"FULL", 2);
+
+        extractor
+            .parse_record_fields(b"TEST", 0x0100_0001, &data)
+            .unwrap();
+
+        assert_eq!(extractor.entries.len(), 2);
+        assert_eq!(extractor.entries[0].source, "<ID:1>");
+        assert_eq!(extractor.entries[0].field_index, 0);
+        assert_eq!(extractor.entries[0].field_index_max, 1);
+        assert_eq!(extractor.entries[1].source, "<ID:2>");
+        assert_eq!(extractor.entries[1].field_index, 1);
+        assert_eq!(extractor.entries[1].field_index_max, 1);
+    }
+
+    #[test]
+    fn test_compare_uses_normalized_master_identity() {
+        let owner_hash = string_hash("skyrim.esm");
+        let old = vec![make_compare_entry(
+            0,
+            "Shared",
+            0x0100_0042,
+            owner_hash,
+            0x0000_0042,
+            0,
+        )];
+        let new = vec![make_compare_entry(
+            10,
+            "Shared",
+            0x0200_0042,
+            owner_hash,
+            0x0000_0042,
+            0,
+        )];
+
+        let comp = build_comparison_from_entries(old, new);
+
+        assert_eq!(comp.identical_count(), 1);
         assert_eq!(comp.added_count(), 0);
         assert_eq!(comp.removed_count(), 0);
     }
