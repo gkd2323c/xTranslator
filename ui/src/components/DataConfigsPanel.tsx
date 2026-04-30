@@ -1,7 +1,29 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useAppStore } from "../stores/appStore";
 import { Database, Search, ChevronDown, ChevronRight, FileText, Settings, MessageSquare, Smile } from "lucide-react";
 import { useTranslation } from "react-i18next";
+
+function useDebounce<T>(value: T, delay: number): T {
+  const [debouncedValue, setDebouncedValue] = useState(value);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+    }
+    timerRef.current = setTimeout(() => {
+      setDebouncedValue(value);
+    }, delay);
+
+    return () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+      }
+    };
+  }, [value, delay]);
+
+  return debouncedValue;
+}
 
 interface CollapsibleSectionProps {
   title: string;
@@ -59,38 +81,44 @@ export function DataConfigsPanel() {
   const [dialSearch, setDialSearch] = useState("");
   const [emoteSearch, setEmoteSearch] = useState("");
 
+  // 防抖搜索输入，减少频繁过滤计算
+  const debouncedCtdaSearch = useDebounce(ctdaSearch, 200);
+  const debouncedFieldSearch = useDebounce(fieldSearch, 200);
+  const debouncedDialSearch = useDebounce(dialSearch, 200);
+  const debouncedEmoteSearch = useDebounce(emoteSearch, 200);
+
   const filteredCtda = useMemo(() => {
     if (!dataConfigs?.ctda_funcs) return [];
-    if (!ctdaSearch) return dataConfigs.ctda_funcs.slice(0, 100);
-    const lower = ctdaSearch.toLowerCase();
+    if (!debouncedCtdaSearch) return dataConfigs.ctda_funcs.slice(0, 100);
+    const lower = debouncedCtdaSearch.toLowerCase();
     return dataConfigs.ctda_funcs
       .filter((f) => f.name.toLowerCase().includes(lower) || f.params.toLowerCase().includes(lower))
       .slice(0, 100);
-  }, [dataConfigs?.ctda_funcs, ctdaSearch]);
+  }, [dataConfigs?.ctda_funcs, debouncedCtdaSearch]);
 
   const filteredFields = useMemo(() => {
     if (!dataConfigs?.field_size_ref) return [];
     const entries = Object.entries(dataConfigs.field_size_ref);
-    if (!fieldSearch) return entries.slice(0, 100);
-    const lower = fieldSearch.toLowerCase();
+    if (!debouncedFieldSearch) return entries.slice(0, 100);
+    const lower = debouncedFieldSearch.toLowerCase();
     return entries.filter(([key]) => key.toLowerCase().includes(lower)).slice(0, 100);
-  }, [dataConfigs?.field_size_ref, fieldSearch]);
+  }, [dataConfigs?.field_size_ref, debouncedFieldSearch]);
 
   const filteredDial = useMemo(() => {
     if (!dataConfigs?.dial_sub_type) return [];
     const entries = Object.entries(dataConfigs.dial_sub_type);
-    if (!dialSearch) return entries.slice(0, 100);
-    const lower = dialSearch.toLowerCase();
+    if (!debouncedDialSearch) return entries.slice(0, 100);
+    const lower = debouncedDialSearch.toLowerCase();
     return entries.filter(([, name]) => name.toLowerCase().includes(lower)).slice(0, 100);
-  }, [dataConfigs?.dial_sub_type, dialSearch]);
+  }, [dataConfigs?.dial_sub_type, debouncedDialSearch]);
 
   const filteredEmote = useMemo(() => {
     if (!dataConfigs?.emote_definition) return [];
     const entries = Object.entries(dataConfigs.emote_definition);
-    if (!emoteSearch) return entries.slice(0, 100);
-    const lower = emoteSearch.toLowerCase();
+    if (!debouncedEmoteSearch) return entries.slice(0, 100);
+    const lower = debouncedEmoteSearch.toLowerCase();
     return entries.filter(([, name]) => name.toLowerCase().includes(lower)).slice(0, 100);
-  }, [dataConfigs?.emote_definition, emoteSearch]);
+  }, [dataConfigs?.emote_definition, debouncedEmoteSearch]);
 
   if (!espStats) {
     return (

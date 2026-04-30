@@ -34,8 +34,9 @@ pub struct FieldSizeInfo {
 /// 格式：`ID=FuncName:{Params}`
 /// 示例：
 /// ```
-/// ACAC=ActorCollidewithActor
+/// 000=GetWantBlocking
 /// 001=GetDistance:{1}
+/// ACAC=ActorCollidewithActor  (0x prefix for hex)
 /// ```
 pub fn parse_ctda_func(path: &Path) -> HashMap<u32, CtdaFunc> {
     let content = match fs::read_to_string(path) {
@@ -54,9 +55,10 @@ pub fn parse_ctda_func(path: &Path) -> HashMap<u32, CtdaFunc> {
             let id_str = line[..eq_pos].trim();
             let rest = line[eq_pos + 1..].trim();
 
-            // ID 可以是十六进制 (如 "ACAC") 或十进制 (如 "001")
-            let id = if id_str.starts_with("0x") || id_str.chars().all(|c| c.is_ascii_hexdigit()) {
-                u32::from_str_radix(id_str, 16).ok()
+            // ID 解析：0x 前缀为十六进制，否则为十进制
+            // Bethesda ctdaFunc.txt 使用十进制 ID（如 "001", "010", "672"）
+            let id = if id_str.starts_with("0x") || id_str.starts_with("0X") {
+                u32::from_str_radix(&id_str[2..], 16).ok()
             } else {
                 u32::from_str(id_str).ok()
             }?;
@@ -199,17 +201,30 @@ mod tests {
     fn test_parse_ctda_func() {
         let path = temp_file(
             "# ctda functions\n\
-             ACAC=ActorCollidewithActor\n\
+             000=GetWantBlocking\n\
              001=GetDistance:{1}\n\
-             002=GetLocked\n",
+             002=GetLocked\n\
+             0x1F=HexExample\n",
         );
         let result = parse_ctda_func(&path);
         fs::remove_file(&path).ok();
-        assert_eq!(result.len(), 3);
-        assert_eq!(result.get(&0xACAC).unwrap().name, "ActorCollidewithActor");
-        assert_eq!(result.get(&0x001).unwrap().name, "GetDistance");
-        assert_eq!(result.get(&0x001).unwrap().params, "{1}");
-        assert_eq!(result.get(&0x002).unwrap().params, "");
+        assert_eq!(result.len(), 4);
+        assert_eq!(result.get(&0).unwrap().name, "GetWantBlocking");
+        assert_eq!(result.get(&1).unwrap().name, "GetDistance");
+        assert_eq!(result.get(&1).unwrap().params, "{1}");
+        assert_eq!(result.get(&2).unwrap().params, "");
+        assert_eq!(result.get(&0x1F).unwrap().name, "HexExample");
+    }
+
+    #[test]
+    fn test_parse_ctda_func_decimal_not_hex() {
+        // 验证 "010" 被解析为十进制 10，而不是十六进制 16
+        let path = temp_file("010=TestFunc\n");
+        let result = parse_ctda_func(&path);
+        fs::remove_file(&path).ok();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result.get(&10).unwrap().name, "TestFunc");
+        assert!(result.get(&16).is_none()); // 不应该是 0x10 = 16
     }
 
     #[test]

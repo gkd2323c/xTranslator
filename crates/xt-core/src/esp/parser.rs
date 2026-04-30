@@ -851,7 +851,14 @@ impl EspParser {
     fn parse_vmad_strings(&mut self, record_sig: &[u8; 4], form_id: u32, data: &[u8], field_index: u16) {
         use crate::types::esp_pointer::string_hash;
 
-        let decoder = VmadDecoder::new(data, 5);
+        // VMAD 字段前 2 字节是版本号 (i16 LE)
+        let vmad_version = if data.len() >= 2 {
+            i16::from_le_bytes([data[0], data[1]])
+        } else {
+            return; // 数据太短，无法解析
+        };
+
+        let decoder = VmadDecoder::new(data, vmad_version);
         let vmad_strings = decoder.decode();
 
         for vmad_str in vmad_strings {

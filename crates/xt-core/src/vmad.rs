@@ -171,17 +171,24 @@ impl VmadDecoder {
                         }
                     }
                     VmadPropType::StringArray => {
-                        let str_start = pos;
+                        let arr_start = pos;
                         if let Ok(arr) = Self::read_string_array(&self.buffer, &mut pos) {
-                            let str_end = pos;
-                            // StringArray 将多个字符串连接存储
-                            result.push(VmadString {
-                                script_name: script_name.clone(),
-                                prop_name: prop_name.clone(),
-                                value: arr.join("\x1F"), // 用 ASCII 单元分隔符连接
-                                offset: str_start,
-                                length: str_end - str_start,
-                            });
+                            // StringArray 中每个字符串都有独立的偏移量，用于写回
+                            // 计算每个字符串的偏移量：跳过 count(u32) 后，每个字符串有 len(u8/u32) + data
+                            let mut item_offset = arr_start + 4; // 跳过 count(u32)
+                            for s in &arr {
+                                // 长度前缀是 u32 (4 bytes)，参见 read_length_prefixed_string
+                                // 但实际 read_length_prefixed_string 用的是 u8 长度前缀
+                                // 这里需要匹配实际格式
+                                result.push(VmadString {
+                                    script_name: script_name.clone(),
+                                    prop_name: prop_name.clone(),
+                                    value: s.clone(),
+                                    offset: item_offset, // 指向 len 前缀的位置
+                                    length: 1 + s.len(), // u8 len prefix + string data
+                                });
+                                item_offset += 1 + s.len(); // 移动到下一个字符串
+                            }
                         }
                     }
                     VmadPropType::Null => {
@@ -236,11 +243,15 @@ impl VmadDecoder {
         result
     }
 
-    /// 写回翻译到 VMAD buffer（保持二进制结构不变）
+    /// 写回翻译到 VMAD buffer（支持变长字符串替换）
     ///
-    /// 注意：此方法仅支持简单的字符串替换，长度变化时需要重写整个 VMAD 结构。
+    /// 当新字符串长度与原字符串相同时，原地替换（最快）。
+    /// 当长度不同时，重新构建整个 VMAD buffer 以保持结构正确。
+    ///
+    /// * `offset` - 字符串长度前缀在 buffer 中的偏移量（由 `decode()` 返回的 `VmadString.offset`）
+    /// * `new_value` - 新的字符串值
     pub fn write_back(&mut self, offset: usize, new_value: &str) -> Result<(), VmadError> {
-        if offset >= self.buffer.len() {
+        if offset + 4 > self.buffer.len() {
             return Err(VmadError::WriteBackFailed(format!(
                 "Offset {} out of bounds (buffer size {})",
                 offset,
@@ -248,44 +259,198 @@ impl VmadDecoder {
             )));
         }
 
-        // 将新值编码为 UTF-8
+        let old_length = u32::from_le_bytes([
+            self.buffer[offset],
+            self.buffer[offset + 1],
+            self.buffer[offset + 2],
+            self.buffer[offset + 3],
+        ]) as usize;
+
         let new_bytes = new_value.as_bytes();
 
-        // 读取原有长度
-        let old_length = if offset + 4 <= self.buffer.len() {
-            u32::from_le_bytes([
-                self.buffer[offset],
-                self.buffer[offset + 1],
-                self.buffer[offset + 2],
-                self.buffer[offset + 3],
-            ]) as usize
+        if new_bytes.len() == old_length {
+            // 原地替换（长度相同，最快路径）
+            let data_start = offset + 4;
+            let data_end = data_start + old_length;
+            if data_end > self.buffer.len() {
+                return Err(VmadError::WriteBackFailed(
+                    "String data extends beyond buffer".to_string(),
+                ));
+            }
+            self.buffer[data_start..data_end].copy_from_slice(new_bytes);
+            Ok(())
         } else {
-            return Err(VmadError::WriteBackFailed(
-                "Cannot read string length at offset".to_string(),
-            ));
-        };
+            // 变长替换：重新构建整个 buffer
+            self.write_back_rebuild(offset, new_bytes)
+        }
+    }
 
-        if new_bytes.len() != old_length {
-            // 长度不匹配时返回错误（后续可实现完整重写）
-            return Err(VmadError::WriteBackFailed(format!(
-                "Length mismatch: new={}, old={}. Variable-length write-back not yet implemented.",
-                new_bytes.len(),
-                old_length
-            )));
+    /// 变长字符串写回：重新构建 VMAD buffer
+    ///
+    /// 策略：重新序列化整个 VMAD 结构，在目标偏移量处替换字符串。
+    fn write_back_rebuild(&mut self, target_offset: usize, new_bytes: &[u8]) -> Result<(), VmadError> {
+        let mut pos = 0usize;
+
+        // 读取 header
+        let (version, obj_type, script_count) = Self::read_header(&self.buffer, &mut pos)?;
+
+        let mut out = Vec::with_capacity(self.buffer.len() + new_bytes.len());
+        // 写入 header
+        out.extend_from_slice(&version.to_le_bytes());
+        out.extend_from_slice(&obj_type.to_le_bytes());
+        out.extend_from_slice(&script_count.to_le_bytes());
+
+        for _ in 0..script_count {
+            // 读取并写入 script name
+            let script_name_len = Self::read_u8(&self.buffer, &mut pos)? as usize;
+            Self::ensure_remaining(&self.buffer, pos, script_name_len)?;
+            out.push(script_name_len as u8);
+            out.extend_from_slice(&self.buffer[pos..pos + script_name_len]);
+            pos += script_name_len;
+
+            // 读取并写入 prop count
+            let prop_count = Self::read_u16(&self.buffer, &mut pos)?;
+            out.extend_from_slice(&prop_count.to_le_bytes());
+
+            for _ in 0..prop_count {
+                // 读取并写入 prop name
+                let prop_name_len = Self::read_u8(&self.buffer, &mut pos)? as usize;
+                Self::ensure_remaining(&self.buffer, pos, prop_name_len)?;
+                out.push(prop_name_len as u8);
+                out.extend_from_slice(&self.buffer[pos..pos + prop_name_len]);
+                pos += prop_name_len;
+
+                // 读取并写入 type + status
+                let prop_type_byte = Self::read_u8(&self.buffer, &mut pos)?;
+                let status = Self::read_u8(&self.buffer, &mut pos)?;
+                out.push(prop_type_byte);
+                out.push(status);
+
+                let prop_type = VmadPropType::from(prop_type_byte);
+
+                match prop_type {
+                    VmadPropType::String => {
+                        let str_len = Self::read_u32(&self.buffer, &mut pos)? as usize;
+                        Self::ensure_remaining(&self.buffer, pos, str_len)?;
+
+                        // 检查是否是目标字符串
+                        let str_prefix_offset = pos - 4; // 回退到 u32 长度前缀的位置
+                        if str_prefix_offset == target_offset {
+                            // 替换为新字符串
+                            out.extend_from_slice(&(new_bytes.len() as u32).to_le_bytes());
+                            out.extend_from_slice(new_bytes);
+                        } else {
+                            // 保持原样
+                            out.extend_from_slice(&(str_len as u32).to_le_bytes());
+                            out.extend_from_slice(&self.buffer[pos..pos + str_len]);
+                        }
+                        pos += str_len;
+                    }
+                    VmadPropType::StringArray => {
+                        let count = Self::read_u32(&self.buffer, &mut pos)? as usize;
+                        out.extend_from_slice(&(count as u32).to_le_bytes());
+
+                        for _ in 0..count {
+                            let str_len = Self::read_u32(&self.buffer, &mut pos)? as usize;
+                            Self::ensure_remaining(&self.buffer, pos, str_len)?;
+
+                            // 检查是否是目标字符串（StringArray 中的每个字符串都有独立的长度前缀）
+                            let str_prefix_offset = pos - 4;
+                            if str_prefix_offset == target_offset {
+                                out.extend_from_slice(&(new_bytes.len() as u32).to_le_bytes());
+                                out.extend_from_slice(new_bytes);
+                            } else {
+                                out.extend_from_slice(&(str_len as u32).to_le_bytes());
+                                out.extend_from_slice(&self.buffer[pos..pos + str_len]);
+                            }
+                            pos += str_len;
+                        }
+                    }
+                    VmadPropType::Null => {
+                        // 无数据
+                    }
+                    VmadPropType::Int => {
+                        Self::ensure_remaining(&self.buffer, pos, 4)?;
+                        out.extend_from_slice(&self.buffer[pos..pos + 4]);
+                        pos += 4;
+                    }
+                    VmadPropType::Float => {
+                        Self::ensure_remaining(&self.buffer, pos, 4)?;
+                        out.extend_from_slice(&self.buffer[pos..pos + 4]);
+                        pos += 4;
+                    }
+                    VmadPropType::Bool => {
+                        let v = Self::read_u8(&self.buffer, &mut pos)?;
+                        out.push(v);
+                    }
+                    VmadPropType::Object => {
+                        Self::ensure_remaining(&self.buffer, pos, 4)?;
+                        out.extend_from_slice(&self.buffer[pos..pos + 4]);
+                        pos += 4;
+                    }
+                    VmadPropType::Variable => {
+                        Self::ensure_remaining(&self.buffer, pos, 2)?;
+                        out.extend_from_slice(&self.buffer[pos..pos + 2]);
+                        pos += 2;
+                    }
+                    VmadPropType::Struct => {
+                        self.rebuild_struct_data(&mut out, &mut pos)?;
+                    }
+                    VmadPropType::IntArray => {
+                        let count = Self::read_u32(&self.buffer, &mut pos)? as usize;
+                        let byte_count = count * 4;
+                        Self::ensure_remaining(&self.buffer, pos, byte_count)?;
+                        out.extend_from_slice(&(count as u32).to_le_bytes());
+                        out.extend_from_slice(&self.buffer[pos..pos + byte_count]);
+                        pos += byte_count;
+                    }
+                    VmadPropType::FloatArray => {
+                        let count = Self::read_u32(&self.buffer, &mut pos)? as usize;
+                        let byte_count = count * 4;
+                        Self::ensure_remaining(&self.buffer, pos, byte_count)?;
+                        out.extend_from_slice(&(count as u32).to_le_bytes());
+                        out.extend_from_slice(&self.buffer[pos..pos + byte_count]);
+                        pos += byte_count;
+                    }
+                    VmadPropType::BoolArray => {
+                        let count = Self::read_u32(&self.buffer, &mut pos)? as usize;
+                        Self::ensure_remaining(&self.buffer, pos, count)?;
+                        out.extend_from_slice(&(count as u32).to_le_bytes());
+                        out.extend_from_slice(&self.buffer[pos..pos + count]);
+                        pos += count;
+                    }
+                    VmadPropType::ArrayStruct => {
+                        let count = Self::read_u32(&self.buffer, &mut pos)? as usize;
+                        out.extend_from_slice(&(count as u32).to_le_bytes());
+                        for _ in 0..count {
+                            self.rebuild_struct_data(&mut out, &mut pos)?;
+                        }
+                    }
+                }
+            }
         }
 
-        // 原地替换
-        let data_start = offset + 4; // 4 bytes for length prefix
-        let data_end = data_start + old_length;
-        if data_end > self.buffer.len() {
-            return Err(VmadError::WriteBackFailed(
-                "String data extends beyond buffer".to_string(),
-            ));
-        }
-
-        self.buffer[data_start..data_end].copy_from_slice(new_bytes);
-
+        self.buffer = out;
         Ok(())
+    }
+
+    /// 辅助：重建 struct 数据（count + elements）
+    fn rebuild_struct_data(&self, out: &mut Vec<u8>, pos: &mut usize) -> Result<(), VmadError> {
+        let count = Self::read_u32(&self.buffer, pos)? as usize;
+        let byte_count = count * 12; // 每个 element: type(u32) + size(u32) + offset(u32)
+        Self::ensure_remaining(&self.buffer, *pos, byte_count)?;
+        out.extend_from_slice(&(count as u32).to_le_bytes());
+        out.extend_from_slice(&self.buffer[*pos..*pos + byte_count]);
+        *pos += byte_count;
+        Ok(())
+    }
+
+    fn ensure_remaining(data: &[u8], pos: usize, needed: usize) -> Result<(), VmadError> {
+        if pos + needed > data.len() {
+            Err(VmadError::Eof)
+        } else {
+            Ok(())
+        }
     }
 
     /// 获取原始 buffer
@@ -526,5 +691,148 @@ mod tests {
         let str_start = strings[0].offset + 4;
         let result = std::str::from_utf8(&buf[str_start..str_start + 2]).unwrap();
         assert_eq!(result, "OK");
+    }
+
+    #[test]
+    fn test_write_back_variable_length() {
+        // 测试变长字符串替换（新字符串比原字符串长）
+        let mut data = Vec::new();
+        data.extend_from_slice(&5i16.to_le_bytes()); // version
+        data.extend_from_slice(&1i16.to_le_bytes()); // objType
+        data.extend_from_slice(&1u16.to_le_bytes()); // scriptCount=1
+        data.push(4);
+        data.extend_from_slice(b"Test"); // scriptName
+        data.extend_from_slice(&1u16.to_le_bytes()); // propCount=1
+        data.push(3);
+        data.extend_from_slice(b"Prp"); // propName
+        data.push(3u8); // type=String
+        data.push(0u8); // status
+        data.extend_from_slice(&2u32.to_le_bytes()); // string length = 2
+        data.extend_from_slice(b"Hi"); // "Hi"
+
+        let mut decoder = VmadDecoder::new(&data, 5);
+        let strings = decoder.decode();
+        assert_eq!(strings.len(), 1);
+        assert_eq!(strings[0].value, "Hi");
+
+        // 替换为更长的字符串
+        decoder.write_back(strings[0].offset, "Hello World!").unwrap();
+
+        // 重新解码验证
+        let strings2 = decoder.decode();
+        assert_eq!(strings2.len(), 1);
+        assert_eq!(strings2[0].value, "Hello World!");
+        assert_eq!(strings2[0].script_name, "Test");
+        assert_eq!(strings2[0].prop_name, "Prp");
+    }
+
+    #[test]
+    fn test_write_back_variable_length_shorter() {
+        // 测试变长字符串替换（新字符串比原字符串短）
+        let mut data = Vec::new();
+        data.extend_from_slice(&5i16.to_le_bytes());
+        data.extend_from_slice(&1i16.to_le_bytes());
+        data.extend_from_slice(&1u16.to_le_bytes());
+        data.push(4);
+        data.extend_from_slice(b"Test");
+        data.extend_from_slice(&1u16.to_le_bytes());
+        data.push(3);
+        data.extend_from_slice(b"Prp");
+        data.push(3u8);
+        data.push(0u8);
+        data.extend_from_slice(&11u32.to_le_bytes()); // length = 11
+        data.extend_from_slice(b"Hello World");
+
+        let mut decoder = VmadDecoder::new(&data, 5);
+        let strings = decoder.decode();
+        assert_eq!(strings[0].value, "Hello World");
+
+        // 替换为更短的字符串
+        decoder.write_back(strings[0].offset, "OK").unwrap();
+
+        let strings2 = decoder.decode();
+        assert_eq!(strings2.len(), 1);
+        assert_eq!(strings2[0].value, "OK");
+    }
+
+    #[test]
+    fn test_write_back_multiple_scripts() {
+        // 测试多脚本场景下的变长替换（只替换第二个脚本的字符串）
+        let mut data = Vec::new();
+        data.extend_from_slice(&5i16.to_le_bytes());
+        data.extend_from_slice(&1i16.to_le_bytes());
+        data.extend_from_slice(&2u16.to_le_bytes()); // 2 scripts
+
+        // Script 1: "Scp1" -> prop "P1" = "Val1"
+        data.push(4);
+        data.extend_from_slice(b"Scp1");
+        data.extend_from_slice(&1u16.to_le_bytes());
+        data.push(2);
+        data.extend_from_slice(b"P1");
+        data.push(3u8);
+        data.push(0u8);
+        data.extend_from_slice(&4u32.to_le_bytes());
+        data.extend_from_slice(b"Val1");
+
+        // Script 2: "Scp2" -> prop "P2" = "Val2"
+        data.push(4);
+        data.extend_from_slice(b"Scp2");
+        data.extend_from_slice(&1u16.to_le_bytes());
+        data.push(2);
+        data.extend_from_slice(b"P2");
+        data.push(3u8);
+        data.push(0u8);
+        data.extend_from_slice(&4u32.to_le_bytes());
+        data.extend_from_slice(b"Val2");
+
+        let mut decoder = VmadDecoder::new(&data, 5);
+        let strings = decoder.decode();
+        assert_eq!(strings.len(), 2);
+        assert_eq!(strings[0].value, "Val1");
+        assert_eq!(strings[1].value, "Val2");
+
+        // 替换第二个脚本的字符串为更长的值
+        decoder.write_back(strings[1].offset, "ReplacedValue").unwrap();
+
+        let strings2 = decoder.decode();
+        assert_eq!(strings2.len(), 2);
+        assert_eq!(strings2[0].value, "Val1"); // 第一个不变
+        assert_eq!(strings2[1].value, "ReplacedValue"); // 第二个被替换
+        assert_eq!(strings2[1].script_name, "Scp2");
+    }
+
+    #[test]
+    fn test_decode_string_array() {
+        // 测试 StringArray 类型的解码
+        let mut data = Vec::new();
+        data.extend_from_slice(&5i16.to_le_bytes()); // version
+        data.extend_from_slice(&1i16.to_le_bytes()); // objType
+        data.extend_from_slice(&1u16.to_le_bytes()); // scriptCount=1
+        data.push(4);
+        data.extend_from_slice(b"Test"); // scriptName
+        data.extend_from_slice(&1u16.to_le_bytes()); // propCount=1
+        data.push(3);
+        data.extend_from_slice(b"Arr"); // propName
+        data.push(12u8); // type=StringArray
+        data.push(0u8); // status
+        // StringArray: count(u32) + strings with u8 len prefix
+        data.extend_from_slice(&3u32.to_le_bytes()); // count=3
+        data.push(3); // len
+        data.extend_from_slice(b"Foo"); // "Foo"
+        data.push(3); // len
+        data.extend_from_slice(b"Bar"); // "Bar"
+        data.push(3); // len
+        data.extend_from_slice(b"Baz"); // "Baz"
+
+        let decoder = VmadDecoder::new(&data, 5);
+        let strings = decoder.decode();
+
+        // StringArray 应该产生 3 个独立的 VmadString 条目
+        assert_eq!(strings.len(), 3);
+        assert_eq!(strings[0].value, "Foo");
+        assert_eq!(strings[1].value, "Bar");
+        assert_eq!(strings[2].value, "Baz");
+        assert_eq!(strings[0].script_name, "Test");
+        assert_eq!(strings[0].prop_name, "Arr");
     }
 }
