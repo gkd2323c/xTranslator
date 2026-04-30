@@ -5,6 +5,7 @@ use crate::types::game_id::GameId;
 use crate::types::params::SkyStringParams;
 use crate::types::sky_string::SkyString;
 use crate::vmad::VmadDecoder;
+use std::collections::HashMap;
 use std::io::{Cursor, Read, Result};
 use std::path::Path;
 
@@ -424,23 +425,40 @@ pub struct EspParser {
     pub compressed_records: u32,
     current_parent_form_id: u32,
     progress_callback: Option<Box<dyn Fn(u64) + Send>>,
+    /// Pre-built HashMap for O(1) field def lookup: (record_sig, field_sig) -> index
+    def_map: HashMap<([u8; 4], [u8; 4]), usize>,
+    build_search_index: bool,
 }
 
 impl EspParser {
+    fn build_def_map(defs: &[TranslatableField]) -> HashMap<([u8; 4], [u8; 4]), usize> {
+        let mut map = HashMap::new();
+        for (i, def) in defs.iter().enumerate() {
+            if !def.ignored {
+                map.insert((def.record_sig, def.field_sig), i);
+            }
+        }
+        map
+    }
+
     pub fn new() -> Self {
-        // 使用内置的默认定义(SkyrimSE 简化版)
         let default_defs = include_str!("../esp_default_defs.txt");
+        let record_defs = parse_record_defs(default_defs);
+        let def_map = Self::build_def_map(&record_defs);
         Self {
-            record_defs: parse_record_defs(default_defs),
+            record_defs,
             strings: Vec::new(),
             strings_files: StringsFiles::default(),
             compressed_records: 0,
             current_parent_form_id: 0,
             progress_callback: None,
+            def_map,
+            build_search_index: true,
         }
     }
 
     pub fn with_defs(defs: Vec<TranslatableField>) -> Self {
+        let def_map = Self::build_def_map(&defs);
         Self {
             record_defs: defs,
             strings: Vec::new(),
@@ -448,6 +466,8 @@ impl EspParser {
             compressed_records: 0,
             current_parent_form_id: 0,
             progress_callback: None,
+            def_map,
+            build_search_index: true,
         }
     }
 
@@ -455,6 +475,11 @@ impl EspParser {
     pub fn with_game(data_dir: &Path, game: GameId) -> std::io::Result<Self> {
         let defs = load_game_record_defs(data_dir, game)?;
         Ok(Self::with_defs(defs))
+    }
+
+    /// Disable normalization/word indexes when callers only need raw parsed strings.
+    pub fn set_build_search_index(&mut self, build_search_index: bool) {
+        self.build_search_index = build_search_index;
     }
 
     /// 设置进度回调函数
@@ -807,13 +832,23 @@ impl EspParser {
 
                     if !source_text.is_empty() {
                         // 构建一条可编辑字符串记录。
-                        let mut sk = SkyString::new(
-                            self.strings.len() as u32, // 内部 ID
-                            source_text,               // 源字符串
-                            String::new(),             // 翻译(初始为空)
-                            *record_sig,               // 记录类型
-                            field_header.name,         // 字段类型
-                        );
+                        let mut sk = if self.build_search_index {
+                            SkyString::new(
+                                self.strings.len() as u32, // 内部 ID
+                                source_text,               // 源字符串
+                                String::new(),             // 翻译(初始为空)
+                                *record_sig,               // 记录类型
+                                field_header.name,         // 字段类型
+                            )
+                        } else {
+                            SkyString::new_without_search_index(
+                                self.strings.len() as u32, // 内部 ID
+                                source_text,               // 源字符串
+                                String::new(),             // 翻译(初始为空)
+                                *record_sig,               // 记录类型
+                                field_header.name,         // 字段类型
+                            )
+                        };
 
                         // 填充 ESP 指针，用于后续 SST/XML 精确匹配与写回。
                         sk.esp_ptr = EspPointer {
@@ -848,7 +883,13 @@ impl EspParser {
     }
 
     /// 解析 VMAD 字段中的脚本字符串
-    fn parse_vmad_strings(&mut self, record_sig: &[u8; 4], form_id: u32, data: &[u8], field_index: u16) {
+    fn parse_vmad_strings(
+        &mut self,
+        record_sig: &[u8; 4],
+        form_id: u32,
+        data: &[u8],
+        field_index: u16,
+    ) {
         use crate::types::esp_pointer::string_hash;
 
         // VMAD 字段前 2 字节是版本号 (i16 LE)
@@ -866,13 +907,23 @@ impl EspParser {
                 continue;
             }
 
-            let mut sk = SkyString::new(
-                self.strings.len() as u32,
-                vmad_str.value.clone(),
-                String::new(),
-                *record_sig,
-                *b"VMAD",
-            );
+            let mut sk = if self.build_search_index {
+                SkyString::new(
+                    self.strings.len() as u32,
+                    vmad_str.value.clone(),
+                    String::new(),
+                    *record_sig,
+                    *b"VMAD",
+                )
+            } else {
+                SkyString::new_without_search_index(
+                    self.strings.len() as u32,
+                    vmad_str.value.clone(),
+                    String::new(),
+                    *record_sig,
+                    *b"VMAD",
+                )
+            };
 
             // VMAD 信息编码到 esp_ptr:
             // - str_id: 负偏移量，标识 VMAD 字符串（后续写回时使用）
@@ -890,7 +941,10 @@ impl EspParser {
                 edid_hash: string_hash(&script_prop_key),
             };
 
-            sk.internal_params.set(crate::types::params::SkyStringInternalParams::IS_VMAD_STRING, true);
+            sk.internal_params.set(
+                crate::types::params::SkyStringInternalParams::IS_VMAD_STRING,
+                true,
+            );
             sk.list_index = 0;
             sk.params.set(SkyStringParams::INCOMPLETE_TRANS, true);
             sk.parent_form_id = self.current_parent_form_id;
@@ -900,16 +954,14 @@ impl EspParser {
     }
 
     fn find_def(&self, record_sig: &[u8; 4], field_sig: &[u8; 4]) -> Option<&TranslatableField> {
-        // 先查找精确匹配
-        for def in &self.record_defs {
-            if def.ignored {
-                continue;
-            }
-            if &def.field_sig == field_sig {
-                if &def.record_sig == record_sig || &def.record_sig == b"****" {
-                    return Some(def);
-                }
-            }
+        // O(1) HashMap lookup, with wildcard record_sig fallback
+        let key = (*record_sig, *field_sig);
+        if let Some(&idx) = self.def_map.get(&key) {
+            return Some(&self.record_defs[idx]);
+        }
+        let wildcard_key = (*b"****", *field_sig);
+        if let Some(&idx) = self.def_map.get(&wildcard_key) {
+            return Some(&self.record_defs[idx]);
         }
         None
     }

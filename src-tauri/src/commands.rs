@@ -1661,35 +1661,35 @@ pub async fn compile_pex(
 
 // ── ESP Compare Commands ───────────────────────────────────────────
 
-use xt_core::esp::compare::{self, EspComparison};
+use xt_core::esp::compare::{self, CompareEntry, EspComparison};
 
 /// Convert internal comparison result to DTO
 fn comparison_to_dto(comp: EspComparison) -> EspCompareResultDto {
     let sig_to_str = |sig: &[u8; 4]| String::from_utf8_lossy(sig).to_string();
 
-    let old_by_id: HashMap<u32, &SkyString> = comp.old_strings.iter().map(|s| (s.id, s)).collect();
-    let new_by_id: HashMap<u32, &SkyString> = comp.new_strings.iter().map(|s| (s.id, s)).collect();
+    let old_by_id: HashMap<u32, &CompareEntry> = comp.old_strings.iter().map(|e| (e.id, e)).collect();
+    let new_by_id: HashMap<u32, &CompareEntry> = comp.new_strings.iter().map(|e| (e.id, e)).collect();
 
     let to_pair = |new_id: u32, old_id: u32| -> EspComparePairDto {
-        let new_s = new_by_id.get(&new_id).copied();
-        let old_s = old_by_id.get(&old_id).copied();
-        let record_sig = new_s
-            .or(old_s)
-            .map(|s| sig_to_str(&s.record_sig))
+        let new_e = new_by_id.get(&new_id).copied();
+        let old_e = old_by_id.get(&old_id).copied();
+        let record_sig = new_e
+            .or(old_e)
+            .map(|e| sig_to_str(&e.record_sig))
             .unwrap_or_default();
-        let field_sig = new_s
-            .or(old_s)
-            .map(|s| sig_to_str(&s.esp_ptr.field_sig))
+        let field_sig = new_e
+            .or(old_e)
+            .map(|e| sig_to_str(&e.field_sig))
             .unwrap_or_default();
 
         EspComparePairDto {
             new_id,
             old_id,
-            source: new_s.map(|s| s.source.clone()).unwrap_or_default(),
+            source: new_e.map(|e| e.source.clone()).unwrap_or_default(),
             record_sig,
             field_sig,
-            old_source: old_s.map(|s| s.source.clone()).unwrap_or_default(),
-            new_source: new_s.map(|s| s.source.clone()).unwrap_or_default(),
+            old_source: old_e.map(|e| e.source.clone()).unwrap_or_default(),
+            new_source: new_e.map(|e| e.source.clone()).unwrap_or_default(),
         }
     };
 

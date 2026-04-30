@@ -98,22 +98,54 @@ impl SkyString {
         record_sig: [u8; 4],
         field_sig: [u8; 4],
     ) -> Self {
+        Self::new_with_search_index(id, source, translation, record_sig, field_sig, true)
+    }
+
+    pub(crate) fn new_without_search_index(
+        id: u32,
+        source: String,
+        translation: String,
+        record_sig: [u8; 4],
+        field_sig: [u8; 4],
+    ) -> Self {
+        Self::new_with_search_index(id, source, translation, record_sig, field_sig, false)
+    }
+
+    fn new_with_search_index(
+        id: u32,
+        source: String,
+        translation: String,
+        record_sig: [u8; 4],
+        field_sig: [u8; 4],
+        build_search_index: bool,
+    ) -> Self {
         // 计算哈希
         let hash = string_hash(&source);
         let hash_trans = string_hash(&translation);
-        // 计算分词哈希列表（简单按非字母数字分割）
-        let word_hashes = source
-            .split(|c: char| !c.is_alphanumeric())
-            .filter(|s| !s.is_empty())
-            .map(string_hash)
-            .collect();
 
-        // 计算源文本的规范化版本及其哈希
-        let source_normalized = normalization::normalize(&source);
-        let normalized_hash = if !source_normalized.is_empty() {
-            Some(string_hash(&source_normalized))
+        let (word_hashes, source_normalized, normalized_hash) = if build_search_index {
+            // 计算分词哈希列表（简单按非字母数字分割）
+            let word_hashes = source
+                .split(|c: char| !c.is_alphanumeric())
+                .filter(|s| !s.is_empty())
+                .map(string_hash)
+                .collect();
+
+            // 计算源文本的规范化版本及其哈希
+            let source_normalized = normalization::normalize(&source);
+            let normalized_hash = if !source_normalized.is_empty() {
+                Some(string_hash(&source_normalized))
+            } else {
+                None
+            };
+            let source_normalized = if source_normalized.is_empty() {
+                None
+            } else {
+                Some(source_normalized)
+            };
+            (word_hashes, source_normalized, normalized_hash)
         } else {
-            None
+            (Vec::new(), None, None)
         };
 
         Self {
@@ -125,11 +157,7 @@ impl SkyString {
             hash,
             hash_trans,
             word_hashes,
-            source_normalized: if source_normalized.is_empty() {
-                None
-            } else {
-                Some(source_normalized)
-            },
+            source_normalized,
             normalized_hash,
             esp_ptr: EspPointer::null(),
             params: SkyStringParams::default(),
@@ -190,5 +218,22 @@ mod tests {
         sk.set_source("World".to_string());
         assert_ne!(sk.hash, old_hash);
         assert_eq!(sk.hash, string_hash("World"));
+    }
+
+    #[test]
+    fn test_creation_without_search_index_keeps_basic_hashes() {
+        let sk = SkyString::new_without_search_index(
+            1,
+            "Hello, World".to_string(),
+            String::new(),
+            *b"INFO",
+            *b"DESC",
+        );
+
+        assert_eq!(sk.hash, string_hash("Hello, World"));
+        assert_eq!(sk.hash_trans, string_hash(""));
+        assert!(sk.word_hashes.is_empty());
+        assert!(sk.source_normalized.is_none());
+        assert!(sk.normalized_hash.is_none());
     }
 }
