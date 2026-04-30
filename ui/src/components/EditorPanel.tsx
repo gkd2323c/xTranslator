@@ -1,10 +1,30 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useAppStore, computeTranslationProgress } from "../stores/appStore";
-import { updateTranslation, heuristicSearch, translateString, setApiKey, tcscConvert, checkAliases, type HeuristicMatchDTO, type AliasCheckResult } from "../api/strings";
-import { Save, X, Type, Search, Copy, Languages, Key, AlertTriangle, Loader } from "lucide-react";
+import { updateTranslation, heuristicSearch, translateString, setApiKey, tcscConvert, rtlReverse, checkAliases, type HeuristicMatchDTO, type AliasCheckResult } from "../api/strings";
+import { Save, X, Type, Search, Copy, Languages, Key, AlertTriangle, Loader, ArrowRight } from "lucide-react";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import { ProgressBar } from "./ProgressBar";
+
+// Highlight Bethesda format tags like <Alias=Name>, <Global=Var>, <Font=Face> etc.
+const TAG_REGEX = /(<\/?[A-Za-z][^>]*>)/g;
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function highlightTags(text: string): string {
+  return text
+    .split(TAG_REGEX)
+    .map((part) => {
+      if (TAG_REGEX.test(part)) {
+        TAG_REGEX.lastIndex = 0; // reset regex state
+        return `<span class="tag-highlight">${escapeHtml(part)}</span>`;
+      }
+      return escapeHtml(part);
+    })
+    .join("");
+}
 
 export function EditorPanel() {
   const { t } = useTranslation();
@@ -15,6 +35,8 @@ export function EditorPanel() {
   const updateItemTranslation = useAppStore((s) => s.updateItemTranslation);
   const setSelectedById = useAppStore((s) => s.setSelectedById);
   const allItems = useAppStore((s) => s.allItems);
+  const items = useAppStore((s) => s.items);
+  const dataConfigs = useAppStore((s) => s.dataConfigs);
 
   const translationProgress = useMemo(() => computeTranslationProgress(allItems), [allItems]);
 
@@ -26,6 +48,34 @@ export function EditorPanel() {
   const [matches, setMatches] = useState<HeuristicMatchDTO[]>([]);
   const [showApiKeyDialog, setShowApiKeyDialog] = useState(false);
   const [apiKeyInput, setApiKeyInput] = useState("");
+
+  // Field size warning: check if translation exceeds field byte limit
+  const fieldSizeWarning = useMemo(() => {
+    if (!selectedItem || !dataConfigs?.field_size_ref || !localTrans) return null;
+    const key = `${selectedItem.record_sig}:${selectedItem.field_sig}`.toUpperCase();
+    const info = dataConfigs.field_size_ref[key];
+    if (!info) return null;
+    const byteLen = new TextEncoder().encode(localTrans).length;
+    if (byteLen > info.max_size) {
+      return { max: info.max_size, current: byteLen };
+    }
+    return null;
+  }, [selectedItem, dataConfigs, localTrans]);
+
+  // Navigate to next/prev untranslated item in filtered view
+  const jumpToUntranslated = useCallback((direction: "next" | "prev") => {
+    if (!selectedId || items.length === 0) return;
+    const currentIdx = items.findIndex((i) => i.id === selectedId);
+    if (currentIdx === -1) return;
+    const step = direction === "next" ? 1 : -1;
+    for (let i = currentIdx + step; i >= 0 && i < items.length; i += step) {
+      if (!items[i].translation) {
+        setSelectedById(items[i].id);
+        return;
+      }
+    }
+    toast(t("editor.noMoreUntranslated"), { icon: "ℹ️" });
+  }, [selectedId, items, setSelectedById]);
 
   useEffect(() => {
     setLocalTrans(selectedItem?.translation || "");
@@ -111,17 +161,25 @@ export function EditorPanel() {
     toast.success(t("editor.translationCopied"));
   };
 
-  // F2 快捷键
+  // F2 + Ctrl+Up/Down 快捷键
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === "F2" && selectedItem) {
         const textarea = document.querySelector(".editor-textarea") as HTMLTextAreaElement;
         textarea?.focus();
       }
+      if (e.ctrlKey && e.key === "ArrowDown") {
+        e.preventDefault();
+        jumpToUntranslated("next");
+      }
+      if (e.ctrlKey && e.key === "ArrowUp") {
+        e.preventDefault();
+        jumpToUntranslated("prev");
+      }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [selectedItem]);
+  }, [selectedItem, jumpToUntranslated]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.ctrlKey && e.key === "Enter") handleSave();
@@ -157,14 +215,21 @@ export function EditorPanel() {
             <>
               <button onClick={handleTranslate} disabled={isTranslating} className="btn btn-sm" title={t("editor.machineTranslateTooltip")}>
                 {isTranslating ? <Loader size={14} style={{ animation: "spin 1s linear infinite" }} /> : <Languages size={14} />}
-                <span>{isTranslating ? "Translating..." : "Translate"}</span>
+                <span>{isTranslating ? t("editor.translating") : t("editor.translate")}</span>
               </button>
               <button onClick={handleHeuristicSearch} disabled={isSearching} className="btn btn-sm" title={t("editor.findSimilarTooltip")}>
                 <Search size={14} />
-                <span>{isSearching ? "Searching..." : "Similar"}</span>
+                <span>{isSearching ? t("editor.searching") : t("editor.similar")}</span>
               </button>
             </>
           )}
+          <button
+            onClick={() => setLocalTrans(selectedItem.source)}
+            className="btn btn-ghost btn-sm"
+            title={t("editor.copySourceTooltip")}
+          >
+            <ArrowRight size={14} />
+          </button>
           <button onClick={handleSave} disabled={isSaving} className="btn btn-primary btn-sm" title="Ctrl+Enter">
             <Save size={14} />
             <span>{t("editor.save")}</span>
@@ -178,7 +243,7 @@ export function EditorPanel() {
       <div className="editor-body">
         <div className="editor-source">
           <label>{t("common.source")}</label>
-          <div className="editor-source-text">{selectedItem.source}</div>
+          <div className="editor-source-text" dangerouslySetInnerHTML={{ __html: highlightTags(selectedItem.source) }} />
         </div>
         <div className="editor-translation">
           <label>
@@ -198,6 +263,19 @@ export function EditorPanel() {
             placeholder={t("editor.enterTranslation")}
             autoFocus
           />
+          <div className="editor-info-row">
+            <span className="editor-char-count">
+              {t("editor.sourceChars")}: {selectedItem.source.length} | {t("editor.transChars")}: {localTrans.length}
+            </span>
+            {fieldSizeWarning && (
+              <span className="editor-field-warning" title={t("editor.fieldSizeExceeded")}>
+                <AlertTriangle size={12} /> {t("editor.fieldSizeWarning", { current: fieldSizeWarning.current, max: fieldSizeWarning.max })}
+              </span>
+            )}
+            <span className="editor-nav-hint" title={t("editor.navTooltip")}>
+              Ctrl+↑/↓ {t("editor.navUntranslated")}
+            </span>
+          </div>
           <div className="editor-tcsc-buttons">
             <button
               type="button"
@@ -232,6 +310,23 @@ export function EditorPanel() {
               title={t("editor.tcsc_traditional")}
             >
               {t("editor.tcsc_traditional")}
+            </button>
+            <button
+              type="button"
+              onClick={async () => {
+                if (!localTrans) return;
+                try {
+                  const result = await rtlReverse(localTrans);
+                  setLocalTrans(result);
+                  toast.success(t("editor.rtlApplied"));
+                } catch (e: any) {
+                  toast.error(`${t("editor.rtlFailed")}: ${e}`);
+                }
+              }}
+              className="btn btn-ghost btn-xs"
+              title={t("editor.rtlTooltip")}
+            >
+              RTL
             </button>
           </div>
         </div>

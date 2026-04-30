@@ -126,7 +126,18 @@
     "translationCopied": "已从匹配项复制翻译",
     "convertedToSimplified": "已转换为简体中文",
     "convertedToTraditional": "已转换为繁体中文",
-    "tcscFailed": "TCSC 失败"
+    "tcscFailed": "TCSC 失败",
+    "copySourceTooltip": "复制源文到译文",
+    "sourceChars": "源文",
+    "transChars": "译文",
+    "fieldSizeWarning": "{{current}} 字节 > {{max}} 上限",
+    "fieldSizeExceeded": "译文超过字段字节大小限制",
+    "noMoreUntranslated": "当前视图中没有更多未翻译条目",
+    "navUntranslated": "未翻译",
+    "navTooltip": "跳转到下一个/上一个未翻译字符串",
+    "rtlTooltip": "反转 RTL 文本（阿拉伯语/希伯来语）",
+    "rtlApplied": "RTL 文本已反转",
+    "rtlFailed": "RTL 反转失败"
   },
   "menu": {
     "tcsc_simplified": "转简体中文",

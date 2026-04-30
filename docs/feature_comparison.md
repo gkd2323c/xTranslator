@@ -69,7 +69,7 @@
 | **ESP 写入（Strings 回写）** | ✅ | ⚠️ Strings 保存已有 | ~30% | ESP 本身不修改（原版策略），但需要整合写入流程 |
 | **最终化 (finalize)** | ✅ 导出翻译结果 | ⚠️ XML 导出可用 | ~40% | XML 导出已就绪，Strings 最终化待整合 |
 | **批量处理器** | ✅ 命令式批处理 | ✅ BatchExecutor + BatchPanel | ~70% | Multi-file translate/export, progress events, cancel, error recovery |
-| **RTL 支持 (阿拉伯语)** | ✅ RTL 标签+字符串反向 | ❌ | 0% | `TESVT_TranslateFunc.pas` 中的 RTL 处理 |
+| **RTL 支持 (阿拉伯语)** | ✅ RTL 标签+字符串反向 | ✅ rtl.rs + EditorPanel RTL 按钮 | ~60% | `rtl.rs`：阿拉伯字符检测 + 块反转 + 符号镜像（端口自 Delphi）；EditorPanel RTL 按钮；阿拉伯整形（Shape/deshape）未移植 |
 | **中文繁简转换** | ✅ SC↔TC 字符映射 | ✅ IPC + MenuBar + EditorPanel 按钮 | ~90% | `tcsc.rs`：OpenCC 主字典(3960对)+Delphi 字典回退(2552对)，编译时嵌入；IPC 命令+MenuBar 按钮+EditorPanel 内转换按钮均已集成；批量转换待实现 |
 
 ---
@@ -90,15 +90,15 @@
 
 | 功能 | 原版 | Rust 重写 | 覆盖度 | 说明 |
 |------|------|----------|--------|------|
-| **ESM 缓存** | ✅ SQLite 缓存加速重载 | ⚠️ ESP/Compare 轻量缓存已实现 | ~50% | Rust 已有 SHA-256+bincode ESP 解析缓存，以及 ESPCompare 轻量 compare cache；Delphi 风格 SQLite ESM 缓存仍未实现 |
+| **ESM 缓存** | ✅ SQLite 缓存加速重载 | ✅ SQLite 缓存（rusqlite） | ~80% | SHA-256 内容寻址 + SQLite 存储（索引查询/单行更新），bincode 缓存保留作为回退；ESPCompare 轻量 compare cache 独立 |
 | **自动备份** | ✅ 定时字典备份 | ✅ 5-min SST snapshots | ~80% | SST 快照，保留 10 份，静默失败 |
-| **配置系统** | ✅ res.ini+注册表 | ✅ JSON 配置持久化 + Proxy UI | ~80% | `AppConfig` JSON 持久化（theme/language/API key/proxy），`load_config`/`save_config` IPC 命令，启动时自动加载；HTTP proxy 后端已接入 `build_client()`，前端 Proxy 设置对话框待实现 |
+| **配置系统** | ✅ res.ini+注册表 | ✅ JSON 配置持久化 + Proxy UI | ~95% | `AppConfig` JSON 持久化（theme/language/API key/proxy），`load_config`/`save_config` IPC 命令，启动时自动加载；HTTP proxy 后端已接入 `build_client()`，SettingsDialog Proxy UI 已完成 |
 | **vocabulary.txt** | ✅ 词汇列表 | ✅ 解析+加载+启发式搜索增强 | ~80% | `vocabulary.rs` 解析 STRINGS=Name 条目，加载 source+target Strings 文件，按 str_id 匹配，合并到启发式搜索候选集 |
-| **ctdaFunc.txt** | ✅ 条件函数定义 | ✅ 文件存在 | ~10% | 未解析 |
-| **fieldSizeRef.txt** | ✅ 字段大小参考 | ✅ 文件存在 | ~10% | 未解析 |
+| **ctdaFunc.txt** | ✅ 条件函数定义 | ✅ 解析+IPC+UI | ~100% | `data_config.rs` 解析 `HashMap<u32, CtdaFunc>`，`load_data_configs` IPC，`DataConfigsPanel` 可搜索展示 |
+| **fieldSizeRef.txt** | ✅ 字段大小参考 | ✅ 解析+IPC+UI | ~100% | `data_config.rs` 解析 `HashMap<String, FieldSizeInfo>`，同上 IPC+UI |
 | **pexNoTransProc.txt** | ✅ PEX 不可翻译过程 | ✅ 解析+过滤 | ~80% | 已解析并用于 PEX 字符串提取过滤 |
-| **DialSubType.txt** | ✅ 对话子类型 | ✅ 文件存在 | ~10% | 未解析 |
-| **EmoteDefinition.txt** | ✅ 表情定义 | ✅ 文件存在 | ~10% | 未解析 |
+| **DialSubType.txt** | ✅ 对话子类型 | ✅ 解析+IPC+UI | ~100% | `data_config.rs` 解析 hex ID→name 映射，同上 IPC+UI |
+| **EmoteDefinition.txt** | ✅ 表情定义 | ✅ 解析+IPC+UI | ~100% | `data_config.rs` 解析 hex ID→name 映射，同上 IPC+UI |
 
 ---
 
@@ -110,12 +110,12 @@
 | **虚拟字符串表格** | ✅ VirtualTreeView | ✅ react-window | ~70% | 76K+ 条虚拟滚动，客户端筛选/排序零延迟，ResizeObserver 自适应 |
 | **字符串编辑器** | ✅ SynEdit 高亮+行内编辑 | ⚠️ 基础编辑 | ~55% | textarea 编辑、Ctrl+Enter 保存、状态显示、启发式搜索、翻译 API |
 | **对话列表视图** | ✅ DIAL/INFO/QUST | ✅ DialogView 组件 | ~60% | QUST→DIAL→INFO 分组 + NPC_ 关联，parent_form_id 跟踪 |
-| **翻译进度条** | ✅ | ❌ | 0% | - |
+| **翻译进度条** | ✅ | ✅ ProgressBar 组件 + EditorPanel 进度条 | ~60% | `ProgressBar.tsx` 显示已翻译/总数百分比；BatchPanel 有独立的文件级+字符串级进度条 |
 | **筛选/搜索栏** | ✅ 多维度筛选 | ✅ 实时筛选 + 正则 | ~80% | 文本搜索 + Regex toggle + 状态筛选 + Record 类型筛选 + 排序，客户端零延迟，虚拟滚动 |
 | **主题支持** | ✅ 默认/亮/灰/暗 | ✅ Dark/Light/Gray/Auto | ~90% | CSS variables + Zustand + localStorage, system follow via matchMedia |
 | **UI 多语言** | ✅ 10+ 语言 | ✅ react-i18next 10 语言 | ~80% | zh-CN/en/de/es/fr/ja/ko/pl/pt/ru locales，MenuBar 切换 + localStorage 持久化 |
 | **高分辨率 DPI** | ✅ DPI 感知 | ✅ Tauri 2.x 原生 | ~90% | Tauri 2.x 自动处理 HiDPI 缩放 |
-| **拖放加载** | ✅ XML 拖放 | ✅ 基础拖放 | ~40% | 支持拖放 ESP/ESM、SST、XML 到主窗口；BSA/PEX/FUZ 拖放仍可后续补 |
+| **拖放加载** | ✅ XML 拖放 | ✅ 全类型拖放 | ~80% | 支持拖放 ESP/ESM（自动加载）、SST（自动加载）、XML（自动导入）、BSA/BA2/PEX/FUZ（打开对应面板） |
 
 ---
 
@@ -161,7 +161,8 @@
 | ~~MCM 翻译~~ | ✅ MCM parser (UTF-16LE/UTF-8/ANSI) + types + IPC命令 + McmPanel UI（加载/保存/编辑/过滤） | Done |
 | ~~ESPCompare~~ | ✅ compare-only extractor + 轻量缓存 + master 归一化 FormID 匹配 + EspComparePanel UI | ✅ 完成 |
 | ~~API 配置解析~~ | ✅ `translation_api/config.rs` — 解析 Delphi `ApiTranslator.txt`，语言代码映射，provider 元数据 IPC（`get_api_config`） | Done |
-| ESM 缓存 | SQLite 缓存加速重载 | 3-5 天 |
+| ~~数据配置文件解析~~ | ✅ ctdaFunc/fieldSizeRef/DialSubType/EmoteDefinition 全部解析 + `load_data_configs` IPC + `DataConfigsPanel` UI | Done |
+| ~~ESM 缓存~~ | ✅ SQLite 缓存（rusqlite + 索引查询 + 单行更新） | Done |
 
 ### P3 - 体验优化
 
@@ -207,7 +208,7 @@
 | TESVT_Utils.pas | ✅ 已分析 | ✅ StringHash 复刻完成 |
 | TESVT_HeuristicSearch.pas | ⚠️ 已分析 | ✅ 已实现 |
 | TESVT_scriptPex.pas | ⚠️ 已分析 | ✅ PEX 解析器完成 |
-| TESVT_TranslateFunc.pas | ✅ 已分析 apply 核心路径 | ✅ matcher 与 apply 状态语义已实现 |
+| TESVT_TranslateFunc.pas | ✅ 已分析 apply 核心路径 | ⚠️ matcher 与 apply 状态语义已实现；RTL 核心已移植（rtl.rs），Shape/deshape 未移植 |
 | TESVT_MainLoader.pas | ✅ 已分析 SST/XML/PEX/缓存关键路径 | ⚠️ Rust 以 Tauri commands + AppState 分拆实现 |
 | TESVT_TranslatorApi.pas | ✅ 已分析 | ✅ OpenAI + DeepL + API config 解析 |
 

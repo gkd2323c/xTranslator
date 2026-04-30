@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tauri::Emitter;
-use xt_core::cache::EsmCache;
+use xt_core::sqlite_cache::SqliteCache;
 use xt_core::esp::parser::{EspParser, StringsFiles};
 use xt_core::matching::{apply_dictionary_entries_with_policy, ApplyPolicy, DictionaryApplyEntry};
 use xt_core::pex::types::PexTranslatableString;
@@ -104,6 +104,13 @@ fn cache_dir() -> std::path::PathBuf {
     }
 }
 
+/// 获取当前 ESP 文件的缓存哈希（从 file_info 读取路径并计算 SHA-256）
+fn get_esp_cache_hash(state: &AppState) -> Option<String> {
+    let file_info = state.file_info.lock().ok()?;
+    let info = file_info.as_ref()?;
+    xt_core::cache::hash_file(std::path::Path::new(&info.esp_path)).ok()
+}
+
 pub fn config_dir() -> std::path::PathBuf {
     if cfg!(windows) {
         std::env::var("LOCALAPPDATA")
@@ -189,14 +196,14 @@ pub async fn load_esp(
             let start = std::time::Instant::now();
 
             // ── 缓存检查阶段 ──
-            let cache = EsmCache::new(c_dir, 50);
+            let cache = SqliteCache::new(c_dir);
             let esp_path_ref = std::path::Path::new(&esp_path_clone);
 
             // 计算一次 SHA-256 哈希，同时用于 lookup 和 store（避免重复 I/O）
             let file_hash = xt_core::cache::hash_file(esp_path_ref).ok();
 
             if let Some(ref hash) = file_hash {
-                if let Some(cached) = cache.lookup_by_hash(hash) {
+                if let Some(cached) = cache.lookup(hash) {
                     let _ = window.emit(
                         "esp-load-progress",
                         EspLoadProgress {
@@ -209,7 +216,8 @@ pub async fn load_esp(
                     );
 
                     let total = cached.strings.len() as u32;
-                    let record_counts = EsmCache::compute_record_counts(&cached.strings);
+                    let record_counts = cache.compute_record_counts(hash)
+                        .unwrap_or_default();
 
                     return Ok((
                         cached.strings,
@@ -403,18 +411,16 @@ pub async fn load_esp(
 
             let compressed_records = parser.compressed_records;
 
-            // 存储解析结果到缓存（静默失败，不影响主流程）
-            let cache_payload = xt_core::cache::CachePayload {
-                version: 1,
-                strings: parser.strings.clone(),
-                compressed_records,
-                strings_loaded,
-            };
-            let _ = if let Some(ref hash) = file_hash {
-                cache.store_with_hash(hash, &cache_payload)
-            } else {
-                cache.store(esp_path_ref, &cache_payload)
-            };
+            // 存储解析结果到 SQLite 缓存（静默失败，不影响主流程）
+            if let Some(ref hash) = file_hash {
+                let cache_payload = xt_core::sqlite_cache::CachePayload {
+                    version: 2,
+                    strings: parser.strings.clone(),
+                    compressed_records,
+                    strings_loaded,
+                };
+                let _ = cache.store(hash, &cache_payload);
+            }
 
             let _ = window.emit(
                 "esp-load-progress",
@@ -549,30 +555,87 @@ pub async fn update_translation(
     id: u32,
     translation: String,
 ) -> Result<(), String> {
-    let mut strings = state.strings.lock().map_err(|e| e.to_string())?;
+    let (esp_hash, trans_clone) = {
+        let mut strings = state.strings.lock().map_err(|e| e.to_string())?;
 
-    // 用内部自增 ID 定位条目，避免筛选/排序后索引漂移问题。
-    let found = strings.iter_mut().find(|sk| sk.id == id);
-    let sk = match found {
-        Some(s) => s,
-        None => return Err(format!("String with id {} not found", id)),
+        // 用内部自增 ID 定位条目，避免筛选/排序后索引漂移问题。
+        let found = strings.iter_mut().find(|sk| sk.id == id);
+        let sk = match found {
+            Some(s) => s,
+            None => return Err(format!("String with id {} not found", id)),
+        };
+
+        sk.set_translation(translation);
+
+        // 更新状态：有译文=已翻译；空译文=未完成（与前端状态语义一致）。
+        if !sk.translation.is_empty() {
+            sk.params.set(SkyStringParams::TRANSLATED, true);
+            sk.params.set(SkyStringParams::INCOMPLETE_TRANS, false);
+        } else {
+            sk.params.set(SkyStringParams::TRANSLATED, false);
+            sk.params.set(SkyStringParams::INCOMPLETE_TRANS, true);
+        }
+
+        // 标记有未保存的修改
+        *state.is_dirty.lock().map_err(|e| e.to_string())? = true;
+
+        // 获取 esp_hash 用于 SQLite 缓存更新
+        let esp_hash = get_esp_cache_hash(&state);
+        (esp_hash, sk.translation.clone())
     };
 
-    sk.set_translation(translation);
-
-    // 更新状态：有译文=已翻译；空译文=未完成（与前端状态语义一致）。
-    if !sk.translation.is_empty() {
-        sk.params.set(SkyStringParams::TRANSLATED, true);
-        sk.params.set(SkyStringParams::INCOMPLETE_TRANS, false);
-    } else {
-        sk.params.set(SkyStringParams::TRANSLATED, false);
-        sk.params.set(SkyStringParams::INCOMPLETE_TRANS, true);
+    // 异步更新 SQLite 缓存（静默失败）
+    if let Some(hash) = esp_hash {
+        let cache = SqliteCache::new(cache_dir());
+        let _ = cache.update_translation(&hash, id, &trans_clone);
     }
 
-    // 标记有未保存的修改
-    *state.is_dirty.lock().map_err(|e| e.to_string())? = true;
-
     Ok(())
+}
+
+/// 批量更新翻译 — 单次 IPC 调用更新多条翻译，避免逐条 IPC 开销。
+#[tauri::command]
+pub async fn batch_update_translations(
+    state: tauri::State<'_, Arc<AppState>>,
+    updates: Vec<(u32, String)>,
+) -> Result<u32, String> {
+    let (esp_hash, changed_pairs) = {
+        let mut strings = state.strings.lock().map_err(|e| e.to_string())?;
+        let mut changed: u32 = 0;
+        let mut pairs: Vec<(u32, String)> = Vec::new();
+
+        for (id, translation) in updates {
+            if let Some(sk) = strings.iter_mut().find(|sk| sk.id == id) {
+                sk.set_translation(translation);
+                if !sk.translation.is_empty() {
+                    sk.params.set(SkyStringParams::TRANSLATED, true);
+                    sk.params.set(SkyStringParams::INCOMPLETE_TRANS, false);
+                } else {
+                    sk.params.set(SkyStringParams::TRANSLATED, false);
+                    sk.params.set(SkyStringParams::INCOMPLETE_TRANS, true);
+                }
+                pairs.push((id, sk.translation.clone()));
+                changed += 1;
+            }
+        }
+
+        if changed > 0 {
+            *state.is_dirty.lock().map_err(|e| e.to_string())? = true;
+        }
+
+        let esp_hash = get_esp_cache_hash(&state);
+        (esp_hash, pairs)
+    };
+
+    // 批量更新 SQLite 缓存（静默失败）
+    if let Some(hash) = esp_hash {
+        let cache = SqliteCache::new(cache_dir());
+        for (id, translation) in &changed_pairs {
+            let _ = cache.update_translation(&hash, *id, translation);
+        }
+    }
+
+    Ok(changed_pairs.len() as u32)
 }
 
 /// 查询字符串分页结果（后端筛选/排序/分页一体化）。
@@ -2233,6 +2296,16 @@ pub async fn tcsc_convert(text: String, direction: String) -> Result<String, Str
         _ => return Err("Invalid direction: use 'to_simplified' or 'to_traditional'".into()),
     };
     Ok(result)
+}
+
+/// Reverse RTL text for Arabic/Hebrew display.
+///
+/// Processes text line-by-line: reverses Arabic character blocks and mirrors
+/// bracket symbols. Returns the reversed text, or an error if no Arabic found.
+#[tauri::command]
+pub async fn rtl_reverse(text: String) -> Result<String, String> {
+    xt_core::rtl::reverse_rtl_multiline(&text)
+        .ok_or_else(|| "No Arabic characters found in text".into())
 }
 
 /// Batch convert translations for all (or specified) strings.

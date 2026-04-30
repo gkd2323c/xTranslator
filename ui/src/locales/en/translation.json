@@ -126,7 +126,18 @@
     "translationCopied": "Translation copied from match",
     "convertedToSimplified": "Converted to Simplified Chinese",
     "convertedToTraditional": "Converted to Traditional Chinese",
-    "tcscFailed": "TCSC failed"
+    "tcscFailed": "TCSC failed",
+    "copySourceTooltip": "Copy source to translation",
+    "sourceChars": "Source",
+    "transChars": "Trans",
+    "fieldSizeWarning": "{{current}} bytes > {{max}} limit",
+    "fieldSizeExceeded": "Translation exceeds field byte size limit",
+    "noMoreUntranslated": "No more untranslated strings in current view",
+    "navUntranslated": "untranslated",
+    "navTooltip": "Jump to next/prev untranslated string",
+    "rtlTooltip": "Reverse RTL text for Arabic/Hebrew",
+    "rtlApplied": "RTL text reversed",
+    "rtlFailed": "RTL reversal failed"
   },
   "menu": {
     "tcsc_simplified": "To Simplified",

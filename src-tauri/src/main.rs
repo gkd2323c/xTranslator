@@ -8,7 +8,7 @@ mod commands;
 
 use crate::batch::BatchExecutor;
 use commands::{
-    auto_backup_sst, build_dialog_tree, cancel_batch_job, compare_esp_files, compare_source_dest,
+    auto_backup_sst, batch_update_translations, build_dialog_tree, cancel_batch_job, compare_esp_files, compare_source_dest,
     check_aliases, compile_pex,
     export_xml, extract_ba2_file, extract_ba2_folder, extract_bsa_file, extract_bsa_folder,
     finalize, get_all_strings, get_batch_status, get_fuz_audio_data, get_is_dirty, get_stats,
@@ -17,7 +17,7 @@ use commands::{
     load_sst, load_vocabulary, mcm_compare, parse_pex_strings, query_strings_command, save_mcm_file, save_sst, save_strings,
     scan_fuz_directory, set_deepl_api_key, set_openai_api_key, set_translation_provider,
     start_batch_export, start_batch_translate, tcsc_convert, tcsc_batch_convert, translate_string, update_translation,
-    load_config, save_config, get_api_config, load_data_configs, AppState,
+    load_config, save_config, get_api_config, load_data_configs, rtl_reverse, AppState,
 };
 use std::sync::Arc;
 
@@ -41,6 +41,7 @@ fn main() {
             load_sst,
             save_sst,
             update_translation,
+            batch_update_translations,
             heuristic_search,
             translate_string,
             set_openai_api_key,
@@ -86,7 +87,8 @@ fn main() {
             load_vocabulary,
             finalize,
             compare_source_dest,
-            check_aliases
+            check_aliases,
+            rtl_reverse
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

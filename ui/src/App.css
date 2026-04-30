@@ -873,6 +873,40 @@ body::after {
   box-shadow: 0 0 20px var(--border-glow), inset 0 0 10px rgba(0, 245, 255, 0.05);
 }
 
+.editor-info-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.editor-char-count {
+  font-variant-numeric: tabular-nums;
+}
+
+.editor-field-warning {
+  color: #e74c3c;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-weight: 500;
+}
+
+.editor-nav-hint {
+  margin-left: auto;
+  opacity: 0.6;
+  font-size: 10px;
+}
+
+.tag-highlight {
+  color: #4fc3f7;
+  background: rgba(79, 195, 247, 0.08);
+  border-radius: 2px;
+  padding: 0 1px;
+}
+
 .editor-matches {
   width: 300px;
   display: flex;

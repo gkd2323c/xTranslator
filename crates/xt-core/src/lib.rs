@@ -10,6 +10,8 @@ pub mod mcm;
 pub mod matching;
 pub mod normalization;
 pub mod pex;
+pub mod rtl;
+pub mod sqlite_cache;
 pub mod sst;
 pub mod strings;
 pub mod tcsc;

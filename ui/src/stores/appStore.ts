@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import type { SkyStringDTO, LoadEspResponse, LoadSstResponse, BatchEntry, BatchStatus, DataConfigsDto } from "../api/strings";
-import { getAllStrings, getStringsChunk, getStringsCount, queryStrings, updateTranslation } from "../api/strings";
+import { getAllStrings, getStringsChunk, getStringsCount, queryStrings, updateTranslation, batchUpdateTranslations } from "../api/strings";
 import { saveConfig } from "../api/strings";
 import toast from "react-hot-toast";
 import i18n from "../i18n";
@@ -126,6 +126,7 @@ interface AppState {
   setSstLoaded: (path: string, stats: LoadSstResponse) => void;
   setTargetLang: (lang: string) => void;
   setFilter: (filter: string) => void;
+  setFilterNow: (filter: string) => void;
   setUseRegex: (use: boolean) => void;
   setReplaceText: (text: string) => void;
   setStatusFilter: (status: string | null) => void;
@@ -256,6 +257,10 @@ export function computeTranslationProgress(allItems: SkyStringDTO[]): { translat
   return { translated, total };
 }
 
+// Debounce timer for filter input (shared across store instances)
+let filterDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+const FILTER_DEBOUNCE_MS = 150;
+
 export const useAppStore = create<AppState>((set, get) => ({
   allItems: [],
   items: [],
@@ -334,6 +339,26 @@ export const useAppStore = create<AppState>((set, get) => ({
   setTargetLang: (targetLang) => set({ targetLang }),
 
   setFilter: (filter) => {
+    // Debounced: update filter text immediately for responsive input, defer re-filter
+    set({ filter });
+    if (filterDebounceTimer) clearTimeout(filterDebounceTimer);
+    filterDebounceTimer = setTimeout(() => {
+      const state = get();
+      const items = applyFilterAndSort(
+        state.allItems,
+        state.filter,
+        state.useRegex,
+        state.statusFilter,
+        state.recordFilter,
+        state.vmadFilter,
+        state.sortField,
+        state.sortDir
+      );
+      set({ items, filtered: items.length });
+    }, FILTER_DEBOUNCE_MS);
+  },
+
+  setFilterNow: (filter) => {
     const state = get();
     const items = applyFilterAndSort(
       state.allItems,
@@ -401,22 +426,50 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     const toastId = toast.loading(i18n.t("toast.replacingCount", { count: candidates.length }));
 
-    let changed = 0;
+    // Build batch updates: collect all replacements first
+    const updates: [number, string][] = [];
     for (const item of candidates) {
       const target = item.translation || item.source;
       const replaced = target.replace(regex, state.replaceText);
       if (replaced !== target) {
-        try {
-          await updateTranslation(item.id, replaced);
-          changed++;
-        } catch (e: any) {
-          console.error(`Replace failed for id=${item.id}:`, e);
-        }
+        updates.push([item.id, replaced]);
       }
     }
 
-    // Reload all strings to sync with backend state
-    await get().loadAllStrings();
+    let changed = 0;
+    if (updates.length > 0) {
+      try {
+        changed = await batchUpdateTranslations(updates);
+      } catch (e: any) {
+        console.error("Batch replace failed:", e);
+        toast.error(`${i18n.t("toast.replaceFailed")}: ${e}`);
+        toast.dismiss(toastId);
+        return;
+      }
+    }
+
+    // Update local state directly (no full reload needed)
+    if (changed > 0) {
+      const updatedMap = new Map(updates);
+      const newAllItems = state.allItems.map((item) => {
+        const newTrans = updatedMap.get(item.id);
+        if (newTrans !== undefined) {
+          return { ...item, translation: newTrans, status: newTrans ? "translated" : "incomplete" };
+        }
+        return item;
+      });
+      const items = applyFilterAndSort(
+        newAllItems,
+        state.filter,
+        state.useRegex,
+        state.statusFilter,
+        state.recordFilter,
+        state.vmadFilter,
+        state.sortField,
+        state.sortDir
+      );
+      set({ allItems: newAllItems, items, filtered: items.length, isDirty: true });
+    }
 
     toast.dismiss(toastId);
     if (changed > 0) {

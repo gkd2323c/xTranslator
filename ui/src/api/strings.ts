@@ -118,6 +118,12 @@ export async function updateTranslation(
   return invoke("update_translation", { id, translation });
 }
 
+export async function batchUpdateTranslations(
+  updates: [number, string][],
+): Promise<number> {
+  return invoke("batch_update_translations", { updates });
+}
+
 export async function heuristicSearch(
   request: HeuristicSearchRequest,
 ): Promise<HeuristicMatchDTO[]> {
@@ -575,6 +581,10 @@ export async function tcscConvert(text: string, direction: "to_simplified" | "to
 
 export async function tcscBatchConvert(direction: "to_simplified" | "to_traditional", ids?: number[]): Promise<number[]> {
   return invoke("tcsc_batch_convert", { direction, ids });
+}
+
+export async function rtlReverse(text: string): Promise<string> {
+  return invoke("rtl_reverse", { text });
 }
 
 // ── Vocabulary Types ────────────────────────────────────────────────
