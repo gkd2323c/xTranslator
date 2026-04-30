@@ -20,6 +20,7 @@ export interface SkyStringDTO {
   status: string;
   list_index: number;
   str_id: number;
+  is_vmad: boolean;
 }
 
 export interface QueryResponse {

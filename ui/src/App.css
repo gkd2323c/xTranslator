@@ -11,6 +11,7 @@
   --accent-magenta: #ff00ff;
   --accent-gold: #ffd700;
   --accent-green: #00ff88;
+  --accent-purple: #a855f7;
   --text-primary: #e4e4e7;
   --text-secondary: #71717a;
   --text-muted: #52525b;
@@ -35,6 +36,7 @@
   --accent-magenta: #c026d3;
   --accent-gold: #b45309;
   --accent-green: #059669;
+  --accent-purple: #7c3aed;
   --text-primary: #111827;
   --text-secondary: #6b7280;
   --text-muted: #9ca3af;
@@ -56,6 +58,7 @@
   --accent-magenta: #c4a7e7;
   --accent-gold: #e6b450;
   --accent-green: #9cce7a;
+  --accent-purple: #a78bfa;
   --text-primary: #cdd6f4;
   --text-secondary: #9399b2;
   --text-muted: #6c7086;
@@ -730,6 +733,14 @@ body::after {
   background: rgba(113, 113, 122, 0.15);
   color: var(--text-secondary);
   border: 1px solid rgba(113, 113, 122, 0.3);
+}
+
+.badge-script {
+  background: rgba(168, 85, 247, 0.15);
+  color: var(--accent-purple);
+  border: 1px solid rgba(168, 85, 247, 0.3);
+  font-size: 9px;
+  padding: 2px 5px;
 }
 
 .status-translated { color: var(--success); }

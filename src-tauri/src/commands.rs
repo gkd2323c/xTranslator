@@ -147,6 +147,8 @@ fn sky_string_to_dto(sk: &SkyString) -> SkyStringDTO {
         status: status_string(sk),
         list_index: sk.list_index,
         str_id: sk.esp_ptr.str_id,
+        // VMAD 字符串使用负 str_id 编码偏移量
+        is_vmad: sk.esp_ptr.str_id < 0,
     }
 }
 
@@ -190,32 +192,37 @@ pub async fn load_esp(
             let cache = EsmCache::new(c_dir, 50);
             let esp_path_ref = std::path::Path::new(&esp_path_clone);
 
-            if let Some(cached) = cache.lookup(esp_path_ref) {
-                let _ = window.emit(
-                    "esp-load-progress",
-                    EspLoadProgress {
-                        stage: "cached".to_string(),
-                        current: 100,
-                        total: 100,
-                        percentage: 100,
-                        message: format!("Loaded from cache ({} strings)", cached.strings.len()),
-                    },
-                );
+            // 计算一次 SHA-256 哈希，同时用于 lookup 和 store（避免重复 I/O）
+            let file_hash = xt_core::cache::hash_file(esp_path_ref).ok();
 
-                let total = cached.strings.len() as u32;
-                let record_counts = EsmCache::compute_record_counts(&cached.strings);
+            if let Some(ref hash) = file_hash {
+                if let Some(cached) = cache.lookup_by_hash(hash) {
+                    let _ = window.emit(
+                        "esp-load-progress",
+                        EspLoadProgress {
+                            stage: "cached".to_string(),
+                            current: 100,
+                            total: 100,
+                            percentage: 100,
+                            message: format!("Loaded from cache ({} strings)", cached.strings.len()),
+                        },
+                    );
 
-                return Ok((
-                    cached.strings,
-                    LoadEspResponse {
-                        total,
-                        compressed_records: cached.compressed_records,
-                        strings_loaded: cached.strings_loaded,
-                        parse_time_ms: 0,
-                        record_counts,
-                        cached: true,
-                    },
-                ));
+                    let total = cached.strings.len() as u32;
+                    let record_counts = EsmCache::compute_record_counts(&cached.strings);
+
+                    return Ok((
+                        cached.strings,
+                        LoadEspResponse {
+                            total,
+                            compressed_records: cached.compressed_records,
+                            strings_loaded: cached.strings_loaded,
+                            parse_time_ms: 0,
+                            record_counts,
+                            cached: true,
+                        },
+                    ));
+                }
             }
 
             // ── 缓存未命中，完整解析 ──
@@ -403,7 +410,11 @@ pub async fn load_esp(
                 compressed_records,
                 strings_loaded,
             };
-            let _ = cache.store(esp_path_ref, &cache_payload);
+            let _ = if let Some(ref hash) = file_hash {
+                cache.store_with_hash(hash, &cache_payload)
+            } else {
+                cache.store(esp_path_ref, &cache_payload)
+            };
 
             let _ = window.emit(
                 "esp-load-progress",
@@ -1084,7 +1095,8 @@ pub async fn save_strings(
     let mut translated_map: std::collections::HashMap<(u8, i32), String> =
         std::collections::HashMap::new();
     for sk in strings.iter() {
-        if !sk.translation.is_empty() {
+        // 跳过 VMAD 字符串（负 str_id），VMAD 不写入 .STRINGS 文件
+        if !sk.translation.is_empty() && sk.esp_ptr.str_id >= 0 {
             translated_map.insert((sk.list_index, sk.esp_ptr.str_id), sk.translation.clone());
         }
     }

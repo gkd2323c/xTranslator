@@ -52,7 +52,12 @@ impl EsmCache {
     /// 缓存命中时返回完整的解析结果载荷。
     pub fn lookup(&self, esp_path: &Path) -> Option<CachePayload> {
         let hash = hash_file(esp_path).ok()?;
-        let cache_path = self.cache_path(&hash);
+        self.lookup_by_hash(&hash)
+    }
+
+    /// 使用预计算哈希查找缓存（避免重复 SHA-256 计算）
+    pub fn lookup_by_hash(&self, hash: &str) -> Option<CachePayload> {
+        let cache_path = self.cache_path(hash);
 
         if !cache_path.exists() {
             return None;
@@ -78,10 +83,15 @@ impl EsmCache {
     ///
     /// 若已存在同名缓存文件则覆盖。
     pub fn store(&self, esp_path: &Path, payload: &CachePayload) -> std::io::Result<()> {
+        let hash = hash_file(esp_path)?;
+        self.store_with_hash(&hash, payload)
+    }
+
+    /// 使用预计算哈希存储 ESP 解析结果（跳过重复 SHA-256 计算）
+    pub fn store_with_hash(&self, hash: &str, payload: &CachePayload) -> std::io::Result<()> {
         std::fs::create_dir_all(&self.cache_dir)?;
 
-        let hash = hash_file(esp_path)?;
-        let cache_path = self.cache_path(&hash);
+        let cache_path = self.cache_path(hash);
 
         let data = bincode::serialize(payload)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;

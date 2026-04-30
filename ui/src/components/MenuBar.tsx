@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAppStore } from "../stores/appStore";
-import { loadEsp, loadSst, saveSst, exportXml, importXml, saveStrings, tcscConvert, tcscBatchConvert, updateTranslation, loadVocabulary, compareSourceDest, type BatchProgress } from "../api/strings";
+import { loadEsp, loadSst, saveSst, exportXml, importXml, saveStrings, tcscConvert, tcscBatchConvert, updateTranslation, loadVocabulary, compareSourceDest, loadDataConfigs, type BatchProgress } from "../api/strings";
 import type { LoadSstResponse, XmlImportResponse } from "../api/strings";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
-import { FolderOpen, FileUp, FileDown, FileCode, Save, RotateCcw, RefreshCw, FileArchive, Braces, Volume2, MessagesSquare, FileText, GitCompare, CheckCircle, Settings, ArrowLeftRight } from "lucide-react";
+import { FolderOpen, FileUp, FileDown, FileCode, Save, RotateCcw, RefreshCw, FileArchive, Braces, Volume2, MessagesSquare, FileText, GitCompare, CheckCircle, Settings, ArrowLeftRight, Database } from "lucide-react";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import { setI18nLanguage, SUPPORTED_LANGS } from "../i18n";
@@ -92,6 +92,9 @@ export function MenuBar() {
   const setShowEspCompare = useAppStore((s) => s.setShowEspCompare);
   const showFinalizePanel = useAppStore((s) => s.showFinalizePanel);
   const setShowFinalizePanel = useAppStore((s) => s.setShowFinalizePanel);
+  const showDataConfigsPanel = useAppStore((s) => s.showDataConfigsPanel);
+  const setShowDataConfigsPanel = useAppStore((s) => s.setShowDataConfigsPanel);
+  const setDataConfigs = useAppStore((s) => s.setDataConfigs);
   const batchEntries = useAppStore((s) => s.batchEntries);
   const [batchProgress, setBatchProgress] = useState<BatchProgress | null>(null);
 
@@ -138,6 +141,15 @@ export function MenuBar() {
             if (info.pair_count > 0) {
               toast(`Vocabulary loaded: ${info.pair_count.toLocaleString()} pairs from ${info.base_names.length} files`, { duration: 3000 });
             }
+          })
+          .catch(() => {});
+
+        // Auto-load Data Configs for reference data
+        loadDataConfigs(useAppStore.getState().language === "english" ? "SkyrimSE" : "SkyrimSE")
+          .then((cfg) => {
+            setDataConfigs(cfg);
+            const fieldCount = Object.keys(cfg.field_size_ref).length;
+            toast.success(`Data Configs: ${cfg.ctda_funcs.length} CTDA functions, ${fieldCount} field sizes`, { duration: 3000 });
           })
           .catch(() => {});
       } finally {
@@ -703,6 +715,16 @@ export function MenuBar() {
             aria-pressed={showEspCompare}
           >
             <GitCompare size={16} />
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowDataConfigsPanel(!showDataConfigsPanel)}
+            className={`btn btn-ghost ${showDataConfigsPanel ? "active" : ""}`}
+            title={showDataConfigsPanel ? "Close Data Configs" : "Open Data Configs"}
+            aria-label={showDataConfigsPanel ? "Close Data Configs" : "Open Data Configs"}
+            aria-pressed={showDataConfigsPanel}
+          >
+            <Database size={16} />
           </button>
         </div>
 

@@ -197,6 +197,29 @@
     "compareDone": "Compared: {{matched}} matched, {{unmatched}} unmatched, {{updated}} updated",
     "compareFailed": "Compare failed"
   },
+  "vmad": {
+    "title": "VMAD Script Strings",
+    "filterVmAD": "Filter VMAD strings",
+    "showingVmadOnly": "Showing VMAD only",
+    "clearFilter": "Clear filter",
+    "description": "VMAD strings are embedded script properties in ESP records"
+  },
+  "dataConfigs": {
+    "title": "Data Configs",
+    "subtitle": "Game reference data",
+    "load": "Load Configs",
+    "loading": "Loading...",
+    "ctdaFuncs": "CTDA Functions",
+    "fieldSizes": "Field Sizes",
+    "dialSubTypes": "Dialog SubTypes",
+    "emoteDefs": "Emote Definitions",
+    "searchPlaceholder": "Search...",
+    "noResults": "No results",
+    "charCount": "{{current}} / {{max}} chars",
+    "canWrap": "Wraps",
+    "loaded": "Loaded: {{ctda}} CTDA, {{fields}} fields",
+    "loadFailed": "Failed to load data configs"
+  },
   "espCompare": {
     "title": "ESP Compare",
     "subtitle": "Compare two ESP/ESM files to find string differences",

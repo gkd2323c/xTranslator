@@ -62,6 +62,9 @@ pub struct SkyStringDTO {
     /// Strings 文件中的字符串 ID（用于 SST/XML 精确匹配）
     #[serde(default)]
     pub str_id: i32,
+    /// 是否为 VMAD 脚本字符串（负 str_id 编码偏移量）
+    #[serde(default)]
+    pub is_vmad: bool,
 }
 
 /// 加载 ESP 文件响应

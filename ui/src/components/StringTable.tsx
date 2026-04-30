@@ -61,12 +61,13 @@ function VirtualRow(props: {
       <div className="row-cell" style={{ width: 60, fontFamily: "'JetBrains Mono', monospace", fontSize: 11 }}>
         {item.id}
       </div>
-      <div className="row-cell" style={{ width: 80 }}>
+      <div className="row-cell" style={{ width: 100, gap: 4 }}>
         <span className={`badge badge-${item.status}`}>
           {item.status[0].toUpperCase()}
         </span>
+        {item.is_vmad && <span className="badge badge-script" title="VMAD script string">VM</span>}
       </div>
-      <div className="row-cell" style={{ width: 80, fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: "var(--accent-gold)" }}>
+      <div className="row-cell" style={{ width: 70, fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: "var(--accent-gold)" }}>
         {item.record_sig}
       </div>
       <div className="row-cell" style={{ width: 80, fontFamily: "'JetBrains Mono', monospace", fontSize: 11 }}>

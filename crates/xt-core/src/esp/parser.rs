@@ -523,8 +523,6 @@ impl EspParser {
         reader.read_to_end(&mut buf)?;
         let mut cursor = Cursor::new(&buf);
 
-        println!("  TES4 parsed, remaining data: {} bytes", buf.len());
-
         let mut grup_count = 0u32;
         let mut record_count = 0u32;
         let total_bytes = buf.len() as u64;
@@ -552,13 +550,6 @@ impl EspParser {
 
         // 报告完成
         self.report_progress(total_bytes);
-
-        println!("  Groups: {}, Records parsed: {}", grup_count, record_count);
-        println!(
-            "  Final cursor position: {}, buffer size: {}",
-            cursor.position(),
-            buf.len()
-        );
 
         Ok(())
     }

@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { useAppStore } from "../stores/appStore";
-import { FileText, Languages, Database, BarChart3 } from "lucide-react";
+import { FileText, Languages, Database, BarChart3, Code2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 export function SidePanel() {
@@ -12,14 +12,17 @@ export function SidePanel() {
   const recordFilter = useAppStore((s) => s.recordFilter);
   const loadProgress = useAppStore((s) => s.loadProgress);
   const setRecordFilter = useAppStore((s) => s.setRecordFilter);
+  const vmadFilter = useAppStore((s) => s.vmadFilter);
+  const setVmadFilter = useAppStore((s) => s.setVmadFilter);
 
-  const { translated, incomplete, locked } = useMemo(() => {
-    let t = 0, inc = 0;
+  const { translated, incomplete, locked, vmadCount } = useMemo(() => {
+    let t = 0, inc = 0, vmad = 0;
     for (const item of allItems) {
       if (item.status === "translated") t++;
       else if (item.status === "incomplete") inc++;
+      if (item.is_vmad) vmad++;
     }
-    return { translated: t, incomplete: inc, locked: allItems.length - t - inc };
+    return { translated: t, incomplete: inc, locked: allItems.length - t - inc, vmadCount: vmad };
   }, [allItems]);
 
   // 如果正在加载，显示加载进度
@@ -113,6 +116,10 @@ export function SidePanel() {
           <span className="sidepanel-label status-locked">{"\u25CF"} Locked</span>
           <span className="sidepanel-value">{locked.toLocaleString()}</span>
         </div>
+        <div className="sidepanel-row">
+          <span className="sidepanel-label" style={{ color: "var(--accent-purple)" }}>{"\u25CF"} VMAD</span>
+          <span className="sidepanel-value">{vmadCount.toLocaleString()}</span>
+        </div>
         <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--border-subtle)" }}>
           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6, fontSize: 11 }}>
             <span style={{ color: "var(--text-secondary)" }}>Progress</span>
@@ -180,6 +187,34 @@ export function SidePanel() {
             <span className="sidepanel-label">Updated</span>
             <span className="sidepanel-value">{sstStats.updated_ids.length}</span>
           </div>
+        </div>
+      )}
+
+      {vmadCount > 0 && (
+        <div className="sidepanel-section">
+          <h3><Code2 size={16} /> VMAD Script Strings</h3>
+          <div
+            className={`sidepanel-row record-type-row ${vmadFilter ? "active" : ""}`}
+            onClick={() => setVmadFilter(!vmadFilter)}
+            title={vmadFilter ? "Click to show all strings" : "Click to show only VMAD strings"}
+            style={{ cursor: "pointer" }}
+          >
+            <span className="sidepanel-label" style={{ color: vmadFilter ? "var(--accent-purple)" : "inherit" }}>
+              {vmadFilter ? "Showing VMAD only" : "Filter VMAD strings"}
+            </span>
+            <span className="sidepanel-value">{vmadCount.toLocaleString()}</span>
+          </div>
+          {vmadFilter && (
+            <div style={{ marginTop: 8, textAlign: "center" }}>
+              <button
+                onClick={() => setVmadFilter(false)}
+                className="btn btn-ghost btn-sm"
+                style={{ fontSize: 11, padding: "4px 12px" }}
+              >
+                Clear filter
+              </button>
+            </div>
+          )}
         </div>
       )}
 

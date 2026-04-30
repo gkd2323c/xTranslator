@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { SkyStringDTO, LoadEspResponse, LoadSstResponse, BatchEntry, BatchStatus } from "../api/strings";
+import type { SkyStringDTO, LoadEspResponse, LoadSstResponse, BatchEntry, BatchStatus, DataConfigsDto } from "../api/strings";
 import { getAllStrings, getStringsChunk, getStringsCount, queryStrings, updateTranslation } from "../api/strings";
 import { saveConfig } from "../api/strings";
 import toast from "react-hot-toast";
@@ -60,12 +60,17 @@ interface AppState {
   espStats: LoadEspResponse | null;
   sstStats: LoadSstResponse | null;
 
+  // Data configs (CTDA, field sizes, etc.)
+  dataConfigs: DataConfigsDto | null;
+  showDataConfigsPanel: boolean;
+
   // Filter / sort
   filter: string;
   useRegex: boolean;
   replaceText: string;
   statusFilter: string | null;
   recordFilter: string | null;
+  vmadFilter: boolean;
   sortField: string;
   sortDir: "asc" | "desc";
 
@@ -124,6 +129,7 @@ interface AppState {
   setReplaceText: (text: string) => void;
   setStatusFilter: (status: string | null) => void;
   setRecordFilter: (record: string | null) => void;
+  setVmadFilter: (enabled: boolean) => void;
   setSort: (field: string, dir?: "asc" | "desc") => void;
   replaceAll: () => Promise<void>;
   undo: () => Promise<void>;
@@ -146,6 +152,8 @@ interface AppState {
   setShowMcmPanel: (show: boolean) => void;
   setShowEspCompare: (show: boolean) => void;
   setShowFinalizePanel: (show: boolean) => void;
+  setDataConfigs: (configs: DataConfigsDto | null) => void;
+  setShowDataConfigsPanel: (show: boolean) => void;
   setBatchEntries: (entries: BatchEntry[]) => void;
   addBatchEntries: (entries: BatchEntry[]) => void;
   removeBatchEntry: (index: number) => void;
@@ -171,6 +179,7 @@ function applyFilterAndSort(
   useRegex: boolean,
   statusFilter: string | null,
   recordFilter: string | null,
+  vmadFilter: boolean,
   sortField: string,
   sortDir: "asc" | "desc"
 ): SkyStringDTO[] {
@@ -184,6 +193,11 @@ function applyFilterAndSort(
   // Status filter
   if (statusFilter) {
     result = result.filter((item) => item.status === statusFilter);
+  }
+
+  // VMAD filter
+  if (vmadFilter) {
+    result = result.filter((item) => item.is_vmad);
   }
 
   // Text filter
@@ -262,6 +276,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   replaceText: "",
   statusFilter: null,
   recordFilter: null,
+  vmadFilter: false,
   sortField: "id",
   sortDir: "asc",
   selectedId: null,
@@ -282,6 +297,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   showMcmPanel: false,
   showEspCompare: false,
   showFinalizePanel: false,
+  dataConfigs: null,
+  showDataConfigsPanel: false,
 
   setAllItems: (allItems) => {
     const state = get();
@@ -291,6 +308,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       state.useRegex,
       state.statusFilter,
       state.recordFilter,
+      state.vmadFilter,
       state.sortField,
       state.sortDir
     );
@@ -322,6 +340,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       state.useRegex,
       state.statusFilter,
       state.recordFilter,
+      state.vmadFilter,
       state.sortField,
       state.sortDir
     );
@@ -336,6 +355,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       useRegex,
       state.statusFilter,
       state.recordFilter,
+      state.vmadFilter,
       state.sortField,
       state.sortDir
     );
@@ -365,6 +385,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       state.useRegex,
       state.statusFilter,
       state.recordFilter,
+      state.vmadFilter,
       state.sortField,
       state.sortDir
     );
@@ -444,6 +465,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       state.useRegex,
       state.statusFilter,
       state.recordFilter,
+      state.vmadFilter,
       state.sortField,
       state.sortDir
     );
@@ -491,6 +513,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       state.useRegex,
       state.statusFilter,
       state.recordFilter,
+      state.vmadFilter,
       state.sortField,
       state.sortDir
     );
@@ -508,6 +531,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       state.useRegex,
       statusFilter,
       state.recordFilter,
+      state.vmadFilter,
       state.sortField,
       state.sortDir
     );
@@ -522,10 +546,26 @@ export const useAppStore = create<AppState>((set, get) => ({
       state.useRegex,
       state.statusFilter,
       recordFilter,
+      state.vmadFilter,
       state.sortField,
       state.sortDir
     );
     set({ recordFilter, items, filtered: items.length });
+  },
+
+  setVmadFilter: (vmadFilter) => {
+    const state = get();
+    const items = applyFilterAndSort(
+      state.allItems,
+      state.filter,
+      state.useRegex,
+      state.statusFilter,
+      state.recordFilter,
+      vmadFilter,
+      state.sortField,
+      state.sortDir
+    );
+    set({ vmadFilter, items, filtered: items.length });
   },
 
   setSort: (field, dir) => {
@@ -538,6 +578,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       state.useRegex,
       state.statusFilter,
       state.recordFilter,
+      state.vmadFilter,
       sortField,
       sortDir
     );
@@ -581,6 +622,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       state.useRegex,
       state.statusFilter,
       state.recordFilter,
+      state.vmadFilter,
       state.sortField,
       state.sortDir
     );
@@ -674,6 +716,18 @@ export const useAppStore = create<AppState>((set, get) => ({
     showEspCompare: false,
     showFinalizePanel,
   }),
+  setDataConfigs: (dataConfigs) => set({ dataConfigs }),
+  setShowDataConfigsPanel: (showDataConfigsPanel) => set({
+    showBatchPanel: false,
+    showBsaBrowser: false,
+    showPexPanel: false,
+    showFuzPanel: false,
+    showDialogView: false,
+    showMcmPanel: false,
+    showEspCompare: false,
+    showFinalizePanel: false,
+    showDataConfigsPanel,
+  }),
 
   setBatchEntries: (batchEntries) => set({ batchEntries }),
 
@@ -762,18 +816,23 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ isLoading: true });
     try {
       const count = await getStringsCount();
-      console.log("[loadAllStrings] count:", count);
-      const CHUNK_SIZE = 10000;
+      const CHUNK_SIZE = 25000;
+      const CONCURRENCY = 3;
+      const totalChunks = Math.ceil(count / CHUNK_SIZE);
       const allItems: SkyStringDTO[] = [];
 
-      for (let offset = 0; offset < count; offset += CHUNK_SIZE) {
-        const limit = Math.min(CHUNK_SIZE, count - offset);
-        const chunk = await getStringsChunk(offset, limit);
-        console.log(`[loadAllStrings] chunk offset=${offset} limit=${limit} received=${chunk.length}`);
-        allItems.push(...chunk);
+      for (let round = 0; round < Math.ceil(totalChunks / CONCURRENCY); round++) {
+        const start = round * CONCURRENCY;
+        const batch: Promise<SkyStringDTO[]>[] = [];
+        for (let i = start; i < Math.min(start + CONCURRENCY, totalChunks); i++) {
+          const offset = i * CHUNK_SIZE;
+          const limit = Math.min(CHUNK_SIZE, count - offset);
+          batch.push(getStringsChunk(offset, limit));
+        }
+        const results = await Promise.all(batch);
+        results.forEach((chunk) => allItems.push(...chunk));
       }
 
-      console.log("[loadAllStrings] total loaded:", allItems.length);
       get().setAllItems(allItems);
       toast.success(`Loaded ${allItems.length.toLocaleString()} strings`);
     } catch (e: any) {
@@ -829,11 +888,14 @@ export const useAppStore = create<AppState>((set, get) => ({
       replaceText: "",
       statusFilter: null,
       recordFilter: null,
+      vmadFilter: false,
       selectedId: null,
       selectedItem: null,
       isDirty: false,
       undoStack: [],
       redoStack: [],
       targetLang: "chinese",
+      dataConfigs: null,
+      showDataConfigsPanel: false,
     }),
 }));
