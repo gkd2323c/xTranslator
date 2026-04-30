@@ -3,6 +3,7 @@ import { List } from "react-window";
 import { useAppStore } from "../stores/appStore";
 import { Search, ArrowUpDown, Loader2, Code2, Replace } from "lucide-react";
 import type { SkyStringDTO } from "../api/strings";
+import { useTranslation } from "react-i18next";
 
 const ROW_HEIGHT = 32;
 
@@ -24,6 +25,7 @@ function VirtualRow(props: {
   selectedId: number | null;
   onSelect: (id: number) => void;
 }): ReactElement | null {
+  const { t } = useTranslation();
   const { index, style, items, selectedId, onSelect } = props;
   const item = items[index];
   if (!item) return null;
@@ -65,7 +67,7 @@ function VirtualRow(props: {
         <span className={`badge badge-${item.status}`}>
           {item.status[0].toUpperCase()}
         </span>
-        {item.is_vmad && <span className="badge badge-script" title="VMAD script string">VM</span>}
+        {item.is_vmad && <span className="badge badge-script" title={t("table.vmadTooltip")}>VM</span>}
       </div>
       <div className="row-cell" style={{ width: 70, fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: "var(--accent-gold)" }}>
         {item.record_sig}
@@ -95,6 +97,7 @@ function VirtualRow(props: {
 }
 
 export function StringTable() {
+  const { t } = useTranslation();
   // Zustand selectors — stable references, no re-render on unrelated state changes
   const espPath = useAppStore((s) => s.espPath);
   const allItems = useAppStore((s) => s.allItems);
@@ -159,7 +162,7 @@ export function StringTable() {
       <div className="string-table-wrapper">
         <div className="table-loading">
           <Loader2 size={24} className="spin" />
-          <span>Loading strings...</span>
+          <span>{t("table.loading")}</span>
         </div>
       </div>
     );
@@ -174,14 +177,14 @@ export function StringTable() {
             <Search size={14} />
             <input
               type="text"
-              placeholder={useRegex ? "Regex filter..." : "Filter strings..."}
+              placeholder={useRegex ? t("common.regexFilter") : t("common.filter")}
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
             />
             <button
               onClick={() => setUseRegex(!useRegex)}
               className="btn btn-ghost btn-sm"
-              title={useRegex ? "Switch to plain text" : "Switch to regex"}
+              title={useRegex ? t("table.regexSwitchTip") : t("table.plainSwitchTip")}
               style={{ padding: "2px 6px", marginLeft: 4, opacity: useRegex ? 1 : 0.4 }}
             >
               <Code2 size={14} />
@@ -189,10 +192,10 @@ export function StringTable() {
           </div>
           <div className="status-filters">
             {[
-              { key: null, label: "All" },
-              { key: "incomplete", label: "Incomplete" },
-              { key: "translated", label: "Translated" },
-              { key: "locked", label: "Locked" },
+              { key: null, label: t("common.all") },
+              { key: "incomplete", label: t("common.incomplete") },
+              { key: "translated", label: t("common.translated") },
+              { key: "locked", label: t("common.locked") },
             ].map((s) => (
               <button
                 key={s.label}
@@ -210,7 +213,7 @@ export function StringTable() {
           <div className="table-info">
             {filtered.toLocaleString()} / {total.toLocaleString()}
             {allItems.length === 0 && !isLoading && (
-              <span style={{ color: "var(--error)", marginLeft: 8 }}>(No data loaded)</span>
+              <span style={{ color: "var(--error)", marginLeft: 8 }}>{t("common.noDataLoaded")}</span>
             )}
           </div>
         </div>
@@ -253,14 +256,14 @@ export function StringTable() {
         <div className="header-cell" style={{ width: 60 }} onClick={() => handleSort("id")}>
           ID <ArrowUpDown size={10} />
         </div>
-        <div className="header-cell" style={{ width: 80 }}>Status</div>
+        <div className="header-cell" style={{ width: 80 }}>{t("table.status")}</div>
         <div className="header-cell" style={{ width: 80 }} onClick={() => handleSort("record_sig")}>
           Rec <ArrowUpDown size={10} />
         </div>
-        <div className="header-cell" style={{ width: 80 }}>Field</div>
-        <div className="header-cell" style={{ width: 100 }}>FormID</div>
-        <div className="header-cell" style={{ flex: 1 }}>Source</div>
-        <div className="header-cell" style={{ flex: 1 }}>Translation</div>
+        <div className="header-cell" style={{ width: 80 }}>{t("table.field")}</div>
+        <div className="header-cell" style={{ width: 100 }}>{t("table.formId")}</div>
+        <div className="header-cell" style={{ flex: 1 }}>{t("table.source")}</div>
+        <div className="header-cell" style={{ flex: 1 }}>{t("table.translation")}</div>
       </div>
 
       {/* Virtual list */}

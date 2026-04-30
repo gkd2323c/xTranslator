@@ -3,6 +3,7 @@ import type { SkyStringDTO, LoadEspResponse, LoadSstResponse, BatchEntry, BatchS
 import { getAllStrings, getStringsChunk, getStringsCount, queryStrings, updateTranslation } from "../api/strings";
 import { saveConfig } from "../api/strings";
 import toast from "react-hot-toast";
+import i18n from "../i18n";
 
 export type Theme = "dark" | "light" | "gray" | "auto";
 
@@ -367,7 +368,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   replaceAll: async () => {
     const state = get();
     if (!state.filter || !state.replaceText) {
-      toast.error("Both search pattern and replacement text are required");
+      toast.error(i18n.t("toast.bothSearchReplaceRequired"));
       return;
     }
 
@@ -375,7 +376,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       regex = new RegExp(state.filter, state.useRegex ? "gi" : "gi");
     } catch {
-      toast.error(`Invalid regex: ${state.filter}`);
+      toast.error(i18n.t("toast.invalidRegex", { pattern: state.filter }));
       return;
     }
 
@@ -391,16 +392,14 @@ export const useAppStore = create<AppState>((set, get) => ({
     );
 
     if (candidates.length === 0) {
-      toast("No matching strings found");
+      toast(i18n.t("toast.noMatchingFound"));
       return;
     }
 
-    const confirmed = window.confirm(
-      `Replace "${state.filter}" → "${state.replaceText}" in ${candidates.length} strings?`
-    );
+    const confirmed = window.confirm(i18n.t("toast.replaceConfirm", { from: state.filter, to: state.replaceText, count: candidates.length }));
     if (!confirmed) return;
 
-    const toastId = toast.loading(`Replacing in ${candidates.length} strings...`);
+    const toastId = toast.loading(i18n.t("toast.replacingCount", { count: candidates.length }));
 
     let changed = 0;
     for (const item of candidates) {
@@ -421,16 +420,16 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     toast.dismiss(toastId);
     if (changed > 0) {
-      toast.success(`Replaced ${changed.toLocaleString()} strings`);
+      toast.success(i18n.t("toast.replaceResult", { count: changed.toLocaleString() }));
     } else {
-      toast("No strings were changed");
+      toast(i18n.t("toast.noStringsChanged"));
     }
   },
 
   undo: async () => {
     const state = get();
     if (state.undoStack.length === 0) {
-      toast("Nothing to undo");
+      toast(i18n.t("toast.undoNothing"));
       return;
     }
     const entry = state.undoStack[0];
@@ -449,7 +448,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       await updateTranslation(entry.id, entry.oldTranslation);
     } catch {
-      toast.error("Undo failed");
+      toast.error(i18n.t("toast.undoFailed"));
       return;
     }
 
@@ -478,7 +477,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   redo: async () => {
     const state = get();
     if (state.redoStack.length === 0) {
-      toast("Nothing to redo");
+      toast(i18n.t("toast.redoNothing"));
       return;
     }
     const entry = state.redoStack[0];
@@ -497,7 +496,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       await updateTranslation(entry.id, entry.oldTranslation);
     } catch {
-      toast.error("Redo failed");
+      toast.error(i18n.t("toast.redoFailed"));
       return;
     }
 
@@ -747,10 +746,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (hasConflict) {
         setTimeout(
           () =>
-            toast(
-              "Batch includes the currently loaded ESP. Changes from one will not reflect in the other.",
-              { icon: "⚠️", duration: 4000 }
-            ),
+            toast(i18n.t("toast.batchConflict"), { icon: "!", duration: 4000 }),
           100
         );
       }
@@ -834,15 +830,15 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
 
       get().setAllItems(allItems);
-      toast.success(`Loaded ${allItems.length.toLocaleString()} strings`);
+      toast.success(i18n.t("toast.loadedStrings", { count: allItems.length.toLocaleString() }));
     } catch (e: any) {
       console.error("Chunked loading failed:", e);
-      toast.error(`Failed to load strings: ${e}`);
+      toast.error(i18n.t("toast.loadingFailed") + ": " + e);
       // Fallback 1: try single-shot (may work for small datasets)
       try {
         const allItems = await getAllStrings();
         get().setAllItems(allItems);
-        toast.success(`Loaded ${allItems.length.toLocaleString()} strings (fallback)`);
+        toast.success(i18n.t("toast.loadedFallback", { count: allItems.length.toLocaleString() }));
       } catch (e2: any) {
         console.error("Single-shot fallback also failed:", e2);
         // Fallback 2: paginated query
@@ -864,7 +860,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           });
         } catch (e3: any) {
           console.error("All fallbacks failed:", e3);
-          toast.error("All loading methods failed");
+          toast.error(i18n.t("toast.allFallbacksFailed"));
         }
       }
     } finally {

@@ -58,11 +58,11 @@ export function FinalizePanel() {
 
   const handleFinalize = async () => {
     if (!outputDir) {
-      toast.error("Please select an output directory");
+      toast.error(t("finalize.needOutputDir"));
       return;
     }
     if (!espPath) {
-      toast.error("Load an ESP file first");
+      toast.error(t("finalize.needEsp"));
       return;
     }
 

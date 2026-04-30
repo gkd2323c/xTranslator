@@ -89,11 +89,11 @@ export function SidePanel() {
           </span>
         </div>
         <div className="sidepanel-row">
-          <span className="sidepanel-label">Strings</span>
-          <span className="sidepanel-value">{espStats.strings_loaded} files loaded</span>
+          <span className="sidepanel-label">{t("sidebar.strings")}</span>
+          <span className="sidepanel-value">{espStats.strings_loaded} {t("sidebar.filesLoaded")}</span>
         </div>
         <div className="sidepanel-row">
-          <span className="sidepanel-label">Parse Time</span>
+          <span className="sidepanel-label">{t("sidebar.parseTime")}</span>
           <span className="sidepanel-value">{espStats.parse_time_ms}ms</span>
         </div>
       </div>
@@ -101,28 +101,28 @@ export function SidePanel() {
       <div className="sidepanel-section">
         <h3><Database size={16} /> Statistics</h3>
         <div className="sidepanel-row">
-          <span className="sidepanel-label">Total</span>
+          <span className="sidepanel-label">{t("sidebar.totalStrings")}</span>
           <span className="sidepanel-value">{espStats.total.toLocaleString()}</span>
         </div>
         <div className="sidepanel-row">
-          <span className="sidepanel-label status-translated">{"\u25CF"} Translated</span>
+          <span className="sidepanel-label status-translated">{"\u25CF"} {t("sidebar.translatedCount")}</span>
           <span className="sidepanel-value">{translated.toLocaleString()}</span>
         </div>
         <div className="sidepanel-row">
-          <span className="sidepanel-label status-incomplete">{"\u25CF"} Incomplete</span>
+          <span className="sidepanel-label status-incomplete">{"\u25CF"} {t("sidebar.incompleteCount")}</span>
           <span className="sidepanel-value">{incomplete.toLocaleString()}</span>
         </div>
         <div className="sidepanel-row">
-          <span className="sidepanel-label status-locked">{"\u25CF"} Locked</span>
+          <span className="sidepanel-label status-locked">{"\u25CF"} {t("sidebar.lockedCount")}</span>
           <span className="sidepanel-value">{locked.toLocaleString()}</span>
         </div>
         <div className="sidepanel-row">
-          <span className="sidepanel-label" style={{ color: "var(--accent-purple)" }}>{"\u25CF"} VMAD</span>
+          <span className="sidepanel-label" style={{ color: "var(--accent-purple)" }}>{"\u25CF"} {t("sidebar.vmad", { defaultValue: "VMAD" })}</span>
           <span className="sidepanel-value">{vmadCount.toLocaleString()}</span>
         </div>
         <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--border-subtle)" }}>
           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6, fontSize: 11 }}>
-            <span style={{ color: "var(--text-secondary)" }}>Progress</span>
+            <span style={{ color: "var(--text-secondary)" }}>{t("sidebar.progress")}</span>
             <span style={{ color: "var(--accent-cyan)", fontFamily: "'JetBrains Mono', monospace", fontWeight: 600 }}>
               {progressPercent.toFixed(1)}%
             </span>
@@ -144,47 +144,47 @@ export function SidePanel() {
         <div className="sidepanel-section">
           <h3><Languages size={16} /> SST</h3>
           <div className="sidepanel-row">
-            <span className="sidepanel-label">Matched</span>
+            <span className="sidepanel-label">{t("sidebar.matched")}</span>
             <span className="sidepanel-value status-translated">{sstStats.matched}</span>
           </div>
           <div className="sidepanel-row">
-            <span className="sidepanel-label">Unmatched</span>
+            <span className="sidepanel-label">{t("sidebar.unmatched")}</span>
             <span className="sidepanel-value status-incomplete">{sstStats.unmatched}</span>
           </div>
           <div className="sidepanel-row">
-            <span className="sidepanel-label">Exact</span>
+            <span className="sidepanel-label">{t("sidebar.exact")}</span>
             <span className="sidepanel-value">{sstStats.tier_exact}</span>
           </div>
           <div className="sidepanel-row">
-            <span className="sidepanel-label">EDID</span>
+            <span className="sidepanel-label">{t("sidebar.edid")}</span>
             <span className="sidepanel-value">{sstStats.tier_edid}</span>
           </div>
           <div className="sidepanel-row">
-            <span className="sidepanel-label">Normalized</span>
+            <span className="sidepanel-label">{t("sidebar.normalized")}</span>
             <span className="sidepanel-value">{sstStats.tier_normalized}</span>
           </div>
           <div className="sidepanel-row">
-            <span className="sidepanel-label">Vocab</span>
+            <span className="sidepanel-label">{t("sidebar.vocab")}</span>
             <span className="sidepanel-value">{sstStats.tier_vocab}</span>
           </div>
           <div className="sidepanel-row">
-            <span className="sidepanel-label">Ambiguous</span>
+            <span className="sidepanel-label">{t("sidebar.ambiguous")}</span>
             <span className="sidepanel-value">{sstStats.ambiguous}</span>
           </div>
           <div className="sidepanel-row">
-            <span className="sidepanel-label">Pending</span>
+            <span className="sidepanel-label">{t("sidebar.pending")}</span>
             <span className="sidepanel-value">{sstStats.pending_skipped}</span>
           </div>
           <div className="sidepanel-row">
-            <span className="sidepanel-label">OldData</span>
+            <span className="sidepanel-label">{t("sidebar.oldData")}</span>
             <span className="sidepanel-value">{sstStats.old_data_preserved}</span>
           </div>
           <div className="sidepanel-row">
-            <span className="sidepanel-label">Warnings</span>
+            <span className="sidepanel-label">{t("sidebar.warnings")}</span>
             <span className="sidepanel-value">{sstStats.warning}/{sstStats.big_warning}</span>
           </div>
           <div className="sidepanel-row">
-            <span className="sidepanel-label">Updated</span>
+            <span className="sidepanel-label">{t("sidebar.updated")}</span>
             <span className="sidepanel-value">{sstStats.updated_ids.length}</span>
           </div>
         </div>
@@ -192,15 +192,15 @@ export function SidePanel() {
 
       {vmadCount > 0 && (
         <div className="sidepanel-section">
-          <h3><Code2 size={16} /> VMAD Script Strings</h3>
+          <h3><Code2 size={16} /> {t("vmad.title")}</h3>
           <div
             className={`sidepanel-row record-type-row ${vmadFilter ? "active" : ""}`}
             onClick={() => setVmadFilter(!vmadFilter)}
-            title={vmadFilter ? "Click to show all strings" : "Click to show only VMAD strings"}
+            title={vmadFilter ? t("vmad.showAll") : t("vmad.showOnly")}
             style={{ cursor: "pointer" }}
           >
             <span className="sidepanel-label" style={{ color: vmadFilter ? "var(--accent-purple)" : "inherit" }}>
-              {vmadFilter ? "Showing VMAD only" : "Filter VMAD strings"}
+              {vmadFilter ? t("vmad.showingVmadOnly") : t("vmad.filterVmAD")}
             </span>
             <span className="sidepanel-value">{vmadCount.toLocaleString()}</span>
           </div>
@@ -220,7 +220,7 @@ export function SidePanel() {
 
       {espStats.record_counts && Object.keys(espStats.record_counts).length > 0 && (
         <div className="sidepanel-section">
-          <h3><BarChart3 size={16} /> Record Types</h3>
+          <h3><BarChart3 size={16} /> {t("sidebar.recordTypes")}</h3>
           {Object.entries(espStats.record_counts)
             .sort((a, b) => b[1] - a[1])
             .slice(0, 10)
@@ -231,7 +231,7 @@ export function SidePanel() {
                   key={sig}
                   className={`sidepanel-row record-type-row ${isActive ? "active" : ""}`}
                   onClick={() => setRecordFilter(isActive ? null : sig)}
-                  title={isActive ? "Click to clear filter" : "Click to filter by this type"}
+                  title={isActive ? t("sidebar.clearFilterTooltip") : t("sidebar.filterByType")}
                 >
                   <span className="sidepanel-label record-sig">{sig}</span>
                   <span className="sidepanel-value">{count.toLocaleString()}</span>

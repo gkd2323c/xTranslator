@@ -139,7 +139,7 @@ export function MenuBar() {
         loadVocabulary(stringsDir, language, useAppStore.getState().targetLang, useAppStore.getState().language === "english" ? "SkyrimSE" : undefined)
           .then((info) => {
             if (info.pair_count > 0) {
-              toast(`Vocabulary loaded: ${info.pair_count.toLocaleString()} pairs from ${info.base_names.length} files`, { duration: 3000 });
+              toast(t("menu.vocabularyLoaded", { pairs: info.pair_count.toLocaleString(), files: info.base_names.length }), { duration: 3000 });
             }
           })
           .catch(() => {});
@@ -149,7 +149,7 @@ export function MenuBar() {
           .then((cfg) => {
             setDataConfigs(cfg);
             const fieldCount = Object.keys(cfg.field_size_ref).length;
-            toast.success(`Data Configs: ${cfg.ctda_funcs.length} CTDA functions, ${fieldCount} field sizes`, { duration: 3000 });
+            toast.success(t("menu.dataConfigsLoaded", { ctda: cfg.ctda_funcs.length, fields: fieldCount }), { duration: 3000 });
           })
           .catch(() => {});
       } finally {
@@ -192,7 +192,7 @@ export function MenuBar() {
 
   const loadSstFromPath = useCallback(async (path: string) => {
     if (!espPath) {
-      toast.error("Load an ESP before loading an SST dictionary.");
+      toast.error(t("menu.espBeforeSst"));
       return;
     }
 
@@ -207,7 +207,7 @@ export function MenuBar() {
       );
       await loadAllStrings();
     } catch (e: any) {
-      toast.error(`Failed to load SST: ${e}`);
+      toast.error(`${t("menu.sstSaveFailed")}: ${e}`);
     } finally {
       setLoading(false);
     }
@@ -238,9 +238,9 @@ export function MenuBar() {
     try {
       await saveSst(sstPath);
       setIsDirty(false);
-      toast.success(`SST saved to ${sstPath}`);
+      toast.success(t("toast.sstSaved", { path: sstPath }));
     } catch (e: any) {
-      toast.error(`Failed to save SST: ${e}`);
+      toast.error(`${t("menu.sstSaveFailed")}: ${e}`);
     } finally {
       setLoading(false);
     }
@@ -266,12 +266,12 @@ export function MenuBar() {
       try {
         const count = await exportXml({ path: xmlPath, dest_lang: targetLang });
         setIsDirty(false);
-        toast.success(`XML exported: ${count} entries`);
+        toast.success(t("toast.xmlExported", { count }));
       } finally {
         unlisten();
       }
     } catch (e: any) {
-      toast.error(`Failed to export XML: ${e}`);
+      toast.error(`${t("menu.exportFailed")}: ${e}`);
     } finally {
       setLoading(false);
       setLoadProgress(null);
@@ -280,7 +280,7 @@ export function MenuBar() {
 
   const importXmlFromPath = useCallback(async (path: string) => {
     if (!espPath) {
-      toast.error("Load an ESP before importing XML.");
+      toast.error(t("menu.espBeforeImport"));
       return;
     }
 
@@ -308,7 +308,7 @@ export function MenuBar() {
         unlisten();
       }
     } catch (e: any) {
-      toast.error(`Failed to import XML: ${e}`);
+      toast.error(`${t("menu.importFailed")}: ${e}`);
     } finally {
       setLoading(false);
       setLoadProgress(null);
@@ -357,7 +357,7 @@ export function MenuBar() {
       return;
     }
 
-    toast.error("Unsupported file type. Drop an ESP/ESM, SST, XML, BSA/BA2, PEX, or FUZ file.");
+    toast.error(t("menu.dragDropUnsupported"));
   }, [importXmlFromPath, loadEspFromPath, loadSstFromPath, setShowBsaBrowser, setShowFuzPanel, setShowPexPanel, t]);
 
   useEffect(() => {
@@ -435,11 +435,9 @@ export function MenuBar() {
         base_name: baseName,
       });
       setIsDirty(false);
-      toast.success(
-        `Strings saved: ${result.strings_count} + ${result.dlstrings_count} + ${result.ilstrings_count} entries (${result.translated_count} translated)`
-      );
+      toast.success(t("menu.stringsSaved", { strings: result.strings_count, dlstrings: result.dlstrings_count, ilstrings: result.ilstrings_count, translated: result.translated_count }));
     } catch (e: any) {
-      toast.error(`Failed to save Strings: ${e}`);
+      toast.error(`${t("menu.saveStringsFailed")}: ${e}`);
     } finally {
       setLoading(false);
     }
@@ -498,7 +496,7 @@ export function MenuBar() {
             onClick={async () => {
               const selectedItem = useAppStore.getState().selectedItem;
               if (!selectedItem?.translation) {
-                toast.error("No translation to convert");
+                toast.error(t("menu.noTranslationToConvert"));
                 return;
               }
               try {
@@ -507,7 +505,7 @@ export function MenuBar() {
                 useAppStore.getState().updateItemTranslation(selectedItem.id, result);
                 toast.success(t("menu.tcsc_simplified"));
               } catch (e: any) {
-                toast.error(`TCSC failed: ${e}`);
+                toast.error(`${t("menu.tcscFailed")}: ${e}`);
               }
             }}
             disabled={isLoading}
@@ -530,7 +528,7 @@ export function MenuBar() {
                 useAppStore.getState().updateItemTranslation(selectedItem.id, result);
                 toast.success(t("menu.tcsc_traditional"));
               } catch (e: any) {
-                toast.error(`TCSC failed: ${e}`);
+                toast.error(`${t("menu.tcscFailed")}: ${e}`);
               }
             }}
             disabled={isLoading}
@@ -545,7 +543,7 @@ export function MenuBar() {
               const allItems = useAppStore.getState().allItems;
               const hasTranslations = allItems.some((item) => item.translation && item.translation.trim() !== "");
               if (!hasTranslations) {
-                toast.error("No translations to convert");
+                toast.error(t("menu.noTranslationsToConvert"));
                 return;
               }
               const confirmed = window.confirm(
@@ -561,7 +559,7 @@ export function MenuBar() {
                   t("menu.tcsc_batch_done", { defaultValue: `Converted ${updatedIds.length} translations` })
                 );
               } catch (e: any) {
-                toast.error(`Batch TCSC failed: ${e}`);
+                toast.error(`${t("menu.batchTcscFailed")}: ${e}`);
               }
             }}
             disabled={isLoading || !espPath}
@@ -576,7 +574,7 @@ export function MenuBar() {
               const allItems = useAppStore.getState().allItems;
               const hasTranslations = allItems.some((item) => item.translation && item.translation.trim() !== "");
               if (!hasTranslations) {
-                toast.error("No translations to convert");
+                toast.error(t("menu.noTranslationsToConvert"));
                 return;
               }
               const confirmed = window.confirm(
@@ -592,7 +590,7 @@ export function MenuBar() {
                   t("menu.tcsc_batch_done", { defaultValue: `Converted ${updatedIds.length} translations` })
                 );
               } catch (e: any) {
-                toast.error(`Batch TCSC failed: ${e}`);
+                toast.error(`${t("menu.batchTcscFailed")}: ${e}`);
               }
             }}
             disabled={isLoading || !espPath}
@@ -650,8 +648,8 @@ export function MenuBar() {
             type="button"
             onClick={() => setShowBatchPanel(!showBatchPanel)}
             className={`btn btn-ghost ${showBatchPanel ? "active" : ""}`}
-            title={showBatchPanel ? "Close Batch Panel" : "Open Batch Panel"}
-            aria-label={showBatchPanel ? "Close Batch Panel" : "Open Batch Panel"}
+            title={showBatchPanel ? t("menu.closeBatchPanel") : t("menu.openBatchPanel")}
+            aria-label={showBatchPanel ? t("menu.closeBatchPanel") : t("menu.openBatchPanel")}
             aria-pressed={showBatchPanel}
           >
             <RefreshCw size={16} />
@@ -660,8 +658,8 @@ export function MenuBar() {
             type="button"
             onClick={() => setShowBsaBrowser(!showBsaBrowser)}
             className={`btn btn-ghost ${showBsaBrowser ? "active" : ""}`}
-            title={showBsaBrowser ? "Close BSA Browser" : "Open BSA Browser"}
-            aria-label={showBsaBrowser ? "Close BSA Browser" : "Open BSA Browser"}
+            title={showBsaBrowser ? t("menu.closeBSABrowser") : t("menu.openBSABrowser")}
+            aria-label={showBsaBrowser ? t("menu.closeBSABrowser") : t("menu.openBSABrowser")}
             aria-pressed={showBsaBrowser}
           >
             <FileArchive size={16} />
@@ -670,8 +668,8 @@ export function MenuBar() {
             type="button"
             onClick={() => setShowPexPanel(!showPexPanel)}
             className={`btn btn-ghost ${showPexPanel ? "active" : ""}`}
-            title={showPexPanel ? "Close PEX Panel" : "Open PEX Panel"}
-            aria-label={showPexPanel ? "Close PEX Panel" : "Open PEX Panel"}
+            title={showPexPanel ? t("menu.closePEXPanel") : t("menu.openPEXPanel")}
+            aria-label={showPexPanel ? t("menu.closePEXPanel") : t("menu.openPEXPanel")}
             aria-pressed={showPexPanel}
           >
             <Braces size={16} />
@@ -680,8 +678,8 @@ export function MenuBar() {
             type="button"
             onClick={() => setShowFuzPanel(!showFuzPanel)}
             className={`btn btn-ghost ${showFuzPanel ? "active" : ""}`}
-            title={showFuzPanel ? "Close Voice Panel" : "Open Voice Panel"}
-            aria-label={showFuzPanel ? "Close Voice Panel" : "Open Voice Panel"}
+            title={showFuzPanel ? t("menu.closeVoicePanel") : t("menu.openVoicePanel")}
+            aria-label={showFuzPanel ? t("menu.closeVoicePanel") : t("menu.openVoicePanel")}
             aria-pressed={showFuzPanel}
           >
             <Volume2 size={16} />
@@ -690,8 +688,8 @@ export function MenuBar() {
             type="button"
             onClick={() => setShowDialogView(!showDialogView)}
             className={`btn btn-ghost ${showDialogView ? "active" : ""}`}
-            title={showDialogView ? "Close Dialog View" : "Open Dialog View"}
-            aria-label={showDialogView ? "Close Dialog View" : "Open Dialog View"}
+            title={showDialogView ? t("menu.closeDialogView") : t("menu.openDialogView")}
+            aria-label={showDialogView ? t("menu.closeDialogView") : t("menu.openDialogView")}
             aria-pressed={showDialogView}
           >
             <MessagesSquare size={16} />
@@ -700,8 +698,8 @@ export function MenuBar() {
             type="button"
             onClick={() => setShowMcmPanel(!showMcmPanel)}
             className={`btn btn-ghost ${showMcmPanel ? "active" : ""}`}
-            title={showMcmPanel ? "Close MCM Panel" : "Open MCM Panel"}
-            aria-label={showMcmPanel ? "Close MCM Panel" : "Open MCM Panel"}
+            title={showMcmPanel ? t("menu.closeMCMPanel") : t("menu.openMCMPanel")}
+            aria-label={showMcmPanel ? t("menu.closeMCMPanel") : t("menu.openMCMPanel")}
             aria-pressed={showMcmPanel}
           >
             <FileText size={16} />
@@ -710,8 +708,8 @@ export function MenuBar() {
             type="button"
             onClick={() => setShowEspCompare(!showEspCompare)}
             className={`btn btn-ghost ${showEspCompare ? "active" : ""}`}
-            title={showEspCompare ? "Close ESP Compare" : "Open ESP Compare"}
-            aria-label={showEspCompare ? "Close ESP Compare" : "Open ESP Compare"}
+            title={showEspCompare ? t("menu.closeESPCompare") : t("menu.openESPCompare")}
+            aria-label={showEspCompare ? t("menu.closeESPCompare") : t("menu.openESPCompare")}
             aria-pressed={showEspCompare}
           >
             <GitCompare size={16} />
@@ -720,8 +718,8 @@ export function MenuBar() {
             type="button"
             onClick={() => setShowDataConfigsPanel(!showDataConfigsPanel)}
             className={`btn btn-ghost ${showDataConfigsPanel ? "active" : ""}`}
-            title={showDataConfigsPanel ? "Close Data Configs" : "Open Data Configs"}
-            aria-label={showDataConfigsPanel ? "Close Data Configs" : "Open Data Configs"}
+            title={showDataConfigsPanel ? t("menu.closeDataConfigs") : t("menu.openDataConfigs")}
+            aria-label={showDataConfigsPanel ? t("menu.closeDataConfigs") : t("menu.openDataConfigs")}
             aria-pressed={showDataConfigsPanel}
           >
             <Database size={16} />
@@ -733,8 +731,8 @@ export function MenuBar() {
             value={targetLang}
             onChange={(e) => setTargetLang(e.target.value)}
             className="lang-select"
-            title="Target language"
-            aria-label="Target language"
+            title={t("menu.targetLanguage")}
+            aria-label={t("menu.targetLanguage")}
           >
             <option value="chinese">Chinese</option>
             <option value="japanese">Japanese</option>
@@ -785,20 +783,20 @@ export function MenuBar() {
           <button
             type="button"
             onClick={() => {
-              if (isDirty && !confirm("You have unsaved changes. Reset anyway?")) return;
+              if (isDirty && !confirm(t("app.resetConfirm"))) return;
               reset();
             }}
             className="btn btn-ghost"
-            title="Reset workspace"
-            aria-label="Reset workspace"
+            title={t("app.resetWorkspace")}
+            aria-label={t("app.resetWorkspace")}
           >
             <RotateCcw size={16} />
           </button>
         </div>
       </div>
-      {isParsing && <span className="menubar-status parsing">Parsing ESP...</span>}
-      {isLoading && <span className="menubar-status loading">Loading...</span>}
-      {isDirty && <span className="menubar-status dirty" title="Unsaved changes">●</span>}
+      {isParsing && <span className="menubar-status parsing">{t("app.parsing")}</span>}
+      {isLoading && <span className="menubar-status loading">{t("app.loading")}</span>}
+      {isDirty && <span className="menubar-status dirty" title={t("app.unsavedChanges")}>●</span>}
       {batchProgress && batchProgress.total_files > 0 && (
         <span className="menubar-status batch-progress" title={`${batchProgress.message}`}>
           Batch: {batchProgress.strings_translated}/{batchProgress.total_strings} ({batchProgress.current_file}/{batchProgress.total_files} files)

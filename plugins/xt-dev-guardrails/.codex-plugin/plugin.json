@@ -1,0 +1,41 @@
+{
+  "name": "xt-dev-guardrails",
+  "version": "0.1.0",
+  "description": "xTranslator project-aware development guardrails and verification helpers.",
+  "author": {
+    "name": "OpenAI Codex",
+    "email": "noreply@example.com",
+    "url": "https://openai.com"
+  },
+  "homepage": "https://openai.com",
+  "repository": "https://openai.com",
+  "license": "MIT",
+  "keywords": [
+    "xtranslator",
+    "tauri",
+    "rust",
+    "verification"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "xTranslator Dev Guardrails",
+    "shortDescription": "Project-specific verification and IPC sync guardrails for xTranslator.",
+    "longDescription": "Adds a repo-local skill for xTranslator that turns changed files into the right verification checklist and reminds agents about project-specific invariants like DTO and TypeScript mirror sync, chunked string loading, selectedId-based updates, and Windows Tauri dev startup behavior.",
+    "developerName": "OpenAI Codex",
+    "category": "Productivity",
+    "capabilities": [
+      "Read",
+      "Write",
+      "Command generation"
+    ],
+    "websiteURL": "https://openai.com",
+    "privacyPolicyURL": "https://openai.com/policies/privacy-policy/",
+    "termsOfServiceURL": "https://openai.com/policies/terms-of-use/",
+    "defaultPrompt": [
+      "Inspect my changed files and tell me which xTranslator checks I must run.",
+      "Before editing IPC, remind me which Rust and TypeScript files must stay in sync.",
+      "Generate a minimal verification plan for this xTranslator patch."
+    ],
+    "brandColor": "#6B8E23"
+  }
+}

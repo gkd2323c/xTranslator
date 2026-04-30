@@ -17,6 +17,7 @@ import type {
 import { open } from "@tauri-apps/plugin-dialog";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import toast from "react-hot-toast";
+import { useTranslation } from "react-i18next";
 import {
   FolderOpen,
   FolderSearch,
@@ -81,6 +82,7 @@ function formatDuration(ms: number): string {
 }
 
 export function BatchPanel() {
+  const { t } = useTranslation();
   const batchEntries = useAppStore((s) => s.batchEntries);
   const batchStatus = useAppStore((s) => s.batchStatus);
   const setBatchStatus = useAppStore((s) => s.setBatchStatus);
@@ -183,7 +185,7 @@ export function BatchPanel() {
     }));
     addBatchEntries(entries);
     if (entries.length > 0) {
-      toast.success(`Added ${entries.length} file(s)`);
+      toast.success(t("batch.addFileSuccess", { count: entries.length }));
     }
   };
 
@@ -197,7 +199,7 @@ export function BatchPanel() {
     try {
       const files = await listEspFiles(dir);
       if (files.length === 0) {
-        toast("No ESP/ESM files found in directory");
+        toast(t("batch.noEspFound"));
         return;
       }
       const entries: BatchEntry[] = files.map((path) => ({
@@ -206,9 +208,9 @@ export function BatchPanel() {
         game: detectGameFromPath(path),
       }));
       addBatchEntries(entries);
-      toast.success(`Found ${entries.length} file(s)`);
+      toast.success(t("batch.foundFiles", { count: entries.length }));
     } catch (e: any) {
-      toast.error(`Failed to scan directory: ${e}`);
+      toast.error(`${t("batch.scanFailed")}: ${e}`);
     }
   };
 
@@ -236,7 +238,7 @@ export function BatchPanel() {
       const status = await getBatchStatus();
       if (status) setBatchStatus(status);
     } catch (e: any) {
-      toast.error(`Failed to start batch: ${e}`);
+      toast.error(`${t("batch.batchStartFailed")}: ${e}`);
       setIsStarting(false);
     }
   };
@@ -264,7 +266,7 @@ export function BatchPanel() {
       const status = await getBatchStatus();
       if (status) setBatchStatus(status);
     } catch (e: any) {
-      toast.error(`Failed to start export: ${e}`);
+      toast.error(`${t("batch.exportStartFailed")}: ${e}`);
       setIsStarting(false);
     }
   };
@@ -272,9 +274,9 @@ export function BatchPanel() {
   const handleCancel = async () => {
     try {
       await cancelBatchJob();
-      toast("Cancelling batch job...");
+      toast(t("batch.cancelling"));
     } catch (e: any) {
-      toast.error(`Failed to cancel: ${e}`);
+      toast.error(`${t("batch.cancelFailed")}: ${e}`);
     }
   };
 
@@ -295,7 +297,7 @@ export function BatchPanel() {
       <div className="sidepanel-section">
         <h3>
           <RefreshCw size={16} />
-          Batch Processor
+          {t("batch.title")}
         </h3>
       </div>
 
@@ -303,8 +305,8 @@ export function BatchPanel() {
       {view === "empty" && (
         <div className="batch-empty">
           <FileText size={40} opacity={0.2} />
-          <p>No files added</p>
-          <p className="sidepanel-hint">Add ESP/ESM files to process</p>
+          <p>{t("batch.noFilesAdded")}</p>
+          <p className="sidepanel-hint">{t("batch.addFilesHint")}</p>
           <div className="batch-empty-actions">
             <button onClick={handleAddFiles} className="btn btn-primary">
               <FolderOpen size={14} />
@@ -327,7 +329,7 @@ export function BatchPanel() {
               <button
                 onClick={clearBatchEntries}
                 className="btn btn-ghost btn-sm"
-                title="Remove all"
+                title={t("batch.removeAll")}
               >
                 <Trash2 size={12} />
               </button>
@@ -345,7 +347,7 @@ export function BatchPanel() {
                 <button
                   onClick={() => removeBatchEntry(idx)}
                   className="btn btn-ghost btn-sm"
-                  title="Remove"
+                  title={t("batch.remove")}
                 >
                   <X size={12} />
                 </button>
@@ -366,14 +368,14 @@ export function BatchPanel() {
 
           <div className="batch-config-toggle" onClick={() => setShowConfig(!showConfig)}>
             <Settings size={12} />
-            <span>Settings</span>
+            <span>{t("batch.settings")}</span>
             {showConfig ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
           </div>
 
           {showConfig && (
             <div className="batch-config">
               <label className="batch-config-row">
-                <span>Provider</span>
+                <span>{t("batch.provider")}</span>
                 <select
                   value={provider}
                   onChange={(e) => setProvider(e.target.value)}
@@ -384,7 +386,7 @@ export function BatchPanel() {
                 </select>
               </label>
               <label className="batch-config-row">
-                <span>Skip translated</span>
+                <span>{t("batch.skipTranslated")}</span>
                 <input
                   type="checkbox"
                   checked={skipTranslated}
@@ -401,7 +403,7 @@ export function BatchPanel() {
               className="btn btn-primary"
             >
               <Play size={14} />
-              {isStarting ? "Starting..." : "Translate All"}
+              {isStarting ? t("batch.starting") : t("batch.translateAll")}
             </button>
             <button
               onClick={handleStartExport}
@@ -422,7 +424,7 @@ export function BatchPanel() {
           <div className="batch-progress-overall">
             <div className="batch-progress-header">
               <span className="batch-progress-label">
-                {status.job_type === "export" ? "Exporting..." : "Translating..."}
+                {status.job_type === "export" ? t("batch.exporting") : t("batch.translating")}
               </span>
               <span className="batch-progress-pct">
                 {status.total_strings > 0
@@ -459,7 +461,7 @@ export function BatchPanel() {
           {progress && (
             <div className="batch-current-file">
               <div className="batch-current-file-header">
-                <span className="batch-current-file-label">Current file</span>
+                <span className="batch-current-file-label">{t("batch.currentFile")}</span>
                 <span className="batch-current-file-stage">{progress.stage}</span>
               </div>
               <div className="batch-current-file-name" title={progress.file_path}>
@@ -490,7 +492,7 @@ export function BatchPanel() {
           {/* Completed files */}
           {completedFiles.length > 0 && (
             <div className="batch-completed-files">
-              <div className="batch-section-label">Completed</div>
+              <div className="batch-section-label">{t("batch.completed")}</div>
               {completedFiles.map((cf, idx) => (
                 <div key={idx} className="batch-file-row batch-file-done">
                   <div className="batch-file-info">
@@ -498,7 +500,7 @@ export function BatchPanel() {
                       {cf.file_path.split(/[\\/]/).pop()}
                     </span>
                     <span className="batch-file-meta">
-                      {cf.translated} translated · {formatDuration(cf.duration_ms)}
+                      {cf.translated} {t("batch.translatedCount")} · {formatDuration(cf.duration_ms)}
                     </span>
                   </div>
                   <CheckCircle size={14} className="batch-icon-success" />
@@ -546,25 +548,25 @@ export function BatchPanel() {
                 <span className="batch-result-stat-value">
                   {result?.success ?? status?.completed_files ?? 0}
                 </span>
-                <span className="batch-result-stat-label">Files OK</span>
+                <span className="batch-result-stat-label">{t("batch.filesOk")}</span>
               </div>
               <div className="batch-result-stat">
                 <span className="batch-result-stat-value">
                   {result?.failed ?? status?.failed_files ?? 0}
                 </span>
-                <span className="batch-result-stat-label">Failed</span>
+                <span className="batch-result-stat-label">{t("batch.failed")}</span>
               </div>
               <div className="batch-result-stat">
                 <span className="batch-result-stat-value">
                   {result?.total_translated ?? status?.translated_strings ?? 0}
                 </span>
-                <span className="batch-result-stat-label">Translated</span>
+                <span className="batch-result-stat-label">{t("batch.translatedCount")}</span>
               </div>
               <div className="batch-result-stat">
                 <span className="batch-result-stat-value">
                   {formatDuration(result?.duration_ms ?? status?.elapsed_ms ?? 0)}
                 </span>
-                <span className="batch-result-stat-label">Duration</span>
+                <span className="batch-result-stat-label">{t("batch.duration")}</span>
               </div>
             </div>
 
@@ -576,7 +578,7 @@ export function BatchPanel() {
                   onClick={() => setShowErrorList(!showErrorList)}
                 >
                   <AlertCircle size={12} />
-                  <span>{(status?.errors?.length ?? 0) + (result?.errors?.length ?? 0)} error(s)</span>
+                  <span>{(status?.errors?.length ?? 0) + (result?.errors?.length ?? 0)} {t("batch.errors")}</span>
                   {showErrorList ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
                 </div>
                 {showErrorList && (
