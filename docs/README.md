@@ -1,16 +1,23 @@
 # xTranslator Documentation
 
-This directory is organized by reader need: start with the project overview, then jump into architecture, format notes, compatibility analysis, or release QA.
+This directory is organized by reader need. Start with the repository entry points below, then move into architecture notes, format references, or historical plans only when you need them.
 
 ## Start Here
 
 | Document | Use it for |
 |----------|------------|
-| [`../README.md`](../README.md) | Product overview, features, quick start, build/test commands |
-| [`../PLAN.md`](../PLAN.md) | Current v1.0 status, implemented feature matrix, high-level roadmap |
+| [`../README.md`](../README.md) | Product overview, supported workflows, quick start, build/test commands |
 | [`../SPEC.md`](../SPEC.md) | Canonical goals, constraints, interfaces, invariants, and completed task list |
 | [`../ARCHITECTURE.md`](../ARCHITECTURE.md) | Data flow, module responsibilities, IPC patterns, and implementation rules |
-| [`release_qa_2026-04-28.md`](release_qa_2026-04-28.md) | Release verification checklist and real-data smoke test plan |
+| [`release_qa.md`](release_qa.md) | Reusable release verification checklist and real-data smoke test plan |
+
+## Reading Order
+
+1. Read `README.md` if you are new to the project.
+2. Read the `Project Status` section in `README.md` if you want the current state without digging through implementation detail.
+3. Read `SPEC.md` before making behavior changes.
+4. Read `ARCHITECTURE.md` before touching IPC, state flow, or parser boundaries.
+5. Use the docs below as focused references, not as a second source of truth.
 
 ## Current Planning And Roadmap
 
@@ -49,6 +56,10 @@ Completed implementation plans and one-off daily plans live in [`archive/`](arch
 | [`archive/phase1_5_execution_plan.md`](archive/phase1_5_execution_plan.md) | Tauri UI foundation plan |
 | [`archive/bsa_implementation_plan.md`](archive/bsa_implementation_plan.md) | Completed BSA support implementation plan |
 | [`archive/bsa_findings.md`](archive/bsa_findings.md) | BSA browser implementation findings, superseded by `bsa_format.md` |
+| [`archive/api_compat_plan.md`](archive/api_compat_plan.md) | Earlier API feature parity plan, now superseded by current implementation docs |
+| [`archive/p3_plan.md`](archive/p3_plan.md) | Earlier phase-based UX/output plan kept for historical context |
+| [`archive/next_actions_v1.1.md`](archive/next_actions_v1.1.md) | Earlier v1.1 action list, partly completed and no longer the active roadmap |
+| [`archive/release_qa_2026-04-28.md`](archive/release_qa_2026-04-28.md) | Dated release checklist snapshot retained as a historical verification record |
 | [`archive/today_plan_2026-04-27.md`](archive/today_plan_2026-04-27.md) | One-day cleanup / auto-backup / undo-redo plan |
 
 ## Maintenance Rules
@@ -56,5 +67,5 @@ Completed implementation plans and one-off daily plans live in [`archive/`](arch
 - Keep `SPEC.md` as the canonical source for goals, interfaces, invariants, and task completion.
 - Keep `README.md` concise and user-facing; detailed implementation notes belong here or in `ARCHITECTURE.md`.
 - Move completed execution plans to `docs/archive/` instead of leaving them in the active docs list.
-- When support status changes, update `PLAN.md`, `README.md`, `SPEC.md`, `feature_comparison.md`, and this index together.
+- When support status changes, update `README.md`, `SPEC.md`, `feature_comparison.md`, and this index together.
 - Keep the original Delphi project under `legacy/original-delphi/`; keep `Data/` at the repository root because the rewrite uses it at runtime/tests.

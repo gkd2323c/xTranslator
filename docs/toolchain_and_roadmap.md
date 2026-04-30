@@ -45,8 +45,8 @@ xtranslator-tauri (bin)
 | ~~TCSC IPC+UI~~ | ✅ `tcsc_convert` IPC 命令 + MenuBar 按钮 + EditorPanel 按钮 + 批量转换 | ✅ 完成 |
 | ~~HTTP proxy 接入~~ | ✅ `build_proxy()`/`build_client()` 已接入 provider + SettingsDialog proxy 设置 UI | ✅ 完成 |
 | ~~MCM 翻译~~ | ✅ MCM parser (UTF-16LE/UTF-8/ANSI) + types + IPC命令 + McmPanel UI（加载/保存/编辑/过滤） | ✅ 完成 |
-| ~~ESPCompare~~ | ✅ 两个 ESP 文件对比建字符串对（identical/added/removed/modified 四类） | ✅ 完成 |
-| ~~TCSC 繁简转换~~ | ✅ OpenCC 主字典(3960对)+Delphi 字典回退(2552对)，编译时嵌入 | ✅ 完成（核心库，IPC+UI 待集成） |
+| ~~ESPCompare~~ | ✅ compare-only extractor，轻量 compare cache，master 归一化 FormID + field occurrence 匹配 | ✅ 完成 |
+| ~~TCSC 繁简转换~~ | ✅ OpenCC 主字典(3960对)+Delphi 字典回退(2552对)，编译时嵌入 | ✅ 完成（核心库 + IPC + MenuBar/EditorPanel/批量入口） |
 | ~~API 配置解析~~ | ✅ 解析 Delphi `ApiTranslator.txt`，语言代码映射，provider 元数据 IPC | ✅ 完成 |
 | ~~配置持久化~~ | ✅ `AppConfig` JSON 持久化（theme/language/API key/proxy），启动自动加载 | ✅ 完成 |
 | ~~CRLF 保护~~ | ✅ 翻译 API `<L_F>` 标签保护/恢复，两个 provider 均已集成 | ✅ 完成 |

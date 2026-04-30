@@ -1,8 +1,8 @@
 # xTranslator 功能对比：Delphi 原版 vs Rust 重写
 
-> **更新日期**：2026-04-29
+> **更新日期**：2026-04-30
 > **原版版本**：xTranslator 1.6.0（Delphi 12.1 CE，~6.7 万行代码，10+ 年迭代）
-> **重写版本**：v1.0 — 全部 33 项 SPEC 任务完成（xt-core 153 个单元测试通过，0 警告）
+> **重写版本**：v1.0+ — SPEC 当前记录 41 项已完成任务（xt-core 181 个单元测试通过，0 警告）
 
 ---
 
@@ -45,7 +45,7 @@
 | **record_defs 加载** | ✅ 完整标记 | ✅ */?/-proc 标记+GameId | ~95% | parse_record_defs 支持 */?/-proc，load_game_record_defs |
 | **Codepage 编码** | ✅ 完整系统 | ✅ 932/936/949/950/1250-1257 | ~90% | CodepageTable 解析 codepage.txt，自动推断语言 |
 | **EDID 提取** | ✅ | ✅ Option<String> | 100% | 按 FormID 后备 |
-| **VMAD 脚本字段** | ✅ 脚本属性字符串提取 | ❌ | 0% | 需要 Skyrim Script Extender 知识 |
+| **VMAD 脚本字段** | ✅ 脚本属性字符串提取 | ✅ 提取 + 写回定位 | ~70% | 解析器已提取 VMAD 脚本属性字符串，使用负偏移 `str_id` + `edid_hash` 定位；更完整的脚本语义编辑仍未做 |
 | **XXXX 超大字段** | ✅ 4字节扩展大小 | ✅ | 100% | 已处理 next_field_size 逻辑 |
 | **XML 导入** | ✅ | ✅ 解析+匹配+更新 | ~95% | 共享 matcher：exact / EDID / normalized / vocab，歧义不自动应用 |
 | **XML 导出** | ✅ | ✅ 写入+实体转义 | ~95% | `write_xml_export` Delphi 兼容格式，只导出有翻译的条目 |
@@ -78,9 +78,9 @@
 
 | 功能 | 原版 | Rust 重写 | 覆盖度 | 说明 |
 |------|------|----------|--------|------|
-| **ESPCompare** | ✅ 两 ESP 建立字符串对 | ✅ StringKey 三元组匹配，EspComparePanel UI，含四标签页+文本过滤 | ~80% | 后端 `esp/compare.rs` 引擎 + Tauri 命令；前端 `EspComparePanel` 含加载/重比/标签页/过滤 |
+| **ESPCompare** | ✅ 两 ESP 建立字符串对 | ✅ Compare-only extractor + FormID/字段序号匹配，EspComparePanel UI | ~90% | 后端按原版思路只提取对比所需字符串字段，使用 master 归一化 FormID + field occurrence 匹配，并保留轻量 compare cache；前端含四标签页+文本过滤 |
 | **Strings Compare** | ✅ .Strings 文件对比 | ✅ 源/译文哈希比较+标记 | ~70% | `compare_source_dest` IPC，标记"源≠译"或"源=译"为 incomplete |
-| **MCM Compare** | ✅ | ❌ | 0% | - |
+| **MCM Compare** | ✅ | ✅ reference file compare + overwrite policy | ~75% | `mcm_compare` IPC + `McmPanel` compare dialog，支持 matched/unmatched 统计和覆盖策略 |
 | **别名检查** | ✅ 源/翻译 Alias 完整性 | ✅ Alias 标签提取+不匹配提示 | ~80% | `check_aliases` IPC，EditorPanel 内提示 alias 不匹配 |
 | **中文繁简转换** | ✅ | ✅ IPC + MenuBar + EditorPanel + 批量 | ~95% | `tcsc.rs` 双向转换，单条+批量转换均已集成 |
 
@@ -90,7 +90,7 @@
 
 | 功能 | 原版 | Rust 重写 | 覆盖度 | 说明 |
 |------|------|----------|--------|------|
-| **ESM 缓存** | ✅ SQLite 缓存加速重载 | ⚠️ ESP 解析结果缓存已实现 | ~40% | Rust 已有 SHA-256+bincode 解析缓存；Delphi 风格 SQLite ESM 缓存仍未实现 |
+| **ESM 缓存** | ✅ SQLite 缓存加速重载 | ⚠️ ESP/Compare 轻量缓存已实现 | ~50% | Rust 已有 SHA-256+bincode ESP 解析缓存，以及 ESPCompare 轻量 compare cache；Delphi 风格 SQLite ESM 缓存仍未实现 |
 | **自动备份** | ✅ 定时字典备份 | ✅ 5-min SST snapshots | ~80% | SST 快照，保留 10 份，静默失败 |
 | **配置系统** | ✅ res.ini+注册表 | ✅ JSON 配置持久化 + Proxy UI | ~80% | `AppConfig` JSON 持久化（theme/language/API key/proxy），`load_config`/`save_config` IPC 命令，启动时自动加载；HTTP proxy 后端已接入 `build_client()`，前端 Proxy 设置对话框待实现 |
 | **vocabulary.txt** | ✅ 词汇列表 | ✅ 解析+加载+启发式搜索增强 | ~80% | `vocabulary.rs` 解析 STRINGS=Name 条目，加载 source+target Strings 文件，按 str_id 匹配，合并到启发式搜索候选集 |
@@ -159,7 +159,7 @@
 | ~~PEX 脚本解析~~ | ✅ PEX parser + string extraction + PexPanel + write-back (roundtrip tested) | Done |
 | ~~FUZ 音频映射~~ | ✅ FuzFile parse + scan + FuzPanel | Done |
 | ~~MCM 翻译~~ | ✅ MCM parser (UTF-16LE/UTF-8/ANSI) + types + IPC命令 + McmPanel UI（加载/保存/编辑/过滤） | Done |
-| ~~ESPCompare~~ | ✅ `esp/compare.rs` 引擎 + Tauri 命令 + EspComparePanel UI（identical/added/removed/modified 四类，含标签页+过滤） | ✅ 完成 |
+| ~~ESPCompare~~ | ✅ compare-only extractor + 轻量缓存 + master 归一化 FormID 匹配 + EspComparePanel UI | ✅ 完成 |
 | ~~API 配置解析~~ | ✅ `translation_api/config.rs` — 解析 Delphi `ApiTranslator.txt`，语言代码映射，provider 元数据 IPC（`get_api_config`） | Done |
 | ESM 缓存 | SQLite 缓存加速重载 | 3-5 天 |
 

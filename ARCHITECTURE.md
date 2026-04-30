@@ -165,7 +165,7 @@ Format: `CachePayload { version: u32, strings: Vec<SkyString>, compressed_record
 | Module | Responsibility |
 |--------|----------------|
 | `esp::parser` | ESP/ESM binary parser: record headers, GRUP nesting, compressed record decompression (zlib), subrecord extraction, codepage-aware string decoding |
-| `esp::compare` | ESP comparison engine: (str_id, rec, field) triple matching, identical/modified/added/removed classification |
+| `esp::compare` | ESP comparison engine: compare-only extraction, duplicate-field occurrence tracking, master-normalized FormID matching, lightweight compare cache, identical/modified/added/removed classification |
 | `strings` | Bethesda `.STRINGS` (null-terminated), `.DLSTRINGS`/`.ILSTRINGS` (4-byte length prefix) read/write. Codepage fallback table (932/936/949/950/1250-1257) |
 | `bsa` | BSA v0x68/v0x69 archive parser and file extraction. SSE uses LZ4, Skyrim uses zlib. Supports `BSAhash64` lookup, `list_all_files`, `extract_file` |
 | `ba2` | BA2 (Bethesda Archive 2) parser for Fallout 4/Starfield. GNRL type support, file listing and extraction |
@@ -265,7 +265,7 @@ Delphi xTranslator compatible:
 # Full backend build
 cargo build -p xtranslator-tauri
 
-# Core library unit tests (153 tests)
+# Core library unit tests (181 tests)
 cargo test -p xt-core --lib
 
 # End-to-end tests (requires Skyrim SE at D:\SteamLibrary\...)

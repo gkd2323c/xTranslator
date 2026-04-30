@@ -27,6 +27,7 @@ A modern Rust-based translator for Bethesda game mods (Skyrim, Skyrim SE, Fallou
 
 ### Advanced Features
 - **GMST:DATA Filtering**: Automatic detection of translatable vs numeric GMST records
+- **ESP Compare**: Lightweight compare-only extractor with normalized FormID + field-occurrence matching
 - **Record Type Filtering**: Filter strings by record type (INFO, QUST, etc.)
 - **Status Filtering**: Filter by translation status (translated/incomplete/locked)
 - **Virtual Rendering**: Efficient handling of large string lists (76K+ items)
@@ -57,15 +58,20 @@ xTranslator/
 └── legacy/original-delphi/ # Original Delphi project kept as reference
 ```
 
+## Project Status
+
+The rewrite is feature-complete for the main desktop translation workflow. `SPEC.md` currently tracks 41 completed tasks covering parsing, editing, compare tools, archive support, translation APIs, config persistence, and language tooling.
+
+The remaining work is mostly parity polish and deeper validation against the Delphi original: direct ESP editing, Delphi-style SQLite cache parity, richer compare workflows, and more real-data cross-checking.
+
 ## Documentation
 
 Start with [`docs/README.md`](docs/README.md) for the organized documentation map. The most-used project references are:
 
-- [`PLAN.md`](PLAN.md) — current v1.0 status and roadmap
 - [`SPEC.md`](SPEC.md) — canonical goals, constraints, interfaces, invariants, and tasks
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) — implementation architecture and IPC/data-flow notes
 - [`docs/feature_comparison.md`](docs/feature_comparison.md) — Delphi parity and remaining gaps
-- [`docs/release_qa_2026-04-28.md`](docs/release_qa_2026-04-28.md) — release QA checklist
+- [`docs/release_qa.md`](docs/release_qa.md) — reusable release QA checklist
 
 ## Build & Test
 
