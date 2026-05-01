@@ -517,6 +517,7 @@ export interface AppConfigDto {
   proxy_port?: number;
   proxy_username?: string;
   proxy_password?: string;
+  esp_mode?: boolean;
 }
 
 // ── API Config ──────────────────────────────────────────────────────
@@ -669,4 +670,89 @@ export interface DataConfigsDto {
 
 export async function loadDataConfigs(game: string): Promise<DataConfigsDto> {
   return invoke("load_data_configs", { game });
+}
+
+// ── ESP Write-back Types ─────────────────────────────────────────────
+
+export interface SaveEspRequest {
+  path: string;
+  create_backup: boolean;
+}
+
+export interface SaveEspResponse {
+  bytes_written: number;
+  records_modified: number;
+}
+
+export interface FinalizeEspRequest {
+  esp_path: string;
+  strings_dir: string;
+  base_name: string;
+  language: string;
+  create_backup: boolean;
+}
+
+export interface FinalizeEspResponse {
+  esp_path: string;
+  strings_files: string[];
+  records_modified: number;
+}
+
+export interface DelocalizeEspRequest {
+  esp_path: string;
+  strings_dir: string;
+  base_name: string;
+  language: string;
+  create_backup: boolean;
+}
+
+export interface DelocalizeEspResponse {
+  new_string_count: number;
+  strings_files_paths: string[];
+}
+
+export async function saveEsp(request: SaveEspRequest): Promise<SaveEspResponse> {
+  return invoke("save_esp", { request });
+}
+
+export async function finalizeEsp(request: FinalizeEspRequest): Promise<FinalizeEspResponse> {
+  return invoke("finalize_esp", { request });
+}
+
+export async function delocalizeEsp(request: DelocalizeEspRequest): Promise<DelocalizeEspResponse> {
+  return invoke("delocalize_esp", { request });
+}
+
+export interface RecoveryInfo {
+  esp_name: string;
+  pending_count: number;
+  cache_file_path: string;
+}
+
+export interface CheckPendingCacheResponse {
+  recovery: RecoveryInfo | null;
+}
+
+export interface ApplyCacheResponse {
+  applied_count: number;
+}
+
+export async function checkPendingCache(espHash: string): Promise<CheckPendingCacheResponse> {
+  return invoke("check_pending_cache", { espHash });
+}
+
+export async function applyTranslationCache(espHash: string): Promise<ApplyCacheResponse> {
+  return invoke("apply_translation_cache", { espHash });
+}
+
+export async function discardTranslationCache(espHash: string): Promise<void> {
+  return invoke("discard_translation_cache", { espHash });
+}
+
+export async function startStringBatchTranslate(ids: number[], concurrency: number): Promise<string> {
+  return invoke("start_string_batch_translate", { ids, concurrency });
+}
+
+export async function cancelStringBatchTranslate(): Promise<void> {
+  return invoke("cancel_string_batch_translate");
 }

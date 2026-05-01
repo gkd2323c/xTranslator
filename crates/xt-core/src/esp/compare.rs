@@ -905,6 +905,7 @@ mod tests {
             rec_refs: Vec::new(),
             parent_form_id: 0,
             tag_hash: 0,
+            field_ref: None,
         }
     }
 

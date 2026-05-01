@@ -14,6 +14,7 @@ export function SidePanel() {
   const setRecordFilter = useAppStore((s) => s.setRecordFilter);
   const vmadFilter = useAppStore((s) => s.vmadFilter);
   const setVmadFilter = useAppStore((s) => s.setVmadFilter);
+  const espMode = useAppStore((s) => s.espMode);
 
   const { translated, incomplete, locked, vmadCount } = useMemo(() => {
     let t = 0, inc = 0, vmad = 0;
@@ -95,6 +96,12 @@ export function SidePanel() {
         <div className="sidepanel-row">
           <span className="sidepanel-label">{t("sidebar.parseTime")}</span>
           <span className="sidepanel-value">{espStats.parse_time_ms}ms</span>
+        </div>
+        <div className="sidepanel-row">
+          <span className="sidepanel-label">{t("sidebar.saveMode", { defaultValue: "Save Mode" })}</span>
+          <span className="sidepanel-value" style={{ color: espMode ? "#4caf50" : undefined }}>
+            {espMode ? t("sidebar.espMode", { defaultValue: "ESP mode" }) : t("sidebar.stringsMode", { defaultValue: "Strings mode" })}
+          </span>
         </div>
       </div>
 

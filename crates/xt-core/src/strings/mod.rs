@@ -41,6 +41,19 @@ impl StringsFile {
         }
     }
 
+    /// Create a StringsFile from a vector of (id, text) entries.
+    pub fn from_entries(entries: Vec<(u32, String)>, codepage: CodepageConfig) -> Self {
+        let mut strings = HashMap::new();
+        for (id, text) in entries {
+            strings.insert(id, text);
+        }
+        Self {
+            strings,
+            format: StringsFormat::NullTerminated,
+            codepage,
+        }
+    }
+
     pub fn load<P: AsRef<Path>>(path: P) -> std::io::Result<Self> {
         let path_ref = path.as_ref();
         let format = Self::detect_format(path_ref);

@@ -1,4 +1,7 @@
 //! 端到端验证测试 - 直接测试 xt-core 功能，不经过 Tauri IPC
+//!
+//! 这些测试需要解析 238MB Skyrim.esm，在 debug 模式下极慢（>120s）。
+//! 使用 `cargo test --release -p xt-core --test e2e_real_data` 运行。
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -26,6 +29,7 @@ impl TestAppState {
 }
 
 #[test]
+#[cfg_attr(debug_assertions, ignore = "requires --release")]
 fn e2e_load_esp_skyrim() {
     let state = Arc::new(TestAppState::new());
 
@@ -111,6 +115,7 @@ fn e2e_load_esp_skyrim() {
 }
 
 #[test]
+#[cfg_attr(debug_assertions, ignore = "requires --release")]
 fn e2e_query_filter_sort() {
     let state = Arc::new(TestAppState::new());
 
@@ -164,6 +169,7 @@ fn e2e_query_filter_sort() {
 }
 
 #[test]
+#[cfg_attr(debug_assertions, ignore = "requires --release")]
 fn e2e_update_and_save_sst() {
     let state = Arc::new(TestAppState::new());
 
@@ -227,6 +233,7 @@ fn e2e_update_and_save_sst() {
 }
 
 #[test]
+#[cfg_attr(debug_assertions, ignore = "requires --release")]
 fn e2e_load_sst_and_match() {
     println!("\n=== E2E Test: Load SST & Match ===");
 
@@ -296,6 +303,7 @@ fn e2e_load_sst_and_match() {
 }
 
 #[test]
+#[cfg_attr(debug_assertions, ignore = "requires --release")]
 fn e2e_performance_benchmark() {
     println!("\n=== E2E Test: Performance Benchmark ===");
 
@@ -365,6 +373,7 @@ fn e2e_performance_benchmark() {
 }
 
 #[test]
+#[cfg_attr(debug_assertions, ignore = "requires --release")]
 fn e2e_ipc_payload_size() {
     // 1. 加载 ESP（复用 e2e_load_esp_skyrim 的逻辑）
     let data_dir = std::path::Path::new("Data");
@@ -447,6 +456,7 @@ fn e2e_ipc_payload_size() {
 }
 
 #[test]
+#[cfg_attr(debug_assertions, ignore = "requires --release")]
 fn e2e_esp_compare_self_benchmark() {
     use xt_core::esp::compare::compare_esp_files;
     use xt_core::types::game_id::GameId;

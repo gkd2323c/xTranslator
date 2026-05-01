@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAppStore } from "../stores/appStore";
-import { loadEsp, loadSst, saveSst, exportXml, importXml, saveStrings, tcscConvert, tcscBatchConvert, updateTranslation, loadVocabulary, compareSourceDest, loadDataConfigs, type BatchProgress } from "../api/strings";
+import { loadEsp, loadSst, saveSst, exportXml, importXml, saveStrings, saveEsp, tcscConvert, tcscBatchConvert, updateTranslation, loadVocabulary, compareSourceDest, loadDataConfigs, delocalizeEsp, type BatchProgress } from "../api/strings";
 import type { LoadSstResponse, XmlImportResponse } from "../api/strings";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { listen } from "@tauri-apps/api/event";
@@ -95,6 +95,7 @@ export function MenuBar() {
   const showDataConfigsPanel = useAppStore((s) => s.showDataConfigsPanel);
   const setShowDataConfigsPanel = useAppStore((s) => s.setShowDataConfigsPanel);
   const setDataConfigs = useAppStore((s) => s.setDataConfigs);
+  const espMode = useAppStore((s) => s.espMode);
   const batchEntries = useAppStore((s) => s.batchEntries);
   const [batchProgress, setBatchProgress] = useState<BatchProgress | null>(null);
 
@@ -417,6 +418,25 @@ export function MenuBar() {
   }, []);
 
   const handleSaveStrings = async () => {
+    if (espMode && espPath) {
+      // ESP mode: save directly to the ESP file
+      setLoading(true);
+      try {
+        const result = await saveEsp({
+          path: espPath,
+          create_backup: true,
+        });
+        setIsDirty(false);
+        toast.success(t("menu.espSaved", { defaultValue: "ESP saved: {{count}} records modified", count: result.records_modified }));
+      } catch (e: any) {
+        toast.error(`${t("menu.saveEspFailed", { defaultValue: "Failed to save ESP" })}: ${e}`);
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
+    // Strings mode: save to external .STRINGS files
     const outputDir = await open({
       multiple: false,
       directory: true,
@@ -488,6 +508,34 @@ export function MenuBar() {
             <CheckCircle size={16} />
             <span>{t("finalize.title")}</span>
           </button>
+          {espMode && (
+            <button
+              type="button"
+              onClick={async () => {
+                if (!espPath) return;
+                try {
+                  const baseName = espPath.replace(/\\/g, "/").split("/").pop()?.replace(/\.[^.]+$/, "") ?? "";
+                  const stringsDir = espPath.replace(/\\/g, "/").split("/").slice(0, -1).join("/");
+                  const result = await delocalizeEsp({
+                    esp_path: espPath,
+                    strings_dir: stringsDir,
+                    base_name: baseName,
+                    language: language,
+                    create_backup: true,
+                  });
+                  toast.success(`Delocalized: ${result.new_string_count} strings`);
+                } catch (e: any) {
+                  toast.error(`Delocalize failed: ${e}`);
+                }
+              }}
+              disabled={isLoading || !espPath}
+              className="btn btn-ghost"
+              title={t("menu.delocalizeEsp", { defaultValue: "Delocalize ESP" })}
+            >
+              <FileCode size={16} />
+              <span>{t("menu.delocalizeEsp", { defaultValue: "Delocalize" })}</span>
+            </button>
+          )}
         </div>
 
         <div className="toolbar-group" role="group" aria-label="TCSC conversion">
@@ -797,6 +845,7 @@ export function MenuBar() {
       {isParsing && <span className="menubar-status parsing">{t("app.parsing")}</span>}
       {isLoading && <span className="menubar-status loading">{t("app.loading")}</span>}
       {isDirty && <span className="menubar-status dirty" title={t("app.unsavedChanges")}>●</span>}
+      {espMode && <span className="menubar-status esp-mode" title={t("sidebar.espMode", { defaultValue: "ESP write-back mode" })}>ESP</span>}
       {batchProgress && batchProgress.total_files > 0 && (
         <span className="menubar-status batch-progress" title={`${batchProgress.message}`}>
           Batch: {batchProgress.strings_translated}/{batchProgress.total_strings} ({batchProgress.current_file}/{batchProgress.total_files} files)

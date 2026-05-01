@@ -694,4 +694,105 @@ pub struct AppConfigDto {
     pub proxy_username: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub proxy_password: Option<String>,
+    /// ESP mode: when true, save operations write back to the ESP file directly.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub esp_mode: Option<bool>,
+}
+
+// ── ESP Write-back DTOs ──────────────────────────────────────────────
+
+/// Request for saving ESP directly (delocalized ESP write-back).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SaveEspRequest {
+    /// Path to save the ESP file.
+    pub path: String,
+    /// Whether to create a backup before writing.
+    #[serde(default = "default_true")]
+    pub create_backup: bool,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+/// Response from saving ESP.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SaveEspResponse {
+    /// Total bytes written.
+    pub bytes_written: u64,
+    /// Number of records that were modified.
+    pub records_modified: u32,
+}
+
+/// Request for finalizing ESP (apply SST → rebuild → serialize → export Strings).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct FinalizeEspRequest {
+    /// Path to save the ESP file.
+    pub esp_path: String,
+    /// Directory to export .STRINGS files.
+    pub strings_dir: String,
+    /// Base name for strings files (e.g., "Skyrim").
+    pub base_name: String,
+    /// Language (e.g., "english").
+    pub language: String,
+    /// Whether to create a backup before writing.
+    #[serde(default = "default_true")]
+    pub create_backup: bool,
+}
+
+/// Response from finalizing ESP.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct FinalizeEspResponse {
+    /// Path to the saved ESP file.
+    pub esp_path: String,
+    /// Paths to exported strings files.
+    pub strings_files: Vec<String>,
+    /// Number of records modified.
+    pub records_modified: u32,
+}
+
+/// Request for delocalizing ESP (localized → delocalized conversion).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct DelocalizeEspRequest {
+    /// Path to save the delocalized ESP file.
+    pub esp_path: String,
+    /// Directory to export .STRINGS files.
+    pub strings_dir: String,
+    /// Base name for strings files.
+    pub base_name: String,
+    /// Language.
+    pub language: String,
+    /// Whether to create a backup before writing.
+    #[serde(default = "default_true")]
+    pub create_backup: bool,
+}
+
+/// Response from delocalizing ESP.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct DelocalizeEspResponse {
+    /// Number of strings delocalized.
+    pub new_string_count: u32,
+    /// Paths to exported strings files.
+    pub strings_files_paths: Vec<String>,
+}
+
+/// Response for checking pending translation cache.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct CheckPendingCacheResponse {
+    /// null if no pending cache, or the recovery details.
+    pub recovery: Option<RecoveryInfo>,
+}
+
+/// Recovery info for pending translation cache.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RecoveryInfo {
+    pub esp_name: String,
+    pub pending_count: u32,
+    pub cache_file_path: String,
+}
+
+/// Response for applying translation cache recovery.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ApplyCacheResponse {
+    pub applied_count: u32,
 }

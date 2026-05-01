@@ -1,7 +1,7 @@
 //! Smoke test: load ESP -> edit translation -> save Strings -> verify roundtrip.
 //!
 //! Requires Skyrim SE installed at the standard path.
-//! Run: cargo test -p xt-core --test smoke_test -- --ignored
+//! Run: cargo test --release -p xt-core --test smoke_test
 
 use std::path::PathBuf;
 use xt_core::esp::parser::EspParser;
@@ -18,7 +18,7 @@ fn skyrim_data_available() -> bool {
 
 /// 1. Parse ESP -> verify string count
 #[test]
-#[ignore = "requires Skyrim SE data"]
+#[cfg_attr(debug_assertions, ignore = "requires --release")]
 fn smoke_parse_esp() {
     assert!(skyrim_data_available(), "Skyrim.esm not found");
 
@@ -40,7 +40,7 @@ fn smoke_parse_esp() {
 
 /// 2. Parse -> edit a string -> save Strings -> reload -> verify
 #[test]
-#[ignore = "requires Skyrim SE data"]
+#[cfg_attr(debug_assertions, ignore = "requires --release")]
 fn smoke_edit_save_reload() {
     assert!(skyrim_data_available(), "Skyrim.esm not found");
 
@@ -86,7 +86,7 @@ fn smoke_edit_save_reload() {
 
 /// 3. SST roundtrip: parse -> build SST -> save -> reload -> verify
 #[test]
-#[ignore = "requires Skyrim SE data"]
+#[cfg_attr(debug_assertions, ignore = "requires --release")]
 fn smoke_sst_roundtrip() {
     assert!(skyrim_data_available(), "Skyrim.esm not found");
 

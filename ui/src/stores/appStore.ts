@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import type { SkyStringDTO, LoadEspResponse, LoadSstResponse, BatchEntry, BatchStatus, DataConfigsDto } from "../api/strings";
-import { getAllStrings, getStringsChunk, getStringsCount, queryStrings, updateTranslation, batchUpdateTranslations } from "../api/strings";
+import { getAllStrings, getStringsChunk, getStringsCount, queryStrings, updateTranslation, batchUpdateTranslations, startStringBatchTranslate, cancelStringBatchTranslate, checkPendingCache, applyTranslationCache } from "../api/strings";
 import { saveConfig } from "../api/strings";
 import toast from "react-hot-toast";
 import i18n from "../i18n";
@@ -65,6 +65,9 @@ interface AppState {
   dataConfigs: DataConfigsDto | null;
   showDataConfigsPanel: boolean;
 
+  // ESP mode (direct write-back vs external .STRINGS)
+  espMode: boolean;
+
   // Filter / sort
   filter: string;
   useRegex: boolean;
@@ -94,6 +97,13 @@ interface AppState {
   showBatchPanel: boolean;
   batchEntries: BatchEntry[];
   batchStatus: BatchStatus | null;
+
+  // String-level batch translation
+  selectedIds: Set<number>;
+  batchState: "idle" | "running" | "cancelling" | "completed" | "cancelled";
+  batchProgress: { completed: number; total: number };
+  batchErrors: { strId: number; error: string }[];
+  batchConcurrency: number;
 
   // BSA Browser
   showBsaBrowser: boolean;
@@ -144,6 +154,12 @@ interface AppState {
   cycleTheme: () => void;
   reapplyTheme: () => void;
   selectNextRow: () => void;
+  toggleSelectId: (id: number) => void;
+  clearSelection: () => void;
+  startBatchTranslation: () => Promise<void>;
+  cancelBatchTranslation: () => Promise<void>;
+  setBatchConcurrency: (n: number) => void;
+  checkAndPromptRecovery: (espHash: string) => Promise<void>;
   selectPrevRow: () => void;
   loadAllStrings: () => Promise<void>;
   setShowBatchPanel: (show: boolean) => void;
@@ -156,6 +172,7 @@ interface AppState {
   setShowFinalizePanel: (show: boolean) => void;
   setDataConfigs: (configs: DataConfigsDto | null) => void;
   setShowDataConfigsPanel: (show: boolean) => void;
+  setEspMode: (espMode: boolean) => void;
   setBatchEntries: (entries: BatchEntry[]) => void;
   addBatchEntries: (entries: BatchEntry[]) => void;
   removeBatchEntry: (index: number) => void;
@@ -295,6 +312,11 @@ export const useAppStore = create<AppState>((set, get) => ({
   showBatchPanel: false,
   batchEntries: [],
   batchStatus: null,
+  selectedIds: new Set<number>(),
+  batchState: "idle" as "idle" | "running" | "cancelling" | "completed" | "cancelled",
+  batchProgress: { completed: 0, total: 0 },
+  batchErrors: [],
+  batchConcurrency: 3,
   showBsaBrowser: false,
   showPexPanel: false,
   showFuzPanel: false,
@@ -305,6 +327,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   showFinalizePanel: false,
   dataConfigs: null,
   showDataConfigsPanel: false,
+  espMode: false,
 
   setAllItems: (allItems) => {
     const state = get();
@@ -781,6 +804,11 @@ export const useAppStore = create<AppState>((set, get) => ({
     showDataConfigsPanel,
   }),
 
+  setEspMode: (espMode) => {
+    set({ espMode });
+    saveConfig({ esp_mode: espMode }).catch(() => {});
+  },
+
   setBatchEntries: (batchEntries) => set({ batchEntries }),
 
   addBatchEntries: (entries) => {
@@ -918,6 +946,67 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
     } finally {
       set({ isLoading: false });
+    }
+  },
+
+  toggleSelectId: (id) => {
+    const state = get();
+    const newSet = new Set(state.selectedIds);
+    if (newSet.has(id)) {
+      newSet.delete(id);
+    } else {
+      newSet.add(id);
+    }
+    set({ selectedIds: newSet });
+  },
+
+  clearSelection: () => set({ selectedIds: new Set() }),
+
+  setBatchConcurrency: (n) => set({ batchConcurrency: n }),
+
+  startBatchTranslation: async () => {
+    const state = get();
+    if (state.selectedIds.size === 0) return;
+
+    const ids = Array.from(state.selectedIds);
+    set({
+      batchState: "running",
+      batchProgress: { completed: 0, total: ids.length },
+      batchErrors: [],
+    });
+
+    try {
+      await startStringBatchTranslate(ids, state.batchConcurrency);
+    } catch (e: any) {
+      toast.error(e?.toString() || "Batch translation failed");
+      set({ batchState: "idle" });
+    }
+  },
+
+  cancelBatchTranslation: async () => {
+    set({ batchState: "cancelled" });
+    try {
+      await cancelStringBatchTranslate();
+    } catch (e: any) {
+      toast.error(e?.toString() || "Cancel failed");
+    }
+  },
+
+  checkAndPromptRecovery: async (espHash) => {
+    try {
+      const resp = await checkPendingCache(espHash);
+      if (resp.recovery) {
+        const confirmed = window.confirm(
+          `Found ${resp.recovery.pending_count} unapplied translations. Recover?`
+        );
+        if (confirmed) {
+          const result = await applyTranslationCache(espHash);
+          toast.success(`Recovered ${result.applied_count} translations`);
+        }
+      }
+    } catch (e: any) {
+      // Don't show error on startup check
+      console.error("Recovery check failed:", e);
     }
   },
 

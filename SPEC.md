@@ -99,7 +99,7 @@ V3: ∀ load_esp → overwrite `AppState.strings`, reset `is_dirty=false`
 V4: ∀ SST/XML match → key = `(str_id, record_sig, field_sig)` triple. No other fields participate.
 V5: ∀ XML export → only items with non-empty `translation` included
 V6: ∀ heuristic_search → candidate set = strings where `params.is_translated() == true`
-V7: ∀ save_strings → load source-language files as base, overwrite by translated entries, write target-language files. ESP itself unmodified.
+V7: ∀ save_strings → load source-language files as base, overwrite by translated entries, write target-language files. When esp_mode=true, route to save_esp instead (direct ESP write-back).
 V8: ∀ GMST:DATA → if EDID starts with 's' → keep (string ref); else skip (numeric)
 V9: ∀ StringsFile.save → entries sorted by id asc; offsets relative to data section start
 V10: ∀ codepage decode → UTF-8 primary; on failure use configured fallback; no fallback → byte-by-byte fallback
@@ -121,6 +121,10 @@ V25: ∀ TCSC conversion → OpenCC dictionary (primary, 3960 pairs) + Delphi Ch
 V26: ∀ proxy settings UI → fields map directly to `AppConfig` proxy_server/proxy_port/proxy_username/proxy_password; `save_config` persists to disk; `translate_string` reads config on each call
 V27: ∀ vocabulary loading → parse `Data/<Game>/vocabulary.txt` for STRINGS=Name entries, load source+target Strings files, match by str_id; pairs merged into heuristic search candidate set
 V28: ∀ PEX string extraction → filter parameters of procedures listed in `Data/<Game>/pexNoTransProc.txt`; only translatable strings returned
+V29: ∀ save_esp → backup original ESP before write (unless user opted out); backup filename: `<original>.backup.<timestamp>`
+V30: ∀ save_esp → compressed record output format is `[4-byte decompressedSize LE] + [zlib data]`; record header dsize = compressed output length
+V31: ∀ record rebuild → non-string fields pass through unchanged; only fields with matching SkyString entries are modified; XXXX size prefix managed via backward iteration
+V32: ∀ delocalize_esp → new string IDs are sequential starting from 1, ordered by source text; .STRINGS/.DLSTRINGS/.ILSTRINGS exported with new IDs
 
 ## §T Tasks
 
@@ -166,6 +170,10 @@ T38|x|HiDPI support (Tauri 2.x native HiDPI + decorations/dragDrop window config
 T39|x|Drag-drop extension (route BSA/BA2, PEX, FUZ file drops to correct handlers)|G7
 T40|x|Source/Dest compare (compare source hash vs translation hash, tag diff/same as incomplete)|G7
 T41|x|Alias integrity check (extract <Alias=...> tags, compare source vs translation, highlight mismatches in EditorPanel)|G7
+T42| |ESP record tree (EspField/EspRecord/EspGrup structs, full in-memory parse tree for write-back)|V29,V31
+T43| |ESP record rebuild (field buffer mutation, XXXX size prefix, zlib recompression)|V30,V31
+T44| |ESP serialization (recursive GRUP/record serialize, backup before write, roundtrip fidelity)|V29
+T45| |Localized→delocalized conversion (string ID replacement, sequential ID reassignment, .STRINGS export)|V32
 
 ## §B Bugs
 

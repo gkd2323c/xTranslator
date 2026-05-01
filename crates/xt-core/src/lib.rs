@@ -1,4 +1,5 @@
 pub mod ba2;
+pub mod batch_queue;
 pub mod bsa;
 pub mod cache;
 pub mod config;
@@ -17,6 +18,7 @@ pub mod strings;
 pub mod tcsc;
 pub mod testing;
 pub mod translation_api;
+pub mod translation_cache;
 pub mod types;
 pub mod vocabulary;
 pub mod vmad;

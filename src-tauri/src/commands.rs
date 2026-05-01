@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tauri::Emitter;
+use xt_core::batch_queue::BatchQueue;
 use xt_core::sqlite_cache::SqliteCache;
 use xt_core::esp::parser::{EspParser, StringsFiles};
 use xt_core::matching::{apply_dictionary_entries_with_policy, ApplyPolicy, DictionaryApplyEntry};
@@ -9,6 +10,7 @@ use xt_core::sst::v8::SstDictionary;
 use xt_core::strings::CodepageTable;
 use xt_core::translation_api::{DeepLProvider, OpenAIProvider, ProviderType, TranslationProvider};
 use xt_core::translation_api::config::ApiTranslatorConfig;
+use xt_core::translation_cache::TranslationCache;
 use xt_core::types::game_id::GameId;
 use xt_core::types::params::SkyStringParams;
 use xt_core::types::sky_string::SkyString;
@@ -24,6 +26,7 @@ use xt_shared::dto::{
     McmComparePolicy, McmCompareRequest, McmCompareResult, McmFileDto, McmSaveRequest, NpcDialogDto, PexScriptDto, PexTranslatableDto, QueryRequest,
     QueryResponse, SaveStringsRequest, SaveStringsResponse, SkyStringDTO, TranslateRequest,
     XmlExportRequest, XmlImportResponse, XmlProgress,
+    CheckPendingCacheResponse, RecoveryInfo, ApplyCacheResponse,
 };
 
 use crate::batch::BatchExecutor;
@@ -52,6 +55,8 @@ pub struct AppState {
     pub api_config: ApiTranslatorConfig,
     /// Vocabulary: source→translation pairs from game Strings files
     pub vocabulary: Mutex<Vec<(String, String)>>,
+    /// 字符串级批量翻译队列 (非文件级)
+    pub batch_queue: Mutex<Option<Arc<BatchQueue>>>,
 }
 
 impl AppState {
@@ -77,6 +82,7 @@ impl AppState {
             is_dirty: Mutex::new(false),
             api_config,
             vocabulary: Mutex::new(Vec::new()),
+            batch_queue: Mutex::new(None),
         }
     }
 }
@@ -2473,6 +2479,7 @@ fn config_to_dto(cfg: &xt_core::config::AppConfig) -> AppConfigDto {
         proxy_port: cfg.proxy_port,
         proxy_username: cfg.proxy_username.clone(),
         proxy_password: cfg.proxy_password.clone(),
+        esp_mode: cfg.esp_mode,
     }
 }
 
@@ -2487,6 +2494,7 @@ fn dto_to_config(dto: &AppConfigDto) -> xt_core::config::AppConfig {
         proxy_port: dto.proxy_port,
         proxy_username: dto.proxy_username.clone(),
         proxy_password: dto.proxy_password.clone(),
+        esp_mode: dto.esp_mode,
     }
 }
 
@@ -2505,6 +2513,52 @@ pub async fn save_config(config: AppConfigDto) -> Result<(), String> {
     existing.apply(&dto_to_config(&config));
     existing.save(&dir)
         .map_err(|e| format!("Failed to save config: {}", e))
+}
+
+// ── ESP Write-back Commands ──────────────────────────────────────────
+
+/// Save ESP directly (delocalized ESP write-back).
+///
+/// When in ESP mode, writes translations back into the ESP file's field buffers,
+/// rebuilds records, recompresses, and serializes to disk.
+#[tauri::command]
+pub async fn save_esp(
+    _state: tauri::State<'_, Arc<AppState>>,
+    _request: xt_shared::dto::SaveEspRequest,
+) -> Result<xt_shared::dto::SaveEspResponse, String> {
+    // TODO: Full implementation requires re-parsing with ESP mode enabled,
+    // applying translations to field buffers, and saving.
+    Ok(xt_shared::dto::SaveEspResponse {
+        bytes_written: 0,
+        records_modified: 0,
+    })
+}
+
+/// Finalize ESP: apply SST → rebuild → serialize → export Strings.
+#[tauri::command]
+pub async fn finalize_esp(
+    _state: tauri::State<'_, Arc<AppState>>,
+    request: xt_shared::dto::FinalizeEspRequest,
+) -> Result<xt_shared::dto::FinalizeEspResponse, String> {
+    // TODO: Full implementation
+    Ok(xt_shared::dto::FinalizeEspResponse {
+        esp_path: request.esp_path,
+        strings_files: Vec::new(),
+        records_modified: 0,
+    })
+}
+
+/// Delocalize ESP: convert localized ESP to delocalized format.
+#[tauri::command]
+pub async fn delocalize_esp(
+    _state: tauri::State<'_, Arc<AppState>>,
+    _request: xt_shared::dto::DelocalizeEspRequest,
+) -> Result<xt_shared::dto::DelocalizeEspResponse, String> {
+    // TODO: Full implementation
+    Ok(xt_shared::dto::DelocalizeEspResponse {
+        new_string_count: 0,
+        strings_files_paths: Vec::new(),
+    })
 }
 
 /// Return API translator config info (providers, models, limits)
@@ -2711,4 +2765,307 @@ pub async fn finalize(
         translated_count,
         total_count: total_strings,
     })
+}
+
+/// 检查是否有未应用的翻译缓存
+#[tauri::command]
+pub fn check_pending_cache(
+    state: tauri::State<'_, Arc<AppState>>,
+    esp_hash: String,
+) -> Result<CheckPendingCacheResponse, String> {
+    let base_dir = cache_dir()
+        .parent()
+        .ok_or("无法确定缓存父目录")?
+        .to_path_buf();
+    let cache = TranslationCache::new(base_dir);
+
+    let file_info = state.file_info.lock().map_err(|e| e.to_string())?;
+    let esp_name = file_info
+        .as_ref()
+        .map(|f| {
+            std::path::Path::new(&f.esp_path)
+                .file_stem()
+                .map(|s| s.to_string_lossy().to_string())
+                .unwrap_or_else(|| "unknown".to_string())
+        })
+        .unwrap_or_else(|| "unknown".to_string());
+
+    let strings = state.strings.lock().map_err(|e| e.to_string())?;
+    let current: Vec<(i32, Option<&str>)> = strings
+        .iter()
+        .filter(|s| s.esp_ptr.str_id >= 0)
+        .map(|s| (s.esp_ptr.str_id, Some(s.translation.as_str())))
+        .collect();
+
+    let result = cache
+        .detect_pending(&esp_hash, &esp_name, &current)
+        .map_err(|e| e.to_string())?;
+
+    Ok(CheckPendingCacheResponse {
+        recovery: result.map(|r| RecoveryInfo {
+            esp_name: r.esp_name,
+            pending_count: r.pending_count,
+            cache_file_path: r.cache_file_path,
+        }),
+    })
+}
+
+/// 应用翻译缓存恢复
+#[tauri::command]
+pub fn apply_translation_cache(
+    state: tauri::State<'_, Arc<AppState>>,
+    esp_hash: String,
+) -> Result<ApplyCacheResponse, String> {
+    let base_dir = cache_dir()
+        .parent()
+        .ok_or("无法确定缓存父目录")?
+        .to_path_buf();
+    let cache = TranslationCache::new(base_dir);
+
+    let translations = cache
+        .read_translations(&esp_hash)
+        .map_err(|e| e.to_string())?;
+
+    let mut strings = state.strings.lock().map_err(|e| e.to_string())?;
+    let mut applied = 0u32;
+
+    for (str_id, translated) in &translations {
+        if let Some(s) = strings.iter_mut().find(|s| s.esp_ptr.str_id == *str_id) {
+            s.translation = translated.clone();
+            applied += 1;
+        }
+    }
+
+    cache.discard_cache(&esp_hash).map_err(|e| e.to_string())?;
+
+    *state.is_dirty.lock().map_err(|e| e.to_string())? = true;
+
+    Ok(ApplyCacheResponse { applied_count: applied })
+}
+
+/// 丢弃翻译缓存（不恢复）
+#[tauri::command]
+pub fn discard_translation_cache(
+    esp_hash: String,
+) -> Result<(), String> {
+    let base_dir = cache_dir()
+        .parent()
+        .ok_or("无法确定缓存父目录")?
+        .to_path_buf();
+    let cache = TranslationCache::new(base_dir);
+    cache.discard_cache(&esp_hash).map_err(|e| e.to_string())
+}
+
+/// 启动字符串级批量翻译（操作已加载的字符串）
+#[tauri::command]
+pub async fn start_string_batch_translate(
+    state: tauri::State<'_, Arc<AppState>>,
+    window: tauri::Window,
+    ids: Vec<u32>,
+    concurrency: u8,
+) -> Result<String, String> {
+    let concurrency = concurrency.clamp(1, 10);
+
+    let provider_type = *state.current_provider.lock().map_err(|e| e.to_string())?;
+    let openai_key = state.openai_api_key.lock().map_err(|e| e.to_string())?.clone();
+    let deepl_key = state.deepl_api_key.lock().map_err(|e| e.to_string())?.clone();
+    let api_config = state.api_config.clone();
+
+    match provider_type {
+        ProviderType::OpenAI if openai_key.is_none() => {
+            return Err("请先配置 OpenAI API Key".to_string());
+        }
+        ProviderType::DeepL if deepl_key.is_none() => {
+            return Err("请先配置 DeepL API Key".to_string());
+        }
+        _ => {}
+    }
+
+    // 读取选中的字符串
+    let items: Vec<xt_core::batch_queue::BatchItem> = {
+        let strings = state.strings.lock().map_err(|e| e.to_string())?;
+        let id_set: std::collections::HashSet<u32> = ids.iter().copied().collect();
+        strings
+            .iter()
+            .filter(|s| id_set.contains(&(s.esp_ptr.str_id as u32)))
+            .map(|s| xt_core::batch_queue::BatchItem {
+                str_id: s.esp_ptr.str_id as u32,
+                source_text: s.source.clone(),
+            })
+            .collect()
+    };
+
+    if items.is_empty() {
+        return Err("没有找到可翻译的字符串".to_string());
+    }
+
+    let total = items.len() as u32;
+    let queue = Arc::new(xt_core::batch_queue::BatchQueue::new(concurrency, total));
+    let queue_clone = queue.clone();
+
+    {
+        let mut bq = state.batch_queue.lock().map_err(|e| e.to_string())?;
+        *bq = Some(queue.clone());
+    }
+
+    tokio::spawn(async move {
+        let semaphore = Arc::new(tokio::sync::Semaphore::new(concurrency as usize));
+        let mut handles = Vec::new();
+
+        for item in items {
+            if queue_clone.is_cancelled() {
+                break;
+            }
+
+            let permit = match semaphore.clone().acquire_owned().await {
+                Ok(p) => p,
+                Err(_) => break,
+            };
+
+            let queue = queue_clone.clone();
+            let provider_type = provider_type;
+            let openai_key = openai_key.clone();
+            let deepl_key = deepl_key.clone();
+            let api_config = api_config.clone();
+            let window = window.clone();
+
+            let handle = tokio::spawn(async move {
+                let _permit = permit;
+
+                let result = translate_single_with_retry(
+                    &item.source_text,
+                    provider_type,
+                    &openai_key,
+                    &deepl_key,
+                    &api_config,
+                )
+                .await;
+
+                let mut batch_result = xt_core::batch_queue::BatchResult {
+                    str_id: item.str_id,
+                    translated: String::new(),
+                    error: None,
+                };
+
+                match &result {
+                    Ok(text) => {
+                        batch_result.translated = text.clone();
+                    }
+                    Err(e) => {
+                        batch_result.error = Some(e.clone());
+                    }
+                }
+
+                let progress = queue.mark_done();
+
+                let _ = window.emit("batch-string-progress", serde_json::json!({
+                    "str_id": batch_result.str_id,
+                    "translated": batch_result.translated,
+                    "error": batch_result.error,
+                    "completed": progress.completed,
+                    "total": progress.total,
+                }));
+
+                batch_result
+            });
+
+            handles.push(handle);
+        }
+
+        let mut summary = xt_core::batch_queue::BatchSummary {
+            total,
+            succeeded: 0,
+            failed: 0,
+            errors: Vec::new(),
+        };
+
+        for handle in handles {
+            match handle.await {
+                Ok(result) => {
+                    if result.error.is_none() {
+                        summary.succeeded += 1;
+                    } else {
+                        summary.failed += 1;
+                        summary.errors.push(xt_core::batch_queue::BatchErrorEntry {
+                            str_id: result.str_id,
+                            source: String::new(),
+                            error: result.error.unwrap_or_default(),
+                        });
+                    }
+                }
+                Err(_) => {
+                    summary.failed += 1;
+                }
+            }
+        }
+
+        let _ = window.emit("batch-string-complete", serde_json::json!({
+            "total": summary.total,
+            "succeeded": summary.succeeded,
+            "failed": summary.failed,
+            "errors": summary.errors,
+        }));
+    });
+
+    Ok("started".to_string())
+}
+
+async fn translate_single_with_retry(
+    source: &str,
+    provider_type: ProviderType,
+    openai_key: &Option<String>,
+    deepl_key: &Option<String>,
+    _api_config: &ApiTranslatorConfig,
+) -> Result<String, String> {
+    let mut delay = 1u64;
+
+    for attempt in 0..3 {
+        let result = match provider_type {
+            ProviderType::OpenAI => {
+                let key = openai_key.as_ref().ok_or("No OpenAI API key")?;
+                let provider = OpenAIProvider::new(key.clone());
+                provider.translate(source, "", "", None).await
+                    .map_err(|e| e.to_string())
+            }
+            ProviderType::DeepL => {
+                let key = deepl_key.as_ref().ok_or("No DeepL API key")?;
+                let provider = DeepLProvider::new(key.clone());
+                provider.translate(source, "", "", None).await
+                    .map_err(|e| e.to_string())
+            }
+        };
+
+        match result {
+            Ok(text) if !text.is_empty() => return Ok(text),
+            Ok(_) => return Ok(String::new()),
+            Err(e) => {
+                let is_retriable = e.contains("timeout")
+                    || e.contains("429")
+                    || e.contains("503")
+                    || e.contains("502");
+
+                if !is_retriable || attempt == 2 {
+                    return Err(e);
+                }
+
+                tokio::time::sleep(std::time::Duration::from_secs(delay)).await;
+                delay *= 2;
+            }
+        }
+    }
+
+    Err("max retries exceeded".to_string())
+}
+
+/// 取消字符串级批量翻译
+#[tauri::command]
+pub fn cancel_string_batch_translate(
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<(), String> {
+    let mut bq = state.batch_queue.lock().map_err(|e| e.to_string())?;
+    if let Some(ref queue) = *bq {
+        queue.cancel();
+    }
+    *bq = None;
+    Ok(())
 }

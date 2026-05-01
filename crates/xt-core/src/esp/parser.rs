@@ -1,4 +1,5 @@
 use crate::esp::header::{FieldHeader, GenericHeader, GrupHeader, RecordHeaderData};
+use crate::esp::record_tree::{EspField, EspFile, EspGrup, EspRecord, Tes4Header};
 use crate::strings::{CodepageTable, StringsFile, StringsFormat};
 use crate::types::esp_pointer::{string_hash, EspPointer};
 use crate::types::game_id::GameId;
@@ -428,6 +429,12 @@ pub struct EspParser {
     /// Pre-built HashMap for O(1) field def lookup: (record_sig, field_sig) -> index
     def_map: HashMap<([u8; 4], [u8; 4]), usize>,
     build_search_index: bool,
+    /// Whether to build the full record tree (ESP mode).
+    esp_mode: bool,
+    /// The in-memory record tree, populated when esp_mode is true.
+    pub record_tree: Vec<EspGrup>,
+    /// TES4 header data, stored when esp_mode is true.
+    pub tes4_header: Option<Tes4Header>,
 }
 
 impl EspParser {
@@ -454,6 +461,9 @@ impl EspParser {
             progress_callback: None,
             def_map,
             build_search_index: true,
+            esp_mode: false,
+            record_tree: Vec::new(),
+            tes4_header: None,
         }
     }
 
@@ -468,6 +478,9 @@ impl EspParser {
             progress_callback: None,
             def_map,
             build_search_index: true,
+            esp_mode: false,
+            record_tree: Vec::new(),
+            tes4_header: None,
         }
     }
 
@@ -480,6 +493,30 @@ impl EspParser {
     /// Disable normalization/word indexes when callers only need raw parsed strings.
     pub fn set_build_search_index(&mut self, build_search_index: bool) {
         self.build_search_index = build_search_index;
+    }
+
+    /// Enable ESP mode — triggers full record tree build on next parse.
+    ///
+    /// When ESP mode is active, the parser retains the full in-memory record tree
+    /// alongside the extracted strings, enabling write-back to the ESP file.
+    pub fn enable_esp_mode(&mut self) {
+        self.esp_mode = true;
+    }
+
+    /// Check if ESP mode is enabled.
+    pub fn is_esp_mode(&self) -> bool {
+        self.esp_mode
+    }
+
+    /// Build an EspFile from the current state (TES4 header + record tree).
+    ///
+    /// Returns None if ESP mode was not active during parsing.
+    pub fn build_esp_file(&self) -> Option<EspFile> {
+        let tes4 = self.tes4_header.clone()?;
+        Some(EspFile {
+            tes4,
+            top_level_grups: self.record_tree.clone(),
+        })
     }
 
     /// 设置进度回调函数
@@ -523,10 +560,12 @@ impl EspParser {
     /// 解析 ESP/ESM 文件
     pub fn parse<R: Read>(&mut self, reader: &mut R) -> Result<()> {
         self.strings.clear();
+        self.record_tree.clear();
+        self.tes4_header = None;
 
         // 先读取 TES4 头记录(插件主头)。
-        let tes4_header = GenericHeader::read_from(reader)?;
-        if !tes4_header.is_tes4() {
+        let tes4_generic = GenericHeader::read_from(reader)?;
+        if !tes4_generic.is_tes4() {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 "Expected TES4 header",
@@ -534,11 +573,20 @@ impl EspParser {
         }
 
         // 读取 TES4 RecordHeaderData(16 字节)。
-        let _tes4_record_header = RecordHeaderData::read_from(reader)?;
+        let tes4_record_header = RecordHeaderData::read_from(reader)?;
 
         // 读取 TES4 字段体(注意：dsize 不包含 RecordHeaderData 本身)。
-        let mut tes4_data = vec![0u8; tes4_header.dsize as usize];
+        let mut tes4_data = vec![0u8; tes4_generic.dsize as usize];
         reader.read_exact(&mut tes4_data)?;
+
+        // Store TES4 header if in ESP mode
+        if self.esp_mode {
+            self.tes4_header = Some(Tes4Header {
+                generic: tes4_generic.clone(),
+                record_header_data: tes4_record_header.clone(),
+                field_data: tes4_data.clone(),
+            });
+        }
 
         // 直接解析 TES4 字段；RecordHeaderData 已在上方消费。
         self.parse_record_fields_direct(b"TES4", 0, &tes4_data)?;
@@ -599,7 +647,7 @@ impl EspParser {
         if header.is_grup() {
             *grup_count += 1;
             // 读取 GRUP 专用头(16 字节)。
-            let _grup_header = GrupHeader::read_from(reader)?;
+            let grup_header = GrupHeader::read_from(reader)?;
             // GRUP 结构：GenericHeader(8) + GrupHeader(16) + payload
             // 注意：GRUP 的 dsize 包含自身头部，因此 payload = dsize - 24。
             let grup_data_size = if header.dsize >= 24 {
@@ -608,13 +656,24 @@ impl EspParser {
                 0
             };
 
+            let mut grup = if self.esp_mode {
+                Some(EspGrup {
+                    header: header.clone(),
+                    grup_header: grup_header.clone(),
+                    records: Vec::new(),
+                    children: Vec::new(),
+                })
+            } else {
+                None
+            };
+
             if grup_data_size > 0 {
                 let mut grup_data = vec![0u8; grup_data_size];
                 reader.read_exact(&mut grup_data)?;
 
                 let mut cursor = Cursor::new(&grup_data);
                 while cursor.position() < grup_data.len() as u64 {
-                    match self.parse_record_debug(&mut cursor, record_count) {
+                    match self.parse_record_debug_for_tree(&mut cursor, record_count, &mut grup) {
                         Ok(()) => {}
                         Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => break,
                         Err(e) => {
@@ -628,6 +687,10 @@ impl EspParser {
                     }
                 }
             }
+
+            if let Some(grup) = grup {
+                self.record_tree.push(grup);
+            }
         } else {
             // 顶层普通记录(非 GRUP)：这里只消费字节，不在此层提取字段。
             let mut data = vec![0u8; header.dsize as usize];
@@ -637,9 +700,238 @@ impl EspParser {
         Ok(())
     }
 
-    #[allow(dead_code)]
-    fn parse_record<R: Read>(&mut self, reader: &mut R) -> Result<()> {
-        self.parse_record_debug(reader, &mut 0)
+    /// Parse a record (or nested GRUP) and optionally build the record tree.
+    ///
+    /// When `grup` is Some, parsed records are added to the GRUP's records vector.
+    /// Translatable strings are extracted and SkyString.field_ref is set.
+    fn parse_record_debug_for_tree<R: Read>(
+        &mut self,
+        reader: &mut R,
+        record_count: &mut u32,
+        parent_grup: &mut Option<EspGrup>,
+    ) -> Result<()> {
+        let header = match GenericHeader::read_from(reader) {
+            Ok(h) => h,
+            Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => return Ok(()),
+            Err(e) => return Err(e),
+        };
+
+        if header.is_grup() {
+            // Nested GRUP
+            *record_count = record_count.saturating_sub(1);
+            let grup_header = GrupHeader::read_from(reader)?;
+            let saved_parent = self.current_parent_form_id;
+            if grup_header.s_type != 0 {
+                self.current_parent_form_id = grup_header.s_type;
+            }
+
+            let grup_data_size = if header.dsize >= 24 {
+                header.dsize as usize - 24
+            } else {
+                0
+            };
+
+            let mut child_grup = if self.esp_mode {
+                Some(EspGrup {
+                    header: header.clone(),
+                    grup_header: grup_header.clone(),
+                    records: Vec::new(),
+                    children: Vec::new(),
+                })
+            } else {
+                None
+            };
+
+            if grup_data_size > 0 {
+                let mut grup_data = vec![0u8; grup_data_size];
+                reader.read_exact(&mut grup_data)?;
+
+                let mut cursor = Cursor::new(&grup_data);
+                while cursor.position() < grup_data.len() as u64 {
+                    match self.parse_record_debug_for_tree(&mut cursor, record_count, &mut child_grup) {
+                        Ok(()) => {}
+                        Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => break,
+                        Err(e) => {
+                            eprintln!("Warning: error parsing nested record: {:?}", e);
+                            break;
+                        }
+                    }
+                }
+            }
+
+            self.current_parent_form_id = saved_parent;
+
+            if let (Some(child), Some(parent)) = (child_grup, parent_grup.as_mut()) {
+                parent.children.push(child);
+            }
+            return Ok(());
+        }
+
+        // Normal record
+        *record_count += 1;
+        let record_header_data = RecordHeaderData::read_from(reader)?;
+        let data_size = header.dsize as usize;
+        let mut record_data = vec![0u8; data_size];
+        reader.read_exact(&mut record_data)?;
+
+        let is_compressed = record_header_data.is_compressed();
+        let form_id = record_header_data.form_id;
+
+        if is_compressed {
+            self.compressed_records += 1;
+        }
+
+        // Parse fields for the tree
+        let (fields, decompressed_data, raw) = if is_compressed {
+            match decompress_bethesda_record(&record_data) {
+                Ok(decompressed) => {
+                    let fields = EspField::parse_fields(&decompressed).unwrap_or_default();
+                    (fields, decompressed, false)
+                }
+                Err(e) => {
+                    eprintln!(
+                        "Warning: failed to decompress record {:?}: {}",
+                        header.name, e
+                    );
+                    // Treat as raw
+                    (Vec::new(), record_data.clone(), true)
+                }
+            }
+        } else {
+            let fields = EspField::parse_fields(&record_data).unwrap_or_default();
+            (fields, record_data.clone(), false)
+        };
+
+        // Extract editor ID from fields
+        let editor_id = fields
+            .iter()
+            .find(|f| f.header.name == *b"EDID")
+            .and_then(|f| {
+                let len = f.buffer.iter().position(|&b| b == 0).unwrap_or(f.buffer.len());
+                String::from_utf8(f.buffer[..len].to_vec()).ok()
+            });
+
+        // Extract translatable strings and set field_ref
+        if !raw {
+            self.extract_strings_from_fields(
+                &header.name,
+                form_id,
+                &fields,
+                &decompressed_data,
+                editor_id.as_deref(),
+                parent_grup.as_ref().map(|g| g.records.len()),
+            );
+        }
+
+        // Build EspRecord
+        let esp_record = EspRecord {
+            header: header.clone(),
+            record_header_data,
+            fields,
+            compressed: is_compressed,
+            raw,
+            form_id,
+            editor_id,
+            original_raw_data: if raw { record_data } else { decompressed_data },
+        };
+
+        if let Some(grup) = parent_grup.as_mut() {
+            grup.records.push(esp_record);
+        }
+
+        Ok(())
+    }
+
+    /// Extract translatable strings from parsed fields and set field_ref.
+    fn extract_strings_from_fields(
+        &mut self,
+        record_sig: &[u8; 4],
+        form_id: u32,
+        fields: &[EspField],
+        _record_data: &[u8],
+        editor_id: Option<&str>,
+        _record_index_in_grup: Option<usize>,
+    ) {
+        let mut field_index = 0u16;
+
+        for (field_vec_idx, field) in fields.iter().enumerate() {
+            if field.is_size_xxxx {
+                continue;
+            }
+
+            // Check if this is a translatable field
+            if let Some(def) = self.find_def(record_sig, &field.header.name) {
+                // GMST:DATA filter
+                if record_sig == b"GMST" && &field.header.name == b"DATA" {
+                    let is_string_gmst = editor_id.map(|e| e.starts_with('s')).unwrap_or(false);
+                    if !is_string_gmst {
+                        field_index += 1;
+                        continue;
+                    }
+                }
+
+                // Extract string ID from field buffer
+                if field.buffer.len() >= 4 {
+                    let string_id = u32::from_le_bytes([
+                        field.buffer[0],
+                        field.buffer[1],
+                        field.buffer[2],
+                        field.buffer[3],
+                    ]);
+
+                    let source_text = self
+                        .strings_files
+                        .get(def.list_index, string_id)
+                        .cloned()
+                        .unwrap_or_else(|| format!("<ID:{}>", string_id));
+
+                    if !source_text.is_empty() {
+                        let mut sk = if self.build_search_index {
+                            SkyString::new(
+                                self.strings.len() as u32,
+                                source_text,
+                                String::new(),
+                                *record_sig,
+                                field.header.name,
+                            )
+                        } else {
+                            SkyString::new_without_search_index(
+                                self.strings.len() as u32,
+                                source_text,
+                                String::new(),
+                                *record_sig,
+                                field.header.name,
+                            )
+                        };
+
+                        sk.esp_ptr = EspPointer {
+                            str_id: string_id as i32,
+                            form_id,
+                            record_sig: *record_sig,
+                            field_sig: field.header.name,
+                            index: field_index,
+                            index_max: 1,
+                            edid_hash: editor_id.map_or(0, |s| string_hash(s)),
+                        };
+
+                        sk.params.set(SkyStringParams::INCOMPLETE_TRANS, true);
+                        sk.list_index = def.list_index;
+                        sk.parent_form_id = self.current_parent_form_id;
+                        // Set field_ref for ESP mode write-back
+                        sk.field_ref = Some(field_vec_idx);
+
+                        self.strings.push(sk);
+                    }
+                }
+            }
+
+            // Handle VMAD fields
+            if &field.header.name == b"VMAD" && !field.buffer.is_empty() {
+                self.parse_vmad_strings(record_sig, form_id, &field.buffer, field_index);
+            }
+
+            field_index += 1;
+        }
     }
 
     fn parse_record_debug<R: Read>(

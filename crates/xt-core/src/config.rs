@@ -25,6 +25,9 @@ pub struct AppConfig {
     pub proxy_username: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub proxy_password: Option<String>,
+    /// ESP mode: when true, save operations write back to the ESP file directly.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub esp_mode: Option<bool>,
 }
 
 impl AppConfig {
@@ -59,6 +62,7 @@ impl AppConfig {
         if other.proxy_port.is_some() { self.proxy_port = other.proxy_port; }
         if other.proxy_username.is_some() { self.proxy_username = other.proxy_username.clone(); }
         if other.proxy_password.is_some() { self.proxy_password = other.proxy_password.clone(); }
+        if other.esp_mode.is_some() { self.esp_mode = other.esp_mode; }
     }
 }
 

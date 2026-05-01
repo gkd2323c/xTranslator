@@ -80,6 +80,10 @@ pub struct SkyString {
     /// 标签哈希值（对应 Delphi 的 iTagHash）
     /// 用于标记和分类字符串
     pub tag_hash: u32,
+
+    /// Back-reference to the field index within the owning EspRecord's fields vector.
+    /// Only populated when ESP mode (record tree) is active. Used for write-back.
+    pub field_ref: Option<usize>,
 }
 
 impl SkyString {
@@ -170,6 +174,7 @@ impl SkyString {
             tag_hash: 0,
             rec_refs: Vec::new(),
             parent_form_id: 0,
+            field_ref: None,
         }
     }
 

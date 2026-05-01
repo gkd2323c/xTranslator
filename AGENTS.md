@@ -1,36 +1,12 @@
 # AGENTS.md — xTranslator Rust Rewrite
 
-Behavioral guidelines and project-specific context for OpenCode sessions.
-
-**Tradeoff:** These guidelines bias toward caution over speed. For trivial tasks, use judgment.
-
-## 1. Think Before Coding
+## Think Before Coding
 
 - State assumptions explicitly. If uncertain, ask.
 - If multiple interpretations exist, present them — don't pick silently.
-- If a simpler approach exists, say so. Push back when warranted.
-
-## 2. Simplicity First
-
-- Minimum code that solves the problem. Nothing speculative.
-- No abstractions for single-use code.
-- No error handling for impossible scenarios.
-- If you write 200 lines and it could be 50, rewrite it.
-
-## 3. Surgical Changes
-
-- Don't "improve" adjacent code, comments, or formatting.
-- Don't refactor things that aren't broken.
-- Match existing style, even if you'd do it differently.
+- Prefer minimum code that solves the problem. No speculative abstractions.
+- Don't "improve" adjacent code. Match existing style. Surgical changes only.
 - Remove imports/variables/functions that **your** changes made unused.
-- Don't remove pre-existing dead code unless asked.
-
-## 4. Goal-Driven Execution
-
-- Transform tasks into verifiable goals (e.g., "Add validation" → "Write tests for invalid inputs, then make them pass").
-- For multi-step tasks, state a brief plan with verification checks.
-
----
 
 ## Workspace Structure
 

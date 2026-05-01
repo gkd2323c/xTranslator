@@ -162,6 +162,23 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
           </p>
         </div>
 
+        {/* ESP Mode */}
+        <div className="dialog-section">
+          <h4>{t("settings.espMode", { defaultValue: "ESP Mode" })}</h4>
+
+          <label className="dialog-label" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <input
+              type="checkbox"
+              checked={config.esp_mode ?? false}
+              onChange={(e) => setConfig((prev) => ({ ...prev, esp_mode: e.target.checked }))}
+            />
+            {t("settings.enableEspMode", { defaultValue: "Enable ESP write-back mode" })}
+          </label>
+          <p className="dialog-hint">
+            {t("settings.espModeHint", { defaultValue: "When enabled, Save writes translations directly into the ESP file (for delocalized ESPs). When disabled, saves to external .STRINGS files (default)." })}
+          </p>
+        </div>
+
         <div className="dialog-actions">
           <button onClick={onClose} className="btn btn-ghost">
             {t("common.cancel")}

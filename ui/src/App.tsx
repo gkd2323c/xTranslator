@@ -3,6 +3,7 @@ import { Toaster } from "react-hot-toast";
 import toast from "react-hot-toast";
 import { Loader } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { listen } from "@tauri-apps/api/event";
 import { setI18nLanguage } from "./i18n";
 import { useAppStore } from "./stores/appStore";
 import { MenuBar } from "./components/MenuBar";
@@ -18,6 +19,7 @@ import { FinalizePanel } from "./components/FinalizePanel";
 import { DataConfigsPanel } from "./components/DataConfigsPanel";
 import { StringTable } from "./components/StringTable";
 import { EditorPanel } from "./components/EditorPanel";
+import { BatchTranslateBar } from "./components/BatchTranslateBar";
 import { autoBackupSst, loadConfig, setOpenAiApiKey, setDeeplApiKey, setTranslationProvider } from "./api/strings";
 import "./App.css";
 
@@ -131,12 +133,47 @@ function App() {
       if (cfg.openai_api_key) setOpenAiApiKey(cfg.openai_api_key);
       if (cfg.deepl_api_key) setDeeplApiKey(cfg.deepl_api_key);
       if (cfg.current_provider) setTranslationProvider(cfg.current_provider);
+      if (cfg.esp_mode !== undefined) useAppStore.getState().setEspMode(cfg.esp_mode);
     }).catch(() => {});
   }, []);
 
   useEffect(() => {
     reapplyTheme();
   }, [theme, reapplyTheme]);
+
+  useEffect(() => {
+    const unlisten = listen<{ str_id: number; translated: string; error: string | null; completed: number; total: number }>(
+      "batch-string-progress",
+      (event) => {
+        const store = useAppStore.getState();
+        store.updateItemTranslation(event.payload.str_id, event.payload.translated || "");
+        useAppStore.setState({
+          batchProgress: {
+            completed: event.payload.completed,
+            total: event.payload.total,
+          },
+        });
+      }
+    );
+
+    const unlistenComplete = listen<{ total: number; succeeded: number; failed: number; errors: any[] }>(
+      "batch-string-complete",
+      (event) => {
+        const { succeeded, failed } = event.payload;
+        if (failed > 0) {
+          toast(`Batch complete: ${succeeded} OK, ${failed} failed`);
+        } else {
+          toast.success(`Batch complete: ${succeeded} translated`);
+        }
+        useAppStore.setState({ batchState: "completed" });
+      }
+    );
+
+    return () => {
+      unlisten.then((u) => u());
+      unlistenComplete.then((u) => u());
+    };
+  }, []);
 
   useEffect(() => {
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
@@ -187,6 +224,7 @@ function App() {
     <div className="app">
       <Toaster position="top-right" />
       <MenuBar />
+      <BatchTranslateBar />
       <div className="app-body">
         <aside className="app-sidebar" aria-label="Active side panel">
           {renderSidebarPanel(activeSidebarPanel)}
