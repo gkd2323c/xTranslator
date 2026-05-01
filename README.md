@@ -1,6 +1,6 @@
 # xTranslator - Rust Rewrite
 
-[![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue.svg)](LICENSE)
+[![License: MPL-2.0](https://img.shields.io/badge/License-MPL--2.0-brightgreen.svg)](LICENSE)
 
 [中文版](README_zh-CN.md)
 
@@ -184,4 +184,4 @@ Original xTranslator by McGuffin and contributors. This Rust rewrite preserves t
 
 ## License
 
-GPL-3.0 License. See [LICENSE](LICENSE) for details.
+MPL-2.0 License. See [LICENSE](LICENSE) for details.

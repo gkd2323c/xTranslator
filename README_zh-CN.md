@@ -1,6 +1,6 @@
 # xTranslator - Rust 重写版
 
-[![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue.svg)](LICENSE)
+[![License: MPL-2.0](https://img.shields.io/badge/License-MPL--2.0-brightgreen.svg)](LICENSE)
 
 一款现代化的基于 Rust 的 Bethesda 游戏模组翻译工具（Skyrim、Skyrim SE、Fallout 4、Starfield）。这是原 Delphi xTranslator 工具的完整重写版本，采用 Tauri 桌面 UI 和 React 前端。
 
@@ -182,4 +182,4 @@ GMST 记录包含一个 `DATA` 字段，可以是：
 
 ## 许可证
 
-GPL-3.0 许可证。详见 [LICENSE](LICENSE)。
+MPL-2.0 许可证。详见 [LICENSE](LICENSE)。
