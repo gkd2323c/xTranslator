@@ -1,12 +1,11 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useAppStore, computeTranslationProgress } from "../stores/appStore";
 import { updateTranslation, heuristicSearch, translateString, setApiKey, tcscConvert, rtlReverse, checkAliases, type HeuristicMatchDTO, type AliasCheckResult } from "../api/strings";
-import { Save, X, Type, Search, Copy, Languages, Key, AlertTriangle, Loader, ArrowRight } from "lucide-react";
+import { Save, X, Type, Search, Languages, Key, AlertTriangle, ArrowRight, Copy } from "lucide-react";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
-import { ProgressBar } from "./ProgressBar";
+import { Button, Textarea, Badge, Modal, Input, ProgressBar, EmptyState } from "./ui";
 
-// Highlight Bethesda format tags like <Alias=Name>, <Global=Var>, <Font=Face> etc.
 const TAG_REGEX = /(<\/?[A-Za-z][^>]*>)/g;
 
 function escapeHtml(s: string): string {
@@ -18,7 +17,7 @@ function highlightTags(text: string): string {
     .split(TAG_REGEX)
     .map((part) => {
       if (TAG_REGEX.test(part)) {
-        TAG_REGEX.lastIndex = 0; // reset regex state
+        TAG_REGEX.lastIndex = 0;
         return `<span class="tag-highlight">${escapeHtml(part)}</span>`;
       }
       return escapeHtml(part);
@@ -49,7 +48,6 @@ export function EditorPanel() {
   const [showApiKeyDialog, setShowApiKeyDialog] = useState(false);
   const [apiKeyInput, setApiKeyInput] = useState("");
 
-  // Field size warning: check if translation exceeds field byte limit
   const fieldSizeWarning = useMemo(() => {
     if (!selectedItem || !dataConfigs?.field_size_ref || !localTrans) return null;
     const key = `${selectedItem.record_sig}:${selectedItem.field_sig}`.toUpperCase();
@@ -62,7 +60,6 @@ export function EditorPanel() {
     return null;
   }, [selectedItem, dataConfigs, localTrans]);
 
-  // Navigate to next/prev untranslated item in filtered view
   const jumpToUntranslated = useCallback((direction: "next" | "prev") => {
     if (!selectedId || items.length === 0) return;
     const currentIdx = items.findIndex((i) => i.id === selectedId);
@@ -81,7 +78,6 @@ export function EditorPanel() {
     setLocalTrans(selectedItem?.translation || "");
     setMatches([]);
     setAliasResult(null);
-    // Check alias integrity when selecting a new string
     if (selectedItem) {
       checkAliases(selectedItem.id).then(setAliasResult).catch(() => {});
     }
@@ -161,7 +157,6 @@ export function EditorPanel() {
     toast.success(t("editor.translationCopied"));
   };
 
-  // F2 + Ctrl+Up/Down 快捷键
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === "F2" && selectedItem) {
@@ -187,9 +182,11 @@ export function EditorPanel() {
 
   if (!selectedItem) {
     return (
-      <div className="editor-panel editor-empty">
-        <Type size={24} opacity={0.3} />
-        <p>{t("editor.selectToEdit")}</p>
+      <div className="editor-panel">
+        <EmptyState
+          icon={<Type size={24} />}
+          title={t("editor.selectToEdit")}
+        />
       </div>
     );
   }
@@ -199,44 +196,58 @@ export function EditorPanel() {
       <div className="editor-header">
         <div className="editor-meta">
           <span className="editor-id">#{selectedItem.id}</span>
-          <span className="editor-sig">
+          <span className="editor-sig mono">
             {selectedItem.record_sig}:{selectedItem.field_sig}
           </span>
-          <span className="editor-formid">{selectedItem.form_id}</span>
-          <span className={`editor-status-badge badge-${selectedItem.status}`}>
+          <span className="editor-formid mono">{selectedItem.form_id}</span>
+          <Badge variant={selectedItem.status === "translated" ? "translated" : selectedItem.status === "incomplete" ? "incomplete" : "locked"}>
             {selectedItem.status}
-          </span>
+          </Badge>
         </div>
         <div className="editor-actions">
-          <button onClick={() => setShowApiKeyDialog(true)} className="btn btn-ghost btn-sm" title={t("editor.setApiKeyTooltip")}>
-            <Key size={14} />
-          </button>
+          <Button variant="ghost" size="sm" onClick={() => setShowApiKeyDialog(true)} title={t("editor.setApiKeyTooltip")} icon={<Key size={14} />} />
           {selectedItem.status !== "translated" && (
             <>
-              <button onClick={handleTranslate} disabled={isTranslating} className="btn btn-sm" title={t("editor.machineTranslateTooltip")}>
-                {isTranslating ? <Loader size={14} style={{ animation: "spin 1s linear infinite" }} /> : <Languages size={14} />}
-                <span>{isTranslating ? t("editor.translating") : t("editor.translate")}</span>
-              </button>
-              <button onClick={handleHeuristicSearch} disabled={isSearching} className="btn btn-sm" title={t("editor.findSimilarTooltip")}>
-                <Search size={14} />
-                <span>{isSearching ? t("editor.searching") : t("editor.similar")}</span>
-              </button>
+              <Button
+                variant="default"
+                size="sm"
+                onClick={handleTranslate}
+                loading={isTranslating}
+                title={t("editor.machineTranslateTooltip")}
+                icon={isTranslating ? undefined : <Languages size={14} />}
+              >
+                {isTranslating ? t("editor.translating") : t("editor.translate")}
+              </Button>
+              <Button
+                variant="default"
+                size="sm"
+                onClick={handleHeuristicSearch}
+                loading={isSearching}
+                title={t("editor.findSimilarTooltip")}
+                icon={isSearching ? undefined : <Search size={14} />}
+              >
+                {isSearching ? t("editor.searching") : t("editor.similar")}
+              </Button>
             </>
           )}
-          <button
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={() => setLocalTrans(selectedItem.source)}
-            className="btn btn-ghost btn-sm"
             title={t("editor.copySourceTooltip")}
+            icon={<ArrowRight size={14} />}
+          />
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={handleSave}
+            loading={isSaving}
+            title="Ctrl+Enter"
+            icon={isSaving ? undefined : <Save size={14} />}
           >
-            <ArrowRight size={14} />
-          </button>
-          <button onClick={handleSave} disabled={isSaving} className="btn btn-primary btn-sm" title="Ctrl+Enter">
-            <Save size={14} />
-            <span>{t("editor.save")}</span>
-          </button>
-          <button onClick={() => setSelectedById(null)} className="btn btn-ghost btn-sm">
-            <X size={14} />
-          </button>
+            {t("editor.save")}
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => setSelectedById(null)} icon={<X size={14} />} />
         </div>
       </div>
 
@@ -249,12 +260,12 @@ export function EditorPanel() {
           <label>
             {t("common.translation")}
             {aliasResult && aliasResult.has_mismatch && (
-              <span style={{ marginLeft: 8, color: "#e74c3c", fontSize: 12, fontWeight: "normal" }} title={aliasResult.missing_in_trans.join(", ")}>
-                <AlertTriangle size={12} style={{ verticalAlign: "middle" }} /> {t("editor.aliasMismatch")}
+              <span className="editor-alias-warning" title={aliasResult.missing_in_trans.join(", ")}>
+                <AlertTriangle size={12} /> {t("editor.aliasMismatch")}
               </span>
             )}
           </label>
-          <textarea
+          <Textarea
             value={localTrans}
             onChange={(e) => setLocalTrans(e.target.value)}
             onKeyDown={handleKeyDown}
@@ -277,8 +288,9 @@ export function EditorPanel() {
             </span>
           </div>
           <div className="editor-tcsc-buttons">
-            <button
-              type="button"
+            <Button
+              variant="ghost"
+              size="xs"
               onClick={async () => {
                 if (!localTrans) return;
                 try {
@@ -289,13 +301,13 @@ export function EditorPanel() {
                   toast.error(`${t("editor.tcscFailed")}: ${e}`);
                 }
               }}
-              className="btn btn-ghost btn-xs"
               title={t("editor.tcsc_simplified")}
             >
               {t("editor.tcsc_simplified")}
-            </button>
-            <button
-              type="button"
+            </Button>
+            <Button
+              variant="ghost"
+              size="xs"
               onClick={async () => {
                 if (!localTrans) return;
                 try {
@@ -306,13 +318,13 @@ export function EditorPanel() {
                   toast.error(`${t("editor.tcscFailed")}: ${e}`);
                 }
               }}
-              className="btn btn-ghost btn-xs"
               title={t("editor.tcsc_traditional")}
             >
               {t("editor.tcsc_traditional")}
-            </button>
-            <button
-              type="button"
+            </Button>
+            <Button
+              variant="ghost"
+              size="xs"
               onClick={async () => {
                 if (!localTrans) return;
                 try {
@@ -323,11 +335,10 @@ export function EditorPanel() {
                   toast.error(`${t("editor.rtlFailed")}: ${e}`);
                 }
               }}
-              className="btn btn-ghost btn-xs"
               title={t("editor.rtlTooltip")}
             >
               RTL
-            </button>
+            </Button>
           </div>
         </div>
         {matches.length > 0 && (
@@ -350,29 +361,37 @@ export function EditorPanel() {
       </div>
 
       <div className="editor-footer">
-        <ProgressBar translated={translationProgress.translated} total={translationProgress.total} />
+        <ProgressBar
+          value={translationProgress.translated}
+          max={translationProgress.total}
+          variant="gradient"
+          size="sm"
+          showLabel
+          label={t("sidebar.progress")}
+        />
       </div>
 
-      {showApiKeyDialog && (
-        <div className="dialog-overlay" onClick={() => setShowApiKeyDialog(false)}>
-          <div className="dialog-content" onClick={(e) => e.stopPropagation()}>
-            <h3>{t("editor.setTranslationApiKey")}</h3>
-            <p className="dialog-hint">{t("editor.apiKeyHint")}</p>
-            <input
-              type="password"
-              value={apiKeyInput}
-              onChange={(e) => setApiKeyInput(e.target.value)}
-              placeholder={t("editor.skPlaceholder")}
-              className="dialog-input"
-              onKeyDown={(e) => { if (e.key === "Enter") handleSetApiKey(); }}
-            />
-            <div className="dialog-actions">
-              <button onClick={() => setShowApiKeyDialog(false)} className="btn btn-ghost">{t("common.cancel")}</button>
-              <button onClick={handleSetApiKey} className="btn btn-primary">{t("common.save")}</button>
-            </div>
-          </div>
-        </div>
-      )}
+      <Modal
+        open={showApiKeyDialog}
+        onClose={() => setShowApiKeyDialog(false)}
+        title={t("editor.setTranslationApiKey")}
+        size="sm"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setShowApiKeyDialog(false)}>{t("common.cancel")}</Button>
+            <Button variant="primary" onClick={handleSetApiKey}>{t("common.save")}</Button>
+          </>
+        }
+      >
+        <p className="ui-modal-hint">{t("editor.apiKeyHint")}</p>
+        <Input
+          type="password"
+          value={apiKeyInput}
+          onChange={(e) => setApiKeyInput(e.target.value)}
+          placeholder={t("editor.skPlaceholder")}
+          onKeyDown={(e) => { if (e.key === "Enter") handleSetApiKey(); }}
+        />
+      </Modal>
     </div>
   );
 }

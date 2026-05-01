@@ -6,6 +6,7 @@ import toast from "react-hot-toast";
 import { parsePexStrings, exportXml } from "../api/strings";
 import type { PexScriptDto } from "../api/strings";
 import { useAppStore } from "../stores/appStore";
+import { Button, EmptyState, Badge } from "./ui";
 
 export function PexPanel() {
   const { t } = useTranslation();
@@ -62,13 +63,14 @@ export function PexPanel() {
     <div className="sidepanel">
       {!script ? (
         <div className="sidepanel-empty">
-          <FileCode size={36} />
-          <p style={{ marginTop: 8 }}>{t("pex.title")}</p>
-          <p className="sidepanel-hint">{t("pex.subtitle")}</p>
-          <button onClick={handleOpen} disabled={loading} className="btn btn-primary" style={{ marginTop: 16 }}>
-            <FileUp size={16} />
-            <span>{loading ? t("pex.parsing") : t("pex.openPex")}</span>
-          </button>
+          <EmptyState
+            icon={<FileCode size={36} />}
+            title={t("pex.title")}
+            hint={t("pex.subtitle")}
+          />
+          <Button variant="primary" onClick={handleOpen} disabled={loading} icon={<FileUp size={16} />} className="pex-open-btn">
+            {loading ? t("pex.parsing") : t("pex.openPex")}
+          </Button>
         </div>
       ) : (
         <>
@@ -90,13 +92,13 @@ export function PexPanel() {
                 {t("pex.stringsDetail", { tableCount: script.string_count, transCount: script.translatable.length })}
               </span>
             </div>
-            <div style={{ display: "flex", gap: 4, marginTop: 8 }}>
-              <button onClick={handleOpen} className="btn btn-sm" style={{ flex: 1 }}>
-                <FileUp size={12} /> {t("pex.openAnother")}
-              </button>
-              <button onClick={handleExportXml} className="btn btn-sm" style={{ flex: 1 }} disabled={script.translatable.length === 0}>
-                <FileCode size={12} /> {t("pex.exportXml")}
-              </button>
+            <div className="pex-action-buttons">
+              <Button variant="default" size="sm" onClick={handleOpen} icon={<FileUp size={12} />}>
+                {t("pex.openAnother")}
+              </Button>
+              <Button variant="default" size="sm" onClick={handleExportXml} icon={<FileCode size={12} />} disabled={script.translatable.length === 0}>
+                {t("pex.exportXml")}
+              </Button>
             </div>
           </div>
 
@@ -127,18 +129,18 @@ export function PexPanel() {
             <h3>{t("pex.stringsCount", { count: filtered.length })}</h3>
             <div style={{ maxHeight: 300, overflowY: "auto" }}>
               {filtered.map((entry, i) => (
-                <div key={i} className="record-type-row" style={{ padding: "6px 8px", lineHeight: 1.4 }}>
-                  <div style={{ fontSize: 10, color: "var(--text-muted)" }}>
+                <div key={i} className="record-type-row pex-string-entry">
+                  <div className="pex-string-path">
                     {entry.object_name}
                     {entry.state_name && ` :: ${entry.state_name}`}
                     {entry.function_name && `.${entry.function_name}`}
                   </div>
-                  <div style={{ fontSize: 11, color: "var(--text-primary)", marginTop: 2 }}>
+                  <div className="pex-string-text">
                     {entry.source_text}
                   </div>
-                  <div className="badge badge-incomplete" style={{ marginTop: 2, fontSize: 8 }}>
+                  <Badge variant="incomplete" size="sm">
                     {entry.string_type}
-                  </div>
+                  </Badge>
                 </div>
               ))}
             </div>

@@ -5,6 +5,7 @@ import { FileText, FileUp, Save } from "lucide-react";
 import toast from "react-hot-toast";
 import { loadMcmFile, saveMcmFile, mcmCompare } from "../api/strings";
 import type { McmFileDto, McmEntryDto, McmComparePolicy, McmCompareRequest } from "../api/strings";
+import { Button, EmptyState, Select, Textarea } from "./ui";
 
 export function McmPanel() {
   const { t } = useTranslation();
@@ -118,18 +119,14 @@ export function McmPanel() {
     <div className="sidepanel">
       {!file ? (
         <div className="sidepanel-empty">
-          <FileText size={36} />
-          <p style={{ marginTop: 8 }}>{t("mcm.title")}</p>
-          <p className="sidepanel-hint">{t("mcm.subtitle")}</p>
-          <button
-            onClick={handleOpen}
-            disabled={loading}
-            className="btn btn-primary"
-            style={{ marginTop: 16 }}
-          >
-            <FileUp size={16} />
-            <span>{loading ? t("mcm.loading") : t("mcm.open")}</span>
-          </button>
+          <EmptyState
+            icon={<FileText size={36} />}
+            title={t("mcm.title")}
+            hint={t("mcm.subtitle")}
+          />
+          <Button variant="primary" onClick={handleOpen} disabled={loading} icon={<FileUp size={16} />} className="mcm-open-btn">
+            {loading ? t("mcm.loading") : t("mcm.open")}
+          </Button>
         </div>
       ) : (
         <>
@@ -152,25 +149,16 @@ export function McmPanel() {
                 {translatedCount} / {file.entry_count}
               </span>
             </div>
-            <div style={{ display: "flex", gap: 4, marginTop: 8 }}>
-              <button onClick={handleOpen} className="btn btn-sm" style={{ flex: 1 }}>
-                <FileUp size={12} /> {t("mcm.openAnother")}
-              </button>
-              <button
-                onClick={handleSave}
-                className="btn btn-sm btn-primary"
-                style={{ flex: 1 }}
-                disabled={!modified}
-              >
-                <Save size={12} /> {t("mcm.save")}
-              </button>
-              <button
-                onClick={() => setCompareDialogOpen(true)}
-                className="btn btn-sm"
-                style={{ flex: 1 }}
-              >
-                <FileText size={12} /> {t("mcm.compare")}
-              </button>
+            <div className="mcm-action-buttons">
+              <Button variant="default" size="sm" onClick={handleOpen} icon={<FileUp size={12} />}>
+                {t("mcm.openAnother")}
+              </Button>
+              <Button variant="primary" size="sm" onClick={handleSave} icon={<Save size={12} />} disabled={!modified}>
+                {t("mcm.save")}
+              </Button>
+              <Button variant="default" size="sm" onClick={() => setCompareDialogOpen(true)} icon={<FileText size={12} />}>
+                {t("mcm.compare")}
+              </Button>
             </div>
             {modified && (
               <div className="badge badge-warning" style={{ marginTop: 6, width: "100%", textAlign: "center" }}>
@@ -180,52 +168,29 @@ export function McmPanel() {
 
             {/* Compare dialog */}
             {compareDialogOpen && (
-              <div
-                style={{
-                  marginTop: 8,
-                  padding: 8,
-                  border: "1px solid var(--border-color)",
-                  borderRadius: 4,
-                  background: "var(--bg-elevated)",
-                }}
-              >
-                <div style={{ marginBottom: 8, fontSize: 12 }}>
+              <div className="mcm-compare-dialog">
+                <div className="mcm-compare-label">
                   {t("mcm.comparePolicy")}
                 </div>
-                <select
+                <Select
                   value={comparePolicy}
                   onChange={(e) => setComparePolicy(e.target.value as McmComparePolicy)}
-                  className="policy-select"
-                  style={{
-                    width: "100%",
-                    padding: "4px 8px",
-                    borderRadius: 4,
-                    border: "1px solid var(--border-color)",
-                    background: "var(--bg-base)",
-                    color: "var(--text-primary)",
-                    marginBottom: 8,
-                  }}
-                >
-                  <option value="all">{t("mcm.policyAll")}</option>
-                  <option value="no_trans">{t("mcm.policyNoTrans")}</option>
-                  <option value="no_trans_and_partial">{t("mcm.policyNoTransAndPartial")}</option>
-                  <option value="partial_only">{t("mcm.policyPartialOnly")}</option>
-                </select>
-                <div style={{ display: "flex", gap: 4 }}>
-                  <button
-                    onClick={handleCompare}
-                    className="btn btn-sm btn-primary"
-                    style={{ flex: 1 }}
-                  >
+                  size="sm"
+                  className="mcm-compare-select"
+                  options={[
+                    { value: "all", label: t("mcm.policyAll") },
+                    { value: "no_trans", label: t("mcm.policyNoTrans") },
+                    { value: "no_trans_and_partial", label: t("mcm.policyNoTransAndPartial") },
+                    { value: "partial_only", label: t("mcm.policyPartialOnly") },
+                  ]}
+                />
+                <div className="mcm-compare-actions">
+                  <Button variant="primary" size="sm" onClick={handleCompare}>
                     {t("mcm.compare")}
-                  </button>
-                  <button
-                    onClick={() => setCompareDialogOpen(false)}
-                    className="btn btn-sm"
-                    style={{ flex: 1 }}
-                  >
+                  </Button>
+                  <Button variant="default" size="sm" onClick={() => setCompareDialogOpen(false)}>
                     {t("common.cancel")}
-                  </button>
+                  </Button>
                 </div>
               </div>
             )}
@@ -255,41 +220,20 @@ export function McmPanel() {
                 return (
                   <div
                     key={originalIndex}
-                    className="record-type-row"
-                    style={{ padding: "8px", lineHeight: 1.4 }}
+                    className="record-type-row mcm-entry"
                   >
-                    <div style={{ fontSize: 10, color: "var(--text-muted)", marginBottom: 4 }}>
+                    <div className="mcm-entry-id">
                       {entry.id}
                     </div>
-                    <div
-                      style={{
-                        fontSize: 11,
-                        color: "var(--text-primary)",
-                        marginBottom: 6,
-                        padding: "4px 6px",
-                        background: "var(--bg-elevated)",
-                        borderRadius: 4,
-                        fontFamily: "monospace",
-                      }}
-                    >
+                    <div className="mcm-entry-source">
                       {entry.source}
                     </div>
-                    <textarea
+                    <Textarea
                       value={entry.translation}
                       onChange={(e) => handleEntryChange(originalIndex, e.target.value)}
                       placeholder={t("mcm.translationPlaceholder")}
                       rows={2}
-                      className="translation-textarea"
-                      style={{
-                        width: "100%",
-                        resize: "vertical",
-                        fontSize: 11,
-                        padding: "4px 6px",
-                        borderRadius: 4,
-                        border: "1px solid var(--border-color)",
-                        background: "var(--bg-elevated)",
-                        color: entry.translation ? "var(--text-primary)" : "var(--text-muted)",
-                      }}
+                      className="mcm-entry-textarea"
                     />
                   </div>
                 );

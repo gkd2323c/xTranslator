@@ -34,6 +34,7 @@ import {
   RefreshCw,
   Save,
 } from "lucide-react";
+import { Button, EmptyState, Select } from "./ui";
 
 type PanelView = "empty" | "idle" | "running" | "complete";
 
@@ -304,18 +305,18 @@ export function BatchPanel() {
       {/* ─── Empty State ─── */}
       {view === "empty" && (
         <div className="batch-empty">
-          <FileText size={40} opacity={0.2} />
-          <p>{t("batch.noFilesAdded")}</p>
-          <p className="sidepanel-hint">{t("batch.addFilesHint")}</p>
+          <EmptyState
+            icon={<FileText size={40} />}
+            title={t("batch.noFilesAdded")}
+            hint={t("batch.addFilesHint")}
+          />
           <div className="batch-empty-actions">
-            <button onClick={handleAddFiles} className="btn btn-primary">
-              <FolderOpen size={14} />
+            <Button variant="primary" onClick={handleAddFiles} icon={<FolderOpen size={14} />}>
               Add Files
-            </button>
-            <button onClick={handleScanDir} className="btn">
-              <FolderSearch size={14} />
+            </Button>
+            <Button variant="default" onClick={handleScanDir} icon={<FolderSearch size={14} />}>
               Scan Dir
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -326,13 +327,13 @@ export function BatchPanel() {
           <div className="batch-file-list">
             <div className="batch-file-list-header">
               <span className="batch-file-count">{batchEntries.length} file(s)</span>
-              <button
+              <Button
+                variant="ghost"
+                size="sm"
                 onClick={clearBatchEntries}
-                className="btn btn-ghost btn-sm"
                 title={t("batch.removeAll")}
-              >
-                <Trash2 size={12} />
-              </button>
+                icon={<Trash2 size={12} />}
+              />
             </div>
             {batchEntries.map((entry, idx) => (
               <div key={idx} className="batch-file-row">
@@ -344,26 +345,24 @@ export function BatchPanel() {
                     {entry.game || "auto"} · {entry.language || "auto"}
                   </span>
                 </div>
-                <button
+                <Button
+                  variant="ghost"
+                  size="sm"
                   onClick={() => removeBatchEntry(idx)}
-                  className="btn btn-ghost btn-sm"
                   title={t("batch.remove")}
-                >
-                  <X size={12} />
-                </button>
+                  icon={<X size={12} />}
+                />
               </div>
             ))}
           </div>
 
           <div className="batch-actions">
-            <button onClick={handleAddFiles} className="btn btn-sm">
-              <FolderOpen size={12} />
+            <Button variant="default" size="sm" onClick={handleAddFiles} icon={<FolderOpen size={12} />}>
               Add
-            </button>
-            <button onClick={handleScanDir} className="btn btn-sm">
-              <FolderSearch size={12} />
+            </Button>
+            <Button variant="default" size="sm" onClick={handleScanDir} icon={<FolderSearch size={12} />}>
               Scan
-            </button>
+            </Button>
           </div>
 
           <div className="batch-config-toggle" onClick={() => setShowConfig(!showConfig)}>
@@ -376,14 +375,15 @@ export function BatchPanel() {
             <div className="batch-config">
               <label className="batch-config-row">
                 <span>{t("batch.provider")}</span>
-                <select
+                <Select
                   value={provider}
                   onChange={(e) => setProvider(e.target.value)}
-                  className="lang-select"
-                >
-                  <option value="openai">OpenAI</option>
-                  <option value="deepl">DeepL</option>
-                </select>
+                  size="sm"
+                  options={[
+                    { value: "openai", label: "OpenAI" },
+                    { value: "deepl", label: "DeepL" },
+                  ]}
+                />
               </label>
               <label className="batch-config-row">
                 <span>{t("batch.skipTranslated")}</span>
@@ -397,22 +397,22 @@ export function BatchPanel() {
           )}
 
           <div className="batch-start-actions">
-            <button
+            <Button
+              variant="primary"
               onClick={handleStartTranslate}
               disabled={isStarting}
-              className="btn btn-primary"
+              icon={<Play size={14} />}
             >
-              <Play size={14} />
               {isStarting ? t("batch.starting") : t("batch.translateAll")}
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="default"
               onClick={handleStartExport}
               disabled={isStarting}
-              className="btn"
+              icon={<Save size={14} />}
             >
-              <Save size={14} />
               Export All
-            </button>
+            </Button>
           </div>
         </>
       )}
@@ -509,10 +509,9 @@ export function BatchPanel() {
             </div>
           )}
 
-          <button onClick={handleCancel} className="btn" style={{ marginTop: 12 }}>
-            <Square size={14} />
+          <Button variant="default" onClick={handleCancel} icon={<Square size={14} />} className="batch-cancel-btn">
             Cancel
-          </button>
+          </Button>
         </>
       )}
 
@@ -596,10 +595,9 @@ export function BatchPanel() {
             )}
           </div>
 
-          <button onClick={handleNewBatch} className="btn btn-primary" style={{ marginTop: 12 }}>
-            <RefreshCw size={14} />
+          <Button variant="primary" onClick={handleNewBatch} icon={<RefreshCw size={14} />} className="batch-cancel-btn">
             New Batch
-          </button>
+          </Button>
         </>
       )}
     </div>

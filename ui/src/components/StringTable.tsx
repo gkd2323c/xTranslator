@@ -1,9 +1,10 @@
 import { useEffect, useCallback, ReactElement } from "react";
 import { List } from "react-window";
 import { useAppStore } from "../stores/appStore";
-import { Search, ArrowUpDown, Loader2, Code2, Replace } from "lucide-react";
+import { Search, ArrowUpDown, Code2, Replace } from "lucide-react";
 import type { SkyStringDTO } from "../api/strings";
 import { useTranslation } from "react-i18next";
+import { Input, Button, Badge, Spinner } from "./ui";
 
 const ROW_HEIGHT = 32;
 
@@ -33,64 +34,35 @@ function VirtualRow(props: {
   const isSelected = selectedId === item.id;
   return (
     <div
-      style={{
-        ...style,
-        display: "flex",
-        alignItems: "center",
-        borderBottom: "1px solid var(--border-subtle)",
-        cursor: "pointer",
-        background: isSelected
-          ? "linear-gradient(90deg, rgba(0, 245, 255, 0.08), rgba(0, 245, 255, 0.02))"
-          : "transparent",
-        boxShadow: isSelected
-          ? "inset 2px 0 0 var(--accent-cyan), 0 0 20px rgba(0, 245, 255, 0.1)"
-          : "none",
-        transition: "background 0.2s, box-shadow 0.2s",
-      }}
-      className={`status-${item.status}`}
+      style={style}
+      className={`virtual-row status-${item.status} ${isSelected ? "virtual-row-selected" : ""}`}
       onClick={() => onSelect(item.id)}
       onMouseEnter={(e) => {
         if (!isSelected) {
-          e.currentTarget.style.background = "var(--bg-secondary)";
+          e.currentTarget.classList.add("virtual-row-hover");
         }
       }}
       onMouseLeave={(e) => {
         if (!isSelected) {
-          e.currentTarget.style.background = "transparent";
+          e.currentTarget.classList.remove("virtual-row-hover");
         }
       }}
     >
-      <div className="row-cell" style={{ width: 60, fontFamily: "'JetBrains Mono', monospace", fontSize: 11 }}>
-        {item.id}
-      </div>
-      <div className="row-cell" style={{ width: 100, gap: 4 }}>
-        <span className={`badge badge-${item.status}`}>
+      <div className="row-cell row-cell-id">{item.id}</div>
+      <div className="row-cell row-cell-status">
+        <Badge variant={item.status === "translated" ? "translated" : item.status === "incomplete" ? "incomplete" : "locked"} size="sm">
           {item.status[0].toUpperCase()}
-        </span>
-        {item.is_vmad && <span className="badge badge-script" title={t("table.vmadTooltip")}>VM</span>}
+        </Badge>
+        {item.is_vmad && <span title={t("table.vmadTooltip")}><Badge variant="script" size="sm">VM</Badge></span>}
       </div>
-      <div className="row-cell" style={{ width: 70, fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: "var(--accent-gold)" }}>
-        {item.record_sig}
-      </div>
-      <div className="row-cell" style={{ width: 80, fontFamily: "'JetBrains Mono', monospace", fontSize: 11 }}>
-        {item.field_sig}
-      </div>
-      <div className="row-cell form-id" style={{ width: 100 }}>
-        {item.form_id}
-      </div>
-      <div
-        className="row-cell text-cell source-text"
-        style={{ flex: 1 }}
-        title={item.source}
-      >
+      <div className="row-cell row-cell-rec">{item.record_sig}</div>
+      <div className="row-cell row-cell-field">{item.field_sig}</div>
+      <div className="row-cell row-cell-formid">{item.form_id}</div>
+      <div className="row-cell text-cell source-text" title={item.source}>
         {item.source}
       </div>
-      <div
-        className="row-cell text-cell trans-text"
-        style={{ flex: 1 }}
-        title={item.translation}
-      >
-        {item.translation || "\u2014"}
+      <div className="row-cell text-cell trans-text" title={item.translation}>
+        {item.translation || "—"}
       </div>
     </div>
   );
@@ -98,7 +70,6 @@ function VirtualRow(props: {
 
 export function StringTable() {
   const { t } = useTranslation();
-  // Zustand selectors — stable references, no re-render on unrelated state changes
   const espPath = useAppStore((s) => s.espPath);
   const allItems = useAppStore((s) => s.allItems);
   const items = useAppStore((s) => s.items);
@@ -122,7 +93,6 @@ export function StringTable() {
   const selectPrevRow = useAppStore((s) => s.selectPrevRow);
   const replaceAll = useAppStore((s) => s.replaceAll);
 
-  // Keyboard navigation: arrow keys to move selection
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
       if (e.key === "ArrowDown") {
@@ -141,7 +111,6 @@ export function StringTable() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [handleKeyDown]);
 
-  // Load all strings when ESP is loaded
   useEffect(() => {
     if (espPath && allItems.length === 0) {
       loadAllStrings();
@@ -161,7 +130,7 @@ export function StringTable() {
     return (
       <div className="string-table-wrapper">
         <div className="table-loading">
-          <Loader2 size={24} className="spin" />
+          <Spinner size={24} />
           <span>{t("table.loading")}</span>
         </div>
       </div>
@@ -170,26 +139,26 @@ export function StringTable() {
 
   return (
     <div className="string-table-wrapper">
-      {/* Toolbar */}
-      <div className="table-toolbar" style={{ flexDirection: "column", alignItems: "stretch", gap: 6 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          <div className="search-box">
-            <Search size={14} />
-            <input
-              type="text"
-              placeholder={useRegex ? t("common.regexFilter") : t("common.filter")}
-              value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-            />
-            <button
-              onClick={() => setUseRegex(!useRegex)}
-              className="btn btn-ghost btn-sm"
-              title={useRegex ? t("table.regexSwitchTip") : t("table.plainSwitchTip")}
-              style={{ padding: "2px 6px", marginLeft: 4, opacity: useRegex ? 1 : 0.4 }}
-            >
-              <Code2 size={14} />
-            </button>
-          </div>
+      <div className="table-toolbar">
+        <div className="table-toolbar-row">
+          <Input
+            size="sm"
+            icon={<Search size={14} />}
+            placeholder={useRegex ? t("common.regexFilter") : t("common.filter")}
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            suffix={
+              <Button
+                variant="ghost"
+                size="xs"
+                onClick={() => setUseRegex(!useRegex)}
+                title={useRegex ? t("table.regexSwitchTip") : t("table.plainSwitchTip")}
+                active={useRegex}
+              >
+                <Code2 size={14} />
+              </Button>
+            }
+          />
           <div className="status-filters">
             {[
               { key: null, label: t("common.all") },
@@ -197,61 +166,47 @@ export function StringTable() {
               { key: "translated", label: t("common.translated") },
               { key: "locked", label: t("common.locked") },
             ].map((s) => (
-              <button
+              <Button
                 key={s.label}
-                className={`status-filter-btn ${statusFilter === s.key ? "active" : ""}`}
-                onClick={() =>
-                  setStatusFilter(
-                    statusFilter === s.key ? null : (s.key as string)
-                  )
-                }
+                variant="ghost"
+                size="sm"
+                active={statusFilter === s.key}
+                onClick={() => setStatusFilter(statusFilter === s.key ? null : (s.key as string))}
               >
                 {s.label}
-              </button>
+              </Button>
             ))}
           </div>
           <div className="table-info">
             {filtered.toLocaleString()} / {total.toLocaleString()}
             {allItems.length === 0 && !isLoading && (
-              <span style={{ color: "var(--error)", marginLeft: 8 }}>{t("common.noDataLoaded")}</span>
+              <span className="table-info-error">{t("common.noDataLoaded")}</span>
             )}
           </div>
         </div>
         {filter && (
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <Replace size={14} style={{ color: "var(--text-secondary)", flexShrink: 0 }} />
-            <input
-              type="text"
+          <div className="table-toolbar-row">
+            <Replace size={14} className="replace-icon" />
+            <Input
+              size="sm"
               placeholder="Replacement text (use $1, $2 for groups)..."
               value={replaceText}
               onChange={(e) => setReplaceText(e.target.value)}
-              style={{
-                flex: 1,
-                padding: "4px 10px",
-                background: "var(--bg-primary)",
-                border: "1px solid var(--border-subtle)",
-                borderRadius: 6,
-                color: "var(--text-primary)",
-                fontSize: 12,
-                outline: "none",
-                fontFamily: "inherit",
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && replaceText) replaceAll();
-              }}
+              onKeyDown={(e) => { if (e.key === "Enter" && replaceText) replaceAll(); }}
+              wrapperClassName="replace-input-wrap"
             />
-            <button
-              className="btn btn-sm"
+            <Button
+              variant="default"
+              size="sm"
               onClick={replaceAll}
               disabled={!replaceText}
             >
               Replace All
-            </button>
+            </Button>
           </div>
         )}
       </div>
 
-      {/* Header */}
       <div className="virtual-table-header">
         <div className="header-cell" style={{ width: 60 }} onClick={() => handleSort("id")}>
           ID <ArrowUpDown size={10} />
@@ -266,7 +221,6 @@ export function StringTable() {
         <div className="header-cell" style={{ flex: 1 }}>{t("table.translation")}</div>
       </div>
 
-      {/* Virtual list */}
       <div className="virtual-list-container">
         <List<RowData>
           rowComponent={VirtualRow}

@@ -5,6 +5,7 @@ import { Volume2, Play, Pause, FolderSearch } from "lucide-react";
 import toast from "react-hot-toast";
 import { scanFuzDirectory, getFuzAudioData } from "../api/strings";
 import type { FuzScanResponse, FuzMapping } from "../api/strings";
+import { Button, EmptyState } from "./ui";
 
 export function FuzPanel() {
   const { t } = useTranslation();
@@ -64,13 +65,14 @@ export function FuzPanel() {
     <div className="sidepanel">
       {!scanResult ? (
         <div className="sidepanel-empty">
-          <Volume2 size={36} />
-          <p style={{ marginTop: 8 }}>{t("fuz.title")}</p>
-          <p className="sidepanel-hint">{t("fuz.subtitle")}</p>
-          <button onClick={handleScan} disabled={loading} className="btn btn-primary" style={{ marginTop: 16 }}>
-            <FolderSearch size={16} />
-            <span>{loading ? t("fuz.scanning") : t("fuz.scanDir")}</span>
-          </button>
+          <EmptyState
+            icon={<Volume2 size={36} />}
+            title={t("fuz.title")}
+            hint={t("fuz.subtitle")}
+          />
+          <Button variant="primary" onClick={handleScan} disabled={loading} icon={<FolderSearch size={16} />} className="fuz-scan-btn">
+            {loading ? t("fuz.scanning") : t("fuz.scanDir")}
+          </Button>
         </div>
       ) : (
         <>
@@ -84,9 +86,9 @@ export function FuzPanel() {
               <span className="sidepanel-label">{t("fuz.matched")}</span>
               <span className="sidepanel-value">{scanResult.fuz_mappings.length.toLocaleString()}</span>
             </div>
-            <button onClick={handleScan} disabled={loading} className="btn btn-sm" style={{ marginTop: 8, width: "100%" }}>
-              <FolderSearch size={12} /> {t("fuz.rescan")}
-            </button>
+            <Button variant="default" size="sm" onClick={handleScan} disabled={loading} icon={<FolderSearch size={12} />} className="fuz-rescan-btn">
+              {t("fuz.rescan")}
+            </Button>
           </div>
 
           <div className="sidepanel-section">
@@ -95,26 +97,24 @@ export function FuzPanel() {
               {scanResult.fuz_mappings.map((m) => (
                 <div
                   key={m.response_id}
-                  className="record-type-row"
-                  style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px" }}
+                  className="record-type-row fuz-mapping-row"
                 >
-                  <button
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     onClick={() => handlePlay(m)}
-                    className="btn btn-sm btn-ghost"
-                    style={{ padding: 2, flexShrink: 0 }}
                     title={playingId === m.response_id ? t("fuz.stop") : t("fuz.play")}
-                  >
-                    {playingId === m.response_id ? <Pause size={14} /> : <Play size={14} />}
-                  </button>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 10, color: "var(--text-muted)", fontFamily: "monospace" }}>
+                    icon={playingId === m.response_id ? <Pause size={14} /> : <Play size={14} />}
+                  />
+                  <div className="fuz-mapping-info">
+                    <div className="fuz-mapping-id">
                       {m.response_id.toString(16).toUpperCase()}
                     </div>
-                    <div style={{ fontSize: 11, color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    <div className="fuz-mapping-text">
                       {m.dialog_text || t("fuz.noTextMatch")}
                     </div>
                   </div>
-                  <span style={{ fontSize: 10, color: "var(--text-secondary)", flexShrink: 0 }}>
+                  <span className="fuz-mapping-duration">
                     {m.duration_secs.toFixed(1)}s
                   </span>
                 </div>

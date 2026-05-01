@@ -1,5 +1,6 @@
 import { useAppStore } from "../stores/appStore";
 import { Play, Square } from "lucide-react";
+import { Button } from "./ui";
 
 export function BatchTranslateBar() {
   const selectedIds = useAppStore((s) => s.selectedIds);
@@ -14,43 +15,45 @@ export function BatchTranslateBar() {
   const hasSelection = selectedIds.size > 0;
 
   return (
-    <div className="batch-translate-bar" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+    <div className="batch-translate-bar">
       {!isRunning ? (
         <>
-          <label style={{ fontSize: 12, opacity: 0.7 }}>Concurrency:</label>
+          <label className="batch-bar-label">Concurrency:</label>
           <input
             type="range"
             min={1}
             max={10}
             value={batchConcurrency}
             onChange={(e) => setBatchConcurrency(Number(e.target.value))}
-            style={{ width: 60 }}
+            className="batch-bar-range"
             disabled={isRunning}
           />
-          <span style={{ fontSize: 11, minWidth: 16 }}>{batchConcurrency}</span>
-          <button
-            className="toolbar-btn"
+          <span className="batch-bar-concurrency">{batchConcurrency}</span>
+          <Button
+            variant="default"
+            size="sm"
+            icon={<Play size={14} />}
             disabled={!hasSelection}
             onClick={startBatchTranslation}
             title={hasSelection ? `Batch translate ${selectedIds.size} strings` : "Select strings first"}
           >
-            <Play size={14} />
-            <span>Batch ({selectedIds.size})</span>
-          </button>
+            Batch ({selectedIds.size})
+          </Button>
         </>
       ) : (
         <>
-          <span style={{ fontSize: 12 }}>
+          <span className="batch-bar-progress">
             {batchProgress.completed}/{batchProgress.total} done
           </span>
-          <button
-            className="toolbar-btn"
+          <Button
+            variant="default"
+            size="sm"
+            icon={<Square size={14} />}
             onClick={cancelBatchTranslation}
             title="Cancel batch"
           >
-            <Square size={14} />
-            <span>Cancel</span>
-          </button>
+            Cancel
+          </Button>
         </>
       )}
     </div>

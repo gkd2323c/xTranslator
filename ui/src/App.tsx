@@ -23,6 +23,7 @@ import { BatchTranslateBar } from "./components/BatchTranslateBar";
 import { RecoveryPromptModal } from "./components/RecoveryPromptModal";
 import { autoBackupSst, loadConfig, setOpenAiApiKey, setDeeplApiKey, setTranslationProvider } from "./api/strings";
 import "./App.css";
+import "./components/ui/ui.css";
 
 const AUTO_BACKUP_INTERVAL_MS = 5 * 60 * 1000;
 

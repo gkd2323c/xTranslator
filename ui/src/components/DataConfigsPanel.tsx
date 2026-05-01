@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, useRef } from "react";
 import { useAppStore } from "../stores/appStore";
 import { Database, Search, ChevronDown, ChevronRight, FileText, Settings, MessageSquare, Smile } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { Input } from "./ui";
 
 function useDebounce<T>(value: T, delay: number): T {
   const [debouncedValue, setDebouncedValue] = useState(value);
@@ -39,34 +40,18 @@ function CollapsibleSection({ title, icon, count, children, defaultExpanded = tr
   return (
     <div className="sidepanel-section" style={{ marginBottom: 8 }}>
       <div
+        className="dc-header"
         onClick={() => setExpanded(!expanded)}
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          cursor: "pointer",
-          padding: "8px 0",
-          borderBottom: expanded ? "1px solid var(--border-subtle)" : "none",
-        }}
+        style={!expanded ? { borderBottom: "none" } : undefined}
       >
-        <h3 style={{ display: "flex", alignItems: "center", gap: 8, margin: 0 }}>
+        <h3 className="dc-header-title">
           {icon}
           {title}
-          <span
-            style={{
-              fontSize: 11,
-              background: "var(--bg-secondary)",
-              padding: "2px 8px",
-              borderRadius: 10,
-              color: "var(--text-secondary)",
-            }}
-          >
-            {count}
-          </span>
+          <span className="dc-count-badge">{count}</span>
         </h3>
         {expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
       </div>
-      {expanded && <div style={{ paddingTop: 8 }}>{children}</div>}
+      {expanded && <div className="dc-content">{children}</div>}
     </div>
   );
 }
@@ -139,7 +124,7 @@ export function DataConfigsPanel() {
           <Database size={48} opacity={0.3} />
           <p>{t("dataConfigs.title")}</p>
           <p className="sidepanel-hint">{t("dataConfigs.subtitle")}</p>
-          <p style={{ marginTop: 8, fontSize: 12, color: "var(--text-muted)" }}>
+          <p className="sidepanel-hint" style={{ marginTop: 8 }}>
             {t("sidebar.loadEspToStart")}
           </p>
         </div>
@@ -149,60 +134,35 @@ export function DataConfigsPanel() {
 
   return (
     <div className="sidepanel" style={{ overflow: "auto", height: "100%" }}>
+
       <CollapsibleSection
         title={t("dataConfigs.ctdaFuncs")}
         icon={<FileText size={16} />}
         count={dataConfigs.ctda_funcs.length}
       >
-        <div style={{ position: "relative", marginBottom: 8 }}>
-          <Search
-            size={14}
-            style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)", opacity: 0.5 }}
-          />
-          <input
-            type="text"
-            placeholder={t("dataConfigs.searchPlaceholder")}
-            value={ctdaSearch}
-            onChange={(e) => setCtdaSearch(e.target.value)}
-            style={{
-              width: "100%",
-              padding: "6px 8px 6px 28px",
-              background: "var(--bg-primary)",
-              border: "1px solid var(--border-subtle)",
-              borderRadius: 4,
-              color: "var(--text-primary)",
-              fontSize: 12,
-            }}
-          />
-        </div>
-        <div style={{ maxHeight: 200, overflow: "auto" }}>
+        <Input
+          size="sm"
+          icon={<Search size={14} />}
+          placeholder={t("dataConfigs.searchPlaceholder")}
+          value={ctdaSearch}
+          onChange={(e) => setCtdaSearch(e.target.value)}
+          wrapperClassName="data-configs-search"
+        />
+        <div className="dc-list">
           {filteredCtda.map((func) => (
-            <div
-              key={func.id}
-              style={{
-                padding: "4px 0",
-                borderBottom: "1px solid var(--border-subtle)",
-                fontSize: 11,
-              }}
-            >
-              <span
-                style={{
-                  fontFamily: "'JetBrains Mono', monospace",
-                  color: "var(--accent-cyan)",
-                  marginRight: 8,
-                }}
-              >
+            <div key={func.id} className="dc-item">
+              <span className="dc-item-id">
                 0x{func.id.toString(16).toUpperCase().padStart(4, "0")}
               </span>
-              <span style={{ color: "var(--text-primary)" }}>{func.name}</span>
+              <span className="dc-item-name">{func.name}</span>
               {func.params && (
-                <span style={{ color: "var(--text-muted)", marginLeft: 4 }}>{func.params}</span>
+                <span className="dc-item-detail">{func.params}</span>
               )}
             </div>
           ))}
         </div>
         {dataConfigs.ctda_funcs.length > 100 && (
-          <p style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 4 }}>
+          <p className="dc-hint">
             Showing 100 of {dataConfigs.ctda_funcs.length} (use search)
           </p>
         )}
@@ -213,62 +173,24 @@ export function DataConfigsPanel() {
         icon={<Settings size={16} />}
         count={Object.keys(dataConfigs.field_size_ref).length}
       >
-        <div style={{ position: "relative", marginBottom: 8 }}>
-          <Search
-            size={14}
-            style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)", opacity: 0.5 }}
-          />
-          <input
-            type="text"
-            placeholder={t("dataConfigs.searchPlaceholder")}
-            value={fieldSearch}
-            onChange={(e) => setFieldSearch(e.target.value)}
-            style={{
-              width: "100%",
-              padding: "6px 8px 6px 28px",
-              background: "var(--bg-primary)",
-              border: "1px solid var(--border-subtle)",
-              borderRadius: 4,
-              color: "var(--text-primary)",
-              fontSize: 12,
-            }}
-          />
-        </div>
-        <div style={{ maxHeight: 200, overflow: "auto" }}>
+        <Input
+          size="sm"
+          icon={<Search size={14} />}
+          placeholder={t("dataConfigs.searchPlaceholder")}
+          value={fieldSearch}
+          onChange={(e) => setFieldSearch(e.target.value)}
+          wrapperClassName="data-configs-search"
+        />
+        <div className="dc-list">
           {filteredFields.map(([key, info]) => (
-            <div
-              key={key}
-              style={{
-                padding: "4px 0",
-                borderBottom: "1px solid var(--border-subtle)",
-                fontSize: 11,
-                display: "flex",
-                justifyContent: "space-between",
-              }}
-            >
+            <div key={key} className="dc-item-row">
               <span>
-                <span
-                  style={{
-                    fontFamily: "'JetBrains Mono', monospace",
-                    color: "var(--accent-gold)",
-                  }}
-                >
-                  {key}
-                </span>
+                <span className="dc-item-id-amber">{key}</span>
               </span>
               <span>
-                <span style={{ color: "var(--text-secondary)" }}>{info.max_size}</span>
+                <span className="dc-item-value">{info.max_size}</span>
                 {info.can_wrap && (
-                  <span
-                    style={{
-                      fontSize: 9,
-                      marginLeft: 4,
-                      color: "var(--success)",
-                      background: "rgba(0,255,136,0.1)",
-                      padding: "1px 4px",
-                      borderRadius: 3,
-                    }}
-                  >
+                  <span className="dc-item-wrap">
                     {t("dataConfigs.canWrap")}
                   </span>
                 )}
@@ -277,7 +199,7 @@ export function DataConfigsPanel() {
           ))}
         </div>
         {Object.keys(dataConfigs.field_size_ref).length > 100 && (
-          <p style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 4 }}>
+          <p className="dc-hint">
             Showing 100 of {Object.keys(dataConfigs.field_size_ref).length} (use search)
           </p>
         )}
@@ -289,47 +211,19 @@ export function DataConfigsPanel() {
         count={Object.keys(dataConfigs.dial_sub_type).length}
         defaultExpanded={false}
       >
-        <div style={{ position: "relative", marginBottom: 8 }}>
-          <Search
-            size={14}
-            style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)", opacity: 0.5 }}
-          />
-          <input
-            type="text"
-            placeholder={t("dataConfigs.searchPlaceholder")}
-            value={dialSearch}
-            onChange={(e) => setDialSearch(e.target.value)}
-            style={{
-              width: "100%",
-              padding: "6px 8px 6px 28px",
-              background: "var(--bg-primary)",
-              border: "1px solid var(--border-subtle)",
-              borderRadius: 4,
-              color: "var(--text-primary)",
-              fontSize: 12,
-            }}
-          />
-        </div>
-        <div style={{ maxHeight: 200, overflow: "auto" }}>
+        <Input
+          size="sm"
+          icon={<Search size={14} />}
+          placeholder={t("dataConfigs.searchPlaceholder")}
+          value={dialSearch}
+          onChange={(e) => setDialSearch(e.target.value)}
+          wrapperClassName="data-configs-search"
+        />
+        <div className="dc-list">
           {filteredDial.map(([id, name]) => (
-            <div
-              key={id}
-              style={{
-                padding: "4px 0",
-                borderBottom: "1px solid var(--border-subtle)",
-                fontSize: 11,
-              }}
-            >
-              <span
-                style={{
-                  fontFamily: "'JetBrains Mono', monospace",
-                  color: "var(--accent-cyan)",
-                  marginRight: 8,
-                }}
-              >
-                {id}
-              </span>
-              <span style={{ color: "var(--text-primary)" }}>{name}</span>
+            <div key={id} className="dc-item">
+              <span className="dc-item-id">{id}</span>
+              <span className="dc-item-name">{name}</span>
             </div>
           ))}
         </div>
@@ -341,47 +235,19 @@ export function DataConfigsPanel() {
         count={Object.keys(dataConfigs.emote_definition).length}
         defaultExpanded={false}
       >
-        <div style={{ position: "relative", marginBottom: 8 }}>
-          <Search
-            size={14}
-            style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)", opacity: 0.5 }}
-          />
-          <input
-            type="text"
-            placeholder={t("dataConfigs.searchPlaceholder")}
-            value={emoteSearch}
-            onChange={(e) => setEmoteSearch(e.target.value)}
-            style={{
-              width: "100%",
-              padding: "6px 8px 6px 28px",
-              background: "var(--bg-primary)",
-              border: "1px solid var(--border-subtle)",
-              borderRadius: 4,
-              color: "var(--text-primary)",
-              fontSize: 12,
-            }}
-          />
-        </div>
-        <div style={{ maxHeight: 200, overflow: "auto" }}>
+        <Input
+          size="sm"
+          icon={<Search size={14} />}
+          placeholder={t("dataConfigs.searchPlaceholder")}
+          value={emoteSearch}
+          onChange={(e) => setEmoteSearch(e.target.value)}
+          wrapperClassName="data-configs-search"
+        />
+        <div className="dc-list">
           {filteredEmote.map(([id, name]) => (
-            <div
-              key={id}
-              style={{
-                padding: "4px 0",
-                borderBottom: "1px solid var(--border-subtle)",
-                fontSize: 11,
-              }}
-            >
-              <span
-                style={{
-                  fontFamily: "'JetBrains Mono', monospace",
-                  color: "var(--accent-cyan)",
-                  marginRight: 8,
-                }}
-              >
-                {id}
-              </span>
-              <span style={{ color: "var(--text-primary)" }}>{name}</span>
+            <div key={id} className="dc-item">
+              <span className="dc-item-id">{id}</span>
+              <span className="dc-item-name">{name}</span>
             </div>
           ))}
         </div>

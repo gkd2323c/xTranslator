@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
 import { loadConfig, saveConfig, setOpenAiApiKey, setDeeplApiKey, setTranslationProvider, getTranslationProviders, type AppConfigDto, type TranslationProvidersResponse } from "../api/strings";
-import { Settings, X } from "lucide-react";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
+import { Button, Modal, Input, Select } from "./ui";
 
 interface SettingsDialogProps {
   open: boolean;
@@ -55,139 +55,126 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
   };
 
   return (
-    <div className="dialog-overlay" onClick={onClose}>
-      <div
-        className="dialog-content dialog-wide"
-        onClick={(e) => e.stopPropagation()}
-        style={{ minWidth: 480, maxWidth: 560 }}
-      >
-        <div className="dialog-header">
-          <h3><Settings size={18} /> {t("settings.title", { defaultValue: "Settings" })}</h3>
-          <button onClick={onClose} className="btn btn-ghost btn-sm"><X size={16} /></button>
-        </div>
-
-        {/* API Keys */}
-        <div className="dialog-section">
-          <h4>{t("settings.apiKeys", { defaultValue: "Translation API" })}</h4>
-
-          <label className="dialog-label">
-            {t("settings.provider", { defaultValue: "Provider" })}
-          </label>
-          <select
-            value={config.current_provider || providers?.current || "openai"}
-            onChange={(e) => handleChange("current_provider", e.target.value)}
-            className="dialog-input"
-          >
-            <option value="openai">OpenAI</option>
-            <option value="deepl">DeepL</option>
-          </select>
-
-          <label className="dialog-label">
-            OpenAI API Key
-          </label>
-          <input
-            type="password"
-            value={config.openai_api_key || ""}
-            onChange={(e) => handleChange("openai_api_key", e.target.value)}
-            placeholder="sk-..."
-            className="dialog-input"
-          />
-          <p className="dialog-hint">
-            {t("settings.apiKeyHint", { defaultValue: "Supports OpenAI-compatible APIs (OpenAI, DeepSeek, etc.). Also settable via XT_TRANSLATE_API_KEY env var." })}
-          </p>
-
-          <label className="dialog-label">
-            DeepL API Key
-          </label>
-          <input
-            type="password"
-            value={config.deepl_api_key || ""}
-            onChange={(e) => handleChange("deepl_api_key", e.target.value)}
-            placeholder={t("settings.deeplPlaceholder", { defaultValue: "DeepL API key (free: xxx:fx, pro: xxx)" })}
-            className="dialog-input"
-          />
-        </div>
-
-        {/* Proxy */}
-        <div className="dialog-section">
-          <h4>{t("settings.proxy", { defaultValue: "HTTP Proxy" })}</h4>
-
-          <label className="dialog-label">
-            {t("settings.proxyServer", { defaultValue: "Proxy Server" })}
-          </label>
-          <input
-            type="text"
-            value={config.proxy_server || ""}
-            onChange={(e) => handleChange("proxy_server", e.target.value)}
-            placeholder={t("settings.proxyServerPlaceholder", { defaultValue: "e.g. proxy.example.com (leave empty to disable)" })}
-            className="dialog-input"
-          />
-
-          <label className="dialog-label">
-            {t("settings.proxyPort", { defaultValue: "Port" })}
-          </label>
-          <input
-            type="number"
-            value={config.proxy_port ?? 8080}
-            onChange={(e) => handleChange("proxy_port", parseInt(e.target.value, 10) || undefined)}
-            placeholder="8080"
-            className="dialog-input"
-            min={1}
-            max={65535}
-          />
-
-          <label className="dialog-label">
-            {t("settings.proxyUsername", { defaultValue: "Username (optional)" })}
-          </label>
-          <input
-            type="text"
-            value={config.proxy_username || ""}
-            onChange={(e) => handleChange("proxy_username", e.target.value)}
-            placeholder={t("settings.proxyAuthPlaceholder", { defaultValue: "Leave empty if no auth" })}
-            className="dialog-input"
-          />
-
-          <label className="dialog-label">
-            {t("settings.proxyPassword", { defaultValue: "Password (optional)" })}
-          </label>
-          <input
-            type="password"
-            value={config.proxy_password || ""}
-            onChange={(e) => handleChange("proxy_password", e.target.value)}
-            placeholder={t("settings.proxyAuthPlaceholder", { defaultValue: "Leave empty if no auth" })}
-            className="dialog-input"
-          />
-          <p className="dialog-hint">
-            {t("settings.proxyHint", { defaultValue: "Proxy settings apply to OpenAI and DeepL translation requests. Saved to config file." })}
-          </p>
-        </div>
-
-        {/* ESP Mode */}
-        <div className="dialog-section">
-          <h4>{t("settings.espMode", { defaultValue: "ESP Mode" })}</h4>
-
-          <label className="dialog-label" style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <input
-              type="checkbox"
-              checked={config.esp_mode ?? false}
-              onChange={(e) => setConfig((prev) => ({ ...prev, esp_mode: e.target.checked }))}
-            />
-            {t("settings.enableEspMode", { defaultValue: "Enable ESP write-back mode" })}
-          </label>
-          <p className="dialog-hint">
-            {t("settings.espModeHint", { defaultValue: "When enabled, Save writes translations directly into the ESP file (for delocalized ESPs). When disabled, saves to external .STRINGS files (default)." })}
-          </p>
-        </div>
-
-        <div className="dialog-actions">
-          <button onClick={onClose} className="btn btn-ghost">
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={t("settings.title", { defaultValue: "Settings" })}
+      size="lg"
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>
             {t("common.cancel")}
-          </button>
-          <button onClick={handleSave} disabled={saving} className="btn btn-primary">
+          </Button>
+          <Button variant="primary" onClick={handleSave} loading={saving}>
             {saving ? t("settings.saving", { defaultValue: "Saving..." }) : t("common.confirm")}
-          </button>
-        </div>
+          </Button>
+        </>
+      }
+    >
+      {/* API Keys */}
+      <div className="dialog-section">
+        <h4>{t("settings.apiKeys", { defaultValue: "Translation API" })}</h4>
+
+        <label className="dialog-label">
+          {t("settings.provider", { defaultValue: "Provider" })}
+        </label>
+        <Select
+          value={config.current_provider || providers?.current || "openai"}
+          onChange={(e) => handleChange("current_provider", e.target.value)}
+          options={[
+            { value: "openai", label: "OpenAI" },
+            { value: "deepl", label: "DeepL" },
+          ]}
+        />
+
+        <label className="dialog-label">
+          OpenAI API Key
+        </label>
+        <Input
+          type="password"
+          value={config.openai_api_key || ""}
+          onChange={(e) => handleChange("openai_api_key", e.target.value)}
+          placeholder="sk-..."
+        />
+        <p className="ui-modal-hint">
+          {t("settings.apiKeyHint", { defaultValue: "Supports OpenAI-compatible APIs (OpenAI, DeepSeek, etc.). Also settable via XT_TRANSLATE_API_KEY env var." })}
+        </p>
+
+        <label className="dialog-label">
+          DeepL API Key
+        </label>
+        <Input
+          type="password"
+          value={config.deepl_api_key || ""}
+          onChange={(e) => handleChange("deepl_api_key", e.target.value)}
+          placeholder={t("settings.deeplPlaceholder", { defaultValue: "DeepL API key (free: xxx:fx, pro: xxx)" })}
+        />
       </div>
-    </div>
+
+      {/* Proxy */}
+      <div className="dialog-section">
+        <h4>{t("settings.proxy", { defaultValue: "HTTP Proxy" })}</h4>
+
+        <label className="dialog-label">
+          {t("settings.proxyServer", { defaultValue: "Proxy Server" })}
+        </label>
+        <Input
+          type="text"
+          value={config.proxy_server || ""}
+          onChange={(e) => handleChange("proxy_server", e.target.value)}
+          placeholder={t("settings.proxyServerPlaceholder", { defaultValue: "e.g. proxy.example.com (leave empty to disable)" })}
+        />
+
+        <label className="dialog-label">
+          {t("settings.proxyPort", { defaultValue: "Port" })}
+        </label>
+        <Input
+          type="number"
+          value={config.proxy_port ?? 8080}
+          onChange={(e) => handleChange("proxy_port", parseInt(e.target.value, 10) || undefined)}
+          placeholder="8080"
+        />
+
+        <label className="dialog-label">
+          {t("settings.proxyUsername", { defaultValue: "Username (optional)" })}
+        </label>
+        <Input
+          type="text"
+          value={config.proxy_username || ""}
+          onChange={(e) => handleChange("proxy_username", e.target.value)}
+          placeholder={t("settings.proxyAuthPlaceholder", { defaultValue: "Leave empty if no auth" })}
+        />
+
+        <label className="dialog-label">
+          {t("settings.proxyPassword", { defaultValue: "Password (optional)" })}
+        </label>
+        <Input
+          type="password"
+          value={config.proxy_password || ""}
+          onChange={(e) => handleChange("proxy_password", e.target.value)}
+          placeholder={t("settings.proxyAuthPlaceholder", { defaultValue: "Leave empty if no auth" })}
+        />
+        <p className="ui-modal-hint">
+          {t("settings.proxyHint", { defaultValue: "Proxy settings apply to OpenAI and DeepL translation requests. Saved to config file." })}
+        </p>
+      </div>
+
+      {/* ESP Mode */}
+      <div className="dialog-section">
+        <h4>{t("settings.espMode", { defaultValue: "ESP Mode" })}</h4>
+
+        <label className="dialog-label settings-checkbox-label">
+          <input
+            type="checkbox"
+            checked={config.esp_mode ?? false}
+            onChange={(e) => setConfig((prev) => ({ ...prev, esp_mode: e.target.checked }))}
+          />
+          {t("settings.enableEspMode", { defaultValue: "Enable ESP write-back mode" })}
+        </label>
+        <p className="ui-modal-hint">
+          {t("settings.espModeHint", { defaultValue: "When enabled, Save writes translations directly into the ESP file (for delocalized ESPs). When disabled, saves to external .STRINGS files (default)." })}
+        </p>
+      </div>
+    </Modal>
   );
 }

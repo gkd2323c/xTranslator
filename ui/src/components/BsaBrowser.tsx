@@ -8,6 +8,7 @@ import {
 import toast from "react-hot-toast";
 import { listBsaFiles, listBa2Files, extractBsaFile, extractBa2File, extractBsaFolder, extractBa2Folder } from "../api/strings";
 import type { BsaFileListDto, BsaFileEntryDto } from "../api/strings";
+import { Button, EmptyState } from "./ui";
 
 function formatSize(bytes: number): string {
   if (bytes >= 1_048_576) return `${(bytes / 1_048_576).toFixed(1)} MB`;
@@ -110,13 +111,14 @@ export function BsaBrowser() {
       {/* Header */}
       {!fileList ? (
         <div className="sidepanel-empty">
-          <FileArchive size={36} />
-          <p style={{ marginTop: 8 }}>{t("bsa.title")}</p>
-          <p className="sidepanel-hint">{t("bsa.subtitle")}</p>
-          <button onClick={handleOpen} disabled={loading} className="btn btn-primary" style={{ marginTop: 16 }}>
-            <FolderOpen size={16} />
-            <span>{loading ? t("bsa.opening") : t("bsa.openBsa")}</span>
-          </button>
+          <EmptyState
+            icon={<FileArchive size={36} />}
+            title={t("bsa.title")}
+            hint={t("bsa.subtitle")}
+          />
+          <Button variant="primary" onClick={handleOpen} disabled={loading} icon={<FolderOpen size={16} />} className="bsa-open-btn">
+            {loading ? t("bsa.opening") : t("bsa.openBsa")}
+          </Button>
         </div>
       ) : (
         <>
@@ -140,13 +142,15 @@ export function BsaBrowser() {
               <span className="sidepanel-label">{t("bsa.folders")}</span>
               <span className="sidepanel-value">{fileList.folders.length}</span>
             </div>
-            <button
+            <Button
+              variant="default"
+              size="sm"
               onClick={handleOpen}
-              className="btn btn-sm"
-              style={{ marginTop: 8, width: "100%" }}
+              icon={<FolderOpen size={12} />}
+              className="bsa-open-another-btn"
             >
-              <FolderOpen size={12} /> {t("bsa.openAnother")}
-            </button>
+              {t("bsa.openAnother")}
+            </Button>
           </div>
 
           {/* Folder Tree */}
@@ -167,27 +171,27 @@ export function BsaBrowser() {
               return (
                 <div key={folder}>
                   <div
-                    className={`record-type-row ${isActive ? "active" : ""}`}
+                    className={`record-type-row bsa-folder-row ${isActive ? "active" : ""}`}
                     onClick={() => {
                       toggleFolder(folder);
                       setSelectedFolder(folder);
                     }}
-                    style={{ display: "flex", alignItems: "center", gap: 4 }}
                   >
                     {isExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-                    <Folder size={12} style={{ color: "var(--accent-gold)", flexShrink: 0 }} />
-                    <span className="sidepanel-label" style={{ flex: 1 }}>{folder}</span>
+                    <Folder size={12} className="bsa-folder-icon" />
+                    <span className="sidepanel-label bsa-folder-name">{folder}</span>
                     <span className="sidepanel-value">{count}</span>
                   </div>
                   {isExpanded && (
-                    <div style={{ marginLeft: 20, marginBottom: 4 }}>
-                      <button
-                        className="btn btn-sm"
+                    <div className="bsa-extract-folder">
+                      <Button
+                        variant="default"
+                        size="xs"
                         onClick={(e) => { e.stopPropagation(); handleExtractFolder(folder); }}
-                        style={{ fontSize: 10, padding: "2px 8px" }}
+                        icon={<Download size={10} />}
                       >
-                        <Download size={10} /> {t("bsa.extractAll")}
-                      </button>
+                        {t("bsa.extractAll")}
+                      </Button>
                     </div>
                   )}
                 </div>
@@ -209,21 +213,20 @@ export function BsaBrowser() {
               {filteredFiles.map((entry) => (
                 <div
                   key={entry.path}
-                  className="record-type-row"
-                  style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11 }}
+                  className="record-type-row bsa-file-row"
                   onClick={() => handleExtractFile(entry)}
                   title={`${entry.path}\n${entry.compressed ? t("bsa.compressed") : "Stored"} — ${formatSize(entry.size)}`}
                 >
-                  <FileText size={12} style={{ color: "var(--text-secondary)", flexShrink: 0 }} />
-                  <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  <FileText size={12} className="bsa-file-icon" />
+                  <span className="bsa-file-name-cell">
                     {entry.path.split("/").pop()}
                   </span>
-                  <span style={{ color: "var(--text-muted)", fontSize: 10, flexShrink: 0 }}>
+                  <span className="bsa-file-size">
                     {formatSize(entry.size)}
                   </span>
                   {entry.compressed && (
                     <span title={t("bsa.compressed")}>
-                      <HardDrive size={10} style={{ color: "var(--accent-cyan)", flexShrink: 0 }} />
+                      <HardDrive size={10} className="bsa-compressed-icon" />
                     </span>
                   )}
                 </div>

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAppStore } from "../stores/appStore";
+import { Button } from "./ui";
 import { loadEsp, loadSst, saveSst, exportXml, importXml, saveStrings, saveEsp, tcscConvert, tcscBatchConvert, updateTranslation, loadVocabulary, compareSourceDest, loadDataConfigs, delocalizeEsp, type BatchProgress } from "../api/strings";
 import type { LoadSstResponse, XmlImportResponse } from "../api/strings";
 import { open, save } from "@tauri-apps/plugin-dialog";
@@ -473,49 +474,44 @@ export function MenuBar() {
       <div className="menubar-brand">xTranslator</div>
       <div className="menubar-actions" role="toolbar" aria-label="Application actions">
         <div className="toolbar-group toolbar-group-primary" role="group" aria-label="Files">
-          <button type="button" onClick={handleLoadEsp} disabled={isParsing} className="btn btn-primary">
-            <FolderOpen size={16} />
-            <span>{t("common.loadEsp")}</span>
-          </button>
-          <button type="button" onClick={handleLoadSst} disabled={isLoading || !espPath} className="btn">
-            <FileUp size={16} />
-            <span>{t("common.loadSst")}</span>
-          </button>
-          <button type="button" onClick={handleSaveSst} disabled={isLoading || !espPath} className="btn">
-            <FileDown size={16} />
-            <span>{t("common.saveSst")}</span>
-          </button>
-          <button type="button" onClick={handleSaveStrings} disabled={isLoading || !espPath} className="btn">
-            <Save size={16} />
-            <span>{t("common.saveStrings")}</span>
-          </button>
+          <Button variant="primary" icon={<FolderOpen size={16} />} onClick={handleLoadEsp} disabled={isParsing}>
+            {t("common.loadEsp")}
+          </Button>
+          <Button icon={<FileUp size={16} />} onClick={handleLoadSst} disabled={isLoading || !espPath}>
+            {t("common.loadSst")}
+          </Button>
+          <Button icon={<FileDown size={16} />} onClick={handleSaveSst} disabled={isLoading || !espPath}>
+            {t("common.saveSst")}
+          </Button>
+          <Button icon={<Save size={16} />} onClick={handleSaveStrings} disabled={isLoading || !espPath}>
+            {t("common.saveStrings")}
+          </Button>
         </div>
 
         <div className="toolbar-group" role="group" aria-label="Exchange formats">
-          <button type="button" onClick={handleExportXml} disabled={isLoading || !espPath} className="btn">
-            <FileCode size={16} />
-            <span>{t("common.exportXml")}</span>
-          </button>
-          <button type="button" onClick={handleImportXml} disabled={isLoading || !espPath} className="btn">
-            <FileCode size={16} />
-            <span>{t("common.importXml")}</span>
-          </button>
+          <Button icon={<FileCode size={16} />} onClick={handleExportXml} disabled={isLoading || !espPath}>
+            {t("common.exportXml")}
+          </Button>
+          <Button icon={<FileCode size={16} />} onClick={handleImportXml} disabled={isLoading || !espPath}>
+            {t("common.importXml")}
+          </Button>
         </div>
 
         <div className="toolbar-group" role="group" aria-label="Finalize">
-          <button
-            type="button"
+          <Button
+            variant="primary"
+            icon={<CheckCircle size={16} />}
             onClick={() => setShowFinalizePanel(!showFinalizePanel)}
             disabled={isLoading || !espPath}
-            className={`btn btn-primary ${showFinalizePanel ? "active" : ""}`}
+            active={showFinalizePanel}
             title={t("finalize.title")}
           >
-            <CheckCircle size={16} />
-            <span>{t("finalize.title")}</span>
-          </button>
+            {t("finalize.title")}
+          </Button>
           {espMode && (
-            <button
-              type="button"
+            <Button
+              variant="ghost"
+              icon={<FileCode size={16} />}
               onClick={async () => {
                 if (!espPath) return;
                 try {
@@ -534,18 +530,15 @@ export function MenuBar() {
                 }
               }}
               disabled={isLoading || !espPath}
-              className="btn btn-ghost"
               title={t("menu.delocalizeEsp", { defaultValue: "Delocalize ESP" })}
             >
-              <FileCode size={16} />
-              <span>{t("menu.delocalizeEsp", { defaultValue: "Delocalize" })}</span>
-            </button>
+              {t("menu.delocalizeEsp", { defaultValue: "Delocalize" })}
+            </Button>
           )}
         </div>
 
         <div className="toolbar-group" role="group" aria-label="TCSC conversion">
-          <button
-            type="button"
+          <Button
             onClick={async () => {
               const selectedItem = useAppStore.getState().selectedItem;
               if (!selectedItem?.translation) {
@@ -562,13 +555,11 @@ export function MenuBar() {
               }
             }}
             disabled={isLoading}
-            className="btn"
             title={t("menu.tcsc_simplified")}
           >
-            <span>{t("menu.tcsc_simplified")}</span>
-          </button>
-          <button
-            type="button"
+            {t("menu.tcsc_simplified")}
+          </Button>
+          <Button
             onClick={async () => {
               const selectedItem = useAppStore.getState().selectedItem;
               if (!selectedItem?.translation) {
@@ -585,13 +576,12 @@ export function MenuBar() {
               }
             }}
             disabled={isLoading}
-            className="btn"
             title={t("menu.tcsc_traditional")}
           >
-            <span>{t("menu.tcsc_traditional")}</span>
-          </button>
-          <button
-            type="button"
+            {t("menu.tcsc_traditional")}
+          </Button>
+          <Button
+            variant="ghost"
             onClick={async () => {
               const allItems = useAppStore.getState().allItems;
               const hasTranslations = allItems.some((item) => item.translation && item.translation.trim() !== "");
@@ -616,13 +606,12 @@ export function MenuBar() {
               }
             }}
             disabled={isLoading || !espPath}
-            className="btn btn-ghost"
             title={t("menu.tcsc_batch_simplified", { defaultValue: "Batch: Convert all to Simplified Chinese" })}
           >
-            <span>{t("menu.tcsc_batch_simplified", { defaultValue: "简↹" })}</span>
-          </button>
-          <button
-            type="button"
+            {t("menu.tcsc_batch_simplified", { defaultValue: "简↹" })}
+          </Button>
+          <Button
+            variant="ghost"
             onClick={async () => {
               const allItems = useAppStore.getState().allItems;
               const hasTranslations = allItems.some((item) => item.translation && item.translation.trim() !== "");
@@ -647,13 +636,13 @@ export function MenuBar() {
               }
             }}
             disabled={isLoading || !espPath}
-            className="btn btn-ghost"
             title={t("menu.tcsc_batch_traditional", { defaultValue: "Batch: Convert all to Traditional Chinese" })}
           >
-            <span>{t("menu.tcsc_batch_traditional", { defaultValue: "繁↹" })}</span>
-          </button>
-          <button
-            type="button"
+            {t("menu.tcsc_batch_traditional", { defaultValue: "繁↹" })}
+          </Button>
+          <Button
+            variant="ghost"
+            icon={<ArrowLeftRight size={16} />}
             onClick={async () => {
               if (!espPath) return;
               try {
@@ -667,14 +656,13 @@ export function MenuBar() {
               }
             }}
             disabled={isLoading || !espPath}
-            className="btn btn-ghost"
             title={t("menu.compare_diff", { defaultValue: "Tag: source ≠ translation" })}
           >
-            <ArrowLeftRight size={16} />
-            <span style={{ fontSize: 11 }}>≠</span>
-          </button>
-          <button
-            type="button"
+            ≠
+          </Button>
+          <Button
+            variant="ghost"
+            icon={<ArrowLeftRight size={16} />}
             onClick={async () => {
               if (!espPath) return;
               try {
@@ -688,95 +676,93 @@ export function MenuBar() {
               }
             }}
             disabled={isLoading || !espPath}
-            className="btn btn-ghost"
             title={t("menu.compare_same", { defaultValue: "Tag: source = translation" })}
           >
-            <ArrowLeftRight size={16} />
-            <span style={{ fontSize: 11 }}>＝</span>
-          </button>
+            ＝
+          </Button>
         </div>
 
         <div className="toolbar-group toolbar-icon-group" role="group" aria-label="Tool panels">
-          <button
-            type="button"
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={<RefreshCw size={16} />}
             onClick={() => setShowBatchPanel(!showBatchPanel)}
-            className={`btn btn-ghost ${showBatchPanel ? "active" : ""}`}
+            active={showBatchPanel}
             title={showBatchPanel ? t("menu.closeBatchPanel") : t("menu.openBatchPanel")}
             aria-label={showBatchPanel ? t("menu.closeBatchPanel") : t("menu.openBatchPanel")}
             aria-pressed={showBatchPanel}
-          >
-            <RefreshCw size={16} />
-          </button>
-          <button
-            type="button"
+          />
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={<FileArchive size={16} />}
             onClick={() => setShowBsaBrowser(!showBsaBrowser)}
-            className={`btn btn-ghost ${showBsaBrowser ? "active" : ""}`}
+            active={showBsaBrowser}
             title={showBsaBrowser ? t("menu.closeBSABrowser") : t("menu.openBSABrowser")}
             aria-label={showBsaBrowser ? t("menu.closeBSABrowser") : t("menu.openBSABrowser")}
             aria-pressed={showBsaBrowser}
-          >
-            <FileArchive size={16} />
-          </button>
-          <button
-            type="button"
+          />
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={<Braces size={16} />}
             onClick={() => setShowPexPanel(!showPexPanel)}
-            className={`btn btn-ghost ${showPexPanel ? "active" : ""}`}
+            active={showPexPanel}
             title={showPexPanel ? t("menu.closePEXPanel") : t("menu.openPEXPanel")}
             aria-label={showPexPanel ? t("menu.closePEXPanel") : t("menu.openPEXPanel")}
             aria-pressed={showPexPanel}
-          >
-            <Braces size={16} />
-          </button>
-          <button
-            type="button"
+          />
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={<Volume2 size={16} />}
             onClick={() => setShowFuzPanel(!showFuzPanel)}
-            className={`btn btn-ghost ${showFuzPanel ? "active" : ""}`}
+            active={showFuzPanel}
             title={showFuzPanel ? t("menu.closeVoicePanel") : t("menu.openVoicePanel")}
             aria-label={showFuzPanel ? t("menu.closeVoicePanel") : t("menu.openVoicePanel")}
             aria-pressed={showFuzPanel}
-          >
-            <Volume2 size={16} />
-          </button>
-          <button
-            type="button"
+          />
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={<MessagesSquare size={16} />}
             onClick={() => setShowDialogView(!showDialogView)}
-            className={`btn btn-ghost ${showDialogView ? "active" : ""}`}
+            active={showDialogView}
             title={showDialogView ? t("menu.closeDialogView") : t("menu.openDialogView")}
             aria-label={showDialogView ? t("menu.closeDialogView") : t("menu.openDialogView")}
             aria-pressed={showDialogView}
-          >
-            <MessagesSquare size={16} />
-          </button>
-          <button
-            type="button"
+          />
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={<FileText size={16} />}
             onClick={() => setShowMcmPanel(!showMcmPanel)}
-            className={`btn btn-ghost ${showMcmPanel ? "active" : ""}`}
+            active={showMcmPanel}
             title={showMcmPanel ? t("menu.closeMCMPanel") : t("menu.openMCMPanel")}
             aria-label={showMcmPanel ? t("menu.closeMCMPanel") : t("menu.openMCMPanel")}
             aria-pressed={showMcmPanel}
-          >
-            <FileText size={16} />
-          </button>
-          <button
-            type="button"
+          />
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={<GitCompare size={16} />}
             onClick={() => setShowEspCompare(!showEspCompare)}
-            className={`btn btn-ghost ${showEspCompare ? "active" : ""}`}
+            active={showEspCompare}
             title={showEspCompare ? t("menu.closeESPCompare") : t("menu.openESPCompare")}
             aria-label={showEspCompare ? t("menu.closeESPCompare") : t("menu.openESPCompare")}
             aria-pressed={showEspCompare}
-          >
-            <GitCompare size={16} />
-          </button>
-          <button
-            type="button"
+          />
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={<Database size={16} />}
             onClick={() => setShowDataConfigsPanel(!showDataConfigsPanel)}
-            className={`btn btn-ghost ${showDataConfigsPanel ? "active" : ""}`}
+            active={showDataConfigsPanel}
             title={showDataConfigsPanel ? t("menu.closeDataConfigs") : t("menu.openDataConfigs")}
             aria-label={showDataConfigsPanel ? t("menu.closeDataConfigs") : t("menu.openDataConfigs")}
             aria-pressed={showDataConfigsPanel}
-          >
-            <Database size={16} />
-          </button>
+          />
         </div>
 
         <div className="toolbar-group toolbar-selects" role="group" aria-label="Preferences">
@@ -809,9 +795,8 @@ export function MenuBar() {
             aria-label="Theme"
           >
             <option value="auto">Auto</option>
-            <option value="dark">Dark</option>
             <option value="light">Light</option>
-            <option value="gray">Gray</option>
+            <option value="dark">Dark</option>
           </select>
           <select
             value={i18n.language}
@@ -824,27 +809,25 @@ export function MenuBar() {
               <option key={code} value={code}>{label}</option>
             ))}
           </select>
-          <button
-            type="button"
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={<Settings size={16} />}
             onClick={() => setShowSettings(true)}
-            className="btn btn-ghost"
             title={t("settings.title", { defaultValue: "Settings" })}
             aria-label={t("settings.title", { defaultValue: "Settings" })}
-          >
-            <Settings size={16} />
-          </button>
-          <button
-            type="button"
+          />
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={<RotateCcw size={16} />}
             onClick={() => {
               if (isDirty && !confirm(t("app.resetConfirm"))) return;
               reset();
             }}
-            className="btn btn-ghost"
             title={t("app.resetWorkspace")}
             aria-label={t("app.resetWorkspace")}
-          >
-            <RotateCcw size={16} />
-          </button>
+          />
         </div>
       </div>
       {isParsing && <span className="menubar-status parsing">{t("app.parsing")}</span>}

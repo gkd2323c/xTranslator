@@ -6,6 +6,7 @@ import { GitCompare, FileUp, RefreshCw } from "lucide-react";
 import toast from "react-hot-toast";
 import { compareEspFiles } from "../api/strings";
 import type { EspCompareResultDto, EspComparePairDto } from "../api/strings";
+import { Button, EmptyState, Input } from "./ui";
 
 type Tab = "identical" | "added" | "removed" | "modified";
 
@@ -49,73 +50,27 @@ function CompareRow(props: {
         padding: "2px 12px",
       }}
     >
-      <div
-        className="record-type-row"
-        style={{
-          height: ROW_HEIGHT - 6,
-          boxSizing: "border-box",
-          padding: "8px",
-          background: "var(--bg-secondary)",
-          borderRadius: 4,
-          overflow: "hidden",
-        }}
-      >
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+      <div className="esp-compare-row">
+        <div className="esp-compare-row-header">
           <span
-            style={{
-              fontSize: 10,
-              fontFamily: "monospace",
-              color: "var(--text-muted)",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-            }}
+            className="esp-compare-row-sig"
             title={`${entry.record_sig}/${entry.field_sig} [old=${oldId} new=${newId}]`}
           >
             {entry.record_sig}/{entry.field_sig} [old={oldId} new={newId}]
           </span>
         </div>
-        <div
-          style={{
-            fontSize: 11,
-            color: "var(--text-secondary)",
-            marginBottom: 2,
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}
-          title={entry.old_source || entry.source}
-        >
-          <span style={{ color: "var(--text-muted)" }}>OLD: </span>
-          {entry.old_source || entry.source || <em style={{ opacity: 0.5 }}>(empty)</em>}
+        <div className="esp-compare-row-source" title={entry.old_source || entry.source}>
+          <span className="esp-compare-row-label">OLD: </span>
+          {entry.old_source || entry.source || <em className="esp-compare-empty">(empty)</em>}
         </div>
         {activeTab === "modified" ? (
-          <div
-            style={{
-              fontSize: 11,
-              color: "var(--text-secondary)",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-            }}
-            title={entry.new_source}
-          >
-            <span style={{ color: "var(--accent)" }}>NEW: </span>
-            {entry.new_source || <em style={{ opacity: 0.5 }}>(empty)</em>}
+          <div className="esp-compare-row-new" title={entry.new_source}>
+            <span className="esp-compare-row-label-new">NEW: </span>
+            {entry.new_source || <em className="esp-compare-empty">(empty)</em>}
           </div>
         ) : (
-          <div
-            style={{
-              fontSize: 11,
-              color: "var(--text-primary)",
-              marginTop: 2,
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-            }}
-            title={entry.source}
-          >
-            {entry.source || <em style={{ opacity: 0.5 }}>(empty)</em>}
+          <div className="esp-compare-row-text" title={entry.source}>
+            {entry.source || <em className="esp-compare-empty">(empty)</em>}
           </div>
         )}
       </div>
@@ -202,46 +157,36 @@ export function EspComparePanel() {
     <div className="sidepanel">
       {!compareResult ? (
         <div className="sidepanel-empty">
-          <GitCompare size={36} />
-          <p style={{ marginTop: 8 }}>{t("espCompare.title")}</p>
-          <p className="sidepanel-hint">{t("espCompare.subtitle")}</p>
-          <button onClick={handleCompare} disabled={loading} className="btn btn-primary" style={{ marginTop: 16 }}>
-            <FileUp size={16} />
-            <span>{loading ? t("espCompare.comparing") : t("espCompare.compare")}</span>
-          </button>
+          <EmptyState
+            icon={<GitCompare size={36} />}
+            title={t("espCompare.title")}
+            hint={t("espCompare.subtitle")}
+          />
+          <Button variant="primary" onClick={handleCompare} disabled={loading} icon={<FileUp size={16} />} className="esp-compare-open-btn">
+            {loading ? t("espCompare.comparing") : t("espCompare.compare")}
+          </Button>
         </div>
       ) : (
         <>
           {/* Header */}
-          <div className="sidepanel-section" style={{ paddingBottom: 0 }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+          <div className="sidepanel-section esp-compare-header">
+            <div className="esp-compare-header-row">
               <h3 style={{ margin: 0 }}>{t("espCompare.title")}</h3>
-              <button onClick={handleCompare} disabled={loading} className="btn btn-ghost btn-sm" title={t("espCompare.compareAgain")}>
-                <RefreshCw size={14} />
-              </button>
+              <Button variant="ghost" size="sm" onClick={handleCompare} disabled={loading} title={t("espCompare.compareAgain")} icon={<RefreshCw size={14} />} />
             </div>
-            <div style={{ fontSize: 10, color: "var(--text-muted)", lineHeight: 1.4 }}>
+            <div className="esp-compare-paths">
               <div>OLD: {compareResult.oldPath.replace(/\\/g, "/").split("/").pop()}</div>
               <div>NEW: {compareResult.newPath.replace(/\\/g, "/").split("/").pop()}</div>
             </div>
           </div>
 
           {/* Tab bar */}
-          <div style={{ display: "flex", borderBottom: "1px solid var(--border)", margin: "8px 12px 0" }}>
+          <div className="esp-compare-tabs">
             {(["identical", "added", "removed", "modified"] as Tab[]).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                style={{
-                  flex: 1,
-                  padding: "6px 4px",
-                  background: "none",
-                  border: "none",
-                  borderBottom: activeTab === tab ? "2px solid var(--accent)" : "2px solid transparent",
-                  color: activeTab === tab ? "var(--accent)" : "var(--text-secondary)",
-                  fontSize: 11,
-                  cursor: "pointer",
-                }}
+                className={`esp-compare-tab ${activeTab === tab ? "esp-compare-tab-active" : ""}`}
               >
                 {t(`espCompare.tabs.${tab}`)} ({tabCounts[tab].toLocaleString()})
               </button>
@@ -249,29 +194,19 @@ export function EspComparePanel() {
           </div>
 
           {/* Filter */}
-          <div style={{ padding: "8px 12px" }}>
-            <input
-              type="text"
+          <div className="esp-compare-filter">
+            <Input
+              size="sm"
               placeholder={t("espCompare.filterPlaceholder")}
               value={filterText}
               onChange={(e) => setFilterText(e.target.value)}
-              style={{
-                width: "100%",
-                padding: "6px 8px",
-                border: "1px solid var(--border)",
-                borderRadius: 4,
-                background: "var(--bg-secondary)",
-                color: "var(--text-primary)",
-                fontSize: 12,
-                boxSizing: "border-box",
-              }}
             />
           </div>
 
           {/* Entry list */}
           <div style={{ height: "calc(100vh - 245px)", minHeight: 240 }}>
             {entries.length === 0 ? (
-              <div style={{ textAlign: "center", color: "var(--text-muted)", padding: 20, fontSize: 12 }}>
+              <div className="esp-compare-empty">
                 {t("espCompare.noMatch")}
               </div>
             ) : (

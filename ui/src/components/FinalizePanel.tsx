@@ -6,6 +6,7 @@ import { finalize } from "../api/strings";
 import type { FinalizeResponse } from "../api/strings";
 import toast from "react-hot-toast";
 import { FileDown, Save, FolderOpen } from "lucide-react";
+import { Button } from "./ui";
 
 export function FinalizePanel() {
   const { t } = useTranslation();
@@ -136,9 +137,7 @@ export function FinalizePanel() {
               className="input"
               readOnly
             />
-            <button onClick={handleSelectOutputDir} className="btn btn-sm">
-              <FolderOpen size={14} />
-            </button>
+            <Button variant="default" size="sm" onClick={handleSelectOutputDir} icon={<FolderOpen size={14} />} />
           </div>
         </div>
 
@@ -160,9 +159,7 @@ export function FinalizePanel() {
                 placeholder={t("finalize.sstPathPlaceholder")}
                 className="input"
               />
-              <button onClick={handleSelectSstPath} className="btn btn-sm">
-                <Save size={14} />
-              </button>
+              <Button variant="default" size="sm" onClick={handleSelectSstPath} icon={<Save size={14} />} />
             </div>
           )}
         </div>
@@ -181,7 +178,8 @@ export function FinalizePanel() {
 
       {/* Action */}
       <div className="sidepanel-section">
-        <button
+        <Button
+          variant="primary"
           onClick={handleFinalize}
           disabled={
             running ||
@@ -190,12 +188,11 @@ export function FinalizePanel() {
             !outputDir ||
             (saveSst && !sstPath)
           }
-          className="btn btn-primary"
-          style={{ width: "100%" }}
+          icon={<FileDown size={16} />}
+          className="finalize-btn"
         >
-          <FileDown size={16} />
-          <span>{running ? t("finalize.exporting") : t("finalize.exportAll")}</span>
-        </button>
+          {running ? t("finalize.exporting") : t("finalize.exportAll")}
+        </Button>
       </div>
 
       {/* Result Output Files */}
