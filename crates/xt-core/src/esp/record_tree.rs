@@ -78,6 +78,11 @@ impl EspField {
         self.buffer = encoded;
     }
 
+    /// Convert field buffer to string using the given codepage.
+    pub fn buffer_to_string(&self, codepage: &crate::strings::CodepageConfig) -> String {
+        codepage.decode(&self.buffer)
+    }
+
     /// Write this field to a writer (header + buffer).
     pub fn write_to<W: Write>(&self, writer: &mut W) -> std::io::Result<()> {
         writer.write_all(&self.header.name)?;
