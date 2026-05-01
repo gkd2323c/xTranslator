@@ -1,8 +1,8 @@
 ---
 intent: 001-batch-translation
 phase: inception
-status: units-decomposed
-updated: 2026-05-01T12:00:00Z
+status: complete
+updated: 2026-05-01T12:30:00Z
 ---
 
 # 批量翻译 - Unit Decomposition

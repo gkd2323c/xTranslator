@@ -136,6 +136,11 @@ export function MenuBar() {
         setIsDirty(false);
         toast.success(`Loaded ${stats.total.toLocaleString()} ${t('sidebar.totalStrings').toLowerCase()}`);
 
+        // Check for unapplied translation cache (crash recovery)
+        if (stats.esp_hash) {
+          useAppStore.getState().checkAndPromptRecovery(stats.esp_hash);
+        }
+
         // Auto-load vocabulary for heuristic search enrichment
         loadVocabulary(stringsDir, language, useAppStore.getState().targetLang, useAppStore.getState().language === "english" ? "SkyrimSE" : undefined)
           .then((info) => {

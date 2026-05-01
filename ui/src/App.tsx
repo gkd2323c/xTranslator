@@ -20,6 +20,7 @@ import { DataConfigsPanel } from "./components/DataConfigsPanel";
 import { StringTable } from "./components/StringTable";
 import { EditorPanel } from "./components/EditorPanel";
 import { BatchTranslateBar } from "./components/BatchTranslateBar";
+import { RecoveryPromptModal } from "./components/RecoveryPromptModal";
 import { autoBackupSst, loadConfig, setOpenAiApiKey, setDeeplApiKey, setTranslationProvider } from "./api/strings";
 import "./App.css";
 
@@ -223,6 +224,7 @@ function App() {
   return (
     <div className="app">
       <Toaster position="top-right" />
+      <RecoveryPromptModal />
       <MenuBar />
       <BatchTranslateBar />
       <div className="app-body">

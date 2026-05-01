@@ -1,6 +1,6 @@
 import { create } from "zustand";
-import type { SkyStringDTO, LoadEspResponse, LoadSstResponse, BatchEntry, BatchStatus, DataConfigsDto } from "../api/strings";
-import { getAllStrings, getStringsChunk, getStringsCount, queryStrings, updateTranslation, batchUpdateTranslations, startStringBatchTranslate, cancelStringBatchTranslate, checkPendingCache, applyTranslationCache } from "../api/strings";
+import type { SkyStringDTO, LoadEspResponse, LoadSstResponse, BatchEntry, BatchStatus, DataConfigsDto, RecoveryInfo } from "../api/strings";
+import { getAllStrings, getStringsChunk, getStringsCount, queryStrings, updateTranslation, batchUpdateTranslations, startStringBatchTranslate, cancelStringBatchTranslate, checkPendingCache, applyTranslationCache, discardTranslationCache } from "../api/strings";
 import { saveConfig } from "../api/strings";
 import toast from "react-hot-toast";
 import i18n from "../i18n";
@@ -89,6 +89,13 @@ interface AppState {
   // Dirty state (unsaved translation changes)
   isDirty: boolean;
 
+  // ESP hash for translation cache
+  espHash: string | null;
+
+  // Recovery prompt
+  showRecoveryModal: boolean;
+  recoveryInfo: RecoveryInfo | null;
+
   // Undo/Redo
   undoStack: UndoEntry[];
   redoStack: UndoEntry[];
@@ -160,6 +167,9 @@ interface AppState {
   cancelBatchTranslation: () => Promise<void>;
   setBatchConcurrency: (n: number) => void;
   checkAndPromptRecovery: (espHash: string) => Promise<void>;
+  applyRecovery: () => Promise<void>;
+  discardRecovery: () => Promise<void>;
+  closeRecoveryModal: () => void;
   selectPrevRow: () => void;
   loadAllStrings: () => Promise<void>;
   setShowBatchPanel: (show: boolean) => void;
@@ -307,6 +317,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   theme: getInitialTheme(),
   themeLabel: THEME_LABELS[getInitialTheme()],
   isDirty: false,
+  espHash: null,
+  showRecoveryModal: false,
+  recoveryInfo: null,
   undoStack: [],
   redoStack: [],
   showBatchPanel: false,
@@ -355,7 +368,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   setLoadProgress: (loadProgress) => set({ loadProgress }),
 
   setEspLoaded: (espPath, espStats, stringsDir) =>
-    set({ espPath, espStats, stringsDir, sstStats: null }),
+    set({ espPath, espStats, stringsDir, sstStats: null, espHash: espStats.esp_hash || null }),
 
   setSstLoaded: (sstPath, sstStats) => set({ sstPath, sstStats }),
 
@@ -996,18 +1009,40 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       const resp = await checkPendingCache(espHash);
       if (resp.recovery) {
-        const confirmed = window.confirm(
-          `Found ${resp.recovery.pending_count} unapplied translations. Recover?`
-        );
-        if (confirmed) {
-          const result = await applyTranslationCache(espHash);
-          toast.success(`Recovered ${result.applied_count} translations`);
-        }
+        set({ showRecoveryModal: true, recoveryInfo: resp.recovery, espHash });
       }
     } catch (e: any) {
-      // Don't show error on startup check
       console.error("Recovery check failed:", e);
     }
+  },
+
+  applyRecovery: async () => {
+    const state = get();
+    if (!state.espHash) return;
+    try {
+      const result = await applyTranslationCache(state.espHash);
+      toast.success(`Recovered ${result.applied_count} translations`);
+      set({ showRecoveryModal: false, recoveryInfo: null });
+      // Reload strings to reflect recovered translations
+      await get().loadAllStrings();
+    } catch (e: any) {
+      toast.error(`Recovery failed: ${e}`);
+    }
+  },
+
+  discardRecovery: async () => {
+    const state = get();
+    if (!state.espHash) return;
+    try {
+      await discardTranslationCache(state.espHash);
+      set({ showRecoveryModal: false, recoveryInfo: null });
+    } catch (e: any) {
+      toast.error(`Discard failed: ${e}`);
+    }
+  },
+
+  closeRecoveryModal: () => {
+    set({ showRecoveryModal: false, recoveryInfo: null });
   },
 
   reset: () =>
@@ -1030,6 +1065,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       selectedId: null,
       selectedItem: null,
       isDirty: false,
+      espHash: null,
+      showRecoveryModal: false,
+      recoveryInfo: null,
       undoStack: [],
       redoStack: [],
       targetLang: "chinese",

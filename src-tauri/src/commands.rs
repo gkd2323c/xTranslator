@@ -234,6 +234,7 @@ pub async fn load_esp(
                             parse_time_ms: 0,
                             record_counts,
                             cached: true,
+                            esp_hash: hash.clone(),
                         },
                     ));
                 }
@@ -448,6 +449,7 @@ pub async fn load_esp(
                     parse_time_ms,
                     record_counts,
                     cached: false,
+                    esp_hash: file_hash.unwrap_or_default(),
                 },
             ))
         },

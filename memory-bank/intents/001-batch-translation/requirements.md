@@ -1,9 +1,9 @@
 ---
 intent: 001-batch-translation
 phase: inception
-status: inception-complete
+status: complete
 created: 2026-05-01T12:00:00Z
-updated: 2026-05-01T12:00:00Z
+updated: 2026-05-01T12:30:00Z
 ---
 
 # Requirements: 批量翻译

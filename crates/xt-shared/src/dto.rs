@@ -83,6 +83,9 @@ pub struct LoadEspResponse {
     /// 是否从缓存加载（而非完整解析）
     #[serde(default)]
     pub cached: bool,
+    /// ESP 文件 SHA-256 哈希（用于翻译缓存关联）
+    #[serde(default)]
+    pub esp_hash: String,
 }
 
 /// ESP 文件加载进度事件

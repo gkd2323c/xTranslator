@@ -38,6 +38,7 @@ export interface LoadEspResponse {
   parse_time_ms: number;
   record_counts: Record<string, number>;
   cached: boolean;
+  esp_hash: string;
 }
 
 export interface LoadSstResponse {
