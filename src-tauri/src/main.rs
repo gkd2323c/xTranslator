@@ -19,7 +19,7 @@ use commands::{
     scan_fuz_directory, set_deepl_api_key, set_openai_api_key, set_translation_provider,
     start_batch_export, start_batch_translate, tcsc_convert, tcsc_batch_convert, translate_string, update_translation,
     load_config, save_config, get_api_config, load_data_configs, rtl_reverse, AppState,
-    save_esp, finalize_esp, delocalize_esp,
+    save_esp, finalize_esp, delocalize_esp, decompile_pex, get_esp_header, shape_arabic, deshape_arabic,
 };
 use std::sync::Arc;
 
@@ -71,6 +71,7 @@ fn main() {
             // PEX commands
             parse_pex_strings,
             compile_pex,
+            decompile_pex,
             compare_esp_files,
             // MCM commands
             load_mcm_file,
@@ -91,10 +92,13 @@ fn main() {
             compare_source_dest,
             check_aliases,
             rtl_reverse,
+            shape_arabic,
+            deshape_arabic,
             // ESP write-back commands
             save_esp,
             finalize_esp,
             delocalize_esp,
+            get_esp_header,
             // Translation cache commands
             check_pending_cache,
             apply_translation_cache,

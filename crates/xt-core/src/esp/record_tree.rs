@@ -1,6 +1,6 @@
 use super::header::{FieldHeader, GenericHeader, GrupHeader, RecordHeaderData};
 use byteorder::{LittleEndian, WriteBytesExt};
-use std::io::{Cursor, Read, Write};
+use std::io::Write;
 
 /// ESP field — a single subrecord within a record.
 ///
@@ -20,37 +20,38 @@ impl EspField {
     /// Handles XXXX size-prefix fields by reading the 4-byte value and
     /// applying it to the next field's effective size.
     pub fn parse_fields(data: &[u8]) -> std::io::Result<Vec<Self>> {
-        let mut cursor = Cursor::new(data);
+        let mut pos = 0usize;
         let mut fields = Vec::new();
         let mut next_explicit_size: Option<u32> = None;
 
-        while (cursor.position() as usize) < data.len() {
-            let pos = cursor.position() as usize;
+        while pos < data.len() {
             if pos + 6 > data.len() {
                 break;
             }
 
-            let field_header = FieldHeader::read_from(&mut cursor)?;
+            let sig = [data[pos], data[pos + 1], data[pos + 2], data[pos + 3]];
+            let dsize = u16::from_le_bytes([data[pos + 4], data[pos + 5]]) as usize;
+            pos += 6;
 
             // Determine the actual data size for this field
-            let effective_size = if field_header.is_xxxx() {
+            let effective_size = if sig == *b"XXXX" {
                 // XXXX field: data is 4 bytes (the size of the NEXT field)
-                field_header.dsize as usize
+                dsize
             } else if let Some(size) = next_explicit_size.take() {
                 // This field was preceded by a XXXX; use the explicit size
                 size as usize
             } else {
-                field_header.dsize as usize
+                dsize
             };
 
             // Check for truncated data
-            let remaining = data.len() - cursor.position() as usize;
+            let remaining = data.len() - pos;
             let read_size = effective_size.min(remaining);
 
-            let mut buffer = vec![0u8; read_size];
-            cursor.read_exact(&mut buffer)?;
+            let buffer = data[pos..pos + read_size].to_vec();
+            pos += read_size;
 
-            let is_size_xxxx = field_header.is_xxxx();
+            let is_size_xxxx = sig == *b"XXXX";
 
             // If this is a XXXX field, extract the next field size
             if is_size_xxxx && buffer.len() >= 4 {
@@ -59,7 +60,7 @@ impl EspField {
             }
 
             fields.push(EspField {
-                header: field_header,
+                header: FieldHeader { name: sig, dsize: read_size as u16 },
                 buffer,
                 is_size_xxxx,
             });
@@ -335,6 +336,96 @@ pub struct Tes4Header {
     pub field_data: Vec<u8>,
 }
 
+/// Parsed TES4 header fields (HEDR, CNAM, SNAM, MAST/DATA pairs).
+#[derive(Clone, Debug, Default)]
+pub struct Tes4HeaderInfo {
+    /// HEDR: version (f32)
+    pub version: f32,
+    /// HEDR: number of records
+    pub num_records: u32,
+    /// HEDR: next available FormID
+    pub next_object_id: u32,
+    /// CNAM: author name
+    pub author: String,
+    /// SNAM: file description
+    pub description: String,
+    /// MAST/DATA pairs: list of master file names
+    pub masters: Vec<String>,
+    /// ONAM: overridden FormIDs (raw bytes)
+    pub overridden_forms: Vec<u32>,
+    /// Whether the file is a master (ESM flag in record header)
+    pub is_master: bool,
+    /// Whether the file is localized (localization flag)
+    pub is_localized: bool,
+}
+
+impl Tes4Header {
+    /// Parse raw field_data into structured header info.
+    pub fn parse_fields(&self) -> Tes4HeaderInfo {
+        let mut info = Tes4HeaderInfo {
+            is_master: (self.record_header_data.flags & 0x00000001) != 0,
+            is_localized: (self.record_header_data.flags & 0x00000080) != 0,
+            ..Default::default()
+        };
+
+        let data = &self.field_data;
+        let mut pos = 0usize;
+
+        while pos + 6 <= data.len() {
+            let sig = [data[pos], data[pos + 1], data[pos + 2], data[pos + 3]];
+            let dsize = u16::from_le_bytes([data[pos + 4], data[pos + 5]]) as usize;
+            pos += 6;
+
+            if pos + dsize > data.len() {
+                break;
+            }
+
+            let field_data = &data[pos..pos + dsize];
+
+            match &sig {
+                b"HEDR" if dsize >= 12 => {
+                    info.version = f32::from_le_bytes([
+                        field_data[0], field_data[1], field_data[2], field_data[3],
+                    ]);
+                    info.num_records = u32::from_le_bytes([
+                        field_data[4], field_data[5], field_data[6], field_data[7],
+                    ]);
+                    info.next_object_id = u32::from_le_bytes([
+                        field_data[8], field_data[9], field_data[10], field_data[11],
+                    ]);
+                }
+                b"CNAM" => {
+                    info.author = read_cstring(field_data);
+                }
+                b"SNAM" => {
+                    info.description = read_cstring(field_data);
+                }
+                b"MAST" => {
+                    info.masters.push(read_cstring(field_data));
+                }
+                b"ONAM" => {
+                    for chunk in field_data.chunks_exact(4) {
+                        info.overridden_forms.push(u32::from_le_bytes([
+                            chunk[0], chunk[1], chunk[2], chunk[3],
+                        ]));
+                    }
+                }
+                _ => {}
+            }
+
+            pos += dsize;
+        }
+
+        info
+    }
+}
+
+/// Read a null-terminated UTF-8 string from bytes.
+fn read_cstring(data: &[u8]) -> String {
+    let end = data.iter().position(|&b| b == 0).unwrap_or(data.len());
+    String::from_utf8_lossy(&data[..end]).into_owned()
+}
+
 /// In-memory ESP file representation for write-back.
 ///
 /// Holds the TES4 header and the full record tree (top-level GRUPs).
@@ -479,7 +570,7 @@ mod tests {
         use flate2::read::ZlibDecoder;
         let mut decoder = ZlibDecoder::new(&compressed[..]);
         let mut decompressed = Vec::new();
-        decoder.read_to_end(&mut decompressed).unwrap();
+        std::io::Read::read_to_end(&mut decoder, &mut decompressed).unwrap();
         assert_eq!(decompressed, original);
     }
 }

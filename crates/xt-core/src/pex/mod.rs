@@ -9,5 +9,6 @@
 //! Scope: string extraction + v1.5 write-back support (string table reconstruction).
 
 pub mod compile;
+pub mod decompile;
 pub mod parser;
 pub mod types;

@@ -1,4 +1,4 @@
-use crate::esp::header::{FieldHeader, GenericHeader, GrupHeader, RecordHeaderData};
+use crate::esp::header::{GenericHeader, GrupHeader, RecordHeaderData};
 use crate::esp::record_tree::{EspField, EspFile, EspGrup, EspRecord, Tes4Header};
 use crate::strings::{CodepageTable, StringsFile, StringsFormat};
 use crate::types::esp_pointer::{string_hash, EspPointer};
@@ -704,6 +704,10 @@ impl EspParser {
     ///
     /// When `grup` is Some, parsed records are added to the GRUP's records vector.
     /// Translatable strings are extracted and SkyString.field_ref is set.
+    /// Parse a record (or nested GRUP) and optionally build the record tree.
+    ///
+    /// When `grup` is Some, parsed records are added to the GRUP's records vector.
+    /// Translatable strings are extracted and SkyString.field_ref is set.
     fn parse_record_debug_for_tree<R: Read>(
         &mut self,
         reader: &mut R,
@@ -781,8 +785,28 @@ impl EspParser {
             self.compressed_records += 1;
         }
 
-        // Parse fields for the tree
-        let (fields, decompressed_data, raw) = if is_compressed {
+        // Fast path for non-ESP mode: skip EspField parsing entirely
+        if !self.esp_mode {
+            if is_compressed {
+                match decompress_bethesda_record(&record_data) {
+                    Ok(decompressed) => {
+                        self.parse_record_fields_direct(&header.name, form_id, &decompressed)?;
+                    }
+                    Err(e) => {
+                        eprintln!(
+                            "Warning: failed to decompress record {:?}: {}",
+                            header.name, e
+                        );
+                    }
+                }
+            } else {
+                self.parse_record_fields_direct(&header.name, form_id, &record_data)?;
+            }
+            return Ok(());
+        }
+
+        // ESP mode: build full EspRecord with parsed fields
+        let (fields, original_raw_data, raw) = if is_compressed {
             match decompress_bethesda_record(&record_data) {
                 Ok(decompressed) => {
                     let fields = EspField::parse_fields(&decompressed).unwrap_or_default();
@@ -793,13 +817,14 @@ impl EspParser {
                         "Warning: failed to decompress record {:?}: {}",
                         header.name, e
                     );
-                    // Treat as raw
-                    (Vec::new(), record_data.clone(), true)
+                    // Treat as raw — move record_data directly, no clone
+                    (Vec::new(), record_data, true)
                 }
             }
         } else {
             let fields = EspField::parse_fields(&record_data).unwrap_or_default();
-            (fields, record_data.clone(), false)
+            // Move record_data directly; no need to clone for uncompressed records
+            (fields, record_data, false)
         };
 
         // Extract editor ID from fields
@@ -817,7 +842,7 @@ impl EspParser {
                 &header.name,
                 form_id,
                 &fields,
-                &decompressed_data,
+                &original_raw_data,
                 editor_id.as_deref(),
                 parent_grup.as_ref().map(|g| g.records.len()),
             );
@@ -832,7 +857,7 @@ impl EspParser {
             raw,
             form_id,
             editor_id,
-            original_raw_data: if raw { record_data } else { decompressed_data },
+            original_raw_data,
         };
 
         if let Some(grup) = parent_grup.as_mut() {
@@ -934,6 +959,7 @@ impl EspParser {
         }
     }
 
+    #[allow(dead_code)]
     fn parse_record_debug<R: Read>(
         &mut self,
         reader: &mut R,
@@ -1042,39 +1068,36 @@ impl EspParser {
             return Ok(());
         }
 
-        let mut cursor = Cursor::new(data);
+        let mut pos = 0usize;
         let mut next_field_size: u32 = 0;
         let mut field_index = 0u16;
         let mut edid: Option<String> = None;
+        let needs_edid = record_sig == b"GMST";
 
-        while cursor.position() < data.len() as u64 {
-            let field_header = match FieldHeader::read_from(&mut cursor) {
-                Ok(h) => h,
-                Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => break,
-                Err(e) => return Err(e),
-            };
+        while pos + 6 <= data.len() {
+            let sig = [data[pos], data[pos + 1], data[pos + 2], data[pos + 3]];
+            let dsize = u16::from_le_bytes([data[pos + 4], data[pos + 5]]) as usize;
+            pos += 6;
 
             let data_size = if next_field_size > 0 {
-                let size = next_field_size as u16;
+                let size = next_field_size as usize;
                 next_field_size = 0;
                 size
             } else {
-                field_header.dsize
+                dsize
             };
 
             // 边界保护：字段声明大小超过剩余字节时，终止当前记录解析。
-            let remaining = data.len() as u64 - cursor.position();
-            if data_size as u64 > remaining {
-                // 记录体可能损坏：不再继续读取，避免产生级联误解析。
+            if data_size > data.len() - pos {
                 break;
             }
 
-            let mut field_data = vec![0u8; data_size as usize];
-            cursor.read_exact(&mut field_data)?;
+            let field_data = &data[pos..pos + data_size];
+            pos += data_size;
 
-            if field_header.is_xxxx() {
-                // XXXX 是 Bethesda 的“扩展长度标记”：
-                // 本字段内容携带“下一字段”的真实 32 位长度。
+            if &sig == b"XXXX" {
+                // XXXX 是 Bethesda 的"扩展长度标记"：
+                // 本字段内容携带"下一字段"的真实 32 位长度。
                 if field_data.len() >= 4 {
                     next_field_size = u32::from_le_bytes([
                         field_data[0],
@@ -1087,7 +1110,7 @@ impl EspParser {
             }
 
             // 提取 EDID(null-terminated ASCII)，供后续 GMST:DATA 类型判断使用。
-            if &field_header.name == b"EDID" && !field_data.is_empty() {
+            if needs_edid && &sig == b"EDID" && !field_data.is_empty() {
                 let len = field_data
                     .iter()
                     .position(|&b| b == 0)
@@ -1096,11 +1119,12 @@ impl EspParser {
             }
 
             // 检查是否是可翻译字段(根据 record_defs.txt 定义)
-            if let Some(def) = self.find_def(record_sig, &field_header.name) {
+            if let Some(def) = self.find_def(record_sig, &sig) {
                 // GMST:DATA 过滤：只保留字符串型(EDID 以 's' 开头)，跳过数值型(f/i/b)。
-                if record_sig == b"GMST" && &field_header.name == b"DATA" {
+                if record_sig == b"GMST" && &sig == b"DATA" {
                     let is_string_gmst = edid.as_ref().map(|e| e.starts_with('s')).unwrap_or(false);
                     if !is_string_gmst {
+                        field_index += 1;
                         continue;
                     }
                 }
@@ -1130,7 +1154,7 @@ impl EspParser {
                                 source_text,               // 源字符串
                                 String::new(),             // 翻译(初始为空)
                                 *record_sig,               // 记录类型
-                                field_header.name,         // 字段类型
+                                sig,                       // 字段类型
                             )
                         } else {
                             SkyString::new_without_search_index(
@@ -1138,18 +1162,18 @@ impl EspParser {
                                 source_text,               // 源字符串
                                 String::new(),             // 翻译(初始为空)
                                 *record_sig,               // 记录类型
-                                field_header.name,         // 字段类型
+                                sig,                       // 字段类型
                             )
                         };
 
                         // 填充 ESP 指针，用于后续 SST/XML 精确匹配与写回。
                         sk.esp_ptr = EspPointer {
-                            str_id: string_id as i32,     // 实际的字符串 ID(关键：用于 XML 匹配)
-                            form_id,                      // 记录的 FormID
-                            record_sig: *record_sig,      // 记录类型
-                            field_sig: field_header.name, // 字段类型
-                            index: field_index,           // 字段索引
-                            index_max: 1,                 // 字段总数
+                            str_id: string_id as i32, // 实际的字符串 ID(关键：用于 XML 匹配)
+                            form_id,                  // 记录的 FormID
+                            record_sig: *record_sig,  // 记录类型
+                            field_sig: sig,           // 字段类型
+                            index: field_index,       // 字段索引
+                            index_max: 1,             // 字段总数
                             edid_hash: edid.as_ref().map_or(0, |s| string_hash(s)), // Editor ID 的 FNV-1a 哈希
                         };
 
@@ -1164,8 +1188,8 @@ impl EspParser {
             }
 
             // 处理 VMAD 字段中的脚本字符串
-            if &field_header.name == b"VMAD" && !field_data.is_empty() {
-                self.parse_vmad_strings(record_sig, form_id, &field_data, field_index);
+            if &sig == b"VMAD" && !field_data.is_empty() {
+                self.parse_vmad_strings(record_sig, form_id, field_data, field_index);
             }
 
             field_index += 1;

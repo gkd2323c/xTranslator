@@ -447,6 +447,42 @@ pub struct PexScriptDto {
     pub translatable: Vec<PexTranslatableDto>,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct DecompilePexResponse {
+    /// Script name (from first object)
+    pub script_name: String,
+    /// Number of objects decompiled
+    pub object_count: u32,
+    /// Number of functions decompiled
+    pub function_count: u32,
+    /// Number of instructions decoded
+    pub instruction_count: u32,
+    /// Generated pseudocode
+    pub pseudocode: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct EspHeaderInfoDto {
+    /// HEDR version
+    pub version: f32,
+    /// Number of records in the file
+    pub num_records: u32,
+    /// Next available FormID
+    pub next_object_id: u32,
+    /// Author name (CNAM)
+    pub author: String,
+    /// File description (SNAM)
+    pub description: String,
+    /// Master file names (MAST)
+    pub masters: Vec<String>,
+    /// Number of overridden FormIDs
+    pub overridden_count: u32,
+    /// Whether the file has the ESM flag
+    pub is_master: bool,
+    /// Whether the file is localized
+    pub is_localized: bool,
+}
+
 // ── FUZ DTOs ────────────────────────────────────────────────────────
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

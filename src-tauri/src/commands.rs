@@ -425,7 +425,7 @@ pub async fn load_esp(
             let compressed_records = parser.compressed_records;
 
             // Build ESP file tree for write-back support
-            let esp_file = parser.build_esp_file();
+            let _esp_file = parser.build_esp_file();
 
             // 存储解析结果到 SQLite 缓存（静默失败，不影响主流程）
             if let Some(ref hash) = file_hash {
@@ -1679,6 +1679,46 @@ pub async fn parse_pex_strings(pex_path: String, game: Option<String>) -> Result
     })
 }
 
+/// Decompile a PEX file into Papyrus-like pseudocode
+#[tauri::command]
+pub async fn decompile_pex(pex_path: String) -> Result<xt_shared::dto::DecompilePexResponse, String> {
+    let data = std::fs::read(&pex_path)
+        .map_err(|e| format!("Failed to read PEX: {}", e))?;
+
+    let decompiled = xt_core::pex::decompile::decompile_pex(&data)
+        .map_err(|e| format!("Failed to decompile PEX: {}", e))?;
+
+    let script_name = decompiled.objects.first()
+        .map(|o| o.name.clone())
+        .unwrap_or_else(|| {
+            std::path::Path::new(&pex_path)
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("unknown")
+                .to_string()
+        });
+
+    let object_count = decompiled.objects.len() as u32;
+    let function_count = decompiled.objects.iter()
+        .map(|o| o.states.iter().map(|s| s.functions.len()).sum::<usize>())
+        .sum::<usize>() as u32;
+    let instruction_count = decompiled.objects.iter()
+        .flat_map(|o| o.states.iter())
+        .flat_map(|s| s.functions.iter())
+        .map(|f| f.instructions.len())
+        .sum::<usize>() as u32;
+
+    let pseudocode = xt_core::pex::decompile::emit_pseudocode(&decompiled);
+
+    Ok(xt_shared::dto::DecompilePexResponse {
+        script_name,
+        object_count,
+        function_count,
+        instruction_count,
+        pseudocode,
+    })
+}
+
 /// Load pexNoTransProc.txt for the given game, returning a set of
 /// lowercase procedure names that should be excluded from translation.
 fn load_no_trans_procs(game: Option<&str>) -> std::collections::HashSet<String> {
@@ -2336,6 +2376,18 @@ pub async fn rtl_reverse(text: String) -> Result<String, String> {
         .ok_or_else(|| "No Arabic characters found in text".into())
 }
 
+/// Shape Arabic text: convert logical-order characters to presentation forms.
+#[tauri::command]
+pub async fn shape_arabic(text: String) -> Result<String, String> {
+    Ok(xt_core::rtl::shape_arabic(&text))
+}
+
+/// Deshape Arabic text: convert presentation forms back to logical base characters.
+#[tauri::command]
+pub async fn deshape_arabic(text: String) -> Result<String, String> {
+    Ok(xt_core::rtl::deshape_arabic(&text))
+}
+
 /// Batch convert translations for all (or specified) strings.
 ///
 /// Converts the `translation` field of each matching string in-place.
@@ -2542,6 +2594,30 @@ pub async fn save_config(config: AppConfigDto) -> Result<(), String> {
 /// Save ESP directly (delocalized ESP write-back).
 ///
 /// When in ESP mode, writes translations back into the ESP file's field buffers,
+/// Get parsed TES4 header information from the loaded ESP file.
+#[tauri::command]
+pub async fn get_esp_header(
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<xt_shared::dto::EspHeaderInfoDto, String> {
+    let esp_file_lock = state.esp_file.lock().map_err(|e| e.to_string())?;
+    let esp_file = esp_file_lock.as_ref()
+        .ok_or_else(|| "No ESP file loaded. Enable ESP mode and load an ESP file first.".to_string())?;
+
+    let info = esp_file.tes4.parse_fields();
+
+    Ok(xt_shared::dto::EspHeaderInfoDto {
+        version: info.version,
+        num_records: info.num_records,
+        next_object_id: info.next_object_id,
+        author: info.author,
+        description: info.description,
+        masters: info.masters,
+        overridden_count: info.overridden_forms.len() as u32,
+        is_master: info.is_master,
+        is_localized: info.is_localized,
+    })
+}
+
 /// rebuilds records, recompresses, and serializes to disk.
 #[tauri::command]
 pub async fn save_esp(
@@ -2637,7 +2713,7 @@ pub async fn finalize_esp(
     let esp_file = esp_file_lock.as_ref().ok_or_else(|| "No ESP file loaded or ESP mode not enabled".to_string())?;
     
     let strings = state.strings.lock().map_err(|e| e.to_string())?;
-    let sst_old_data = state.sst_old_data.lock().map_err(|e| e.to_string())?;
+    let _sst_old_data = state.sst_old_data.lock().map_err(|e| e.to_string())?;
     
     // Create a mutable copy of the ESP file for rebuilding
     let mut esp_file_mut = esp_file.clone();

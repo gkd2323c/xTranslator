@@ -26,29 +26,26 @@
 /// assert_eq!(norm, "hello world");
 /// ```
 pub fn normalize(s: &str) -> String {
-    let mut result = String::new();
+    let mut result = String::with_capacity(s.len());
     let mut last_was_space = false;
 
     for c in s.chars() {
         if c.is_alphanumeric() {
             // 字母数字：直接追加（小写化）
-            let lower = if c.is_ascii() {
+            if c.is_ascii() {
                 // ASCII 快速路径
                 let mut c = c as u8;
                 if c >= b'A' && c <= b'Z' {
                     c += b'a' - b'A';
                 }
-                c as char
+                result.push(c as char);
             } else {
                 // Unicode 字符使用 to_lowercase（可能产生多个字符，如德语 ß → ss）
                 // 但大多数情况是 1 对 1
                 for ch in c.to_lowercase() {
                     result.push(ch);
                 }
-                last_was_space = false;
-                continue;
-            };
-            result.push(lower);
+            }
             last_was_space = false;
         } else if !last_was_space {
             // 非字母数字且上一个不是空格 → 添加单个空格

@@ -86,7 +86,14 @@
     "warnings": "警告",
     "updated": "已更新",
     "filterByType": "点击按此类型筛选",
-    "clearFilterTooltip": "点击取消筛选"
+    "clearFilterTooltip": "点击取消筛选",
+    "strings": "Strings 文件",
+    "saveMode": "保存模式",
+    "espMode": "ESP 模式",
+    "stringsMode": "Strings 模式",
+    "localization": "本地化",
+    "localized": "本地化（嵌入式）",
+    "delocalized": "非本地化（外部文件）"
   },
   "editor": {
     "sourceText": "源文本",
@@ -439,7 +446,14 @@
     "success": "已导出 {translated} / {total} 条字符串",
     "failed": "完成导出失败",
     "needOutputDir": "请选择输出目录",
-    "needEsp": "请先加载 ESP 文件"
+    "needEsp": "请先加载 ESP 文件",
+    "espSubtitle": "将翻译写入 ESP 文件并导出 .STRINGS 文件",
+    "espOptions": "ESP 写回选项",
+    "espHint": "将翻译直接写入 ESP 文件并导出 .STRINGS 文件",
+    "createBackup": "写入前创建备份",
+    "espExportAll": "完成 ESP 导出",
+    "espExporting": "ESP 导出中...",
+    "espSuccess": "ESP 已完成：修改了 {{count}} 条记录"
   },
   "settings": {
     "title": "设置",

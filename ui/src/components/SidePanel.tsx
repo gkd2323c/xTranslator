@@ -1,8 +1,10 @@
-import { useMemo } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useAppStore } from "../stores/appStore";
-import { FileText, Languages, Database, BarChart3, Code2 } from "lucide-react";
+import { FileText, Languages, Database, BarChart3, Code2, Info } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Section, KeyValueRow, ProgressBar, EmptyState, Button } from "./ui";
+import { getEspHeader } from "../api/strings";
+import type { EspHeaderInfoDto } from "../api/strings";
 
 export function SidePanel() {
   const { t } = useTranslation();
@@ -16,6 +18,18 @@ export function SidePanel() {
   const vmadFilter = useAppStore((s) => s.vmadFilter);
   const setVmadFilter = useAppStore((s) => s.setVmadFilter);
   const espMode = useAppStore((s) => s.espMode);
+
+  const [headerInfo, setHeaderInfo] = useState<EspHeaderInfoDto | null>(null);
+
+  useEffect(() => {
+    if (espMode && espPath) {
+      getEspHeader()
+        .then(setHeaderInfo)
+        .catch(() => setHeaderInfo(null));
+    } else {
+      setHeaderInfo(null);
+    }
+  }, [espMode, espPath]);
 
   const { translated, incomplete, locked, vmadCount } = useMemo(() => {
     let t = 0, inc = 0, vmad = 0;
@@ -74,7 +88,35 @@ export function SidePanel() {
           value={espMode ? t("sidebar.espMode", { defaultValue: "ESP mode" }) : t("sidebar.stringsMode", { defaultValue: "Strings mode" })}
           valueClassName={espMode ? "ui-status-translated" : ""}
         />
+        <KeyValueRow
+          label={t("sidebar.localization", { defaultValue: "Localization" })}
+          value={
+            espStats.strings_loaded > 0
+              ? t("sidebar.delocalized", { defaultValue: "Delocalized" })
+              : t("sidebar.localized", { defaultValue: "Localized" })
+          }
+          valueClassName={espStats.strings_loaded > 0 ? "" : "ui-status-incomplete"}
+        />
       </Section>
+
+      {/* ESP Header info — only in ESP mode */}
+      {espMode && headerInfo && (
+        <Section icon={<Info size={16} />} title={t("sidebar.espHeader", { defaultValue: "ESP Header" })}>
+          <KeyValueRow label={t("sidebar.author", { defaultValue: "Author" })} value={headerInfo.author || "—"} />
+          <KeyValueRow label={t("sidebar.description", { defaultValue: "Description" })} value={headerInfo.description || "—"} />
+          <KeyValueRow label={t("sidebar.version", { defaultValue: "Version" })} value={headerInfo.version.toFixed(2)} />
+          <KeyValueRow label={t("sidebar.records", { defaultValue: "Records" })} value={headerInfo.num_records.toLocaleString()} />
+          <KeyValueRow label={t("sidebar.nextObjectId", { defaultValue: "Next Object ID" })} value={`0x${headerInfo.next_object_id.toString(16).toUpperCase()}`} />
+          <KeyValueRow label={t("sidebar.masterFile", { defaultValue: "Master" })} value={headerInfo.is_master ? "Yes" : "No"} />
+          <KeyValueRow label={t("sidebar.localized", { defaultValue: "Localized" })} value={headerInfo.is_localized ? "Yes" : "No"} />
+          {headerInfo.masters.length > 0 && (
+            <KeyValueRow
+              label={t("sidebar.masterFiles", { defaultValue: "Masters" })}
+              value={headerInfo.masters.join(", ")}
+            />
+          )}
+        </Section>
+      )}
 
       <Section icon={<Database size={16} />} title="Statistics">
         <KeyValueRow label={t("sidebar.totalStrings")} value={espStats.total.toLocaleString()} />

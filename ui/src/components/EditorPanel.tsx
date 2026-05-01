@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useAppStore, computeTranslationProgress } from "../stores/appStore";
-import { updateTranslation, heuristicSearch, translateString, setApiKey, tcscConvert, rtlReverse, checkAliases, type HeuristicMatchDTO, type AliasCheckResult } from "../api/strings";
+import { updateTranslation, heuristicSearch, translateString, setApiKey, tcscConvert, rtlReverse, shapeArabic, deshapeArabic, checkAliases, type HeuristicMatchDTO, type AliasCheckResult } from "../api/strings";
 import { Save, X, Type, Search, Languages, Key, AlertTriangle, ArrowRight, Copy } from "lucide-react";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
@@ -338,6 +338,40 @@ export function EditorPanel() {
               title={t("editor.rtlTooltip")}
             >
               RTL
+            </Button>
+            <Button
+              variant="ghost"
+              size="xs"
+              onClick={async () => {
+                if (!localTrans) return;
+                try {
+                  const result = await shapeArabic(localTrans);
+                  setLocalTrans(result);
+                  toast.success(t("editor.shapeApplied", { defaultValue: "Arabic shaped" }));
+                } catch (e: any) {
+                  toast.error(`${t("editor.shapeFailed", { defaultValue: "Shape failed" })}: ${e}`);
+                }
+              }}
+              title={t("editor.shapeTooltip", { defaultValue: "Shape Arabic (logical → presentation forms)" })}
+            >
+              Shape
+            </Button>
+            <Button
+              variant="ghost"
+              size="xs"
+              onClick={async () => {
+                if (!localTrans) return;
+                try {
+                  const result = await deshapeArabic(localTrans);
+                  setLocalTrans(result);
+                  toast.success(t("editor.deshapeApplied", { defaultValue: "Arabic deshaped" }));
+                } catch (e: any) {
+                  toast.error(`${t("editor.deshapeFailed", { defaultValue: "Deshape failed" })}: ${e}`);
+                }
+              }}
+              title={t("editor.deshapeTooltip", { defaultValue: "Deshape Arabic (presentation forms → logical)" })}
+            >
+              Deshape
             </Button>
           </div>
         </div>

@@ -402,6 +402,18 @@ export async function parsePexStrings(pexPath: string, game?: string): Promise<P
   return invoke("parse_pex_strings", { pexPath, game });
 }
 
+export interface DecompilePexResponse {
+  script_name: string;
+  object_count: number;
+  function_count: number;
+  instruction_count: number;
+  pseudocode: string;
+}
+
+export async function decompilePex(pexPath: string): Promise<DecompilePexResponse> {
+  return invoke("decompile_pex", { pexPath });
+}
+
 // ── FUZ Types ───────────────────────────────────────────────────────
 
 export interface FuzMapping {
@@ -589,6 +601,14 @@ export async function rtlReverse(text: string): Promise<string> {
   return invoke("rtl_reverse", { text });
 }
 
+export async function shapeArabic(text: string): Promise<string> {
+  return invoke("shape_arabic", { text });
+}
+
+export async function deshapeArabic(text: string): Promise<string> {
+  return invoke("deshape_arabic", { text });
+}
+
 // ── Vocabulary Types ────────────────────────────────────────────────
 
 export interface VocabularyInfo {
@@ -712,8 +732,24 @@ export interface DelocalizeEspResponse {
   strings_files_paths: string[];
 }
 
+export interface EspHeaderInfoDto {
+  version: number;
+  num_records: number;
+  next_object_id: number;
+  author: string;
+  description: string;
+  masters: string[];
+  overridden_count: number;
+  is_master: boolean;
+  is_localized: boolean;
+}
+
 export async function saveEsp(request: SaveEspRequest): Promise<SaveEspResponse> {
   return invoke("save_esp", { request });
+}
+
+export async function getEspHeader(): Promise<EspHeaderInfoDto> {
+  return invoke("get_esp_header");
 }
 
 export async function finalizeEsp(request: FinalizeEspRequest): Promise<FinalizeEspResponse> {

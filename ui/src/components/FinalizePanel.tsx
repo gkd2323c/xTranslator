@@ -2,10 +2,10 @@ import { useState } from "react";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { useTranslation } from "react-i18next";
 import { useAppStore } from "../stores/appStore";
-import { finalize } from "../api/strings";
-import type { FinalizeResponse } from "../api/strings";
+import { finalize, finalizeEsp } from "../api/strings";
+import type { FinalizeResponse, FinalizeEspResponse } from "../api/strings";
 import toast from "react-hot-toast";
-import { FileDown, Save, FolderOpen } from "lucide-react";
+import { FileDown, Save, FolderOpen, HardDrive } from "lucide-react";
 import { Button } from "./ui";
 
 export function FinalizePanel() {
@@ -15,13 +15,17 @@ export function FinalizePanel() {
   const allItems = useAppStore((s) => s.allItems);
   const isLoading = useAppStore((s) => s.isLoading);
   const setIsDirty = useAppStore((s) => s.setIsDirty);
+  const espMode = useAppStore((s) => s.espMode);
+  const language = useAppStore((s) => s.language);
 
   const [outputDir, setOutputDir] = useState<string>("");
   const [saveSst, setSaveSst] = useState(true);
   const [exportXml, setExportXml] = useState(true);
   const [sstPath, setSstPath] = useState<string>("");
+  const [createBackup, setCreateBackup] = useState(true);
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<FinalizeResponse | null>(null);
+  const [espResult, setEspResult] = useState<FinalizeEspResponse | null>(null);
 
   // Compute stats from all items
   const stats = {
@@ -93,11 +97,49 @@ export function FinalizePanel() {
     }
   };
 
+  const handleFinalizeEsp = async () => {
+    if (!espPath) {
+      toast.error(t("finalize.needEsp"));
+      return;
+    }
+
+    const stringsDir = espPath.replace(/\\/g, "/").split("/").slice(0, -1).join("/");
+    const baseName = espPath.replace(/\\/g, "/").split("/").pop()?.replace(/\.es[mp]$/i, "") || "Skyrim";
+
+    setRunning(true);
+    setEspResult(null);
+    try {
+      const response = await finalizeEsp({
+        esp_path: espPath,
+        strings_dir: stringsDir,
+        base_name: baseName,
+        language: language,
+        create_backup: createBackup,
+      });
+      setEspResult(response);
+      setIsDirty(false);
+      toast.success(
+        t("finalize.espSuccess", {
+          defaultValue: "ESP finalized: {{count}} records modified",
+          count: response.records_modified,
+        })
+      );
+    } catch (e: unknown) {
+      toast.error(`${t("finalize.failed")}: ${e}`);
+    } finally {
+      setRunning(false);
+    }
+  };
+
   return (
     <div className="sidepanel">
       <div className="sidepanel-section">
         <h3>{t("finalize.title")}</h3>
-        <p className="sidepanel-hint">{t("finalize.subtitle")}</p>
+        <p className="sidepanel-hint">
+          {espMode
+            ? t("finalize.espSubtitle", { defaultValue: "Write translations into ESP and export .STRINGS files" })
+            : t("finalize.subtitle")}
+        </p>
       </div>
 
       {/* Translation Summary */}
@@ -123,80 +165,116 @@ export function FinalizePanel() {
         </div>
       </div>
 
-      {/* Output Options */}
-      <div className="sidepanel-section">
-        <h4>{t("finalize.outputOptions")}</h4>
-
-        <div className="finalize-field">
-          <label>{t("finalize.outputDirectory")}</label>
-          <div className="finalize-field-row">
-            <input
-              type="text"
-              value={outputDir}
-              placeholder={t("finalize.selectDirectory")}
-              className="input"
-              readOnly
-            />
-            <Button variant="default" size="sm" onClick={handleSelectOutputDir} icon={<FolderOpen size={14} />} />
-          </div>
-        </div>
-
-        <div className="finalize-field">
-          <label className="finalize-checkbox">
-            <input
-              type="checkbox"
-              checked={saveSst}
-              onChange={(e) => setSaveSst(e.target.checked)}
-            />
-            {t("finalize.saveSst")}
-          </label>
-          {saveSst && (
-            <div className="finalize-field-row" style={{ marginTop: 4 }}>
-              <input
-                type="text"
-                value={sstPath}
-                readOnly
-                placeholder={t("finalize.sstPathPlaceholder")}
-                className="input"
-              />
-              <Button variant="default" size="sm" onClick={handleSelectSstPath} icon={<Save size={14} />} />
+      {/* Output Options — ESP mode vs Strings mode */}
+      {espMode ? (
+        <>
+          <div className="sidepanel-section">
+            <h4>{t("finalize.espOptions", { defaultValue: "ESP Write-back Options" })}</h4>
+            <p className="sidepanel-hint">
+              {t("finalize.espHint", { defaultValue: "Writes translations directly into the ESP file and exports .STRINGS files" })}
+            </p>
+            <div className="finalize-field">
+              <label className="finalize-checkbox">
+                <input
+                  type="checkbox"
+                  checked={createBackup}
+                  onChange={(e) => setCreateBackup(e.target.checked)}
+                />
+                {t("finalize.createBackup", { defaultValue: "Create backup before writing" })}
+              </label>
             </div>
-          )}
-        </div>
+          </div>
 
-        <div className="finalize-field">
-          <label className="finalize-checkbox">
-            <input
-              type="checkbox"
-              checked={exportXml}
-              onChange={(e) => setExportXml(e.target.checked)}
-            />
-            {t("finalize.exportXml")}
-          </label>
-        </div>
-      </div>
+          <div className="sidepanel-section">
+            <Button
+              variant="primary"
+              onClick={handleFinalizeEsp}
+              disabled={running || isLoading || !espPath}
+              icon={<HardDrive size={16} />}
+              className="finalize-btn"
+            >
+              {running
+                ? t("finalize.espExporting", { defaultValue: "Finalizing ESP..." })
+                : t("finalize.espExportAll", { defaultValue: "Finalize ESP" })}
+            </Button>
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="sidepanel-section">
+            <h4>{t("finalize.outputOptions")}</h4>
 
-      {/* Action */}
-      <div className="sidepanel-section">
-        <Button
-          variant="primary"
-          onClick={handleFinalize}
-          disabled={
-            running ||
-            isLoading ||
-            !espPath ||
-            !outputDir ||
-            (saveSst && !sstPath)
-          }
-          icon={<FileDown size={16} />}
-          className="finalize-btn"
-        >
-          {running ? t("finalize.exporting") : t("finalize.exportAll")}
-        </Button>
-      </div>
+            <div className="finalize-field">
+              <label>{t("finalize.outputDirectory")}</label>
+              <div className="finalize-field-row">
+                <input
+                  type="text"
+                  value={outputDir}
+                  placeholder={t("finalize.selectDirectory")}
+                  className="input"
+                  readOnly
+                />
+                <Button variant="default" size="sm" onClick={handleSelectOutputDir} icon={<FolderOpen size={14} />} />
+              </div>
+            </div>
 
-      {/* Result Output Files */}
-      {result && (
+            <div className="finalize-field">
+              <label className="finalize-checkbox">
+                <input
+                  type="checkbox"
+                  checked={saveSst}
+                  onChange={(e) => setSaveSst(e.target.checked)}
+                />
+                {t("finalize.saveSst")}
+              </label>
+              {saveSst && (
+                <div className="finalize-field-row" style={{ marginTop: 4 }}>
+                  <input
+                    type="text"
+                    value={sstPath}
+                    readOnly
+                    placeholder={t("finalize.sstPathPlaceholder")}
+                    className="input"
+                  />
+                  <Button variant="default" size="sm" onClick={handleSelectSstPath} icon={<Save size={14} />} />
+                </div>
+              )}
+            </div>
+
+            <div className="finalize-field">
+              <label className="finalize-checkbox">
+                <input
+                  type="checkbox"
+                  checked={exportXml}
+                  onChange={(e) => setExportXml(e.target.checked)}
+                />
+                {t("finalize.exportXml")}
+              </label>
+            </div>
+          </div>
+
+          <div className="sidepanel-section">
+            <Button
+              variant="primary"
+              onClick={handleFinalize}
+              disabled={
+                running ||
+                isLoading ||
+                !espPath ||
+                !outputDir ||
+                (saveSst && !sstPath)
+              }
+              icon={<FileDown size={16} />}
+              className="finalize-btn"
+            >
+              {running ? t("finalize.exporting") : t("finalize.exportAll")}
+            </Button>
+          </div>
+        </>
+      )}
+
+      {/* Result Output Files — Strings mode */}
+      {!espMode && result && (
         <div className="sidepanel-section">
           <h4>{t("finalize.outputFiles")}</h4>
           <div className="finalize-files">
@@ -240,6 +318,29 @@ export function FinalizePanel() {
                 </span>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Result — ESP mode */}
+      {espMode && espResult && (
+        <div className="sidepanel-section">
+          <h4>{t("finalize.outputFiles")}</h4>
+          <div className="finalize-files">
+            <div className="finalize-file">
+              <span className="finalize-file-type">ESP</span>
+              <span className="finalize-file-path" title={espResult.esp_path}>
+                {espResult.esp_path.split(/[/\\]/).pop()}
+              </span>
+            </div>
+            {espResult.strings_files.map((f, i) => (
+              <div className="finalize-file" key={i}>
+                <span className="finalize-file-type">STRINGS</span>
+                <span className="finalize-file-path" title={f}>
+                  {f.split(/[/\\]/).pop()}
+                </span>
+              </div>
+            ))}
           </div>
         </div>
       )}
