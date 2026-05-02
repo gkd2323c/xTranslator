@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useAppStore, computeTranslationProgress } from "../stores/appStore";
 import { updateTranslation, heuristicSearch, translateString, setApiKey, tcscConvert, rtlReverse, shapeArabic, deshapeArabic, checkAliases, type HeuristicMatchDTO, type AliasCheckResult } from "../api/strings";
-import { Save, X, Type, Search, Languages, Key, AlertTriangle, ArrowRight, Copy } from "lucide-react";
+import { Save, X, Type, Search, Languages, Key, AlertTriangle, ArrowRight, Copy, ArrowUp, ArrowDown } from "lucide-react";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import { Button, Textarea, Badge, Modal, Input, ProgressBar, EmptyState } from "./ui";
@@ -171,10 +171,18 @@ export function EditorPanel() {
         e.preventDefault();
         jumpToUntranslated("prev");
       }
+      if (e.ctrlKey && e.key === "h" && selectedItem) {
+        e.preventDefault();
+        handleHeuristicSearch();
+      }
+      if (e.ctrlKey && e.key === "t" && selectedItem) {
+        e.preventDefault();
+        handleTranslate();
+      }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [selectedItem, jumpToUntranslated]);
+  }, [selectedItem, jumpToUntranslated, handleHeuristicSearch, handleTranslate]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.ctrlKey && e.key === "Enter") handleSave();
@@ -193,6 +201,7 @@ export function EditorPanel() {
 
   return (
     <div className="editor-panel">
+      {/* Header: metadata only */}
       <div className="editor-header">
         <div className="editor-meta">
           <span className="editor-id">#{selectedItem.id}</span>
@@ -203,68 +212,73 @@ export function EditorPanel() {
           <Badge variant={selectedItem.status === "translated" ? "translated" : selectedItem.status === "incomplete" ? "incomplete" : "locked"}>
             {selectedItem.status}
           </Badge>
-        </div>
-        <div className="editor-actions">
-          <Button variant="ghost" size="sm" onClick={() => setShowApiKeyDialog(true)} title={t("editor.setApiKeyTooltip")} icon={<Key size={14} />} />
-          {selectedItem.status !== "translated" && (
-            <>
-              <Button
-                variant="default"
-                size="sm"
-                onClick={handleTranslate}
-                loading={isTranslating}
-                title={t("editor.machineTranslateTooltip")}
-                icon={isTranslating ? undefined : <Languages size={14} />}
-              >
-                {isTranslating ? t("editor.translating") : t("editor.translate")}
-              </Button>
-              <Button
-                variant="default"
-                size="sm"
-                onClick={handleHeuristicSearch}
-                loading={isSearching}
-                title={t("editor.findSimilarTooltip")}
-                icon={isSearching ? undefined : <Search size={14} />}
-              >
-                {isSearching ? t("editor.searching") : t("editor.similar")}
-              </Button>
-            </>
+          {aliasResult && aliasResult.has_mismatch && (
+            <span className="editor-alias-warning" title={aliasResult.missing_in_trans.join(", ")}>
+              <AlertTriangle size={12} /> {t("editor.aliasMismatch")}
+            </span>
           )}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setLocalTrans(selectedItem.source)}
-            title={t("editor.copySourceTooltip")}
-            icon={<ArrowRight size={14} />}
-          />
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={handleSave}
-            loading={isSaving}
-            title="Ctrl+Enter"
-            icon={isSaving ? undefined : <Save size={14} />}
-          >
-            {t("editor.save")}
-          </Button>
-          <Button variant="ghost" size="sm" onClick={() => setSelectedById(null)} icon={<X size={14} />} />
         </div>
+        <Button variant="ghost" size="sm" onClick={() => setSelectedById(null)} icon={<X size={14} />} />
       </div>
 
+      {/* Body: source | vertical toolbar | translation */}
       <div className="editor-body">
         <div className="editor-source">
           <label>{t("common.source")}</label>
           <div className="editor-source-text" dangerouslySetInnerHTML={{ __html: highlightTags(selectedItem.source) }} />
         </div>
+
+        <div className="editor-vtoolbar">
+          <button
+            className="vtoolbar-btn"
+            onClick={handleHeuristicSearch}
+            disabled={isSearching || selectedItem.status === "translated"}
+            title={t("editor.findSimilarTooltip")}
+          >
+            <Search size={14} />
+          </button>
+          <button
+            className="vtoolbar-btn"
+            onClick={handleTranslate}
+            disabled={isTranslating}
+            title={t("editor.machineTranslateTooltip")}
+          >
+            <Languages size={14} />
+          </button>
+          <button
+            className="vtoolbar-btn"
+            onClick={() => setLocalTrans(selectedItem.source)}
+            title={t("editor.copySourceTooltip")}
+          >
+            <ArrowRight size={14} />
+          </button>
+          <div className="vtoolbar-sep" />
+          <button
+            className="vtoolbar-btn"
+            onClick={() => jumpToUntranslated("prev")}
+            title="Ctrl+↑"
+          >
+            <ArrowUp size={14} />
+          </button>
+          <button
+            className="vtoolbar-btn"
+            onClick={() => jumpToUntranslated("next")}
+            title="Ctrl+↓"
+          >
+            <ArrowDown size={14} />
+          </button>
+          <div className="vtoolbar-sep" />
+          <button
+            className="vtoolbar-btn"
+            onClick={() => setShowApiKeyDialog(true)}
+            title={t("editor.setApiKeyTooltip")}
+          >
+            <Key size={14} />
+          </button>
+        </div>
+
         <div className="editor-translation">
-          <label>
-            {t("common.translation")}
-            {aliasResult && aliasResult.has_mismatch && (
-              <span className="editor-alias-warning" title={aliasResult.missing_in_trans.join(", ")}>
-                <AlertTriangle size={12} /> {t("editor.aliasMismatch")}
-              </span>
-            )}
-          </label>
+          <label>{t("common.translation")}</label>
           <Textarea
             value={localTrans}
             onChange={(e) => setLocalTrans(e.target.value)}
@@ -283,10 +297,31 @@ export function EditorPanel() {
                 <AlertTriangle size={12} /> {t("editor.fieldSizeWarning", { current: fieldSizeWarning.current, max: fieldSizeWarning.max })}
               </span>
             )}
-            <span className="editor-nav-hint" title={t("editor.navTooltip")}>
-              Ctrl+↑/↓ {t("editor.navUntranslated")}
-            </span>
           </div>
+        </div>
+
+        {matches.length > 0 && (
+          <div className="editor-matches">
+            <label>{t("editor.similarTranslations")}</label>
+            <div className="matches-list">
+              {matches.map((m, i) => (
+                <div key={i} className="match-item" onClick={() => applyMatch(m.translation)}>
+                  <div className="match-source" title={m.source}>{m.source}</div>
+                  <div className="match-translation">{m.translation}</div>
+                  <div className="match-meta">
+                    <span className="match-sim">{(m.similarity * 100).toFixed(0)}%</span>
+                    <Copy size={12} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Footer: TCSC/RTL + actions + progress */}
+      <div className="editor-footer">
+        <div className="editor-footer-row">
           <div className="editor-tcsc-buttons">
             <Button
               variant="ghost"
@@ -374,27 +409,19 @@ export function EditorPanel() {
               Deshape
             </Button>
           </div>
-        </div>
-        {matches.length > 0 && (
-          <div className="editor-matches">
-            <label>{t("editor.similarTranslations")}</label>
-            <div className="matches-list">
-              {matches.map((m, i) => (
-                <div key={i} className="match-item" onClick={() => applyMatch(m.translation)}>
-                  <div className="match-source" title={m.source}>{m.source}</div>
-                  <div className="match-translation">{m.translation}</div>
-                  <div className="match-meta">
-                    <span className="match-sim">{(m.similarity * 100).toFixed(0)}%</span>
-                    <Copy size={12} />
-                  </div>
-                </div>
-              ))}
-            </div>
+          <div className="editor-actions">
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={handleSave}
+              loading={isSaving}
+              title="Ctrl+Enter"
+              icon={isSaving ? undefined : <Save size={14} />}
+            >
+              {t("editor.save")}
+            </Button>
           </div>
-        )}
-      </div>
-
-      <div className="editor-footer">
+        </div>
         <ProgressBar
           value={translationProgress.translated}
           max={translationProgress.total}

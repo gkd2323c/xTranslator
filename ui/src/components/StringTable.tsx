@@ -1,10 +1,11 @@
-import { useEffect, useCallback, ReactElement } from "react";
+import { useState, useEffect, useCallback, ReactElement } from "react";
 import { List } from "react-window";
 import { useAppStore } from "../stores/appStore";
-import { Search, ArrowUpDown, Code2, Replace } from "lucide-react";
+import { Search, ArrowUpDown, Code2, Replace, Cpu, Edit3, Copy, Filter } from "lucide-react";
 import type { SkyStringDTO } from "../api/strings";
 import { useTranslation } from "react-i18next";
 import { Input, Button, Badge, Spinner } from "./ui";
+import { ContextMenu } from "./ContextMenu";
 
 const ROW_HEIGHT = 32;
 
@@ -12,6 +13,7 @@ interface RowData {
   items: SkyStringDTO[];
   selectedId: number | null;
   onSelect: (id: number) => void;
+  onContextMenu: (e: React.MouseEvent, item: SkyStringDTO) => void;
 }
 
 function VirtualRow(props: {
@@ -25,9 +27,10 @@ function VirtualRow(props: {
   items: SkyStringDTO[];
   selectedId: number | null;
   onSelect: (id: number) => void;
+  onContextMenu: (e: React.MouseEvent, item: SkyStringDTO) => void;
 }): ReactElement | null {
   const { t } = useTranslation();
-  const { index, style, items, selectedId, onSelect } = props;
+  const { index, style, items, selectedId, onSelect, onContextMenu } = props;
   const item = items[index];
   if (!item) return null;
 
@@ -37,6 +40,7 @@ function VirtualRow(props: {
       style={style}
       className={`virtual-row status-${item.status} ${isSelected ? "virtual-row-selected" : ""}`}
       onClick={() => onSelect(item.id)}
+      onContextMenu={(e) => onContextMenu(e, item)}
       onMouseEnter={(e) => {
         if (!isSelected) {
           e.currentTarget.classList.add("virtual-row-hover");
@@ -78,6 +82,8 @@ export function StringTable() {
   const useRegex = useAppStore((s) => s.useRegex);
   const replaceText = useAppStore((s) => s.replaceText);
   const statusFilter = useAppStore((s) => s.statusFilter);
+  const vmadFilter = useAppStore((s) => s.vmadFilter);
+  const listIndex = useAppStore((s) => s.listIndex);
   const selectedId = useAppStore((s) => s.selectedId);
   const total = useAppStore((s) => s.total);
   const filtered = useAppStore((s) => s.filtered);
@@ -88,10 +94,20 @@ export function StringTable() {
   const setReplaceText = useAppStore((s) => s.setReplaceText);
   const setSort = useAppStore((s) => s.setSort);
   const setStatusFilter = useAppStore((s) => s.setStatusFilter);
+  const setVmadFilter = useAppStore((s) => s.setVmadFilter);
+  const setListIndex = useAppStore((s) => s.setListIndex);
   const setSelectedById = useAppStore((s) => s.setSelectedById);
   const selectNextRow = useAppStore((s) => s.selectNextRow);
   const selectPrevRow = useAppStore((s) => s.selectPrevRow);
   const replaceAll = useAppStore((s) => s.replaceAll);
+
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; item: SkyStringDTO } | null>(null);
+
+  const handleContextMenu = useCallback((e: React.MouseEvent, item: SkyStringDTO) => {
+    e.preventDefault();
+    setSelectedById(item.id);
+    setCtxMenu({ x: e.clientX, y: e.clientY, item });
+  }, [setSelectedById]);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
@@ -124,6 +140,7 @@ export function StringTable() {
     items,
     selectedId,
     onSelect: handleSelect,
+    onContextMenu: handleContextMenu,
   };
 
   if (isLoading && allItems.length === 0) {
@@ -139,6 +156,22 @@ export function StringTable() {
 
   return (
     <div className="string-table-wrapper">
+      <div className="list-index-tabs">
+        {[
+          { key: null, label: t("common.all", { defaultValue: "All" }) },
+          { key: 0, label: "STRINGS" },
+          { key: 1, label: "DLSTRINGS" },
+          { key: 2, label: "ILSTRINGS" },
+        ].map((tab) => (
+          <button
+            key={tab.label}
+            className={`list-index-tab ${listIndex === tab.key ? "list-index-tab-active" : ""}`}
+            onClick={() => setListIndex(tab.key)}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
       <div className="table-toolbar">
         <div className="table-toolbar-row">
           <Input
@@ -176,6 +209,16 @@ export function StringTable() {
                 {s.label}
               </Button>
             ))}
+            <Button
+              variant="ghost"
+              size="sm"
+              active={vmadFilter}
+              onClick={() => setVmadFilter(!vmadFilter)}
+              title={t("table.vmadFilterTooltip", { defaultValue: "Filter VMAD script strings" })}
+              icon={<Cpu size={12} />}
+            >
+              VMAD
+            </Button>
           </div>
           <div className="table-info">
             {filtered.toLocaleString()} / {total.toLocaleString()}
@@ -231,6 +274,41 @@ export function StringTable() {
           style={{ height: "100%", width: "100%" }}
         />
       </div>
+      {ctxMenu && (
+        <ContextMenu
+          x={ctxMenu.x}
+          y={ctxMenu.y}
+          onClose={() => setCtxMenu(null)}
+          items={[
+            {
+              label: t("table.ctxEdit", { defaultValue: "Edit" }),
+              icon: <Edit3 size={14} />,
+              shortcut: "Enter",
+              onClick: () => setSelectedById(ctxMenu.item.id),
+            },
+            { separator: true, label: "" },
+            {
+              label: t("table.ctxCopySource", { defaultValue: "Copy Source" }),
+              icon: <Copy size={14} />,
+              shortcut: "Ctrl+C",
+              onClick: () => navigator.clipboard.writeText(ctxMenu.item.source),
+            },
+            {
+              label: t("table.ctxCopyTranslation", { defaultValue: "Copy Translation" }),
+              icon: <Copy size={14} />,
+              onClick: () => navigator.clipboard.writeText(ctxMenu.item.translation || ""),
+              disabled: !ctxMenu.item.translation,
+            },
+            { separator: true, label: "" },
+            {
+              label: t("table.ctxFilterFormId", { defaultValue: "Filter by FormID" }),
+              icon: <Filter size={14} />,
+              shortcut: "F12",
+              onClick: () => setFilter(ctxMenu.item.form_id),
+            },
+          ]}
+        />
+      )}
     </div>
   );
 }

@@ -77,24 +77,8 @@ export function MenuBar() {
   const reset = useAppStore((s) => s.reset);
   const theme = useAppStore((s) => s.theme);
   const setTheme = useAppStore((s) => s.setTheme);
-  const showBatchPanel = useAppStore((s) => s.showBatchPanel);
-  const setShowBatchPanel = useAppStore((s) => s.setShowBatchPanel);
-  const showBsaBrowser = useAppStore((s) => s.showBsaBrowser);
-  const setShowBsaBrowser = useAppStore((s) => s.setShowBsaBrowser);
-  const showPexPanel = useAppStore((s) => s.showPexPanel);
-  const setShowPexPanel = useAppStore((s) => s.setShowPexPanel);
-  const showFuzPanel = useAppStore((s) => s.showFuzPanel);
-  const setShowFuzPanel = useAppStore((s) => s.setShowFuzPanel);
-  const showDialogView = useAppStore((s) => s.showDialogView);
-  const setShowDialogView = useAppStore((s) => s.setShowDialogView);
-  const showMcmPanel = useAppStore((s) => s.showMcmPanel);
-  const setShowMcmPanel = useAppStore((s) => s.setShowMcmPanel);
-  const showEspCompare = useAppStore((s) => s.showEspCompare);
-  const setShowEspCompare = useAppStore((s) => s.setShowEspCompare);
-  const showFinalizePanel = useAppStore((s) => s.showFinalizePanel);
-  const setShowFinalizePanel = useAppStore((s) => s.setShowFinalizePanel);
-  const showDataConfigsPanel = useAppStore((s) => s.showDataConfigsPanel);
-  const setShowDataConfigsPanel = useAppStore((s) => s.setShowDataConfigsPanel);
+  const activePanel = useAppStore((s) => s.activePanel);
+  const setActivePanel = useAppStore((s) => s.setActivePanel);
   const setDataConfigs = useAppStore((s) => s.setDataConfigs);
   const espMode = useAppStore((s) => s.espMode);
   const batchEntries = useAppStore((s) => s.batchEntries);
@@ -105,13 +89,13 @@ export function MenuBar() {
     const isBatchFile = batchEntries.some(
       (entry) => entry.esp_path.replace(/\\/g, "/").toLowerCase() === normalizedPath
     );
-    if (isBatchFile && !showBatchPanel) {
+    if (isBatchFile && activePanel !== "batch") {
       toast(
         "This file is also in the batch queue. Changes may be overwritten when the batch runs.",
         { icon: "!", duration: 4000 }
       );
     }
-  }, [batchEntries, showBatchPanel]);
+  }, [batchEntries, activePanel]);
 
   const loadEspFromPath = useCallback(async (path: string) => {
     if (isDirty && !confirm(t("batch.batchConflict"))) return;
@@ -349,23 +333,23 @@ export function MenuBar() {
       return;
     }
     if (ext === "bsa" || ext === "ba2") {
-      setShowBsaBrowser(true);
+      setActivePanel("bsa");
       toast(t("menu.dragDropBsa", { defaultValue: "BSA/BA2 file detected — use the BSA Browser panel to open it" }), { icon: "📦", duration: 3000 });
       return;
     }
     if (ext === "pex") {
-      setShowPexPanel(true);
+      setActivePanel("pex");
       toast(t("menu.dragDropPex", { defaultValue: "PEX file detected — use the PEX panel to open it" }), { icon: "📜", duration: 3000 });
       return;
     }
     if (ext === "fuz") {
-      setShowFuzPanel(true);
+      setActivePanel("fuz");
       toast(t("menu.dragDropFuz", { defaultValue: "FUZ file detected — use the Voice panel to scan" }), { icon: "🔊", duration: 3000 });
       return;
     }
 
     toast.error(t("menu.dragDropUnsupported"));
-  }, [importXmlFromPath, loadEspFromPath, loadSstFromPath, setShowBsaBrowser, setShowFuzPanel, setShowPexPanel, t]);
+  }, [importXmlFromPath, loadEspFromPath, loadSstFromPath, setActivePanel, t]);
 
   useEffect(() => {
     let disposed = false;
@@ -501,9 +485,9 @@ export function MenuBar() {
           <Button
             variant="primary"
             icon={<CheckCircle size={16} />}
-            onClick={() => setShowFinalizePanel(!showFinalizePanel)}
+            onClick={() => setActivePanel("finalize")}
             disabled={isLoading || !espPath}
-            active={showFinalizePanel}
+            active={activePanel === "finalize"}
             title={t("finalize.title")}
           >
             {t("finalize.title")}
@@ -683,86 +667,28 @@ export function MenuBar() {
         </div>
 
         <div className="toolbar-group toolbar-icon-group" role="group" aria-label="Tool panels">
-          <Button
-            variant="ghost"
-            size="sm"
-            icon={<RefreshCw size={16} />}
-            onClick={() => setShowBatchPanel(!showBatchPanel)}
-            active={showBatchPanel}
-            title={showBatchPanel ? t("menu.closeBatchPanel") : t("menu.openBatchPanel")}
-            aria-label={showBatchPanel ? t("menu.closeBatchPanel") : t("menu.openBatchPanel")}
-            aria-pressed={showBatchPanel}
-          />
-          <Button
-            variant="ghost"
-            size="sm"
-            icon={<FileArchive size={16} />}
-            onClick={() => setShowBsaBrowser(!showBsaBrowser)}
-            active={showBsaBrowser}
-            title={showBsaBrowser ? t("menu.closeBSABrowser") : t("menu.openBSABrowser")}
-            aria-label={showBsaBrowser ? t("menu.closeBSABrowser") : t("menu.openBSABrowser")}
-            aria-pressed={showBsaBrowser}
-          />
-          <Button
-            variant="ghost"
-            size="sm"
-            icon={<Braces size={16} />}
-            onClick={() => setShowPexPanel(!showPexPanel)}
-            active={showPexPanel}
-            title={showPexPanel ? t("menu.closePEXPanel") : t("menu.openPEXPanel")}
-            aria-label={showPexPanel ? t("menu.closePEXPanel") : t("menu.openPEXPanel")}
-            aria-pressed={showPexPanel}
-          />
-          <Button
-            variant="ghost"
-            size="sm"
-            icon={<Volume2 size={16} />}
-            onClick={() => setShowFuzPanel(!showFuzPanel)}
-            active={showFuzPanel}
-            title={showFuzPanel ? t("menu.closeVoicePanel") : t("menu.openVoicePanel")}
-            aria-label={showFuzPanel ? t("menu.closeVoicePanel") : t("menu.openVoicePanel")}
-            aria-pressed={showFuzPanel}
-          />
-          <Button
-            variant="ghost"
-            size="sm"
-            icon={<MessagesSquare size={16} />}
-            onClick={() => setShowDialogView(!showDialogView)}
-            active={showDialogView}
-            title={showDialogView ? t("menu.closeDialogView") : t("menu.openDialogView")}
-            aria-label={showDialogView ? t("menu.closeDialogView") : t("menu.openDialogView")}
-            aria-pressed={showDialogView}
-          />
-          <Button
-            variant="ghost"
-            size="sm"
-            icon={<FileText size={16} />}
-            onClick={() => setShowMcmPanel(!showMcmPanel)}
-            active={showMcmPanel}
-            title={showMcmPanel ? t("menu.closeMCMPanel") : t("menu.openMCMPanel")}
-            aria-label={showMcmPanel ? t("menu.closeMCMPanel") : t("menu.openMCMPanel")}
-            aria-pressed={showMcmPanel}
-          />
-          <Button
-            variant="ghost"
-            size="sm"
-            icon={<GitCompare size={16} />}
-            onClick={() => setShowEspCompare(!showEspCompare)}
-            active={showEspCompare}
-            title={showEspCompare ? t("menu.closeESPCompare") : t("menu.openESPCompare")}
-            aria-label={showEspCompare ? t("menu.closeESPCompare") : t("menu.openESPCompare")}
-            aria-pressed={showEspCompare}
-          />
-          <Button
-            variant="ghost"
-            size="sm"
-            icon={<Database size={16} />}
-            onClick={() => setShowDataConfigsPanel(!showDataConfigsPanel)}
-            active={showDataConfigsPanel}
-            title={showDataConfigsPanel ? t("menu.closeDataConfigs") : t("menu.openDataConfigs")}
-            aria-label={showDataConfigsPanel ? t("menu.closeDataConfigs") : t("menu.openDataConfigs")}
-            aria-pressed={showDataConfigsPanel}
-          />
+          {([
+            { id: "batch" as const, icon: <RefreshCw size={16} />, openKey: "menu.openBatchPanel", closeKey: "menu.closeBatchPanel" },
+            { id: "bsa" as const, icon: <FileArchive size={16} />, openKey: "menu.openBSABrowser", closeKey: "menu.closeBSABrowser" },
+            { id: "pex" as const, icon: <Braces size={16} />, openKey: "menu.openPEXPanel", closeKey: "menu.closePEXPanel" },
+            { id: "fuz" as const, icon: <Volume2 size={16} />, openKey: "menu.openVoicePanel", closeKey: "menu.closeVoicePanel" },
+            { id: "dialog" as const, icon: <MessagesSquare size={16} />, openKey: "menu.openDialogView", closeKey: "menu.closeDialogView" },
+            { id: "mcm" as const, icon: <FileText size={16} />, openKey: "menu.openMCMPanel", closeKey: "menu.closeMCMPanel" },
+            { id: "espCompare" as const, icon: <GitCompare size={16} />, openKey: "menu.openESPCompare", closeKey: "menu.closeESPCompare" },
+            { id: "dataConfigs" as const, icon: <Database size={16} />, openKey: "menu.openDataConfigs", closeKey: "menu.closeDataConfigs" },
+          ]).map(({ id, icon, openKey, closeKey }) => (
+            <Button
+              key={id}
+              variant="ghost"
+              size="sm"
+              icon={icon}
+              onClick={() => setActivePanel(id)}
+              active={activePanel === id}
+              title={activePanel === id ? t(closeKey) : t(openKey)}
+              aria-label={activePanel === id ? t(closeKey) : t(openKey)}
+              aria-pressed={activePanel === id}
+            />
+          ))}
         </div>
 
         <div className="toolbar-group toolbar-selects" role="group" aria-label="Preferences">

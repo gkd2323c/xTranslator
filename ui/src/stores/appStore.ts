@@ -7,6 +7,30 @@ import i18n from "../i18n";
 
 export type Theme = "dark" | "light" | "auto";
 
+// Panel system: unified panel/tab management (replaces 9 boolean flags)
+export type ActivePanel =
+  | "batch"
+  | "bsa"
+  | "pex"
+  | "fuz"
+  | "dialog"
+  | "mcm"
+  | "espCompare"
+  | "finalize"
+  | "dataConfigs"
+  | null;
+
+export type BottomTabId =
+  | "home"
+  | "vocabulary"
+  | "heuristic"
+  | "espTree"
+  | "pex"
+  | "quests"
+  | "dialogs"
+  | "log"
+  | null;
+
 const THEME_STORAGE_KEY = "xtranslator-theme";
 
 function getSystemPrefersDark(): boolean {
@@ -63,7 +87,6 @@ interface AppState {
 
   // Data configs (CTDA, field sizes, etc.)
   dataConfigs: DataConfigsDto | null;
-  showDataConfigsPanel: boolean;
 
   // ESP mode (direct write-back vs external .STRINGS)
   espMode: boolean;
@@ -75,6 +98,7 @@ interface AppState {
   statusFilter: string | null;
   recordFilter: string | null;
   vmadFilter: boolean;
+  listIndex: number | null; // null = all, 0=STRINGS, 1=DLSTRINGS, 2=ILSTRINGS
   sortField: string;
   sortDir: "asc" | "desc";
 
@@ -100,8 +124,12 @@ interface AppState {
   undoStack: UndoEntry[];
   redoStack: UndoEntry[];
 
+  // Panel system (unified, replaces 9 boolean flags)
+  activePanel: ActivePanel;
+  activeBottomTab: BottomTabId;
+  showBottomPanel: boolean;
+
   // Batch processor
-  showBatchPanel: boolean;
   batchEntries: BatchEntry[];
   batchStatus: BatchStatus | null;
 
@@ -111,27 +139,6 @@ interface AppState {
   batchProgress: { completed: number; total: number };
   batchErrors: { strId: number; error: string }[];
   batchConcurrency: number;
-
-  // BSA Browser
-  showBsaBrowser: boolean;
-
-  // PEX Panel
-  showPexPanel: boolean;
-
-  // FUZ Panel
-  showFuzPanel: boolean;
-
-  // Dialog View
-  showDialogView: boolean;
-
-  // MCM Panel
-  showMcmPanel: boolean;
-
-  // ESP Compare Panel
-  showEspCompare: boolean;
-
-  // Finalize Panel
-  showFinalizePanel: boolean;
 
   // Actions
   setAllItems: (items: SkyStringDTO[]) => void;
@@ -149,6 +156,7 @@ interface AppState {
   setStatusFilter: (status: string | null) => void;
   setRecordFilter: (record: string | null) => void;
   setVmadFilter: (enabled: boolean) => void;
+  setListIndex: (index: number | null) => void;
   setSort: (field: string, dir?: "asc" | "desc") => void;
   replaceAll: () => Promise<void>;
   undo: () => Promise<void>;
@@ -172,16 +180,10 @@ interface AppState {
   closeRecoveryModal: () => void;
   selectPrevRow: () => void;
   loadAllStrings: () => Promise<void>;
-  setShowBatchPanel: (show: boolean) => void;
-  setShowBsaBrowser: (show: boolean) => void;
-  setShowPexPanel: (show: boolean) => void;
-  setShowFuzPanel: (show: boolean) => void;
-  setShowDialogView: (show: boolean) => void;
-  setShowMcmPanel: (show: boolean) => void;
-  setShowEspCompare: (show: boolean) => void;
-  setShowFinalizePanel: (show: boolean) => void;
+  setActivePanel: (panel: ActivePanel) => void;
+  setActiveBottomTab: (tab: BottomTabId) => void;
+  toggleBottomPanel: () => void;
   setDataConfigs: (configs: DataConfigsDto | null) => void;
-  setShowDataConfigsPanel: (show: boolean) => void;
   setEspMode: (espMode: boolean) => void;
   setBatchEntries: (entries: BatchEntry[]) => void;
   addBatchEntries: (entries: BatchEntry[]) => void;
@@ -210,10 +212,16 @@ function applyFilterAndSort(
   statusFilter: string | null,
   recordFilter: string | null,
   vmadFilter: boolean,
+  listIndex: number | null,
   sortField: string,
   sortDir: "asc" | "desc"
 ): SkyStringDTO[] {
   let result = allItems;
+
+  // List index filter (STRINGS/DLSTRINGS/ILSTRINGS)
+  if (listIndex !== null) {
+    result = result.filter((item) => item.list_index === listIndex);
+  }
 
   // Record type filter
   if (recordFilter) {
@@ -311,6 +319,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   statusFilter: null,
   recordFilter: null,
   vmadFilter: false,
+  listIndex: null,
   sortField: "id",
   sortDir: "asc",
   selectedId: null,
@@ -323,7 +332,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   recoveryInfo: null,
   undoStack: [],
   redoStack: [],
-  showBatchPanel: false,
+  activePanel: null,
+  activeBottomTab: "home",
+  showBottomPanel: true,
   batchEntries: [],
   batchStatus: null,
   selectedIds: new Set<number>(),
@@ -331,16 +342,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   batchProgress: { completed: 0, total: 0 },
   batchErrors: [],
   batchConcurrency: 3,
-  showBsaBrowser: false,
-  showPexPanel: false,
-  showFuzPanel: false,
-  showDialogView: false,
-
-  showMcmPanel: false,
-  showEspCompare: false,
-  showFinalizePanel: false,
   dataConfigs: null,
-  showDataConfigsPanel: false,
   espMode: false,
 
   setAllItems: (allItems) => {
@@ -352,6 +354,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       state.statusFilter,
       state.recordFilter,
       state.vmadFilter,
+      state.listIndex,
       state.sortField,
       state.sortDir
     );
@@ -388,6 +391,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         state.statusFilter,
         state.recordFilter,
         state.vmadFilter,
+        state.listIndex,
         state.sortField,
         state.sortDir
       );
@@ -404,6 +408,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       state.statusFilter,
       state.recordFilter,
       state.vmadFilter,
+      state.listIndex,
       state.sortField,
       state.sortDir
     );
@@ -419,6 +424,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       state.statusFilter,
       state.recordFilter,
       state.vmadFilter,
+      state.listIndex,
       state.sortField,
       state.sortDir
     );
@@ -449,6 +455,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       state.statusFilter,
       state.recordFilter,
       state.vmadFilter,
+      state.listIndex,
       state.sortField,
       state.sortDir
     );
@@ -502,6 +509,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         state.statusFilter,
         state.recordFilter,
         state.vmadFilter,
+        state.listIndex,
         state.sortField,
         state.sortDir
       );
@@ -555,6 +563,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       state.statusFilter,
       state.recordFilter,
       state.vmadFilter,
+      state.listIndex,
       state.sortField,
       state.sortDir
     );
@@ -603,6 +612,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       state.statusFilter,
       state.recordFilter,
       state.vmadFilter,
+      state.listIndex,
       state.sortField,
       state.sortDir
     );
@@ -621,6 +631,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       statusFilter,
       state.recordFilter,
       state.vmadFilter,
+      state.listIndex,
       state.sortField,
       state.sortDir
     );
@@ -636,6 +647,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       state.statusFilter,
       recordFilter,
       state.vmadFilter,
+      state.listIndex,
       state.sortField,
       state.sortDir
     );
@@ -651,10 +663,27 @@ export const useAppStore = create<AppState>((set, get) => ({
       state.statusFilter,
       state.recordFilter,
       vmadFilter,
+      state.listIndex,
       state.sortField,
       state.sortDir
     );
     set({ vmadFilter, items, filtered: items.length });
+  },
+
+  setListIndex: (listIndex) => {
+    const state = get();
+    const items = applyFilterAndSort(
+      state.allItems,
+      state.filter,
+      state.useRegex,
+      state.statusFilter,
+      state.recordFilter,
+      state.vmadFilter,
+      listIndex,
+      state.sortField,
+      state.sortDir
+    );
+    set({ listIndex, items, filtered: items.length });
   },
 
   setSort: (field, dir) => {
@@ -668,6 +697,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       state.statusFilter,
       state.recordFilter,
       state.vmadFilter,
+      state.listIndex,
       sortField,
       sortDir
     );
@@ -712,6 +742,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       state.statusFilter,
       state.recordFilter,
       state.vmadFilter,
+      state.listIndex,
       state.sortField,
       state.sortDir
     );
@@ -732,91 +763,14 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   setIsDirty: (isDirty) => set({ isDirty }),
 
-  setShowBatchPanel: (showBatchPanel) => set({
-    showBatchPanel,
-    showBsaBrowser: false,
-    showPexPanel: false,
-    showFuzPanel: false,
-    showDialogView: false,
-    showMcmPanel: false,
-    showEspCompare: false,
-  }),
-  setShowBsaBrowser: (showBsaBrowser) => set({
-    showBatchPanel: false,
-    showBsaBrowser,
-    showPexPanel: false,
-    showFuzPanel: false,
-    showDialogView: false,
-    showMcmPanel: false,
-    showEspCompare: false,
-  }),
-  setShowPexPanel: (showPexPanel) => set({
-    showBatchPanel: false,
-    showBsaBrowser: false,
-    showPexPanel,
-    showFuzPanel: false,
-    showDialogView: false,
-    showMcmPanel: false,
-    showEspCompare: false,
-  }),
-  setShowFuzPanel: (showFuzPanel) => set({
-    showBatchPanel: false,
-    showBsaBrowser: false,
-    showPexPanel: false,
-    showFuzPanel,
-    showDialogView: false,
-    showMcmPanel: false,
-    showEspCompare: false,
-  }),
-  setShowDialogView: (showDialogView) => set({
-    showBatchPanel: false,
-    showBsaBrowser: false,
-    showPexPanel: false,
-    showFuzPanel: false,
-    showDialogView,
-    showMcmPanel: false,
-    showEspCompare: false,
-  }),
-  setShowMcmPanel: (showMcmPanel) => set({
-    showBatchPanel: false,
-    showBsaBrowser: false,
-    showPexPanel: false,
-    showFuzPanel: false,
-    showDialogView: false,
-    showMcmPanel,
-    showEspCompare: false,
-  }),
-  setShowEspCompare: (showEspCompare) => set({
-    showBatchPanel: false,
-    showBsaBrowser: false,
-    showPexPanel: false,
-    showFuzPanel: false,
-    showDialogView: false,
-    showMcmPanel: false,
-    showEspCompare,
-  }),
-  setShowFinalizePanel: (showFinalizePanel) => set({
-    showBatchPanel: false,
-    showBsaBrowser: false,
-    showPexPanel: false,
-    showFuzPanel: false,
-    showDialogView: false,
-    showMcmPanel: false,
-    showEspCompare: false,
-    showFinalizePanel,
-  }),
+  setActivePanel: (panel) => {
+    const current = get().activePanel;
+    // Toggle off if clicking the same panel
+    set({ activePanel: current === panel ? null : panel });
+  },
+  setActiveBottomTab: (tab) => set({ activeBottomTab: tab, showBottomPanel: true }),
+  toggleBottomPanel: () => set((s) => ({ showBottomPanel: !s.showBottomPanel })),
   setDataConfigs: (dataConfigs) => set({ dataConfigs }),
-  setShowDataConfigsPanel: (showDataConfigsPanel) => set({
-    showBatchPanel: false,
-    showBsaBrowser: false,
-    showPexPanel: false,
-    showFuzPanel: false,
-    showDialogView: false,
-    showMcmPanel: false,
-    showEspCompare: false,
-    showFinalizePanel: false,
-    showDataConfigsPanel,
-  }),
 
   setEspMode: (espMode) => {
     set({ espMode });
@@ -1063,6 +1017,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       statusFilter: null,
       recordFilter: null,
       vmadFilter: false,
+      listIndex: null,
       selectedId: null,
       selectedItem: null,
       isDirty: false,
@@ -1073,6 +1028,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       redoStack: [],
       targetLang: "chinese",
       dataConfigs: null,
-      showDataConfigsPanel: false,
+      activePanel: null,
+      activeBottomTab: "home",
     }),
 }));

@@ -5,7 +5,7 @@ import { FileText, FileUp, Save } from "lucide-react";
 import toast from "react-hot-toast";
 import { loadMcmFile, saveMcmFile, mcmCompare } from "../api/strings";
 import type { McmFileDto, McmEntryDto, McmComparePolicy, McmCompareRequest } from "../api/strings";
-import { Button, EmptyState, Select, Textarea } from "./ui";
+import { Button, Badge, EmptyState, Select, Textarea } from "./ui";
 
 export function McmPanel() {
   const { t } = useTranslation();
@@ -161,8 +161,8 @@ export function McmPanel() {
               </Button>
             </div>
             {modified && (
-              <div className="badge badge-warning" style={{ marginTop: 6, width: "100%", textAlign: "center" }}>
-                {t("mcm.unsaved")}
+              <div style={{ marginTop: 6, width: "100%", textAlign: "center" }}>
+                <Badge variant="incomplete">{t("mcm.unsaved")}</Badge>
               </div>
             )}
 

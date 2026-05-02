@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 import { listen } from "@tauri-apps/api/event";
 import { setI18nLanguage } from "./i18n";
 import { useAppStore } from "./stores/appStore";
+import type { ActivePanel } from "./stores/appStore";
 import { MenuBar } from "./components/MenuBar";
 import { SidePanel } from "./components/SidePanel";
 import { BatchPanel } from "./components/BatchPanel";
@@ -17,55 +18,24 @@ import { McmPanel } from "./components/McmPanel";
 import { EspComparePanel } from "./components/EspComparePanel";
 import { FinalizePanel } from "./components/FinalizePanel";
 import { DataConfigsPanel } from "./components/DataConfigsPanel";
+import { VocabularyPanel } from "./components/bottom/VocabularyPanel";
+import { HeuristicPanel } from "./components/bottom/HeuristicPanel";
+import { EspTreePanel } from "./components/bottom/EspTreePanel";
+import { QuestsPanel } from "./components/bottom/QuestsPanel";
+import { LogPanel } from "./components/bottom/LogPanel";
 import { StringTable } from "./components/StringTable";
 import { EditorPanel } from "./components/EditorPanel";
 import { BatchTranslateBar } from "./components/BatchTranslateBar";
 import { RecoveryPromptModal } from "./components/RecoveryPromptModal";
+import { StatusBar } from "./components/StatusBar";
 import { autoBackupSst, loadConfig, setOpenAiApiKey, setDeeplApiKey, setTranslationProvider } from "./api/strings";
 import "./App.css";
 import "./components/ui/ui.css";
 
 const AUTO_BACKUP_INTERVAL_MS = 5 * 60 * 1000;
 
-type SidebarPanelId =
-  | "mcm"
-  | "espCompare"
-  | "bsa"
-  | "pex"
-  | "fuz"
-  | "dialog"
-  | "batch"
-  | "finalize"
-  | "dataConfigs"
-  | "overview";
-
-type SidebarPanelFlags = {
-  showMcmPanel: boolean;
-  showEspCompare: boolean;
-  showBsaBrowser: boolean;
-  showPexPanel: boolean;
-  showFuzPanel: boolean;
-  showDialogView: boolean;
-  showBatchPanel: boolean;
-  showFinalizePanel: boolean;
-  showDataConfigsPanel: boolean;
-};
-
-function getActiveSidebarPanel(flags: SidebarPanelFlags): SidebarPanelId {
-  if (flags.showMcmPanel) return "mcm";
-  if (flags.showEspCompare) return "espCompare";
-  if (flags.showBsaBrowser) return "bsa";
-  if (flags.showPexPanel) return "pex";
-  if (flags.showFuzPanel) return "fuz";
-  if (flags.showDialogView) return "dialog";
-  if (flags.showBatchPanel) return "batch";
-  if (flags.showFinalizePanel) return "finalize";
-  if (flags.showDataConfigsPanel) return "dataConfigs";
-  return "overview";
-}
-
-function renderSidebarPanel(panelId: SidebarPanelId) {
-  switch (panelId) {
+function renderActivePanel(panel: ActivePanel) {
+  switch (panel) {
     case "mcm":
       return <McmPanel />;
     case "espCompare":
@@ -84,8 +54,8 @@ function renderSidebarPanel(panelId: SidebarPanelId) {
       return <FinalizePanel />;
     case "dataConfigs":
       return <DataConfigsPanel />;
-    case "overview":
-      return <SidePanel />;
+    default:
+      return null;
   }
 }
 
@@ -96,15 +66,9 @@ function App() {
   const isParsing = useAppStore((s) => s.isParsing);
   const loadProgress = useAppStore((s) => s.loadProgress);
   const theme = useAppStore((s) => s.theme);
-  const showBatchPanel = useAppStore((s) => s.showBatchPanel);
-  const showMcmPanel = useAppStore((s) => s.showMcmPanel);
-  const showEspCompare = useAppStore((s) => s.showEspCompare);
-  const showBsaBrowser = useAppStore((s) => s.showBsaBrowser);
-  const showPexPanel = useAppStore((s) => s.showPexPanel);
-  const showFuzPanel = useAppStore((s) => s.showFuzPanel);
-  const showDialogView = useAppStore((s) => s.showDialogView);
-  const showFinalizePanel = useAppStore((s) => s.showFinalizePanel);
-  const showDataConfigsPanel = useAppStore((s) => s.showDataConfigsPanel);
+  const activePanel = useAppStore((s) => s.activePanel);
+  const activeBottomTab = useAppStore((s) => s.activeBottomTab);
+  const showBottomPanel = useAppStore((s) => s.showBottomPanel);
   const isDirty = useAppStore((s) => s.isDirty);
   const sstPath = useAppStore((s) => s.sstPath);
   const undo = useAppStore((s) => s.undo);
@@ -210,17 +174,6 @@ function App() {
   }, [sstPath, isDirty, t]);
 
   const isLocked = isLoading || isParsing;
-  const activeSidebarPanel = getActiveSidebarPanel({
-    showMcmPanel,
-    showEspCompare,
-    showBsaBrowser,
-    showPexPanel,
-    showFuzPanel,
-    showDialogView,
-    showBatchPanel,
-    showFinalizePanel,
-    showDataConfigsPanel,
-  });
 
   return (
     <div className="app">
@@ -229,18 +182,67 @@ function App() {
       <MenuBar />
       <BatchTranslateBar />
       <div className="app-body">
-        <aside className="app-sidebar" aria-label="Active side panel">
-          {renderSidebarPanel(activeSidebarPanel)}
-        </aside>
+        {/* Active tool panel (overlay/drawer for BSA, PEX, FUZ, etc.) */}
+        {activePanel && (
+          <aside className="app-side-panel" aria-label="Active tool panel">
+            {renderActivePanel(activePanel)}
+          </aside>
+        )}
         <main className="app-main">
+          {/* String table area */}
           <div className="app-table-area">
             <StringTable />
           </div>
+          {/* Editor area */}
           <div className="app-editor-area">
             <EditorPanel />
           </div>
+          {/* Bottom panel (tabbed auxiliary views) */}
+          {showBottomPanel && (
+            <>
+              <div className="app-bottom-splitter" />
+              <div className="app-bottom-panel">
+                <div className="bottom-panel-tabs">
+                  {(["home", "vocabulary", "heuristic", "espTree", "pex", "quests", "dialogs", "log"] as const).map((tab) => (
+                    <button
+                      key={tab}
+                      className={`bottom-tab ${activeBottomTab === tab ? "bottom-tab-active" : ""}`}
+                      onClick={() => useAppStore.getState().setActiveBottomTab(tab)}
+                    >
+                      {tab === "home" ? t("bottomTabs.home", { defaultValue: "Home" }) :
+                       tab === "vocabulary" ? t("bottomTabs.vocabulary", { defaultValue: "Vocabulary" }) :
+                       tab === "heuristic" ? t("bottomTabs.heuristic", { defaultValue: "Heuristic" }) :
+                       tab === "espTree" ? t("bottomTabs.espTree", { defaultValue: "ESP Tree" }) :
+                       tab === "pex" ? t("bottomTabs.pex", { defaultValue: "PEX" }) :
+                       tab === "quests" ? t("bottomTabs.quests", { defaultValue: "Quests" }) :
+                       tab === "dialogs" ? t("bottomTabs.dialogs", { defaultValue: "Dialogs" }) :
+                       t("bottomTabs.log", { defaultValue: "Log" })}
+                    </button>
+                  ))}
+                  <button
+                    className="bottom-tab bottom-tab-close"
+                    onClick={() => useAppStore.getState().toggleBottomPanel()}
+                    title="Close panel"
+                  >
+                    ×
+                  </button>
+                </div>
+                <div className="bottom-panel-content">
+                  {activeBottomTab === "home" && <SidePanel />}
+                  {activeBottomTab === "vocabulary" && <VocabularyPanel />}
+                  {activeBottomTab === "heuristic" && <HeuristicPanel />}
+                  {activeBottomTab === "espTree" && <EspTreePanel />}
+                  {activeBottomTab === "pex" && <PexPanel />}
+                  {activeBottomTab === "quests" && <QuestsPanel />}
+                  {activeBottomTab === "dialogs" && <DialogView />}
+                  {activeBottomTab === "log" && <LogPanel />}
+                </div>
+              </div>
+            </>
+          )}
         </main>
       </div>
+      <StatusBar />
       {isLocked && (
         <div className="app-overlay">
           <Loader size={40} className="app-overlay-spinner" />
