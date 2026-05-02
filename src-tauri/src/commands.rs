@@ -59,6 +59,8 @@ pub struct AppState {
     pub batch_queue: Mutex<Option<Arc<BatchQueue>>>,
     /// ESP 文件树（用于回写）
     pub esp_file: Mutex<Option<xt_core::esp::record_tree::EspFile>>,
+    /// Codepage 表（用于正确的字符串文件编码加载/写入）
+    pub codepage_table: Mutex<Option<CodepageTable>>,
 }
 
 impl AppState {
@@ -86,6 +88,7 @@ impl AppState {
             vocabulary: Mutex::new(Vec::new()),
             batch_queue: Mutex::new(None),
             esp_file: Mutex::new(None),
+            codepage_table: Mutex::new(None),
         }
     }
 }
@@ -493,6 +496,38 @@ pub async fn load_esp(
     }
 
     *state.is_dirty.lock().map_err(|e| e.to_string())? = false;
+
+    // Store codepage table for use in save_strings/finalize export
+    let codepage_table = {
+        let game_id = game
+            .as_deref()
+            .map(|g| match g.to_lowercase().as_str() {
+                "skyrim" => GameId::Skyrim,
+                "skyrimse" | "skyrim se" => GameId::SkyrimSE,
+                "fallout4" | "fo4" => GameId::Fallout4,
+                "falloutnv" | "fonv" => GameId::FalloutNV,
+                "fallout76" | "fo76" => GameId::Fallout76,
+                "starfield" | "sf" => GameId::Starfield,
+                _ => GameId::SkyrimSE,
+            })
+            .unwrap_or(GameId::SkyrimSE);
+        let codepage_path = std::path::Path::new("Data")
+            .join(match game_id {
+                GameId::Skyrim => "Skyrim",
+                GameId::SkyrimSE => "SkyrimSE",
+                GameId::Fallout4 => "Fallout4",
+                GameId::FalloutNV => "FalloutNV",
+                GameId::Fallout76 => "Fallout76",
+                GameId::Starfield => "Starfield",
+            })
+            .join("codepage.txt");
+        if codepage_path.exists() {
+            CodepageTable::load_from_file(&codepage_path).ok()
+        } else {
+            None
+        }
+    };
+    *state.codepage_table.lock().map_err(|e| e.to_string())? = codepage_table;
 
     Ok(result.1)
 }
@@ -1171,6 +1206,8 @@ pub async fn save_strings(
 ) -> Result<SaveStringsResponse, String> {
     let strings = state.strings.lock().map_err(|e| e.to_string())?;
     let file_info = state.file_info.lock().map_err(|e| e.to_string())?;
+    let codepage_table = state.codepage_table.lock().map_err(|e| e.to_string())?;
+    let codepage_table_ref: Option<&CodepageTable> = codepage_table.as_ref();
 
     let source_lang = file_info
         .as_ref()
@@ -1216,10 +1253,17 @@ pub async fn save_strings(
 
         // 加载源语言文件作为基础（保留所有未翻译条目）
         let mut strings_file = if source_path.exists() {
-            xt_core::strings::StringsFile::load_with_format(
-                &source_path,
-                xt_core::strings::StringsFile::detect_format(&source_path),
-            )
+            if let Some(ref table) = codepage_table_ref {
+                xt_core::strings::StringsFile::load_with_codepage_table(
+                    &source_path,
+                    table,
+                )
+            } else {
+                xt_core::strings::StringsFile::load_with_format(
+                    &source_path,
+                    xt_core::strings::StringsFile::detect_format(&source_path),
+                )
+            }
             .unwrap_or_else(|_| xt_core::strings::StringsFile::new())
         } else {
             xt_core::strings::StringsFile::new()
@@ -2629,22 +2673,31 @@ pub async fn save_esp(
     
     let strings = state.strings.lock().map_err(|e| e.to_string())?;
     
+    // Build index: (form_id, record_sig, field_sig) → &SkyString for O(1) lookup
+    let mut string_index: HashMap<(u32, [u8; 4], [u8; 4]), &SkyString> = HashMap::new();
+    for sk in strings.iter() {
+        if !sk.translation.is_empty() {
+            string_index.insert(
+                (sk.esp_ptr.form_id, sk.esp_ptr.record_sig, sk.esp_ptr.field_sig),
+                sk,
+            );
+        }
+    }
+    
     // Create a mutable copy of the ESP file for rebuilding
     let mut esp_file_mut = esp_file.clone();
     
-    // Apply translations to field buffers
+    // Iterate through all records in the tree and update translatable fields
     let mut records_modified = 0u32;
     
-    // Iterate through all records in the tree and update translatable fields
     fn update_records_in_grup(
         grup: &mut xt_core::esp::record_tree::EspGrup,
-        strings: &[xt_core::types::sky_string::SkyString],
+        string_index: &HashMap<(u32, [u8; 4], [u8; 4]), &SkyString>,
         codepage: &xt_core::strings::CodepageConfig,
     ) -> u32 {
         let mut modified = 0u32;
         
         for record in &mut grup.records {
-            // Skip TES4 record (it's handled separately)
             if record.header.name == *b"TES4" {
                 continue;
             }
@@ -2654,14 +2707,9 @@ pub async fn save_esp(
                     continue;
                 }
                 
-                // Find matching SkyString for this field
-                if let Some(sk) = strings.iter().find(|sk| {
-                    sk.esp_ptr.record_sig == record.header.name &&
-                    sk.esp_ptr.field_sig == field.header.name &&
-                    sk.esp_ptr.form_id == record.form_id
-                }) {
-                    // Only update if translation is different from source
-                    if !sk.translation.is_empty() && sk.translation != sk.source {
+                let key = (record.form_id, record.header.name, field.header.name);
+                if let Some(sk) = string_index.get(&key) {
+                    if sk.translation != sk.source {
                         field.update_buffer(&sk.translation, codepage);
                         modified += 1;
                     }
@@ -2673,17 +2721,15 @@ pub async fn save_esp(
             }
         }
         
-        // Recursively update child GRUPs
         for child in &mut grup.children {
-            modified += update_records_in_grup(child, strings, codepage);
+            modified += update_records_in_grup(child, string_index, codepage);
         }
         
         modified
     }
     
-    // Update all top-level GRUPs
     for grup in &mut esp_file_mut.top_level_grups {
-        records_modified += update_records_in_grup(grup, &strings, &xt_core::strings::CodepageConfig::default());
+        records_modified += update_records_in_grup(grup, &string_index, &xt_core::strings::CodepageConfig::default());
     }
     
     // Rebuild all records to recalculate sizes
@@ -2715,22 +2761,28 @@ pub async fn finalize_esp(
     let strings = state.strings.lock().map_err(|e| e.to_string())?;
     let _sst_old_data = state.sst_old_data.lock().map_err(|e| e.to_string())?;
     
+    // Build index: (form_id, record_sig, field_sig) → &SkyString for O(1) lookup
+    let mut string_index: HashMap<(u32, [u8; 4], [u8; 4]), &SkyString> = HashMap::new();
+    for sk in strings.iter() {
+        string_index.insert(
+            (sk.esp_ptr.form_id, sk.esp_ptr.record_sig, sk.esp_ptr.field_sig),
+            sk,
+        );
+    }
+    
     // Create a mutable copy of the ESP file for rebuilding
     let mut esp_file_mut = esp_file.clone();
     
-    // Apply translations to field buffers
     let mut records_modified = 0u32;
     
-    // Apply translations to all records
     fn apply_translations_to_records(
         grup: &mut xt_core::esp::record_tree::EspGrup,
-        strings: &[xt_core::types::sky_string::SkyString],
+        string_index: &HashMap<(u32, [u8; 4], [u8; 4]), &SkyString>,
         codepage: &xt_core::strings::CodepageConfig,
     ) -> u32 {
         let mut modified = 0u32;
         
         for record in &mut grup.records {
-            // Skip TES4 record
             if record.header.name == *b"TES4" {
                 continue;
             }
@@ -2740,13 +2792,8 @@ pub async fn finalize_esp(
                     continue;
                 }
                 
-                // Find matching SkyString
-                if let Some(sk) = strings.iter().find(|sk| {
-                    sk.esp_ptr.record_sig == record.header.name &&
-                    sk.esp_ptr.field_sig == field.header.name &&
-                    sk.esp_ptr.form_id == record.form_id
-                }) {
-                    // Use translation if available, otherwise use source
+                let key = (record.form_id, record.header.name, field.header.name);
+                if let Some(sk) = string_index.get(&key) {
                     let text = if !sk.translation.is_empty() {
                         sk.translation.clone()
                     } else {
@@ -2765,17 +2812,15 @@ pub async fn finalize_esp(
             }
         }
         
-        // Recursively process child GRUPs
         for child in &mut grup.children {
-            modified += apply_translations_to_records(child, strings, codepage);
+            modified += apply_translations_to_records(child, string_index, codepage);
         }
         
         modified
     }
     
-    // Apply to all top-level GRUPs
     for grup in &mut esp_file_mut.top_level_grups {
-        records_modified += apply_translations_to_records(grup, &strings, &xt_core::strings::CodepageConfig::default());
+        records_modified += apply_translations_to_records(grup, &string_index, &xt_core::strings::CodepageConfig::default());
     }
     
     // Rebuild all records
@@ -2801,60 +2846,101 @@ pub async fn finalize_esp(
 }
 
 /// Export .STRINGS/.DLSTRINGS/.ILSTRINGS files from translated strings
+/// using proper binary format (compatible with Bethesda games).
 fn export_strings_files(
     strings: &[xt_core::types::sky_string::SkyString],
     strings_dir: &str,
     base_name: &str,
     language: &str,
 ) -> Result<Vec<String>, String> {
+    export_strings_files_inner(
+        strings,
+        strings_dir,
+        base_name,
+        language,
+        |sk| (!sk.translation.is_empty(), sk.translation.clone()),
+    )
+}
+
+/// Export strings files for delocalized ESP (uses source as fallback).
+fn export_strings_files_for_delocalize(
+    strings: &[xt_core::types::sky_string::SkyString],
+    strings_dir: &str,
+    base_name: &str,
+    language: &str,
+) -> Result<Vec<String>, String> {
+    export_strings_files_inner(
+        strings,
+        strings_dir,
+        base_name,
+        language,
+        |sk| {
+            let text = if !sk.translation.is_empty() {
+                sk.translation.clone()
+            } else {
+                sk.source.clone()
+            };
+            (!text.is_empty(), text)
+        },
+    )
+}
+
+/// Common implementation for exporting strings files in binary format.
+fn export_strings_files_inner(
+    strings: &[xt_core::types::sky_string::SkyString],
+    strings_dir: &str,
+    base_name: &str,
+    language: &str,
+    pick_text: impl Fn(&xt_core::types::sky_string::SkyString) -> (bool, String),
+) -> Result<Vec<String>, String> {
     use std::collections::HashMap;
     use std::fs;
     use std::path::Path;
-    
+
     // Group strings by list_index
-    let mut grouped: HashMap<u8, Vec<&xt_core::types::sky_string::SkyString>> = HashMap::new();
+    let mut grouped: HashMap<u8, Vec<(u32, String)>> = HashMap::new();
     for sk in strings {
-        if !sk.translation.is_empty() {
-            grouped.entry(sk.list_index).or_default().push(sk);
+        let (should_include, text) = pick_text(sk);
+        if should_include && sk.esp_ptr.str_id >= 0 {
+            grouped
+                .entry(sk.list_index)
+                .or_default()
+                .push((sk.esp_ptr.str_id as u32, text));
         }
     }
-    
+
     let mut exported_files = Vec::new();
     let strings_path = Path::new(strings_dir);
-    
-    // Create directory if it doesn't exist
+
     fs::create_dir_all(strings_path)
         .map_err(|e| format!("Failed to create strings directory: {}", e))?;
-    
-    for (list_index, strings_list) in grouped {
-        // Sort by string ID
-        let mut sorted_strings = strings_list;
-        sorted_strings.sort_by_key(|sk| sk.esp_ptr.str_id);
-        
-        // Determine file extension based on list_index
+
+    for (list_index, mut entries) in grouped {
+        // Sort by string ID for stable output
+        entries.sort_by_key(|(id, _)| *id);
+
         let ext = match list_index {
             0 => "STRINGS",
             1 => "DLSTRINGS",
             2 => "ILSTRINGS",
             _ => "STRINGS",
         };
-        
+
         let filename = format!("{}_{}.{}", base_name, language, ext);
         let filepath = strings_path.join(&filename);
-        
-        // For now, create a simple implementation
-        // In a full implementation, we would write the proper binary format
-        let content = sorted_strings.iter()
-            .map(|sk| format!("{}={}", sk.esp_ptr.str_id, sk.translation))
-            .collect::<Vec<_>>()
-            .join("\n");
-        
-        fs::write(&filepath, content)
+
+        let format = xt_core::strings::StringsFile::detect_format(&filepath);
+        let sfile = xt_core::strings::StringsFile::from_entries(
+            entries,
+            xt_core::strings::CodepageConfig::utf8(),
+        );
+        sfile
+            .save_with_format(&filepath, format)
             .map_err(|e| format!("Failed to write strings file {}: {}", filename, e))?;
-        
+
         exported_files.push(filepath.to_string_lossy().to_string());
     }
-    
+
     Ok(exported_files)
 }
 
@@ -2869,21 +2955,28 @@ pub async fn delocalize_esp(
     
     let strings = state.strings.lock().map_err(|e| e.to_string())?;
     
+    // Build index: (form_id, record_sig, field_sig) → &SkyString for O(1) lookup
+    let mut string_index: HashMap<(u32, [u8; 4], [u8; 4]), &SkyString> = HashMap::new();
+    for sk in strings.iter() {
+        string_index.insert(
+            (sk.esp_ptr.form_id, sk.esp_ptr.record_sig, sk.esp_ptr.field_sig),
+            sk,
+        );
+    }
+    
     // Create a mutable copy of the ESP file
     let mut esp_file_mut = esp_file.clone();
     
-    // Apply translations to field buffers
     let mut new_string_count = 0u32;
     
     fn delocalize_records_in_grup(
         grup: &mut xt_core::esp::record_tree::EspGrup,
-        strings: &[xt_core::types::sky_string::SkyString],
+        string_index: &HashMap<(u32, [u8; 4], [u8; 4]), &SkyString>,
         codepage: &xt_core::strings::CodepageConfig,
     ) -> u32 {
         let mut new_strings = 0u32;
         
         for record in &mut grup.records {
-            // Skip TES4 record
             if record.header.name == *b"TES4" {
                 continue;
             }
@@ -2893,13 +2986,8 @@ pub async fn delocalize_esp(
                     continue;
                 }
                 
-                // Find matching SkyString
-                if let Some(sk) = strings.iter().find(|sk| {
-                    sk.esp_ptr.record_sig == record.header.name &&
-                    sk.esp_ptr.field_sig == field.header.name &&
-                    sk.esp_ptr.form_id == record.form_id
-                }) {
-                    // Use translation if available, otherwise use source
+                let key = (record.form_id, record.header.name, field.header.name);
+                if let Some(sk) = string_index.get(&key) {
                     let text = if !sk.translation.is_empty() {
                         sk.translation.clone()
                     } else {
@@ -2918,17 +3006,15 @@ pub async fn delocalize_esp(
             }
         }
         
-        // Recursively process child GRUPs
         for child in &mut grup.children {
-            new_strings += delocalize_records_in_grup(child, strings, codepage);
+            new_strings += delocalize_records_in_grup(child, string_index, codepage);
         }
         
         new_strings
     }
     
-    // Apply to all top-level GRUPs
     for grup in &mut esp_file_mut.top_level_grups {
-        new_string_count += delocalize_records_in_grup(grup, &strings, &xt_core::strings::CodepageConfig::default());
+        new_string_count += delocalize_records_in_grup(grup, &string_index, &xt_core::strings::CodepageConfig::default());
     }
     
     // Rebuild all records
@@ -2950,75 +3036,6 @@ pub async fn delocalize_esp(
         new_string_count,
         strings_files_paths: strings_files,
     })
-}
-
-/// Export strings files for delocalized ESP
-fn export_strings_files_for_delocalize(
-    strings: &[xt_core::types::sky_string::SkyString],
-    strings_dir: &str,
-    base_name: &str,
-    language: &str,
-) -> Result<Vec<String>, String> {
-    use std::collections::HashMap;
-    use std::fs;
-    use std::path::Path;
-    
-    // Group strings by list_index
-    let mut grouped: HashMap<u8, Vec<&xt_core::types::sky_string::SkyString>> = HashMap::new();
-    for sk in strings {
-        let text = if !sk.translation.is_empty() {
-            sk.translation.clone()
-        } else {
-            sk.source.clone()
-        };
-        if !text.is_empty() {
-            grouped.entry(sk.list_index).or_default().push(sk);
-        }
-    }
-    
-    let mut exported_files = Vec::new();
-    let strings_path = Path::new(strings_dir);
-    
-    // Create directory if it doesn't exist
-    fs::create_dir_all(strings_path)
-        .map_err(|e| format!("Failed to create strings directory: {}", e))?;
-    
-    for (list_index, strings_list) in grouped {
-        // Sort by string ID
-        let mut sorted_strings = strings_list;
-        sorted_strings.sort_by_key(|sk| sk.esp_ptr.str_id);
-        
-        // Determine file extension based on list_index
-        let ext = match list_index {
-            0 => "STRINGS",
-            1 => "DLSTRINGS",
-            2 => "ILSTRINGS",
-            _ => "STRINGS",
-        };
-        
-        let filename = format!("{}_{}.{}", base_name, language, ext);
-        let filepath = strings_path.join(&filename);
-        
-        // For now, create a simple implementation
-        let content = sorted_strings.iter()
-            .map(|sk| {
-                let text = if !sk.translation.is_empty() {
-                    sk.translation.clone()
-                } else {
-                    sk.source.clone()
-                };
-                format!("{}={}", sk.esp_ptr.str_id, text)
-            })
-            .collect::<Vec<_>>()
-            .join("\n");
-        
-        fs::write(&filepath, content)
-            .map_err(|e| format!("Failed to write strings file {}: {}", filename, e))?;
-        
-        exported_files.push(filepath.to_string_lossy().to_string());
-    }
-    
-    Ok(exported_files)
 }
 
 /// Return API translator config info (providers, models, limits)
@@ -3092,6 +3109,10 @@ pub async fn finalize(
     let (strings_clone, total_strings, translated_count, translated_map) = strings_data;
     let (source_lang, strings_dir, esp_path) = file_info_data;
 
+    // Get codepage table for proper encoding when loading source files
+    let codepage_table = state.codepage_table.lock().map_err(|e| e.to_string())?;
+    let codepage_table_ref: Option<&CodepageTable> = codepage_table.as_ref();
+
     let output_dir = std::path::Path::new(&request.strings_output_dir);
     let base_name = &request.base_name;
     let target_lang = &request.target_lang;
@@ -3116,10 +3137,17 @@ pub async fn finalize(
         ));
 
         let mut strings_file = if source_path.exists() {
-            xt_core::strings::StringsFile::load_with_format(
-                &source_path,
-                xt_core::strings::StringsFile::detect_format(&source_path),
-            )
+            if let Some(ref table) = codepage_table_ref {
+                xt_core::strings::StringsFile::load_with_codepage_table(
+                    &source_path,
+                    table,
+                )
+            } else {
+                xt_core::strings::StringsFile::load_with_format(
+                    &source_path,
+                    xt_core::strings::StringsFile::detect_format(&source_path),
+                )
+            }
             .unwrap_or_else(|_| xt_core::strings::StringsFile::new())
         } else {
             xt_core::strings::StringsFile::new()

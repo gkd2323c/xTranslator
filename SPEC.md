@@ -170,10 +170,10 @@ T38|x|HiDPI support (Tauri 2.x native HiDPI + decorations/dragDrop window config
 T39|x|Drag-drop extension (route BSA/BA2, PEX, FUZ file drops to correct handlers)|G7
 T40|x|Source/Dest compare (compare source hash vs translation hash, tag diff/same as incomplete)|G7
 T41|x|Alias integrity check (extract <Alias=...> tags, compare source vs translation, highlight mismatches in EditorPanel)|G7
-T42| |ESP record tree (EspField/EspRecord/EspGrup structs, full in-memory parse tree for write-back)|V29,V31
-T43| |ESP record rebuild (field buffer mutation, XXXX size prefix, zlib recompression)|V30,V31
-T44| |ESP serialization (recursive GRUP/record serialize, backup before write, roundtrip fidelity)|V29
-T45| |Localized→delocalized conversion (string ID replacement, sequential ID reassignment, .STRINGS export)|V32
+T42|x|ESP record tree (EspField/EspRecord/EspGrup structs, full in-memory parse tree for write-back)|V29,V31
+T43|x|ESP record rebuild (field buffer mutation, XXXX size prefix, zlib recompression)|V30,V31
+T44|x|ESP serialization (recursive GRUP/record serialize, backup before write, roundtrip fidelity)|V29
+T45|x|Localized→delocalized conversion (string ID replacement, sequential ID reassignment, .STRINGS export)|V32
 
 ## §B Bugs
 
