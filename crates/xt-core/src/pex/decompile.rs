@@ -171,9 +171,10 @@ impl Opcode {
         }
     }
 
-    /// Number of u16 arguments this opcode takes
+    /// Number of u16 arguments this opcode takes (based on PEX binary format).
     pub fn arg_count(self) -> usize {
         match self {
+            // 0-arg instructions
             Self::Nop
             | Self::Iadd
             | Self::Fadd
@@ -188,40 +189,42 @@ impl Opcode {
             | Self::Ineg
             | Self::Fneg
             | Self::Assign
-            | Self::Cmplt
+            | Self::Return
+            | Self::Propset
+            | Self::ArraySetElement
+            | Self::ArrayClear
+            | Self::FloatToInt => 0,
+
+            // 1-arg instructions
+            Self::Cmplt
             | Self::CmpEq
             | Self::CmpLte
             | Self::Cmpgt
             | Self::Cmpgte
             | Self::Cmpneq
-            | Self::Return
             | Self::Strcat
-            | Self::Propset
-            | Self::ArraySetElement
-            | Self::ArrayFindElement
-            | Self::ArrayRfindElement
-            | Self::ArrayInsert
-            | Self::ArrayRemoveIndex
-            | Self::ArrayClear
-            | Self::ArrayRemovelast
-            | Self::IntToFloat
-            | Self::FloatToInt => 0,
-
-            Self::Cast
-            | Self::Jump
-            | Self::Jz
-            | Self::Jnz
-            | Self::Callmethod
-            | Self::Callparent
+            | Self::Cast
             | Self::Callstatic
             | Self::Propget
             | Self::ArrayCreate
             | Self::ArrayLength
             | Self::ArrayGetElement
             | Self::ArrayAddElement
-            | Self::ArrayRemoveLast => 1,
+            | Self::ArrayRemoveLast
+            | Self::ArrayRemovelast
+            | Self::IntToFloat => 1,
 
-            Self::Invalid => 2,
+            // 2-arg instructions
+            Self::Jump
+            | Self::Jnz
+            | Self::Callmethod
+            | Self::Callparent
+            | Self::Invalid
+            | Self::Jz
+            | Self::ArrayFindElement
+            | Self::ArrayRfindElement
+            | Self::ArrayInsert
+            | Self::ArrayRemoveIndex => 2,
         }
     }
 }
@@ -1152,7 +1155,164 @@ mod tests {
     #[test]
     fn test_opcode_arg_count() {
         assert_eq!(Opcode::Nop.arg_count(), 0);
-        assert_eq!(Opcode::Jump.arg_count(), 1);
+        assert_eq!(Opcode::Jump.arg_count(), 2);
         assert_eq!(Opcode::Invalid.arg_count(), 2);
+        assert_eq!(Opcode::Cast.arg_count(), 1);
+        assert_eq!(Opcode::Return.arg_count(), 0);
+        assert_eq!(Opcode::Callmethod.arg_count(), 2);
+        assert_eq!(Opcode::Callstatic.arg_count(), 1);
+        assert_eq!(Opcode::Jz.arg_count(), 2);
+        assert_eq!(Opcode::Jnz.arg_count(), 2);
+    }
+
+    #[test]
+    fn test_decompile_minimal_pex() {
+        // Construct a minimal PEX with one object and one function
+        // String table:
+        // 0: ""
+        // 1: "TestScript"
+        // 2: ""
+        // 3: ""
+        // 4: ""
+        // 5: "Int"
+        // 6: "count"
+        // 7: ""
+        // 8: "GetCount"
+        // 9: "Int"
+
+        let strings: Vec<&str> = vec![
+            "", "", "TestScript", "", "", "", "Int", "count", "", "GetCount", "Int",
+        ];
+        // idx 0:"", 1:"", 2:"TestScript", 3:"", 4:"", 5:"", 6:"Int", 7:"count", 8:"", 9:"GetCount", 10:"Int"
+
+        let mut data = Vec::new();
+        // Magic
+        data.extend_from_slice(&0xFA57C0DEu32.to_le_bytes());
+        // Header
+        data.push(3); data.push(10);
+        data.extend_from_slice(&1u16.to_le_bytes());
+        data.extend_from_slice(&0u64.to_le_bytes());
+        // String table
+        data.extend_from_slice(&(strings.len() as u16).to_le_bytes());
+        for s in &strings {
+            let b = s.as_bytes();
+            data.extend_from_slice(&(b.len() as u16).to_le_bytes());
+            data.extend_from_slice(b);
+        }
+        // Debug info (empty)
+        data.extend_from_slice(&0u64.to_le_bytes());
+        data.extend_from_slice(&0u16.to_le_bytes());
+        // User flags (empty)
+        data.extend_from_slice(&0u16.to_le_bytes());
+        // Objects: 1
+        data.extend_from_slice(&1u16.to_le_bytes());
+        data.extend_from_slice(&2u16.to_le_bytes()); // name=idx2 "TestScript"
+
+        // Build body
+        let mut body = Vec::new();
+        // parent class = "" (idx 0)
+        body.extend_from_slice(&0u16.to_le_bytes());
+        // doc = "" (idx 1)
+        body.extend_from_slice(&1u16.to_le_bytes());
+        // user flags = 0
+        body.extend_from_slice(&0u16.to_le_bytes());
+        // auto state = "" (idx 3)
+        body.extend_from_slice(&3u16.to_le_bytes());
+        // variables = 0
+        body.extend_from_slice(&0u16.to_le_bytes());
+        // guards = 0
+        body.extend_from_slice(&0u16.to_le_bytes());
+        // property groups = 0
+        body.extend_from_slice(&0u16.to_le_bytes());
+        // states = 1
+        body.extend_from_slice(&1u16.to_le_bytes());
+        // state name = "" (idx 4)
+        body.extend_from_slice(&4u16.to_le_bytes());
+        // functions = 1
+        body.extend_from_slice(&1u16.to_le_bytes());
+        // func name = "GetCount" (idx 9)
+        body.extend_from_slice(&9u16.to_le_bytes());
+        // return type = "Int" (idx 10)
+        body.extend_from_slice(&10u16.to_le_bytes());
+        // doc = "" (idx 5)
+        body.extend_from_slice(&5u16.to_le_bytes());
+        // flags = 0
+        body.push(0u8);
+        // user flags = 0
+        body.extend_from_slice(&0u16.to_le_bytes());
+        // params = 0
+        body.extend_from_slice(&0u16.to_le_bytes());
+        // locals = 1 (Int count)
+        body.extend_from_slice(&1u16.to_le_bytes());
+        body.extend_from_slice(&7u16.to_le_bytes());  // name=idx7 "count"
+        body.extend_from_slice(&6u16.to_le_bytes());  // type=idx6 "Int"
+        // instructions = 3
+        body.extend_from_slice(&3u16.to_le_bytes());
+        // inst 0: Jump (0x15), 2 args
+        body.push(0x15u8);
+        body.extend_from_slice(&1u16.to_le_bytes());
+        body.extend_from_slice(&2u16.to_le_bytes());
+        // inst 1: Cast (0x0E), 1 arg
+        body.push(0x0Eu8);
+        body.extend_from_slice(&5u16.to_le_bytes());
+        // inst 2: Return (0x1B), 0 args
+        body.push(0x1Bu8);
+
+        // Write body size and data
+        data.extend_from_slice(&(body.len() as u32).to_le_bytes());
+        data.extend_from_slice(&body);
+
+        // Decompile
+        let result = decompile_pex(&data);
+        assert!(result.is_ok(), "Decompile failed: {:?}", result.err());
+        let decompiled = result.unwrap();
+
+        assert_eq!(decompiled.objects.len(), 1);
+        assert_eq!(decompiled.objects[0].name, "TestScript");
+        assert_eq!(decompiled.objects[0].states.len(), 1);
+        assert_eq!(decompiled.objects[0].states[0].functions.len(), 1);
+        let func = &decompiled.objects[0].states[0].functions[0];
+        assert_eq!(func.name, "GetCount");
+        assert_eq!(func.return_type, "Int");
+        assert_eq!(func.locals.len(), 1);
+        assert_eq!(func.locals[0].name, "count");
+        assert_eq!(func.instructions.len(), 3);
+        assert_eq!(func.instructions[0].opcode, Opcode::Jump);
+        assert_eq!(func.instructions[1].opcode, Opcode::Cast);
+        assert_eq!(func.instructions[2].opcode, Opcode::Return);
+
+        // Emit pseudocode and verify key parts
+        let pseudo = emit_pseudocode(&decompiled);
+        println!("=== PSEUDOCODE ===\n{}", pseudo);
+        assert!(pseudo.contains("ScriptName TestScript"));
+        assert!(pseudo.contains("Int Function GetCount()"));
+        assert!(pseudo.contains("Int count"));
+        assert!(pseudo.contains("return"));
+        assert!(pseudo.contains("EndFunction"));
+    }
+
+    #[test]
+    fn test_decompile_reject_invalid_magic() {
+        let data = vec![0u8; 16];
+        let result = decompile_pex(&data);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_decompile_empty_object_list() {
+        let mut data = Vec::new();
+        data.extend_from_slice(&0xFA57C0DEu32.to_le_bytes());
+        data.push(3); data.push(10);
+        data.extend_from_slice(&1u16.to_le_bytes());
+        data.extend_from_slice(&0u64.to_le_bytes());
+        data.extend_from_slice(&0u16.to_le_bytes()); // empty string table
+        data.extend_from_slice(&0u64.to_le_bytes()); // debug mod time
+        data.extend_from_slice(&0u16.to_le_bytes()); // debug count
+        data.extend_from_slice(&0u16.to_le_bytes()); // user flags
+        data.extend_from_slice(&0u16.to_le_bytes()); // 0 objects
+
+        let result = decompile_pex(&data);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().objects.len(), 0);
     }
 }

@@ -37,7 +37,9 @@ tests/fixtures/*.sst
 .qoder/
 .qwen/
 .trae/
+.trae/
 .codex/
+.deepseek/
 
 # OS
 .DS_Store
