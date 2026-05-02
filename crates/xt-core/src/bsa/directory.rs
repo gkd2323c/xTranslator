@@ -193,8 +193,25 @@ pub fn bsa_hash64(name: &str, ext: &str) -> u64 {
     }
 
     // 特殊扩展名处理（.nif/.kf/.dds/.wav）
-    // 这部分 Delphi 做了特殊调整，但 Strings 文件通常不涉及这些扩展名
-    // 暂不实现，如有需要后续补充
+    // Delphi TESVT_bsa.pas:248-286 — bit manipulation for known extensions
+    // This modifies the result for specific file types to match Bethesda's own hash.
+    let ext_flag: u32 = match ext {
+        ".nif" => 1,
+        ".kf" => 2,
+        ".dds" => 3,
+        ".wav" => 4,
+        _ => 0,
+    };
+    if ext_flag != 0 {
+        let a = ((ext_flag & 0xFC) << 5) as u8;
+        let a = (a as u64).wrapping_add((result & 0xFF00_0000) >> 24);
+        let b = ((ext_flag & 0xFE) << 6) as u8;
+        let b = (b as u64).wrapping_add(result & 0xFF);
+        let c = (ext_flag << 7) as u8;
+        let c = (c as u64).wrapping_add((result & 0xFF00) >> 8);
+        result = result.wrapping_sub(result & 0xFF00_FFFF);
+        result = result.wrapping_add((a << 24).wrapping_add(b).wrapping_add(c << 8));
+    }
 
     result
 }
@@ -224,6 +241,39 @@ mod tests {
 
         // 相同输入应产生相同输出
         assert_eq!(bsa_hash64("test", ".ext"), bsa_hash64("test", ".ext"));
+    }
+
+    #[test]
+    fn test_bsa_hash64_special_extensions() {
+        // .nif extension triggers flag=1, modifying the hash
+        let h_nif = bsa_hash64("meshes\\test", ".nif");
+        let h_generic = bsa_hash64("meshes\\test", ".xxx");
+        assert_ne!(h_nif, h_generic);
+
+        // .kf extension
+        let h_kf = bsa_hash64("animations\\test", ".kf");
+        assert_ne!(h_kf, 0);
+
+        // .dds extension
+        let h_dds = bsa_hash64("textures\\test", ".dds");
+        assert_ne!(h_dds, 0);
+
+        // .wav extension
+        let h_wav = bsa_hash64("sound\\test", ".wav");
+        assert_ne!(h_wav, 0);
+
+        // Deterministic: same inputs = same hash
+        assert_eq!(
+            bsa_hash64("meshes\\test", ".nif"),
+            bsa_hash64("meshes\\test", ".nif")
+        );
+
+        // Extension matching is case-sensitive for str_to_num part,
+        // so use lowercase consistently (Bethesda uses lowercase in BSAs).
+        assert_eq!(
+            bsa_hash64("test", ".kf"),
+            bsa_hash64("test", ".kf")
+        );
     }
 
     #[test]

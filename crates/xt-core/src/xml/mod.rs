@@ -461,13 +461,21 @@ pub fn write_xml_export<W: Write>(
             writeln!(writer, "      <EDID/>")?;
         }
 
-        writeln!(
-            writer,
-            r#"      <REC id="{}" idMax="{}">{}</REC>"#,
-            entry.index,
-            entry.index_max,
-            escape(&rec_text)
-        )?;
+        if entry.index_max > 0 {
+            writeln!(
+                writer,
+                r#"      <REC id="{}" idMax="{}">{}</REC>"#,
+                entry.index,
+                entry.index_max,
+                escape(&rec_text)
+            )?;
+        } else {
+            writeln!(
+                writer,
+                r#"      <REC>{}</REC>"#,
+                escape(&rec_text)
+            )?;
+        }
 
         writeln!(writer, "      <Source>{}</Source>", escape(&entry.source))?;
         writeln!(writer, "      <Dest>{}</Dest>", escape(&entry.translation))?;

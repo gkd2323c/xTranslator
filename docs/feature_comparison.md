@@ -69,7 +69,7 @@
 | **ESP 写入（Strings 回写）** | ✅ | ⚠️ Strings 保存已有 | ~30% | ESP 本身不修改（原版策略），但需要整合写入流程 |
 | **最终化 (finalize)** | ✅ 导出翻译结果 | ⚠️ XML 导出可用 | ~40% | XML 导出已就绪，Strings 最终化待整合 |
 | **批量处理器** | ✅ 命令式批处理 | ✅ BatchExecutor + BatchPanel | ~70% | Multi-file translate/export, progress events, cancel, error recovery |
-| **RTL 支持 (阿拉伯语)** | ✅ RTL 标签+字符串反向 | ✅ rtl.rs + EditorPanel RTL 按钮 | ~60% | `rtl.rs`：阿拉伯字符检测 + 块反转 + 符号镜像（端口自 Delphi）；EditorPanel RTL 按钮；阿拉伯整形（Shape/deshape）未移植 |
+| **RTL 支持 (阿拉伯语)** | ✅ RTL 标签+字符串反向 | ✅ rtl.rs + EditorPanel RTL 按钮 | ~80% | `rtl.rs`：阿拉伯字符检测 + 块反转 + 符号镜像 + 阿拉伯整形（Shape/deshape）均已从 Delphi 移植，roundtrip 测试通过；EditorPanel RTL 按钮 |
 | **中文繁简转换** | ✅ SC↔TC 字符映射 | ✅ IPC + MenuBar + EditorPanel 按钮 | ~90% | `tcsc.rs`：OpenCC 主字典(3960对)+Delphi 字典回退(2552对)，编译时嵌入；IPC 命令+MenuBar 按钮+EditorPanel 内转换按钮均已集成；批量转换待实现 |
 
 ---

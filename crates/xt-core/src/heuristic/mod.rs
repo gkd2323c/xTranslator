@@ -7,6 +7,12 @@
 //! - Levenshtein 编辑距离：衡量字符串整体差异
 //! - 最长公共子串（LCS）：衡量局部连续匹配  
 //! - 最长公共前缀（LCP）：衡量开头部分匹配
+//!
+//! ## Delphi Scoring (delphi_scoring.rs)
+//! Ports the original Delphi multi-dimensional scoring system including
+//! word-level hashing, proxy penalties, and dynamic thresholds.
+
+pub mod delphi_scoring;
 
 /// 计算 Levenshtein 编辑距离
 ///

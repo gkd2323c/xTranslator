@@ -33,7 +33,7 @@
 
 ## 待完成的分析任务
 
-- [ ] 启发式搜索阈值参数 (TESVT_HeuristicSearch.pas)
+- [x] 启发式搜索阈值参数 (TESVT_HeuristicSearch.pas) → 已分析，Rust 评分系统待移植（见 docs/delphi_rust_fix_plan.md 阶段1）
 - [x] 翻译匹配流程 (TESVT_TranslateFunc.pas)
 - [x] 文件加载流程 (TESVT_MainLoader.pas)
 - [x] SST 字典应用逻辑 (id 匹配, EDID, normalized, vocab, 状态语义)

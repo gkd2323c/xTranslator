@@ -112,7 +112,7 @@ struct ChatChoice {
 #[async_trait]
 impl super::TranslationProvider for OpenAIProvider {
     async fn translate(&self, text: &str, _source_lang: &str, target_lang: &str, proxy: Option<&crate::config::AppConfig>) -> Result<String> {
-        let protected = super::protect_crlf(text);
+        let (protected, crlf_style) = super::protect_crlf(text);
         let query = self.build_query(&protected, target_lang);
 
         let request = ChatRequest {
@@ -159,7 +159,7 @@ impl super::TranslationProvider for OpenAIProvider {
         chat_response
             .choices
             .first()
-            .map(|c| super::restore_crlf(c.message.content.trim()))
+            .map(|c| super::restore_crlf_with_style(c.message.content.trim(), crlf_style))
             .ok_or_else(|| anyhow!("No translation in API response"))
     }
 }

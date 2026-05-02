@@ -20,6 +20,13 @@ tests/fixtures/*.sst
 !tests/fixtures/*.md
 !tests/fixtures/small.*
 
+# Delphi golden files (large reference exports)
+tests/fixtures/delphi_golden/*.xml
+tests/fixtures/delphi_golden/*.sst
+tests/fixtures/delphi_golden/*.STRINGS
+tests/fixtures/delphi_golden/*.DLSTRINGS
+tests/fixtures/delphi_golden/*.ILSTRINGS
+
 # IDE
 .idea/
 .vscode/

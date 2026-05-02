@@ -2,8 +2,10 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tauri::Emitter;
 use xt_core::batch_queue::BatchQueue;
+use xt_core::cache_index::CacheIndex;
 use xt_core::sqlite_cache::SqliteCache;
 use xt_core::esp::parser::{EspParser, StringsFiles};
+use xt_core::esp::record_tree::EspFile;
 use xt_core::matching::{apply_dictionary_entries_with_policy, ApplyPolicy, DictionaryApplyEntry};
 use xt_core::pex::types::PexTranslatableString;
 use xt_core::sst::v8::SstDictionary;
@@ -204,15 +206,19 @@ pub async fn load_esp(
 
     // ESP 解析是 CPU 密集型任务，放到阻塞线程池里执行，避免卡住异步运行时。
     let result = tokio::task::spawn_blocking(
-        move || -> Result<(Vec<SkyString>, LoadEspResponse), String> {
+        move || -> Result<(Vec<SkyString>, LoadEspResponse, Option<EspFile>), String> {
             let start = std::time::Instant::now();
 
             // ── 缓存检查阶段 ──
-            let cache = SqliteCache::new(c_dir);
+            let cache = SqliteCache::new(c_dir.clone());
             let esp_path_ref = std::path::Path::new(&esp_path_clone);
 
-            // 计算一次 SHA-256 哈希，同时用于 lookup 和 store（避免重复 I/O）
-            let file_hash = xt_core::cache::hash_file(esp_path_ref).ok();
+            let mut cache_index = CacheIndex::load(&c_dir);
+
+            // Fast path: mtime+size lookup avoids full-file SHA-256 read
+            let file_hash = cache_index
+                .lookup(esp_path_ref)
+                .or_else(|| xt_core::cache::hash_file(esp_path_ref).ok());
 
             if let Some(ref hash) = file_hash {
                 if let Some(cached) = cache.lookup(hash) {
@@ -231,6 +237,17 @@ pub async fn load_esp(
                     let record_counts = cache.compute_record_counts(hash)
                         .unwrap_or_default();
 
+                    // 缓存命中：字符串已就绪，但 ESP 树仍需构建（write-back 需要）
+                    // 在阻塞线程内解析文件结构以构建记录树
+                    let mut tree_parser = EspParser::new();
+                    tree_parser.enable_esp_mode();
+                    let esp_file = if let Ok(mut f) = std::fs::File::open(esp_path_ref) {
+                        let _ = tree_parser.parse(&mut f);
+                        tree_parser.build_esp_file()
+                    } else {
+                        None
+                    };
+
                     return Ok((
                         cached.strings,
                         LoadEspResponse {
@@ -242,6 +259,7 @@ pub async fn load_esp(
                             cached: true,
                             esp_hash: hash.clone(),
                         },
+                        esp_file,
                     ));
                 }
             }
@@ -428,7 +446,7 @@ pub async fn load_esp(
             let compressed_records = parser.compressed_records;
 
             // Build ESP file tree for write-back support
-            let _esp_file = parser.build_esp_file();
+            let esp_file = parser.build_esp_file();
 
             // 存储解析结果到 SQLite 缓存（静默失败，不影响主流程）
             if let Some(ref hash) = file_hash {
@@ -439,6 +457,9 @@ pub async fn load_esp(
                     strings_loaded,
                 };
                 let _ = cache.store(hash, &cache_payload);
+                // 更新索引：下次加载时通过 mtime+size 直接获取哈希
+                cache_index.store(esp_path_ref, hash);
+                cache_index.save(&c_dir);
             }
 
             let _ = window.emit(
@@ -463,6 +484,7 @@ pub async fn load_esp(
                     cached: false,
                     esp_hash: file_hash.unwrap_or_default(),
                 },
+                esp_file,
             ))
         },
     )
@@ -484,15 +506,10 @@ pub async fn load_esp(
         language: language.unwrap_or_else(|| "english".to_string()),
     });
 
-    // Build ESP file tree for write-back support
-    let mut parser = EspParser::new();
-    parser.enable_esp_mode();
-    
-    // Re-parse to build the record tree
-    if let Ok(mut file) = std::fs::File::open(&esp_path) {
-        let _ = parser.parse(&mut file);
-        let mut esp_file = state.esp_file.lock().map_err(|e| e.to_string())?;
-        *esp_file = parser.build_esp_file();
+    // Reuse the ESP tree built during parsing (avoids double parse)
+    {
+        let mut esp_file_lock = state.esp_file.lock().map_err(|e| e.to_string())?;
+        *esp_file_lock = result.2;
     }
 
     *state.is_dirty.lock().map_err(|e| e.to_string())? = false;

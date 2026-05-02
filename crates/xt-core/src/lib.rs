@@ -2,6 +2,7 @@ pub mod ba2;
 pub mod batch_queue;
 pub mod bsa;
 pub mod cache;
+pub mod cache_index;
 pub mod config;
 pub mod data_config;
 pub mod esp;

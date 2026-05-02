@@ -13,16 +13,59 @@ use std::fmt;
 /// CRLF 保护标签（与 Delphi `CRLFtag = '<L_F>'` 一致）
 const CRLF_TAG: &str = "<L_F>";
 
-/// 翻译前：将换行符替换为保护标签
-pub fn protect_crlf(text: &str) -> String {
-    text.replace("\r\n", CRLF_TAG)
-        .replace('\r', "")
-        .replace('\n', CRLF_TAG)
+/// 文本中的换行风格（Delphi 保留原文换行风格）
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CrlfStyle {
+    /// `\r\n` (Windows)
+    CrLf,
+    /// `\n` (Unix/Linux/macOS)
+    Lf,
 }
 
-/// 翻译后：将保护标签还原为换行符
+impl CrlfStyle {
+    fn as_str(&self) -> &'static str {
+        match self {
+            CrlfStyle::CrLf => "\r\n",
+            CrlfStyle::Lf => "\n",
+        }
+    }
+}
+
+/// 检测文本的主导航行风格
+fn detect_crlf_style(text: &str) -> CrlfStyle {
+    let has_crlf = text.contains("\r\n");
+    let has_lf = text.contains('\n');
+
+    if has_crlf {
+        CrlfStyle::CrLf
+    } else if has_lf {
+        CrlfStyle::Lf
+    } else {
+        // 没有换行符，默认 Windows 风格
+        CrlfStyle::CrLf
+    }
+}
+
+/// 翻译前：将换行符替换为保护标签，同时记录原始换行风格
+///
+/// 返回 `(受保护的文本, 原始换行风格)`
+pub fn protect_crlf(text: &str) -> (String, CrlfStyle) {
+    let style = detect_crlf_style(text);
+    let protected = text
+        .replace("\r\n", CRLF_TAG)
+        .replace('\r', "")
+        .replace('\n', CRLF_TAG);
+    (protected, style)
+}
+
+/// 翻译后：将保护标签还原为换行符（默认 `\r\n`，向后兼容）
 pub fn restore_crlf(text: &str) -> String {
     text.replace(CRLF_TAG, "\r\n")
+}
+
+/// 翻译后：将保护标签还原为指定风格的换行符
+pub fn restore_crlf_with_style(text: &str, style: CrlfStyle) -> String {
+    text.replace(CRLF_TAG, style.as_str())
 }
 
 /// Build an optional reqwest::Proxy from AppConfig proxy settings
@@ -56,17 +99,22 @@ mod tests {
 
     #[test]
     fn test_protect_crlf_single_newline() {
-        assert_eq!(protect_crlf("line1\nline2"), "line1<L_F>line2");
+        let (protected, style) = protect_crlf("line1\nline2");
+        assert_eq!(protected, "line1<L_F>line2");
+        assert_eq!(style, CrlfStyle::Lf);
     }
 
     #[test]
     fn test_protect_crlf_crlf() {
-        assert_eq!(protect_crlf("line1\r\nline2"), "line1<L_F>line2");
+        let (protected, style) = protect_crlf("line1\r\nline2");
+        assert_eq!(protected, "line1<L_F>line2");
+        assert_eq!(style, CrlfStyle::CrLf);
     }
 
     #[test]
     fn test_protect_crlf_multiline() {
-        assert_eq!(protect_crlf("a\n\nb"), "a<L_F><L_F>b");
+        let (protected, _) = protect_crlf("a\n\nb");
+        assert_eq!(protected, "a<L_F><L_F>b");
     }
 
     #[test]
@@ -75,18 +123,34 @@ mod tests {
     }
 
     #[test]
-    fn test_roundtrip() {
-        let orig = "Hello\r\nWorld\nTest\r\nFoo";
-        let protected = protect_crlf(orig);
-        let restored = restore_crlf(&protected);
-        // Note: \n alone becomes <L_F> which restores to \r\n
-        // So roundtrip normalizes \n to \r\n — acceptable behavior
-        assert_eq!(restored, "Hello\r\nWorld\r\nTest\r\nFoo");
+    fn test_restore_crlf_with_style_lf() {
+        assert_eq!(
+            restore_crlf_with_style("line1<L_F>line2", CrlfStyle::Lf),
+            "line1\nline2"
+        );
+    }
+
+    #[test]
+    fn test_roundtrip_style_preservation() {
+        // Unix-style line endings should survive roundtrip
+        let orig = "Hello\nWorld\nTest";
+        let (protected, style) = protect_crlf(orig);
+        assert_eq!(style, CrlfStyle::Lf);
+        let restored = restore_crlf_with_style(&protected, style);
+        assert_eq!(restored, orig);
+
+        // Windows-style line endings should survive roundtrip
+        let orig = "Hello\r\nWorld\r\nTest";
+        let (protected, style) = protect_crlf(orig);
+        assert_eq!(style, CrlfStyle::CrLf);
+        let restored = restore_crlf_with_style(&protected, style);
+        assert_eq!(restored, orig);
     }
 
     #[test]
     fn test_no_newlines_unchanged() {
-        assert_eq!(protect_crlf("Hello World"), "Hello World");
+        let (protected, _) = protect_crlf("Hello World");
+        assert_eq!(protected, "Hello World");
         assert_eq!(restore_crlf("Hello World"), "Hello World");
     }
 

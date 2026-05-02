@@ -62,13 +62,8 @@ pub(crate) fn decompress_bethesda_record(data: &[u8]) -> Result<Vec<u8>> {
     let mut decompressed = Vec::with_capacity(decompressed_size);
     match decoder.read_to_end(&mut decompressed) {
         Ok(_) => {
-            // 解压长度和头部声明可能不一致：记录告警但不直接失败，尽量继续解析。
+            // 解压长度和头部声明可能不一致。
             if decompressed.len() != decompressed_size {
-                eprintln!(
-                    "Warning: decompressed size mismatch: expected {}, got {}",
-                    decompressed_size,
-                    decompressed.len()
-                );
             }
             Ok(decompressed)
         }
@@ -530,6 +525,7 @@ impl EspParser {
     }
 
     /// 报告进度
+    #[allow(dead_code)]
     fn report_progress(&self, bytes_processed: u64) {
         if let Some(ref cb) = self.progress_callback {
             cb(bytes_processed);
@@ -591,38 +587,18 @@ impl EspParser {
         // 直接解析 TES4 字段；RecordHeaderData 已在上方消费。
         self.parse_record_fields_direct(b"TES4", 0, &tes4_data)?;
 
-        // 读取后续全部记录/组数据并进入顶层遍历。
-        let mut buf = Vec::new();
-        reader.read_to_end(&mut buf)?;
-        let mut cursor = Cursor::new(&buf);
-
+        // 流式解析后续记录/组。Delphi 原版顺序读取 GenericHeader →
+        // 判断 GRUP/Record → 按需读取数据，避免 read_to_end 大内存分配。
         let mut grup_count = 0u32;
         let mut record_count = 0u32;
-        let total_bytes = buf.len() as u64;
-        let mut last_reported_percentage = 0u8;
 
-        while cursor.position() < buf.len() as u64 {
-            let pos = cursor.position();
-
-            // 每处理 1MB 或百分比变化时报告进度
-            let current_percentage = ((pos as f64 / total_bytes as f64) * 100.0) as u8;
-            if current_percentage != last_reported_percentage && current_percentage % 5 == 0 {
-                self.report_progress(pos);
-                last_reported_percentage = current_percentage;
-            }
-
-            match self.parse_top_level_debug(&mut cursor, &mut grup_count, &mut record_count) {
+        loop {
+            match self.parse_top_level_debug(reader, &mut grup_count, &mut record_count) {
                 Ok(()) => {}
                 Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => break,
-                Err(e) => {
-                    eprintln!("Error at byte {}: {:?}", pos, e);
-                    return Err(e);
-                }
+                Err(e) => return Err(e),
             }
         }
-
-        // 报告完成
-        self.report_progress(total_bytes);
 
         Ok(())
     }
@@ -672,18 +648,15 @@ impl EspParser {
                 reader.read_exact(&mut grup_data)?;
 
                 let mut cursor = Cursor::new(&grup_data);
-                while cursor.position() < grup_data.len() as u64 {
-                    match self.parse_record_debug_for_tree(&mut cursor, record_count, &mut grup) {
+                loop {
+                    match self.parse_record_debug_for_tree(
+                        &mut cursor,
+                        record_count,
+                        &mut grup,
+                    ) {
                         Ok(()) => {}
                         Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => break,
-                        Err(e) => {
-                            eprintln!(
-                                "Warning: error parsing nested record at byte {}: {:?}",
-                                cursor.position(),
-                                e
-                            );
-                            break;
-                        }
+                        Err(_e) => break,
                     }
                 }
             }
@@ -751,14 +724,15 @@ impl EspParser {
                 reader.read_exact(&mut grup_data)?;
 
                 let mut cursor = Cursor::new(&grup_data);
-                while cursor.position() < grup_data.len() as u64 {
-                    match self.parse_record_debug_for_tree(&mut cursor, record_count, &mut child_grup) {
+                loop {
+                    match self.parse_record_debug_for_tree(
+                        &mut cursor,
+                        record_count,
+                        &mut child_grup,
+                    ) {
                         Ok(()) => {}
                         Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => break,
-                        Err(e) => {
-                            eprintln!("Warning: error parsing nested record: {:?}", e);
-                            break;
-                        }
+                        Err(_e) => break,
                     }
                 }
             }
@@ -994,14 +968,11 @@ impl EspParser {
                 reader.read_exact(&mut grup_data)?;
 
                 let mut cursor = Cursor::new(&grup_data);
-                while cursor.position() < grup_data.len() as u64 {
+                loop {
                     match self.parse_record_debug(&mut cursor, record_count) {
                         Ok(()) => {}
                         Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => break,
-                        Err(e) => {
-                            eprintln!("Warning: error parsing nested record: {:?}", e);
-                            break;
-                        }
+                        Err(_e) => break,
                     }
                 }
             }

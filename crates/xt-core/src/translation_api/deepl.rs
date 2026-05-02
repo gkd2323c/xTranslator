@@ -75,7 +75,7 @@ impl DeepLProvider {
 #[async_trait::async_trait]
 impl super::TranslationProvider for DeepLProvider {
     async fn translate(&self, text: &str, source_lang: &str, target_lang: &str, proxy: Option<&crate::config::AppConfig>) -> Result<String> {
-        let protected = super::protect_crlf(text);
+        let (protected, crlf_style) = super::protect_crlf(text);
         let client = match proxy {
             Some(cfg) => super::build_client(cfg),
             None => reqwest::Client::new(),
@@ -117,7 +117,7 @@ impl super::TranslationProvider for DeepLProvider {
             .translations
             .first()
             .ok_or_else(|| anyhow::anyhow!("No translation in DeepL API response"))
-            .map(|t| super::restore_crlf(&t.text))
+            .map(|t| super::restore_crlf_with_style(&t.text, crlf_style))
     }
 }
 

@@ -41,7 +41,7 @@ xtranslator-tauri (bin)
 | ~~PEX 写回~~ | ✅ 字符串表原地更新（索引不变），原始 opcode/调试信息全部保留，roundtrip 测试通过 | ✅ 完成 |
 | 完整反编译 | Papyrus 指令集全量反编译为可读伪代码 | 待实现 |
 | ESP 模式编辑 | 直接编辑 ESP 文件中的字符串（当前策略：修改 Strings 文件） | 待实现 |
-| Delphi 风格 ESM 缓存 | SQLite 缓存加速重载（区别于当前 SHA-256+bincode ESP 解析缓存） | 待实现 |
+| ~~Delphi 风格 ESM 缓存~~ | ✅ SQLite 缓存（rusqlite + 索引查询 + 单行更新），SHA-256 内容寻址 bincode 缓存保留作为回退 | ✅ 完成 |
 | ~~TCSC IPC+UI~~ | ✅ `tcsc_convert` IPC 命令 + MenuBar 按钮 + EditorPanel 按钮 + 批量转换 | ✅ 完成 |
 | ~~HTTP proxy 接入~~ | ✅ `build_proxy()`/`build_client()` 已接入 provider + SettingsDialog proxy 设置 UI | ✅ 完成 |
 | ~~MCM 翻译~~ | ✅ MCM parser (UTF-16LE/UTF-8/ANSI) + types + IPC命令 + McmPanel UI（加载/保存/编辑/过滤） | ✅ 完成 |

@@ -21,6 +21,7 @@ fn print_usage() {
         "  diff <esp/esm> <xml>                     Compare ESP parsing with Delphi XML export"
     );
     println!("  diff-xml <xml1> <xml2>                   Compare two XML exports");
+    println!("  golden-diff <delphi-dir> <esp>            Cross-validate Rust vs Delphi output");
     println!("  strings load <file>                      Load and display strings file");
     println!(
         "  strings save <source> <dest>             Save strings to file (auto-detect format)"
@@ -83,6 +84,14 @@ fn main() -> Result<()> {
                 return Ok(());
             }
             commands::diff::diff_xml_with_xml(&args[2], &args[3])?
+        }
+        "golden-diff" => {
+            if args.len() < 4 {
+                println!("Usage: xt-cli golden-diff <delphi-golden-dir> <esp>");
+                println!("Example: xt-cli golden-diff tests/fixtures/delphi_golden Skyrim.esm");
+                return Ok(());
+            }
+            commands::golden_diff::run_golden_diff(&args[2], &args[3])?
         }
         "strings" => {
             if args.len() < 4 {
