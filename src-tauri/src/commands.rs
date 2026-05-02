@@ -2694,7 +2694,7 @@ pub async fn save_esp(
         grup: &mut xt_core::esp::record_tree::EspGrup,
         string_index: &HashMap<(u32, [u8; 4], [u8; 4]), &SkyString>,
         codepage: &xt_core::strings::CodepageConfig,
-    ) -> u32 {
+    ) -> Result<u32, String> {
         let mut modified = 0u32;
         
         for record in &mut grup.records {
@@ -2717,23 +2717,34 @@ pub async fn save_esp(
             }
             
             if modified > 0 {
-                record.rebuild_data();
+                record.rebuild_data().map_err(|e| format!("Failed to rebuild record: {}", e))?;
             }
         }
         
         for child in &mut grup.children {
-            modified += update_records_in_grup(child, string_index, codepage);
+            modified += update_records_in_grup(child, string_index, codepage)?;
         }
         
-        modified
+        Ok(modified)
     }
     
+    // Get codepage config for the game
+    let codepage_config = {
+        let codepage_table = state.codepage_table.lock().map_err(|e| e.to_string());
+        match codepage_table {
+            Ok(ref table) if table.is_some() => {
+                table.as_ref().unwrap().get_or_utf8("default")
+            }
+            _ => xt_core::strings::CodepageConfig::default(),
+        }
+    };
+    
     for grup in &mut esp_file_mut.top_level_grups {
-        records_modified += update_records_in_grup(grup, &string_index, &xt_core::strings::CodepageConfig::default());
+        records_modified += update_records_in_grup(grup, &string_index, &codepage_config)?;
     }
     
     // Rebuild all records to recalculate sizes
-    esp_file_mut.rebuild_all();
+    esp_file_mut.rebuild_all().map_err(|e| format!("Failed to rebuild ESP: {}", e))?;
     
     // Save to file
     esp_file_mut.save_to_file(&request.path, request.create_backup)
@@ -2779,7 +2790,7 @@ pub async fn finalize_esp(
         grup: &mut xt_core::esp::record_tree::EspGrup,
         string_index: &HashMap<(u32, [u8; 4], [u8; 4]), &SkyString>,
         codepage: &xt_core::strings::CodepageConfig,
-    ) -> u32 {
+    ) -> Result<u32, String> {
         let mut modified = 0u32;
         
         for record in &mut grup.records {
@@ -2808,23 +2819,34 @@ pub async fn finalize_esp(
             }
             
             if modified > 0 {
-                record.rebuild_data();
+                record.rebuild_data().map_err(|e| format!("Failed to rebuild record: {}", e))?;
             }
         }
         
         for child in &mut grup.children {
-            modified += apply_translations_to_records(child, string_index, codepage);
+            modified += apply_translations_to_records(child, string_index, codepage)?;
         }
         
-        modified
+        Ok(modified)
     }
     
+    // Get codepage config for the language
+    let codepage_config = {
+        let codepage_table = state.codepage_table.lock().map_err(|e| e.to_string());
+        match codepage_table {
+            Ok(ref table) if table.is_some() => {
+                table.as_ref().unwrap().get_or_utf8(&request.language)
+            }
+            _ => xt_core::strings::CodepageConfig::default(),
+        }
+    };
+    
     for grup in &mut esp_file_mut.top_level_grups {
-        records_modified += apply_translations_to_records(grup, &string_index, &xt_core::strings::CodepageConfig::default());
+        records_modified += apply_translations_to_records(grup, &string_index, &codepage_config)?;
     }
     
     // Rebuild all records
-    esp_file_mut.rebuild_all();
+    esp_file_mut.rebuild_all().map_err(|e| format!("Failed to rebuild ESP: {}", e))?;
     
     // Save ESP file
     esp_file_mut.save_to_file(&request.esp_path, request.create_backup)
@@ -2836,6 +2858,7 @@ pub async fn finalize_esp(
         &request.strings_dir,
         &request.base_name,
         &request.language,
+        &codepage_config,
     )?;
     
     Ok(xt_shared::dto::FinalizeEspResponse {
@@ -2852,12 +2875,14 @@ fn export_strings_files(
     strings_dir: &str,
     base_name: &str,
     language: &str,
+    codepage: &xt_core::strings::CodepageConfig,
 ) -> Result<Vec<String>, String> {
     export_strings_files_inner(
         strings,
         strings_dir,
         base_name,
         language,
+        codepage,
         |sk| (!sk.translation.is_empty(), sk.translation.clone()),
     )
 }
@@ -2868,12 +2893,14 @@ fn export_strings_files_for_delocalize(
     strings_dir: &str,
     base_name: &str,
     language: &str,
+    codepage: &xt_core::strings::CodepageConfig,
 ) -> Result<Vec<String>, String> {
     export_strings_files_inner(
         strings,
         strings_dir,
         base_name,
         language,
+        codepage,
         |sk| {
             let text = if !sk.translation.is_empty() {
                 sk.translation.clone()
@@ -2891,6 +2918,7 @@ fn export_strings_files_inner(
     strings_dir: &str,
     base_name: &str,
     language: &str,
+    codepage: &xt_core::strings::CodepageConfig,
     pick_text: impl Fn(&xt_core::types::sky_string::SkyString) -> (bool, String),
 ) -> Result<Vec<String>, String> {
     use std::collections::HashMap;
@@ -2932,7 +2960,7 @@ fn export_strings_files_inner(
         let format = xt_core::strings::StringsFile::detect_format(&filepath);
         let sfile = xt_core::strings::StringsFile::from_entries(
             entries,
-            xt_core::strings::CodepageConfig::utf8(),
+            codepage.clone(),
         );
         sfile
             .save_with_format(&filepath, format)
@@ -2973,7 +3001,7 @@ pub async fn delocalize_esp(
         grup: &mut xt_core::esp::record_tree::EspGrup,
         string_index: &HashMap<(u32, [u8; 4], [u8; 4]), &SkyString>,
         codepage: &xt_core::strings::CodepageConfig,
-    ) -> u32 {
+    ) -> Result<u32, String> {
         let mut new_strings = 0u32;
         
         for record in &mut grup.records {
@@ -3002,23 +3030,34 @@ pub async fn delocalize_esp(
             }
             
             if new_strings > 0 {
-                record.rebuild_data();
+                record.rebuild_data().map_err(|e| format!("Failed to rebuild record: {}", e))?;
             }
         }
         
         for child in &mut grup.children {
-            new_strings += delocalize_records_in_grup(child, string_index, codepage);
+            new_strings += delocalize_records_in_grup(child, string_index, codepage)?;
         }
         
-        new_strings
+        Ok(new_strings)
     }
     
+    // Get codepage config for the language
+    let codepage_config = {
+        let codepage_table = state.codepage_table.lock().map_err(|e| e.to_string());
+        match codepage_table {
+            Ok(ref table) if table.is_some() => {
+                table.as_ref().unwrap().get_or_utf8(&request.language)
+            }
+            _ => xt_core::strings::CodepageConfig::default(),
+        }
+    };
+    
     for grup in &mut esp_file_mut.top_level_grups {
-        new_string_count += delocalize_records_in_grup(grup, &string_index, &xt_core::strings::CodepageConfig::default());
+        new_string_count += delocalize_records_in_grup(grup, &string_index, &codepage_config)?;
     }
     
     // Rebuild all records
-    esp_file_mut.rebuild_all();
+    esp_file_mut.rebuild_all().map_err(|e| format!("Failed to rebuild ESP: {}", e))?;
     
     // Save ESP file
     esp_file_mut.save_to_file(&request.esp_path, request.create_backup)
@@ -3030,6 +3069,7 @@ pub async fn delocalize_esp(
         &request.strings_dir,
         &request.base_name,
         &request.language,
+        &codepage_config,
     )?;
     
     Ok(xt_shared::dto::DelocalizeEspResponse {

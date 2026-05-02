@@ -21,7 +21,9 @@ impl EspField {
     /// applying it to the next field's effective size.
     pub fn parse_fields(data: &[u8]) -> std::io::Result<Vec<Self>> {
         let mut pos = 0usize;
-        let mut fields = Vec::new();
+        // Pre-allocate based on average field size (~50 bytes)
+        let estimated_count = (data.len() / 50).max(4);
+        let mut fields = Vec::with_capacity(estimated_count);
         let mut next_explicit_size: Option<u32> = None;
 
         while pos < data.len() {
@@ -122,16 +124,17 @@ impl EspRecord {
     /// Walks fields, manages XXXX size prefix fields (backward iteration
     /// per Delphi algorithm), recalculates all dsize values, and optionally
     /// recompresses with zlib.
-    pub fn rebuild_data(&mut self) {
+    pub fn rebuild_data(&mut self) -> std::io::Result<()> {
         if self.raw {
-            return; // raw records pass through unchanged
+            return Ok(()); // raw records pass through unchanged
         }
 
         // First pass: handle XXXX fields via backward iteration
         self.manage_xxxx_fields();
 
         // Second pass: rebuild the contiguous data buffer
-        let mut data = Vec::new();
+        let estimated_size: usize = self.fields.iter().map(|f| 6 + f.buffer.len()).sum();
+        let mut data = Vec::with_capacity(estimated_size);
         for field in &self.fields {
             // Write field header (6 bytes) + field buffer
             data.extend_from_slice(&field.header.name);
@@ -142,7 +145,7 @@ impl EspRecord {
         if self.compressed {
             // Compress with zlib (RFC 1950)
             let decompressed_size = data.len() as u32;
-            let compressed = compress_zlib(&data);
+            let compressed = compress_zlib(&data)?;
             // Format: [4-byte decompressed size LE] + [zlib data]
             let mut output = Vec::with_capacity(4 + compressed.len());
             output.extend_from_slice(&decompressed_size.to_le_bytes());
@@ -155,6 +158,8 @@ impl EspRecord {
             // For uncompressed records, we don't need to store extra data;
             // the fields vector is the source of truth.
         }
+
+        Ok(())
     }
 
     /// Manage XXXX size prefix fields.
@@ -219,7 +224,8 @@ impl EspRecord {
         }
 
         // Uncompressed: build from fields
-        let mut data = Vec::new();
+        let estimated_size: usize = self.fields.iter().map(|f| 6 + f.buffer.len()).sum();
+        let mut data = Vec::with_capacity(estimated_size);
         for field in &self.fields {
             data.extend_from_slice(&field.header.name);
             data.extend_from_slice(&field.header.dsize.to_le_bytes());
@@ -318,13 +324,14 @@ impl EspGrup {
 }
 
 /// Compress data using zlib (RFC 1950).
-fn compress_zlib(data: &[u8]) -> Vec<u8> {
+fn compress_zlib(data: &[u8]) -> std::io::Result<Vec<u8>> {
     use flate2::write::ZlibEncoder;
     use flate2::Compression;
 
-    let mut encoder = ZlibEncoder::new(Vec::new(), Compression::best());
-    encoder.write_all(data).expect("zlib compression failed");
-    encoder.finish().expect("zlib compression finish failed")
+    // Use fast compression for better performance (game doesn't care about minor size differences)
+    let mut encoder = ZlibEncoder::new(Vec::new(), Compression::fast());
+    encoder.write_all(data)?;
+    encoder.finish().map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
 }
 
 /// TES4 header record (the plugin's main header at the start of the file).
@@ -437,20 +444,22 @@ pub struct EspFile {
 
 impl EspFile {
     /// Rebuild all records in the tree (recalculate sizes, recompress).
-    pub fn rebuild_all(&mut self) {
+    pub fn rebuild_all(&mut self) -> std::io::Result<()> {
         for grup in &mut self.top_level_grups {
-            Self::rebuild_grup(grup);
+            Self::rebuild_grup(grup)?;
         }
+        Ok(())
     }
 
-    fn rebuild_grup(grup: &mut EspGrup) {
+    fn rebuild_grup(grup: &mut EspGrup) -> std::io::Result<()> {
         for record in &mut grup.records {
-            record.rebuild_data();
+            record.rebuild_data()?;
         }
         for child in &mut grup.children {
-            Self::rebuild_grup(child);
+            Self::rebuild_grup(child)?;
         }
         grup.recalculate_size();
+        Ok(())
     }
 
     /// Serialize the entire ESP file to a writer.
@@ -503,7 +512,7 @@ impl EspFile {
 
         // Rebuild all records first
         let mut file = self.clone();
-        file.rebuild_all();
+        file.rebuild_all()?;
 
         // Serialize to file
         let mut writer = std::io::BufWriter::new(std::fs::File::create(path)?);
@@ -564,7 +573,7 @@ mod tests {
     #[test]
     fn test_compress_decompress_roundtrip() {
         let original = b"Hello, World! This is a test of zlib compression.";
-        let compressed = compress_zlib(original);
+        let compressed = compress_zlib(original).unwrap();
 
         // Decompress and verify
         use flate2::read::ZlibDecoder;
@@ -572,5 +581,330 @@ mod tests {
         let mut decompressed = Vec::new();
         std::io::Read::read_to_end(&mut decoder, &mut decompressed).unwrap();
         assert_eq!(decompressed, original);
+    }
+
+    fn make_test_record(fields: Vec<EspField>, compressed: bool) -> EspRecord {
+        let data_len: usize = fields.iter().map(|f| 6 + f.buffer.len()).sum();
+        EspRecord {
+            header: GenericHeader { name: *b"NPC_", dsize: data_len as u32 },
+            record_header_data: RecordHeaderData {
+                flags: if compressed { 0x00040000 } else { 0 },
+                form_id: 0x1234,
+                version: 44,
+                f_version: 15,
+                v_info: 0,
+            },
+            fields,
+            compressed,
+            raw: false,
+            form_id: 0x1234,
+            editor_id: None,
+            original_raw_data: Vec::new(),
+        }
+    }
+
+    fn make_field(sig: &[u8; 4], data: &[u8]) -> EspField {
+        EspField {
+            header: FieldHeader { name: *sig, dsize: data.len() as u16 },
+            buffer: data.to_vec(),
+            is_size_xxxx: false,
+        }
+    }
+
+    #[test]
+    fn test_rebuild_no_change() {
+        let fields = vec![
+            make_field(b"EDID", b"TestNPC"),
+            make_field(b"FULL", b"Test Name"),
+        ];
+        let mut record = make_test_record(fields, false);
+        let original_dsize = record.header.dsize;
+
+        record.rebuild_data().unwrap();
+
+        // dsize should remain the same since nothing changed
+        assert_eq!(record.header.dsize, original_dsize);
+        assert_eq!(record.fields.len(), 2);
+        assert_eq!(record.fields[0].buffer, b"TestNPC");
+        assert_eq!(record.fields[1].buffer, b"Test Name");
+    }
+
+    #[test]
+    fn test_rebuild_with_translation() {
+        let fields = vec![
+            make_field(b"EDID", b"TestNPC"),
+            make_field(b"FULL", b"Hello"),
+        ];
+        let mut record = make_test_record(fields, false);
+        let original_dsize = record.header.dsize;
+
+        // Simulate translation: update FULL field
+        record.fields[1].buffer = b"Translated Greeting in Chinese".to_vec();
+        record.fields[1].header.dsize = record.fields[1].buffer.len() as u16;
+
+        record.rebuild_data().unwrap();
+
+        // dsize should increase
+        assert!(record.header.dsize > original_dsize);
+        assert_eq!(record.fields[1].buffer, b"Translated Greeting in Chinese");
+    }
+
+    #[test]
+    fn test_rebuild_compressed() {
+        let fields = vec![
+            make_field(b"EDID", b"TestNPC"),
+            make_field(b"FULL", b"Some text for compression"),
+        ];
+        let mut record = make_test_record(fields, true);
+
+        record.rebuild_data().unwrap();
+
+        // Should have compressed data in original_raw_data
+        assert!(!record.original_raw_data.is_empty());
+
+        // Verify compressed format: first 4 bytes = decompressed size LE
+        assert!(record.original_raw_data.len() >= 4);
+        let decompressed_size = u32::from_le_bytes([
+            record.original_raw_data[0],
+            record.original_raw_data[1],
+            record.original_raw_data[2],
+            record.original_raw_data[3],
+        ]);
+
+        // Decompress and verify
+        use flate2::read::ZlibDecoder;
+        let mut decoder = ZlibDecoder::new(&record.original_raw_data[4..]);
+        let mut decompressed = Vec::new();
+        std::io::Read::read_to_end(&mut decoder, &mut decompressed).unwrap();
+        assert_eq!(decompressed.len() as u32, decompressed_size);
+
+        // The decompressed data should contain our field data
+        assert!(decompressed.windows(4).any(|w| w == b"EDID"));
+        assert!(decompressed.windows(4).any(|w| w == b"FULL"));
+    }
+
+    #[test]
+    fn test_rebuild_xxxx_field() {
+        let fields = vec![
+            make_field(b"EDID", b"TestNPC"),
+            make_field(b"DESC", &vec![0xAA; 70000]), // large field > 65535
+        ];
+        let mut record = make_test_record(fields, false);
+
+        assert_eq!(record.fields.len(), 2);
+        assert!(!record.fields[0].is_size_xxxx);
+        assert!(!record.fields[1].is_size_xxxx);
+
+        record.rebuild_data().unwrap();
+
+        // Should have inserted a XXXX field before DESC
+        assert_eq!(record.fields.len(), 3);
+        assert!(record.fields[0].is_size_xxxx || record.fields[1].is_size_xxxx);
+
+        // Find the XXXX field and verify its value
+        let xxxx_idx = record.fields.iter().position(|f| f.is_size_xxxx).unwrap();
+        assert!(xxxx_idx < record.fields.len() - 1);
+        let xxxx_value = u32::from_le_bytes([
+            record.fields[xxxx_idx].buffer[0],
+            record.fields[xxxx_idx].buffer[1],
+            record.fields[xxxx_idx].buffer[2],
+            record.fields[xxxx_idx].buffer[3],
+        ]);
+        assert_eq!(xxxx_value, 70000);
+
+        // The DESC field should still be 70000 bytes
+        let desc_idx = record.fields.iter().position(|f| f.header.name == *b"DESC").unwrap();
+        assert_eq!(record.fields[desc_idx].buffer.len(), 70000);
+    }
+
+    #[test]
+    fn test_rebuild_xxxx_remove_when_shrink() {
+        // Start with a large field that needs XXXX
+        let fields = vec![
+            make_field(b"DESC", &vec![0xBB; 70000]),
+        ];
+        let mut record = make_test_record(fields, false);
+
+        record.rebuild_data().unwrap();
+        // XXXX should be inserted
+        assert_eq!(record.fields.len(), 2);
+        assert!(record.fields[0].is_size_xxxx);
+
+        // Now shrink the field below 65536
+        record.fields[1].buffer = vec![0xCC; 100];
+        record.fields[1].header.dsize = 100;
+
+        record.rebuild_data().unwrap();
+
+        // XXXX should be removed
+        assert_eq!(record.fields.len(), 1);
+        assert!(!record.fields[0].is_size_xxxx);
+        assert_eq!(record.fields[0].header.name, *b"DESC");
+    }
+
+    #[test]
+    fn test_rebuild_raw_passthrough() {
+        let raw_data = vec![0xDE, 0xAD, 0xBE, 0xEF];
+        let mut record = EspRecord {
+            header: GenericHeader { name: *b"NPC_", dsize: 4 },
+            record_header_data: RecordHeaderData {
+                flags: 0, form_id: 0x1234, version: 44, f_version: 15, v_info: 0,
+            },
+            fields: Vec::new(),
+            compressed: false,
+            raw: true,
+            form_id: 0x1234,
+            editor_id: None,
+            original_raw_data: raw_data.clone(),
+        };
+
+        record.rebuild_data().unwrap();
+
+        // Raw records should pass through unchanged
+        assert_eq!(record.original_raw_data, raw_data);
+        assert_eq!(record.header.dsize, 4);
+    }
+
+    #[test]
+    fn test_serialize_roundtrip() {
+        use std::io::Cursor;
+
+        // Build a minimal EspFile
+        let fields = vec![
+            make_field(b"EDID", b"TestNPC"),
+            make_field(b"FULL", b"Hello World"),
+        ];
+        let record = make_test_record(fields, false);
+
+        let grup = EspGrup {
+            header: GenericHeader { name: *b"GRUP", dsize: 0 },
+            grup_header: GrupHeader {
+                s_ident: [0; 4], s_type: 0, s_tstamp: 0,
+                param1: 0, param2: 0, param3: 0,
+            },
+            records: vec![record],
+            children: Vec::new(),
+        };
+
+        let esp_file = EspFile {
+            tes4: Tes4Header {
+                generic: GenericHeader { name: *b"TES4", dsize: 0 },
+                record_header_data: RecordHeaderData {
+                    flags: 0, form_id: 0, version: 44, f_version: 15, v_info: 0,
+                },
+                field_data: Vec::new(),
+            },
+            top_level_grups: vec![grup],
+        };
+
+        // Serialize
+        let mut buf = Vec::new();
+        esp_file.serialize(&mut Cursor::new(&mut buf)).unwrap();
+
+        // Verify the output starts with TES4
+        assert_eq!(&buf[0..4], b"TES4");
+
+        // Find GRUP in the output
+        let mut found_grup = false;
+        for i in 0..buf.len() - 3 {
+            if &buf[i..i + 4] == b"GRUP" {
+                found_grup = true;
+                break;
+            }
+        }
+        assert!(found_grup, "GRUP not found in serialized output");
+
+        // Find EDID and FULL in the output
+        let has_edid = buf.windows(4).any(|w| w == b"EDID");
+        let has_full = buf.windows(4).any(|w| w == b"FULL");
+        assert!(has_edid, "EDID not found in serialized output");
+        assert!(has_full, "FULL not found in serialized output");
+    }
+
+    #[test]
+    fn test_serialize_roundtrip_with_rebuild() {
+        use std::io::Cursor;
+
+        // Build record with translation
+        let fields = vec![
+            make_field(b"EDID", b"TestNPC"),
+            make_field(b"FULL", b"Original"),
+        ];
+        let mut record = make_test_record(fields, false);
+
+        // Simulate translation
+        record.fields[1].buffer = b"Translated Text Here".to_vec();
+        record.fields[1].header.dsize = 20;
+
+        let mut grup = EspGrup {
+            header: GenericHeader { name: *b"GRUP", dsize: 0 },
+            grup_header: GrupHeader {
+                s_ident: [0; 4], s_type: 0, s_tstamp: 0,
+                param1: 0, param2: 0, param3: 0,
+            },
+            records: vec![record],
+            children: Vec::new(),
+        };
+
+        // Rebuild the GRUP (which rebuilds records and recalculates sizes)
+        for r in &mut grup.records {
+            r.rebuild_data().unwrap();
+        }
+        grup.recalculate_size();
+
+        // Verify GRUP dsize includes the 24-byte header
+        let records_size: usize = grup.records.iter().map(|r| r.serialized_size()).sum();
+        assert_eq!(grup.header.dsize as usize, 24 + records_size);
+
+        // Serialize
+        let esp_file = EspFile {
+            tes4: Tes4Header {
+                generic: GenericHeader { name: *b"TES4", dsize: 0 },
+                record_header_data: RecordHeaderData {
+                    flags: 0, form_id: 0, version: 44, f_version: 15, v_info: 0,
+                },
+                field_data: Vec::new(),
+            },
+            top_level_grups: vec![grup],
+        };
+
+        let mut buf = Vec::new();
+        esp_file.serialize(&mut Cursor::new(&mut buf)).unwrap();
+
+        // Verify the translated text appears in the output
+        let has_translated = buf.windows(20).any(|w| w == b"Translated Text Here");
+        assert!(has_translated, "Translated text not found in serialized output");
+    }
+
+    #[test]
+    fn test_grup_recalculate_size_nested() {
+        // Test nested GRUP size calculation
+        let inner_grup = EspGrup {
+            header: GenericHeader { name: *b"GRUP", dsize: 0 },
+            grup_header: GrupHeader {
+                s_ident: [0; 4], s_type: 8, s_tstamp: 0,
+                param1: 0, param2: 0, param3: 0,
+            },
+            records: vec![make_test_record(vec![make_field(b"EDID", b"Inner")], false)],
+            children: Vec::new(),
+        };
+
+        let mut outer_grup = EspGrup {
+            header: GenericHeader { name: *b"GRUP", dsize: 0 },
+            grup_header: GrupHeader {
+                s_ident: [0; 4], s_type: 0, s_tstamp: 0,
+                param1: 0, param2: 0, param3: 0,
+            },
+            records: vec![make_test_record(vec![make_field(b"EDID", b"Outer")], false)],
+            children: vec![inner_grup],
+        };
+
+        outer_grup.recalculate_size();
+
+        // Outer GRUP dsize = 24 (own header) + record_size + inner_grup_dsize
+        let outer_record_size = outer_grup.records[0].serialized_size();
+        let inner_dsize = outer_grup.children[0].header.dsize;
+        let expected = 24 + outer_record_size as u32 + inner_dsize;
+        assert_eq!(outer_grup.header.dsize, expected);
     }
 }

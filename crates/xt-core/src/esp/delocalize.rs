@@ -5,6 +5,7 @@
 //! text in record field buffers).
 
 use super::record_tree::{EspFile, EspGrup, EspRecord};
+use crate::normalization;
 use crate::strings::{CodepageConfig, StringsFile, StringsFormat};
 use crate::types::sky_string::SkyString;
 use std::collections::HashMap;
@@ -22,6 +23,10 @@ pub struct DelocalizeResult {
 /// Delocalize an ESP file: replace 4-byte string IDs with inline text,
 /// reassign sequential IDs, and export .STRINGS files.
 ///
+/// Uses 2-pass SST matching:
+/// 1. Strict: (form_id, field_sig, occurrence_index) triple
+/// 2. Relaxed: normalized source text + field_sig (for fields missed in pass 1)
+///
 /// # Arguments
 /// * `esp` - The in-memory ESP file (must have been parsed with ESP mode)
 /// * `strings` - The loaded SkyString entries with translations
@@ -37,13 +42,16 @@ pub fn delocalize_esp(
     language: &str,
     codepage: &CodepageConfig,
 ) -> std::io::Result<DelocalizeResult> {
-    // Build a map from (form_id, field_sig, field_index) → SkyString
+    // Pass 1: strict triple match
     let string_map = build_string_map(strings);
+
+    // Pass 2: normalized text index for fallback matching
+    let normalized_index = build_normalized_index(strings);
 
     // Delocalize all records in the tree
     let mut total_strings = 0;
     for grup in &mut esp.top_level_grups {
-        total_strings += delocalize_grup(grup, &string_map, codepage);
+        total_strings += delocalize_grup(grup, &string_map, &normalized_index, codepage);
     }
 
     // Reassign sequential string IDs
@@ -60,8 +68,8 @@ pub fn delocalize_esp(
 
 /// Build a lookup map from (form_id, field_sig, occurrence_index) to SkyString.
 fn build_string_map(strings: &[SkyString]) -> HashMap<(u32, [u8; 4], u16), &SkyString> {
-    let mut map = HashMap::new();
-    let mut occurrence_counts: HashMap<(u32, [u8; 4]), u16> = HashMap::new();
+    let mut map = HashMap::with_capacity(strings.len());
+    let mut occurrence_counts: HashMap<(u32, [u8; 4]), u16> = HashMap::with_capacity(strings.len());
 
     for sk in strings {
         let key = (sk.esp_ptr.form_id, sk.field_sig);
@@ -75,29 +83,52 @@ fn build_string_map(strings: &[SkyString]) -> HashMap<(u32, [u8; 4], u16), &SkyS
     map
 }
 
+/// Build a secondary lookup from (normalized_hash, field_sig) to SkyString.
+/// Used for relaxed matching when strict triple match fails.
+fn build_normalized_index(strings: &[SkyString]) -> HashMap<(u32, [u8; 4]), Vec<&SkyString>> {
+    let mut index: HashMap<(u32, [u8; 4]), Vec<&SkyString>> = HashMap::with_capacity(strings.len());
+
+    for sk in strings {
+        if let Some(norm_hash) = sk.normalized_hash {
+            index
+                .entry((norm_hash, sk.field_sig))
+                .or_default()
+                .push(sk);
+        }
+    }
+
+    index
+}
+
 /// Delocalize all records in a GRUP (recursive).
 fn delocalize_grup(
     grup: &mut EspGrup,
     string_map: &HashMap<(u32, [u8; 4], u16), &SkyString>,
+    normalized_index: &HashMap<(u32, [u8; 4]), Vec<&SkyString>>,
     codepage: &CodepageConfig,
 ) -> usize {
     let mut count = 0;
 
     for record in &mut grup.records {
-        count += delocalize_record(record, string_map, codepage);
+        count += delocalize_record(record, string_map, normalized_index, codepage);
     }
 
     for child in &mut grup.children {
-        count += delocalize_grup(child, string_map, codepage);
+        count += delocalize_grup(child, string_map, normalized_index, codepage);
     }
 
     count
 }
 
 /// Delocalize a single record: replace 4-byte string IDs with inline text.
+///
+/// Uses 2-pass matching:
+/// 1. Strict: (form_id, field_sig, occurrence_index)
+/// 2. Relaxed: normalized source text + field_sig
 fn delocalize_record(
     record: &mut EspRecord,
     string_map: &HashMap<(u32, [u8; 4], u16), &SkyString>,
+    normalized_index: &HashMap<(u32, [u8; 4]), Vec<&SkyString>>,
     codepage: &CodepageConfig,
 ) -> usize {
     if record.raw {
@@ -117,10 +148,9 @@ fn delocalize_record(
         let index = *occurrence;
         *occurrence += 1;
 
-        // Check if this field has a matching SkyString
+        // Pass 1: strict triple match
         let key = (record.form_id, field.header.name, index);
         if let Some(sk) = string_map.get(&key) {
-            // Replace 4-byte string ID with inline text
             let text = if !sk.translation.is_empty() {
                 &sk.translation
             } else {
@@ -131,6 +161,39 @@ fn delocalize_record(
             field.header.dsize = encoded.len() as u16;
             field.buffer = encoded;
             count += 1;
+            continue;
+        }
+
+        // Pass 2: relaxed match by normalized source text + field_sig
+        // Only for fields that look like they contain inline text (not 4-byte string IDs)
+        if field.buffer.len() > 4 {
+            if let Ok(raw_text) = std::str::from_utf8(&field.buffer) {
+                let text = raw_text.trim_end_matches('\0');
+                if !text.is_empty() {
+                    let norm = normalization::normalize(text);
+                    if !norm.is_empty() {
+                        let norm_hash = crate::types::esp_pointer::string_hash(&norm);
+                        let norm_key = (norm_hash, field.header.name);
+                        if let Some(candidates) = normalized_index.get(&norm_key) {
+                            // Verify the normalized text actually matches (hash collision check)
+                            if let Some(sk) = candidates.iter().find(|sk| {
+                                sk.source_normalized.as_deref() == Some(norm.as_str())
+                            }) {
+                                let trans_text = if !sk.translation.is_empty() {
+                                    &sk.translation
+                                } else {
+                                    &sk.source
+                                };
+
+                                let encoded = codepage.encode(trans_text);
+                                field.header.dsize = encoded.len() as u16;
+                                field.buffer = encoded;
+                                count += 1;
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -336,5 +399,62 @@ mod tests {
         let entries = vec![sk];
         let map = build_string_map(&entries);
         assert!(map.contains_key(&(0x1234, *b"FULL", 0)));
+    }
+
+    #[test]
+    fn test_2pass_normalized_match() {
+        use crate::strings::CodepageConfig;
+
+        // Create a SkyString with a translation
+        let mut sk = SkyString::new(
+            0,
+            "Hello World".to_string(),
+            "你好世界".to_string(),
+            *b"INFO",
+            *b"FULL",
+        );
+        sk.esp_ptr.form_id = 0x1234;
+
+        let entries = vec![sk];
+        let string_map = build_string_map(&entries);
+        let normalized_index = build_normalized_index(&entries);
+
+        // Create a record where the field text matches the SkyString source
+        // but with different form_id (so strict match fails)
+        let record = make_test_record(
+            0x9999, // different form_id
+            vec![
+                make_string_field(*b"EDID", "SomeNPC"),
+                make_string_field(*b"FULL", "Hello World"), // matches normalized source
+            ],
+        );
+
+        let mut grup = EspGrup {
+            header: GenericHeader {
+                name: *b"GRUP",
+                dsize: 0,
+            },
+            grup_header: GrupHeader {
+                s_ident: *b"INFO",
+                s_type: 0,
+                s_tstamp: 0,
+                param1: 0,
+                param2: 0,
+                param3: 0,
+            },
+            records: vec![record],
+            children: Vec::new(),
+        };
+
+        let codepage = CodepageConfig::utf8();
+        let count = delocalize_grup(&mut grup, &string_map, &normalized_index, &codepage);
+
+        // Should have matched via normalized text (pass 2)
+        assert_eq!(count, 1);
+
+        // The field should now contain the translation
+        let full_field = &grup.records[0].fields[1];
+        let text = std::str::from_utf8(&full_field.buffer).unwrap();
+        assert_eq!(text, "你好世界");
     }
 }
