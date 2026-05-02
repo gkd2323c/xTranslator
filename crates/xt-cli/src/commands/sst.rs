@@ -151,6 +151,7 @@ pub fn export_sst(input: &str, output: &str) -> Result<()> {
 }
 
 /// 应用 SST 字典到字符串列表
+#[allow(dead_code)]
 pub fn apply_sst(strings: &mut Vec<SkyString>, sst_path: &str) -> Result<usize> {
     let file = File::open(sst_path)?;
     let mut reader = BufReader::new(file);

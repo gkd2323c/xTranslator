@@ -16,6 +16,9 @@ pub const BA2_MAGIC: [u8; 4] = *b"BTDX";
 /// BA2 归档类型：'GNRL'
 pub const BA2_TYPE_GNRL: [u8; 4] = *b"GNRL";
 
+/// BA2 归档类型：'DX10'（纹理归档）
+pub const BA2_TYPE_DX10: [u8; 4] = *b"DX10";
+
 /// BA2 版本：Fallout 4
 pub const BA2_VERSION_FO4: u32 = 0x01;
 
@@ -86,5 +89,10 @@ impl Ba2Header {
     /// 检查是否为 General 类型
     pub fn is_general_type(&self) -> bool {
         self.archive_type == BA2_TYPE_GNRL
+    }
+
+    /// 检查是否为 DX10 类型（纹理归档）
+    pub fn is_dx10_type(&self) -> bool {
+        self.archive_type == BA2_TYPE_DX10
     }
 }

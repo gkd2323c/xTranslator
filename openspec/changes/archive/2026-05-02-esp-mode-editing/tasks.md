@@ -12,15 +12,15 @@
 - [x] 2.2 Implement `EspRecord::rebuild_data()` — walk fields, manage XXXX size prefix fields (backward iteration per Delphi algorithm), recalculate all dsize values
 - [x] 2.3 Implement zlib recompression in rebuild: serialize fields to contiguous buffer → `flate2::Compress::compress_vec()` → prepend 4-byte decompressed size LE
 - [x] 2.4 Handle raw records: pass through unchanged, no rebuild or recompression
-- [ ] 2.5 Unit tests: test_rebuild_no_change, test_rebuild_with_translation, test_rebuild_compressed, test_rebuild_xxxx_field
+- [x] 2.5 Unit tests: test_rebuild_no_change, test_rebuild_with_translation, test_rebuild_compressed, test_rebuild_xxxx_field
 
 ## 3. ESP serialization
 
 - [x] 3.1 Implement `EspGrup::recalculate_size()` — compute dsize from children (records + sub-GRUPs), including 24B GRUP header
 - [x] 3.2 Implement `EspRecord::serialize(writer)` — write GenericHeader + RecordHeader + (compressed blob or fields sequentially)
 - [x] 3.3 Implement `EspGrup::serialize(writer)` — recursive: write GRUP header, then serialize children (records and sub-GRUPs)
-- [ ] 3.4 Implement `save_esp_to_file(path, tree)` — TES4 header + top-level GRUPs, backup creation before write
-- [ ] 3.5 Unit tests: test_serialize_roundtrip (parse → serialize → re-parse, assert identical strings), test_backup_created
+- [x] 3.4 Implement `save_esp_to_file(path, tree)` — TES4 header + top-level GRUPs, backup creation before write
+- [x] 3.5 Unit tests: test_serialize_roundtrip (parse → serialize → re-parse, assert identical strings), test_backup_created
 
 ## 4. ESP mode parser integration
 
@@ -34,8 +34,8 @@
 - [x] 5.1 Implement `delocalize_record(record, strings_map)` — replace 4-byte string ID fields with inline text from strings files
 - [x] 5.2 Implement `reassign_string_ids(strings)` — assign sequential IDs (1..N) in source text order
 - [x] 5.3 Implement `export_strings_on_delocalize(strings, output_dir, language)` — write .STRINGS, .DLSTRINGS, .ILSTRINGS with new IDs
-- [ ] 5.4 Implement 2-pass SST match before delocalization: strict (triple match) then relaxed (normalized text)
-- [ ] 5.5 Unit tests: test_delocalize_minimal, test_id_reassignment, test_strings_export
+- [x] 5.4 Implement 2-pass SST match before delocalization: strict (triple match) then relaxed (normalized text)
+- [x] 5.5 Unit tests: test_delocalize_minimal, test_id_reassignment, test_strings_export
 
 ## 6. IPC commands
 
@@ -63,7 +63,7 @@
 
 ## 9. Verification
 
-- [x] 9.1 Run full unit test suite: `cargo test -p xt-core --lib` (200 passed, 0 failed)
+- [x] 9.1 Run full unit test suite: `cargo test -p xt-core --lib` (247 passed, 0 failed)
 - [ ] 9.2 Run E2E tests in release mode: `cargo test --release -p xt-core --test e2e_real_data` (pre-existing: requires Skyrim.esm, fails with memory allocation)
 - [ ] 9.3 Run smoke tests in release mode: `cargo test --release -p xt-core --test smoke_test` (pre-existing: requires Skyrim.esm, fails with memory allocation)
 - [x] 9.4 Build check: `cargo build -p xtranslator-tauri` (succeeded)

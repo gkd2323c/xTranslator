@@ -25,9 +25,7 @@ const LD_MAX_BREAK: u32 = 25;
 /// Maximum words extracted per string (Delphi `iWordThreshold`)
 const WORD_THRESHOLD: usize = 1000;
 
-/// Maximum LD word search threshold (Delphi `iLDWordSearchThresholdMax`)
-#[allow(dead_code)]
-const LD_WORD_SEARCH_MAX: u32 = 10;
+
 
 // ── Word tokenization ──────────────────────────────────────────────────
 

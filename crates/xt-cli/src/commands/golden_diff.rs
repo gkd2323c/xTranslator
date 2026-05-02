@@ -227,6 +227,7 @@ fn compare_sst(delphi_dir: &Path) -> Result<SstDiffResult> {
 // ── Strings files comparison ───────────────────────────────────────────
 
 #[derive(Debug, Default)]
+#[allow(dead_code)]
 struct StringsDiffResult {
     status: String,
     formats_compared: Vec<String>,
@@ -234,6 +235,7 @@ struct StringsDiffResult {
     total_mismatched: usize,
 }
 
+#[allow(dead_code)]
 fn compare_strings_files(
     esp_strings: &[xt_core::types::sky_string::SkyString],
     delphi_dir: &Path,

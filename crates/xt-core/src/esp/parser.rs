@@ -1019,6 +1019,7 @@ impl EspParser {
         self.parse_record_fields_with_id(record_sig, 0, data)
     }
 
+    #[allow(dead_code)]
     fn parse_record_fields_with_id(
         &mut self,
         record_sig: &[u8; 4],

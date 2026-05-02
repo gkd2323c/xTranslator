@@ -6,7 +6,10 @@
 //! - Fallout 4 B (v0x08)
 //!
 //! 支持类型：
-//! - GNRL (General) - 通用文件归档
+//! - GNRL (General) - 通用文件归档（包含可翻译的字符串文件）
+//!
+//! 不支持类型：
+//! - DX10 - 纹理归档（仅包含纹理数据，无字符串）
 //!
 //! 基于 Delphi TESVT_bsa.pas（源自 xEdit wbBSA.pas）复刻。
 
@@ -45,13 +48,13 @@ impl Ba2Archive {
         }
 
         if !header.is_general_type() {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!(
-                    "Unsupported BA2 type: {:?} (only GNRL supported)",
-                    std::str::from_utf8(&header.archive_type).unwrap_or("invalid")
-                ),
-            ));
+            let archive_type_str = std::str::from_utf8(&header.archive_type).unwrap_or("invalid");
+            let message = if header.is_dx10_type() {
+                format!("DX10 BA2 archives (texture files) are not supported. This archive contains textures, not translatable strings.")
+            } else {
+                format!("Unsupported BA2 type: {} (only GNRL type is supported for string extraction)", archive_type_str)
+            };
+            return Err(io::Error::new(io::ErrorKind::InvalidData, message));
         }
 
         file.seek(SeekFrom::Start(header.file_table_offset as u64))?;
@@ -275,5 +278,36 @@ mod tests {
         assert_eq!(BA2_VERSION_FO4, 0x01);
         assert_eq!(BA2_VERSION_SF, 0x02);
         assert_eq!(BA2_VERSION_FO4B, 0x08);
+    }
+
+    #[test]
+    fn test_header_dx10_type_detection() {
+        use header::{BA2_TYPE_GNRL, BA2_TYPE_DX10};
+        let mut buf = Vec::new();
+        buf.extend_from_slice(b"BTDX");
+        buf.extend_from_slice(&0x01u32.to_le_bytes());
+        buf.extend_from_slice(b"DX10");
+        buf.extend_from_slice(&1u32.to_le_bytes());
+        buf.extend_from_slice(&0x30i64.to_le_bytes());
+
+        let header = Ba2Header::read_from(&mut Cursor::new(&buf)).unwrap();
+        assert!(header.is_dx10_type());
+        assert!(!header.is_general_type());
+        assert_eq!(header.archive_type, BA2_TYPE_DX10);
+        assert_ne!(header.archive_type, BA2_TYPE_GNRL);
+    }
+
+    #[test]
+    fn test_header_reject_dx10_type() {
+        let mut buf = Vec::new();
+        buf.extend_from_slice(b"BTDX");
+        buf.extend_from_slice(&0x01u32.to_le_bytes());
+        buf.extend_from_slice(b"DX10");
+        buf.extend_from_slice(&1u32.to_le_bytes());
+        buf.extend_from_slice(&0x30i64.to_le_bytes());
+
+        let header = Ba2Header::read_from(&mut Cursor::new(&buf)).unwrap();
+        assert!(!header.is_general_type());
+        assert!(header.is_dx10_type());
     }
 }

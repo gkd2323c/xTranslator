@@ -131,9 +131,6 @@ struct DeepLResponse {
 /// Individual translation result from DeepL API
 #[derive(Debug, Deserialize)]
 struct DeepLTranslation {
-    #[allow(dead_code)]
-    #[serde(rename = "detected_source_language")]
-    detected_source_language: String,
     /// Translated text
     text: String,
 }
