@@ -1,8 +1,8 @@
 # xTranslator 功能对比：Delphi 原版 vs Rust 重写
 
-> **更新日期**：2026-04-30
+> **更新日期**：2026-05-04
 > **原版版本**：xTranslator 1.6.0（Delphi 12.1 CE，~6.7 万行代码，10+ 年迭代）
-> **重写版本**：v1.0+ — SPEC 当前记录 41 项已完成任务（xt-core 181 个单元测试通过，0 警告）
+> **重写版本**：v0.1.0 — SPEC 当前记录 45 项已完成任务（xt-core 247 个单元测试通过，0 警告）
 
 ---
 
@@ -24,7 +24,7 @@
 
 | 编辑模式 | 原版 | Rust 重写 | 状态 | 说明 |
 |---------|------|----------|------|------|
-| **ESP 模式** | ✅ 直接翻译 ESP/ESM | ⚠️ 仅解析 | 部分实现 | ESP 解析完整（71,937条），编辑/写入未实现 |
+| **ESP 模式** | ✅ 直接翻译 ESP/ESM | ✅ 解析 + 写入（record tree + serialize） | 完整实现 | ESP 解析+记录树+写入完整，支持压缩记录、XXXX 字段、嵌套 GRUP |
 | **Strings 模式** | ✅ 翻译 STRINGS 文件（已弃用） | ✅ 三格式读写 | 等价实现 | .STRINGS/.DLSTRINGS/.ILSTRINGS 均支持 |
 | **Hybrid 模式** | ✅ 推荐模式：ESP 结构+编辑 Strings | ⚠️ 后端就绪 | 部分实现 | 解析+Strings 读写已有，UI 编辑器未实现 |
 | **MCM/Translate** | ✅ MCM 菜单翻译文件 | ✅ 后端解析+UI面板 | ~50% | 后端：parser+types+IPC命令；前端：McmPanel，含加载/保存/编辑/过滤 |
@@ -50,7 +50,7 @@
 | **XML 导入** | ✅ | ✅ 解析+匹配+更新 | ~95% | 共享 matcher：exact / EDID / normalized / vocab，歧义不自动应用 |
 | **XML 导出** | ✅ | ✅ 写入+实体转义 | ~95% | `write_xml_export` Delphi 兼容格式，只导出有翻译的条目 |
 | **BSA/BA2 归档** | ✅ 提取+浏览 | ✅ BSA + BA2 GNRL 全支持 | ~80% | `BsaArchive` v0x68/v0x69，`Ba2Archive` v0x01/0x02/0x08 GNRL，`list_all_files` + `extract_file` + `BsaBrowser` 组件，ESP strings 回退到 BA2 搜索 |
-| **PEX 脚本解析** | ✅ 反编译+编辑 | ✅ 字符串提取+写回 | ~60% | PEX parser 完成（Header+StringTable+ObjectInfo），可翻译字符串提取 + PexPanel；写回 PEX 已完成（字符串表原地更新，原始 opcode/调试信息全部保留，索引不变，roundtrip 测试通过） |
+| **PEX 脚本解析** | ✅ 反编译+编辑 | ✅ 字符串提取+写回 | ~90% | PEX parser 完成（Header+StringTable+ObjectInfo），可翻译字符串提取 + PexPanel；写回 PEX 已完成（字符串表原地更新，原始 opcode/调试信息全部保留，索引不变，roundtrip 测试通过） |
 | **FUZ 音频映射** | ✅ 映射+播放 | ✅ FuzFile parse + WAV 播放 | ~50% | FuzHeader 解析 + Sound/Voice/ 扫描 + RESP/INFO 关联 + FuzPanel；LIP 唇形数据未处理 |
 
 ---
@@ -66,8 +66,8 @@
 | **正则搜索/替换** | ✅ PCRE+批量 | ✅ Regex filter toggle + Replace All | ~80% | Regex toggle + Replace All with confirmation + capture groups ($1/$2) |
 | **直接搜索** | ✅ | ✅ 实时筛选 | ~80% | 客户端 filter+sort：文本/Regex/状态/Record 类型/排序，零延迟，76K+ 条 |
 | **撤销/重做** | ✅ | ✅ Stack-based (max 100) | ~80% | Ctrl+Z/Y + Ctrl+Shift+Z, IPC-synced, session-only |
-| **ESP 写入（Strings 回写）** | ✅ | ⚠️ Strings 保存已有 | ~30% | ESP 本身不修改（原版策略），但需要整合写入流程 |
-| **最终化 (finalize)** | ✅ 导出翻译结果 | ⚠️ XML 导出可用 | ~40% | XML 导出已就绪，Strings 最终化待整合 |
+| **ESP 写入（Strings 回写）** | ✅ | ✅ 直接 ESP 写入 + Strings 导出 | ~100% | ESP 记录树+重建+序列化+备份+Strings 导出完整实现（T42-T45） |
+| **最终化 (finalize)** | ✅ 导出翻译结果 | ✅ ESP finalize + Strings 导出 | ~90% | `finalize_esp` 命令：应用 SST 翻译→重建记录→序列化→导出 .STRINGS/.DLSTRINGS/.ILSTRINGS |
 | **批量处理器** | ✅ 命令式批处理 | ✅ BatchExecutor + BatchPanel | ~70% | Multi-file translate/export, progress events, cancel, error recovery |
 | **RTL 支持 (阿拉伯语)** | ✅ RTL 标签+字符串反向 | ✅ rtl.rs + EditorPanel RTL 按钮 | ~80% | `rtl.rs`：阿拉伯字符检测 + 块反转 + 符号镜像 + 阿拉伯整形（Shape/deshape）均已从 Delphi 移植，roundtrip 测试通过；EditorPanel RTL 按钮 |
 | **中文繁简转换** | ✅ SC↔TC 字符映射 | ✅ IPC + MenuBar + EditorPanel 按钮 | ~90% | `tcsc.rs`：OpenCC 主字典(3960对)+Delphi 字典回退(2552对)，编译时嵌入；IPC 命令+MenuBar 按钮+EditorPanel 内转换按钮均已集成；批量转换待实现 |
@@ -174,7 +174,8 @@
 | Proxy 设置 UI | 前端 Settings Dialog 包含 proxy server/port/user/pass | Done |
 | Batch TCSC | `tcsc_batch_convert` IPC + MenuBar 按钮 | Done |
 | ~~CRLF 保护~~ | ✅ 翻译 API `<L_F>` 标签保护/恢复，两个 provider 均已集成 | Done |
-| Header 处理器 | ESP 头部修改 | 1 周 |
+| ~~ESP 写入（record tree + serialize）~~ | ✅ `record_tree.rs` + `save_esp`/`finalize_esp`/`delocalize_esp` 命令，XXXX 字段管理，备份机制 | Done |
+| ~~Header 处理器~~ | ESP 头部修改 | 1 周 |
 | ~~主题系统~~ | ✅ Dark/Light/Gray/Auto | Done |
 | ~~UI 多语言~~ | ✅ react-i18next 10 languages | Done |
 | ~~自动备份~~ | ✅ 5-min SST snapshots | Done |

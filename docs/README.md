@@ -7,8 +7,9 @@ This directory is organized by reader need. Start with the repository entry poin
 | Document | Use it for |
 |----------|------------|
 | [`../README.md`](../README.md) | Product overview, supported workflows, quick start, build/test commands |
-| [`../SPEC.md`](../SPEC.md) | Canonical goals, constraints, interfaces, invariants, and completed task list |
+| [`../SPEC.md`](../SPEC.md) | Canonical goals, constraints, interfaces, invariants, and **45 completed tasks** |
 | [`../ARCHITECTURE.md`](../ARCHITECTURE.md) | Data flow, module responsibilities, IPC patterns, and implementation rules |
+| [`../IMPLEMENTATION_SUMMARY.md`](../IMPLEMENTATION_SUMMARY.md) | ESP write-back implementation details (record tree, serialization, XXXX handling) |
 | [`release_qa.md`](release_qa.md) | Reusable release verification checklist and real-data smoke test plan |
 
 ## Reading Order

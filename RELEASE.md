@@ -2,7 +2,8 @@
 
 ## 当前版本
 - **版本**: 0.1.0
-- **最后提交**: `d20314d` - feat(ui): complete 10-phase frontend refactoring
+- **最后提交**: `b80816b` - feat: ESP write-back serialization fixes and test updates
+- **SPEC 完成度**: 45/45 任务完成 ✅
 
 ## 发布步骤
 

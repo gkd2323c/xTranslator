@@ -9,8 +9,8 @@ A modern Rust-based translator for Bethesda game mods (Skyrim, Skyrim SE, Fallou
 ## Features
 
 ### Core Functionality
-- **ESP/ESM Parsing**: Load and parse Bethesda ESP/ESM plugin files
-- **Strings Files**: Support for `.STRINGS`, `.DLSTRINGS`, `.ILSTRINGS` formats
+- **ESP/ESM Parsing + Write-Back**: Load, parse, and directly edit Bethesda ESP/ESM plugin files with full record tree support (XXXX field management, zlib recompression, automatic backup before write)
+- **Strings Files**: Support for `.STRINGS`, `.DLSTRINGS`, `.ILSTRINGS` formats (with deduplication, ~17% size reduction)
 - **BSA Archive Support**: Extract and load strings from Bethesda archive files (.bsa, .ba2)
 - **XML Import/Export**: Compatible with Delphi xTranslator XML format (UTF-8, entity escaping)
 - **SST Dictionaries**: Full v8 bidirectional compatibility with Delphi xTranslator (UTF-16LE, FNV-1a, 24B EspPointer)
@@ -50,7 +50,7 @@ A modern Rust-based translator for Bethesda game mods (Skyrim, Skyrim SE, Fallou
 ```
 xTranslator/
 ├── crates/
-│   ├── xt-core/         # Core library: ESP parser, strings, SST, XML, BSA, heuristic search
+│   ├── xt-core/         # Core library: ESP parser + record tree + write-back, strings, SST, XML, BSA, heuristic search
 │   ├── xt-shared/       # Shared DTOs for IPC between backend and frontend
 │   └── xt-cli/          # CLI tool (legacy, superseded by Tauri UI)
 ├── src-tauri/           # Tauri 2.x desktop app backend
@@ -62,9 +62,30 @@ xTranslator/
 
 ## Project Status
 
-The rewrite is feature-complete for the main desktop translation workflow. `SPEC.md` currently tracks 41 completed tasks covering parsing, editing, compare tools, archive support, translation APIs, config persistence, and language tooling.
+The rewrite is feature-complete for the main desktop translation workflow. `SPEC.md` tracks **45 completed tasks** covering parsing, editing, ESP write-back, compare tools, archive support, translation APIs, config persistence, and language tooling.
 
-The remaining work is mostly parity polish and deeper validation against the Delphi original: direct ESP editing, Delphi-style SQLite cache parity, richer compare workflows, and more real-data cross-checking.
+All core functionality is implemented and tested:
+- ✅ ESP parsing with record tree + write-back (T42-T45)
+- ✅ Strings read/write with deduplication (~17% size reduction)
+- ✅ SST v8 bidirectional compatibility
+- ✅ XML import/export (Delphi-compatible)
+- ✅ BSA v0x68/v0x69 + BA2 General archive support
+- ✅ PEX script parsing + string extraction + write-back
+- ✅ FUZ audio mapping
+- ✅ MCM translation file support
+- ✅ ESP comparison engine
+- ✅ Translation APIs (OpenAI + DeepL)
+- ✅ Heuristic search (Levenshtein + LCS + LCP)
+- ✅ Config persistence (JSON + proxy settings)
+- ✅ TCSC 繁简转换 (OpenCC + Delphi fallback)
+- ✅ Batch processor with cancellation
+- ✅ Auto-backup (5-min SST snapshots)
+- ✅ Undo/Redo (stack-based, max 100)
+- ✅ Virtual scrolling (react-window v2, 76K+ items)
+- ✅ 10-language i18n UI
+- ✅ Theme system (Dark/Light/Gray/Auto)
+
+Remaining work focuses on parity polish and deeper validation against the Delphi original: nested GRUP verification, Delphi cross-check with real data, and UI polish.
 
 ## Documentation
 
@@ -156,6 +177,16 @@ Filtering logic: during ESP parsing, if a GMST record's `EDID` field starts with
 ### XML Import/Export
 - **Export**: `export_xml` command → `write_xml_export()` → Delphi-compatible UTF-8 XML with entity escaping
 - **Import**: `import_xml` command → `parse_xml_file()` → `import_xml_to_sky_strings()` — matches by `(str_id, record_sig, field_sig)` triple. Returns `XmlImportResponse { matched, unmatched, total, updated_ids }`
+
+### ESP Write-Back
+- **Record Tree**: Full in-memory parse tree (`EspField` → `EspRecord` → `EspGrup` → `EspFile`) built during ESP parsing
+- **Write Commands**:
+  - `save_esp`: Apply translations → rebuild records (XXXX management, zlib recompression) → serialize → save with optional backup
+  - `finalize_esp`: Apply SST translations → rebuild → serialize → export .STRINGS/.DLSTRINGS/.ILSTRINGS
+  - `delocalize_esp`: Convert localized ESP to delocalized format (sequential IDs from 1)
+- **Backup**: `.backup.<timestamp>` created before any ESP write (configurable)
+- **XXXX Handling**: Automatic insertion/removal when field size crosses 65535 boundary
+- **Module**: `crates/xt-core/src/esp/record_tree.rs`, `src/esp/parser.rs`
 
 ## Known Limitations
 

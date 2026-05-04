@@ -45,7 +45,7 @@ xTranslator/
 
 | Member | Role | Key Files |
 |--------|------|-----------|
-| `xt-core` | Domain logic: ESP parsing, Bethesda strings formats, SST v8 read/write, XML import/export, BSA v0x68/v0x69 archive support, PEX script parsing, FUZ audio, TCSC conversion, config persistence, heuristic similarity search, translation API providers (with CRLF protection, API config parsing, proxy builder), ESP cache | `src/lib.rs`, `src/esp/`, `src/strings/`, `src/sst/`, `src/xml/`, `src/bsa/`, `src/pex/`, `src/fuz/`, `src/tcsc.rs`, `src/config.rs`, `src/heuristic/`, `src/translation_api/`, `src/cache.rs` |
+| `xt-core` | Domain logic: ESP parsing + record tree + write-back, Bethesda strings formats, SST v8 read/write, XML import/export, BSA v0x68/v0x69 + BA2 General archive support, PEX script parsing + decompile + compile, FUZ audio, TCSC conversion, config persistence, heuristic similarity search, translation API providers (with CRLF protection, API config parsing, proxy builder), ESP cache, ESP compare, MCM parsing, data configs | `src/lib.rs`, `src/esp/parser.rs`, `src/esp/record_tree.rs`, `src/esp/compare.rs`, `src/strings/`, `src/sst/`, `src/xml/`, `src/bsa/`, `src/ba2/`, `src/pex/`, `src/fuz/`, `src/tcsc.rs`, `src/config.rs`, `src/heuristic/`, `src/translation_api/`, `src/cache.rs`, `src/mcm.rs`, `src/data_config.rs` |
 | `xt-shared` | Serializable DTOs for IPC. Source of truth for data shapes. | `src/dto.rs` |
 | `xt-cli` | Legacy CLI for testing core functionality without UI. | `src/main.rs` |
 | `src-tauri` | Tauri backend: holds `AppState`, exposes commands to frontend. | `src/main.rs`, `src/commands.rs` |

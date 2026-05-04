@@ -8,7 +8,8 @@
 
 ### 核心功能
 - **ESP/ESM 解析**：加载和解析 Bethesda ESP/ESM 插件文件
-- **字符串文件**：支持 `.STRINGS`、`.DLSTRINGS`、`.ILSTRINGS` 格式
+- **ESP 写入**：ESP 记录树 + 重建 + 序列化（支持 XXXX 超大字段管理、zlib 重新压缩、写入前自动备份）
+- **字符串文件**：支持 `.STRINGS`、`.DLSTRINGS`、`.ILSTRINGS` 格式（带去重，~17% 体积缩减）
 - **BSA 归档支持**：从 Bethesda 归档文件提取和加载字符串（.bsa、.ba2）
 - **XML 导入/导出**：兼容 Delphi xTranslator XML 格式（UTF-8、实体转义）
 - **SST 字典**：完全兼容 Delphi xTranslator 的 v8 双向格式（UTF-16LE、FNV-1a、24B EspPointer）
@@ -48,7 +49,7 @@
 ```
 xTranslator/
 ├── crates/
-│   ├── xt-core/         # 核心库：ESP 解析器、字符串、SST、XML、BSA、启发式搜索
+│   ├── xt-core/         # 核心库：ESP 解析器 + 记录树 + 写入、字符串、SST、XML、BSA、启发式搜索
 │   ├── xt-shared/       # IPC 共享 DTO，后端和前端之间
 │   └── xt-cli/          # CLI 工具（遗留，已被 Tauri UI 取代）
 ├── src-tauri/           # Tauri 2.x 桌面应用后端
@@ -60,9 +61,30 @@ xTranslator/
 
 ## 项目状态
 
-重写版本已完成主要桌面翻译工作流的完整功能。`SPEC.md` 目前跟踪 41 个已完成任务，涵盖解析、编辑、比较工具、归档支持、翻译 API、配置持久化和语言工具。
+重写版本已完成主要桌面翻译工作流的完整功能。`SPEC.md` 跟踪 **45 个已完成任务**，涵盖解析、编辑、ESP 写入、比较工具、归档支持、翻译 API、配置持久化和语言工具。
 
-剩余工作主要是与 Delphi 原版的对等性完善和更深入的验证：直接 ESP 编辑、Delphi 风格 SQLite 缓存对等性、更丰富的比较工作流，以及更多真实数据交叉检查。
+所有核心功能已实现并通过测试：
+- ✅ ESP 解析 + 记录树 + 写入（T42-T45）
+- ✅ 字符串读写 + 去重（~17% 体积缩减）
+- ✅ SST v8 双向兼容
+- ✅ XML 导入/导出（Delphi 兼容）
+- ✅ BSA v0x68/v0x69 + BA2 通用归档支持
+- ✅ PEX 脚本解析 + 字符串提取 + 写回
+- ✅ FUZ 音频映射
+- ✅ MCM 翻译文件支持
+- ✅ ESP 比较引擎
+- ✅ 翻译 API（OpenAI + DeepL）
+- ✅ 启发式搜索（Levenshtein + LCS + LCP）
+- ✅ 配置持久化（JSON + 代理设置）
+- ✅ TCSC 繁简转换（OpenCC + Delphi 回退）
+- ✅ 批量处理器 + 取消
+- ✅ 自动备份（5 分钟 SST 快照）
+- ✅ 撤销/重做（基于栈，最大 100）
+- ✅ 虚拟滚动（react-window v2，76K+ 条）
+- ✅ 10 语言 i18n UI
+- ✅ 主题系统（深色/浅色/灰色/自动）
+
+剩余工作聚焦于对等性完善和与 Delphi 原版的深入验证：嵌套 GRUP 验证、真实数据交叉检查、UI 细节打磨。
 
 ## 文档
 
@@ -154,6 +176,16 @@ GMST 记录包含一个 `DATA` 字段，可以是：
 ### XML 导入/导出
 - **导出**：`export_xml` 命令 → `write_xml_export()` → Delphi 兼容 UTF-8 XML，具有实体转义
 - **导入**：`import_xml` 命令 → `parse_xml_file()` → `import_xml_to_sky_strings()` — 通过 `(str_id, record_sig, field_sig)` 三元组匹配。返回 `XmlImportResponse { matched, unmatched, total, updated_ids }`
+
+### ESP 写入
+- **记录树**：完整的内存解析树（`EspField` → `EspRecord` → `EspGrup` → `EspFile`）在 ESP 解析期间构建
+- **写入命令**：
+  - `save_esp`：应用翻译 → 重建记录（XXXX 管理、zlib 重新压缩）→ 序列化 → 保存（可选备份）
+  - `finalize_esp`：应用 SST 翻译 → 重建 → 序列化 → 导出 .STRINGS/.DLSTRINGS/.ILSTRINGS
+  - `delocalize_esp`：将本地化 ESP 转换为去本地化格式（从 1 开始的顺序 ID）
+- **备份**：任何 ESP 写入前创建 `.backup.<timestamp>`（可配置）
+- **XXXX 处理**：字段大小跨越 65535 边界时自动插入/移除
+- **模块**：`crates/xt-core/src/esp/record_tree.rs`, `src/esp/parser.rs`
 
 ## 已知限制
 

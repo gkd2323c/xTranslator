@@ -14,7 +14,7 @@ Cargo workspace with 4 members:
 
 | Member | Role | Key Entrypoints |
 |--------|------|-----------------|
-| `crates/xt-core` | Core library: ESP parser, BA2, MCM, PEX compile, ESP compare, strings, SST, XML, BSA, heuristic search, translation API, ESP cache | `src/lib.rs` |
+| `crates/xt-core` | Core library: ESP parser + record tree + write-back, BA2, MCM, PEX compile/decompile, ESP compare, strings, SST, XML, BSA, heuristic search, translation API, ESP cache, FUZ, TCSC, data configs | `src/lib.rs` |
 | `crates/xt-shared` | IPC DTOs shared between backend and frontend | `src/dto.rs` |
 | `crates/xt-cli` | CLI tool (legacy, mostly superseded by Tauri UI) | `src/main.rs` |
 | `src-tauri` | Tauri 2.x desktop app backend | `src/main.rs`, `src/commands.rs` |
@@ -92,6 +92,18 @@ For production builds, `beforeBuildCommand` runs `cd ui && npm run build` correc
 - **Pruning**: Max 50 cache entries; oldest removed on `store()`. Manual clear via deleting the cache directory.
 - **Module**: `crates/xt-core/src/cache.rs` (`EsmCache`, `CachePayload`, `hash_file`).
 - **DTO field**: `LoadEspResponse.cached` (bool, `#[serde(default)]`) — frontend can show "Loaded from cache" vs parse time.
+
+### ESP Write-Back (T42-T45)
+
+- **Record Tree**: `EspField` → `EspRecord` → `EspGrup` → `EspFile` — full in-memory parse tree built during ESP parsing (`enable_esp_mode()`).
+- **Write Commands**:
+  - `save_esp`: Apply translations to field buffers → rebuild records (XXXX management, zlib recompression) → serialize → save with optional backup
+  - `finalize_esp`: Apply SST translations → rebuild → serialize → export .STRINGS/.DLSTRINGS/.ILSTRINGS
+  - `delocalize_esp`: Convert localized ESP to delocalized format (sequential IDs from 1)
+- **Backup**: Before any ESP write, create `.backup.<timestamp>` unless user opts out (V29).
+- **XXXX Handling**: Backward iteration through fields; automatic insertion/removal when field size crosses 65535 boundary.
+- **Compression**: Compressed records output as `[4-byte decompressedSize LE] + [zlib data]`; record header dsize = compressed output length (V30).
+- **Module**: `crates/xt-core/src/esp/record_tree.rs`, `src/esp/parser.rs`
 
 ### Data Formats (Bethesda)
 
