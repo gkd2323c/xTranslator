@@ -12,46 +12,66 @@ xTranslator is a tool for translating Bethesda game mods (Skyrim, Fallout 4, Sta
 - Support for .STRINGS/.DLSTRINGS/.ILSTRINGS files with codepage fallback
 - SST dictionary format (bidirectional compatibility with Delphi xTranslator)
 - XML import/export for translation exchange with tiered matching (T1-T4)
-- Heuristic search with translation suggestions (Levenshtein + LCS + LCP)
+- Heuristic search with translation suggestions (Levenshtein + LCS + LCP + Delphi 6-dimension scoring)
 - Translation API integration (OpenAI, DeepL, etc.) with API config parsing (ApiTranslator.txt) and CRLF protection
 - Virtual scrolling with client-side filtering
 - Traditional/Simplified Chinese conversion (TCSC, OpenCC + Delphi dictionaries)
-- Config persistence (JSON, theme/language/API keys/proxy survive restart)
-- Batch processing (translate/export multiple ESP files)
+- Config persistence (JSON, theme/language/API keys/proxy/esp_mode survive restart)
+- Batch processing (file-level and string-level, with progress events and cancellation)
 - BSA/BA2 archive browser with extraction
-- PEX script string extraction and write-back
-- FUZ audio mapping and WAV playback
+- PEX script string extraction, write-back, and decompilation
+- FUZ audio mapping, WAV playback, and LIP lip-sync parsing
 - Dialog/NPC tree view
 - UI i18n (10 languages via react-i18next)
+- RTL/Arabic text processing (logical→presentation shaping, bidirectional reorder)
+- Crash-safe translation cache (JSONL journal with recovery on restart)
+- ESP write-back (save_esp, finalize_esp, delocalize_esp)
 
 ## Project Structure
 
 ```
 xTranslator/
 ├── crates/
-│   ├── xt-core/          # Core business logic (Rust)
-│   │   ├── src/esp/      # ESP/ESM binary parser
-│   │   ├── src/strings/  # .STRINGS files + codepage encoding
-│   │   ├── src/sst/      # SST dictionary v8 format
-│   │   ├── src/xml/      # Delphi XML export format parser
-│   │   ├── src/heuristic/ # Similarity search algorithms
+│   ├── xt-core/              # Core business logic (Rust)
+│   │   ├── src/esp/          # ESP/ESM binary parser + record tree
+│   │   ├── src/strings/      # .STRINGS files + codepage encoding
+│   │   ├── src/sst/          # SST dictionary v8 format
+│   │   ├── src/xml/          # Delphi XML export format parser
+│   │   ├── src/heuristic/    # Similarity search + Delphi 6-dim scoring
 │   │   ├── src/translation_api/ # Translation providers + API config + CRLF protection
-│   │   ├── src/tcsc.rs   # Traditional/Simplified Chinese conversion
-│   │   ├── src/config.rs # App config persistence (JSON)
-│   │   └── src/types/    # Core types (SkyString, EspPointer, etc.)
-│   ├── xt-shared/        # IPC DTOs shared between Tauri backend/frontend
-│   └── xt-cli/           # CLI tool for testing and batch operations
-├── src-tauri/            # Tauri 2.x desktop app backend
-│   ├── src/main.rs       # App setup, command registration
-│   ├── src/commands.rs   # IPC command implementations
-│   └── src/batch.rs      # Batch processing state machine
-├── ui/                   # React + TypeScript frontend (Vite)
-│   ├── src/api/          # Tauri invoke wrappers + DTO types
-│   ├── src/stores/       # Zustand state management
-│   └── src/components/   # MenuBar, SidePanel, StringTable, EditorPanel
-├── tests/                # Integration tests
-│   └── fixtures/         # Test data files
-└── docs/                 # Format documentation
+│   │   ├── src/pex/          # PEX parser, string extraction, decompiler
+│   │   ├── src/ba2/          # BA2 archive format (Fallout 4, Starfield)
+│   │   ├── src/bsa/          # BSA v0x68/v0x69 archive format
+│   │   ├── src/fuz/          # FUZ audio container + LIP lip-sync
+│   │   ├── src/matching.rs   # T1-T4 tiered dictionary matcher
+│   │   ├── src/normalization.rs # String normalization for matching
+│   │   ├── src/vocabulary.rs # vocabulary.txt parser + heuristic enrichment
+│   │   ├── src/vmad.rs       # VMAD script string decoder
+│   │   ├── src/mcm.rs        # MCM translation file support
+│   │   ├── src/data_config.rs # ctdaFunc.txt, fieldSizeRef.txt, etc.
+│   │   ├── src/rtl.rs        # RTL/Arabic text processing
+│   │   ├── src/tcsc.rs       # Traditional/Simplified Chinese conversion
+│   │   ├── src/config.rs     # App config persistence (JSON)
+│   │   ├── src/cache.rs      # Legacy bincode ESP cache
+│   │   ├── src/sqlite_cache.rs # SQLite ESP cache (WAL mode, replaces bincode)
+│   │   ├── src/cache_index.rs # mtime+size→SHA-256 index for fast cache lookup
+│   │   ├── src/translation_cache.rs # JSONL journal for crash-safe translation recovery
+│   │   ├── src/batch_queue.rs # String-level concurrent batch translation
+│   │   ├── src/testing.rs    # Test utilities
+│   │   └── src/types/        # Core types (SkyString, EspPointer, etc.)
+│   ├── xt-shared/            # IPC DTOs shared between Tauri backend/frontend
+│   └── xt-cli/               # CLI tool for testing, batch ops, golden diff
+├── src-tauri/                # Tauri 2.x desktop app backend
+│   ├── src/main.rs           # App setup, command registration (~64 commands)
+│   ├── src/commands.rs       # IPC command implementations
+│   └── src/batch.rs          # File-level batch processing state machine
+├── ui/                       # React + TypeScript frontend (Vite)
+│   ├── src/api/              # Tauri invoke wrappers + DTO types
+│   ├── src/stores/           # Zustand state management
+│   └── src/components/       # See "Key Components" below
+├── tests/                    # Integration tests
+│   └── fixtures/             # Test data files
+└── docs/                     # Format documentation
 ```
 
 ## Build Commands
@@ -59,9 +79,12 @@ xTranslator/
 ### Full Application
 
 ```bash
-# Dev mode (watching + hot reload) - run in separate terminals:
-cd ui && npm run dev
-cargo run -p xtranslator-tauri
+# Dev mode (recommended): one-click script — kills stale processes, starts Vite on :5173, launches Tauri
+.\dev.ps1
+
+# Manual dev (two terminals):
+# Terminal 1: cd ui && npm run dev
+# Terminal 2: cargo run -p xtranslator-tauri
 
 # Production build
 cargo tauri build
@@ -76,15 +99,20 @@ cargo build --workspace
 # Run all tests
 cargo test --workspace
 
-# Run specific crate tests
-cargo test -p xt-core
-cargo test -p xt-shared
+# Run specific crate tests (fast, no external deps)
+cargo test -p xt-core --lib
+
+# Run single test by name
+cargo test -p xt-core test_parse_strings
 
 # Run doc tests
 cargo test --doc
 
 # Run CLI tool
 cargo run -p xt-cli -- --help
+
+# Typecheck frontend
+cd ui && npx tsc --noEmit
 ```
 
 ### Frontend
@@ -94,189 +122,142 @@ cd ui
 npm run dev      # Development server (localhost:5173)
 npm run build    # Production build (outputs to ui/dist)
 npm run preview  # Preview production build
+npm run test     # Vitest
 ```
 
-## Testing Workflow
+## Key Components
 
-### Test Categories
+**Top-level** (`ui/src/components/`): `MenuBar`, `SidePanel`, `StringTable`, `EditorPanel`, `StatusBar`, `ContextMenu`, `BatchTranslateBar`, `RecoveryPromptModal`, `DialogView`, `BatchPanel`, `BsaBrowser`, `FuzPanel`, `SettingsDialog`, `DataConfigsPanel`, `EspComparePanel`, `FinalizePanel`, `PexPanel`, `McmPanel`
 
-1. **Unit Tests** - In each Rust crate (`#[test]`)
-2. **Doc Tests** - Example code in documentation (`cargo test --doc`)
-3. **Integration Tests** - In `tests/` directory
-4. **End-to-End Tests** - Requires game files (Skyrim.esm, etc.) via environment variables
+**Bottom panels** (`ui/src/components/bottom/`): `HeuristicPanel`, `EspTreePanel`, `QuestsPanel`, `LogPanel`, `VocabularyPanel`
 
-### Running Tests
-
-```bash
-# Fast unit tests (no external dependencies)
-cargo test -p xt-core --lib
-
-# All tests including integration
-cargo test --workspace
-
-# With output visibility
-cargo test --workspace -- --nocapture
-
-# Specific test by name
-cargo test -p xt-core test_parse_strings
-```
-
-### Environment Variables for Large File Tests
-
-```bash
-# Windows PowerShell
-$env:XTRANSLATOR_TEST_SKYRIM_ESM = "C:\Path\To\Skyrim.esm"
-
-# Linux/macOS
-export XTRANSLATOR_TEST_SKYRIM_ESM="/path/to/Skyrim.esm"
-```
-
-## Key Technical Details
-
-### ESP/ESM File Format
-
-- **Record Header**: 16 bytes, not included in data size
-- **GRUP Header**: 24 bytes, includes its own header in data size
-- **Compressed Records**: Format `[4-byte decompressedSize LE] + [zlib data]`
-- **String Lookup**: Fields store `string_id` (4 bytes), actual text in .STRINGS files
-
-### Strings File Formats
-
-Three variants with different encoding:
-
-- `.STRINGS` (listIndex=0): null-terminated UTF-8 strings
-- `.DLSTRINGS` (listIndex=1): 4-byte LE length prefix + content
-- `.ILSTRINGS` (listIndex=2): 4-byte LE length prefix + content
-
-**Codepage System**: Delphi uses UTF-8 first, then Windows codepage fallback (932 Japanese, 936 Chinese, 949 Korean, 950 Traditional Chinese, 1250-1257 European).
-
-### SST v8 Dictionary Format
-
-- UTF-16LE string encoding (Delphi compatible)
-- FNV-1a hash on UTF-16 low bytes
-- `EspPointer` is 24 bytes (little-endian)
-- Bidirectional roundtrip with Delphi xTranslator
-
-### XML Format
-
-Delphi-compatible export/import:
-
-```xml
-<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<SSTXMLRessources>
-  <Params><Addon>Skyrim</Addon><Source>english</Source><Dest>chinese</Dest></Params>
-  <Content>
-    <String List="0" sID="000001">
-      <EDID>EditorID</EDID>
-      <REC id="0" idMax="0">INFO:NNAM</REC>
-      <Source>Hello</Source>
-      <Dest>你好</Dest>
-    </String>
-  </Content>
-</SSTXMLRessources>
-```
+**UI primitives** (`ui/src/components/ui/`): `Button`, `Input`, `Textarea`, `Select`, `Badge`, `Modal`, `Section`, `KeyValueRow`, `EmptyState`, `StatusDot`, `ProgressBar`, `Spinner`
 
 ## Architecture Patterns
 
 ### IPC Layer (Tauri Commands)
 
-Commands are registered in `src-tauri/src/main.rs` and implemented in `commands.rs`. Frontend calls via `invoke()` in `ui/src/api/strings.ts`.
+Commands registered in `src-tauri/src/main.rs` (~64 commands), implemented in `commands.rs`. Frontend calls via `invoke()` wrappers in `ui/src/api/strings.ts`.
 
-**Key Commands:**
+**Data flow:** ESP loads → frontend chunks via `get_strings_chunk` (25K/batch, concurrency 3, ~2MB JSON) → client-side filter/sort/scroll. `query_strings_command` is the fallback.
 
-- `load_esp(espPath, stringsDir, language, game)` - Load and parse ESP file
-- `load_sst(path)` / `save_sst(path, masters?)` - SST dictionary management
-- `update_translation(id, translation)` - Update single string
-- `get_strings_chunk(offset, limit)` - Paginated string fetch for virtual scroll
-- `heuristic_search(source, minSimilarity, maxResults)` - Find similar translations
-- `translate_string(source, provider, apiKey?)` - AI translation
-- `export_xml(filePath, ...)` / `import_xml(filePath)` - XML exchange
-- `list_bsa_files(path)` / `extract_bsa_file(path, file, out)` - BSA browser
-- `parse_pex_strings(path)` - PEX string extraction
-- `load_fuz_mapping(espDir)` - FUZ audio mapping
-- `build_dialog_tree()` - Dialog/NPC view
-- `start_batch_translate(files)` / `start_batch_export(files)` - Batch processing
-- `load_config()` / `save_config(dto)` - Config persistence (JSON, theme/language/API key/proxy)
-- `get_api_config()` - Provider metadata from ApiTranslator.txt
+**Update by ID, not index:** `update_translation(id, text)` uses `u32 id`. Frontend uses `selectedId` — indices break after filtering/sorting.
 
-### State Management
+**Large payloads (>1MB)** may hit WebView2 `postMessage` limits. Use chunking.
 
-- **Backend**: `AppState` in `src-tauri/src/main.rs` holds `Mutex<Vec<SkyString>>`, API keys, dirty flag, and `ApiTranslatorConfig`
-- **Batch**: `BatchExecutor` in `src-tauri/src/batch.rs` is a separate `Mutex`-guarded state machine (Idle → Running → Done) with `AtomicBool` cancel flag, managed independently from `AppState`
-- **Frontend**: Zustand store in `ui/src/stores/appStore.ts` — `allItems` holds full dataset, `items` is the filtered/sorted view for display
-- **Virtual Scroll**: React Window `FixedSizeList` renders visible rows only
-- **Data Refresh**: Single updates use optimistic local update; SST/XML load triggers full reload
-- **Cache**: `EsmCache` in `cache.rs` uses SHA-256 content-addressed binary cache (bincode) for ESP parse results — keyed by file content hash, auto-invalidates on change
+### Frontend State Pipeline
 
-### Shared Dictionary Matcher
+`appStore.allItems` (full DTO) → client filter/sort → `appStore.items` (display) → `react-window` `List` virtual render.
 
-`matching.rs` implements a 4-tier matching system shared by both XML import and SST load:
+**SidePanel stats are based on `allItems`, not `items`.**
 
-| Tier | Strategy | Key | Confidence |
-| --- | --- | --- | --- |
-| T1 | Exact triple | (str_id, record_sig, field_sig) | very high |
-| T2 | EDID hash | (edid_hash, record_sig, field_sig) | high |
-| T3 | Normalized source | (normalized_hash, record_sig, field_sig) | high |
-| T4 | Vocabulary overlap | word_hashes Jaccard >= 0.5 | medium |
+### Zustand Pattern
+
+Use `useAppStore((s) => s.field)` — never `const store = useAppStore()`. Select only what the component needs.
+
+### react-window v2 API
+
+Uses `rowComponent`/`rowCount`/`rowHeight`/`rowProps` (NOT v1's `children`/`itemCount`/`itemSize`). Row receives `{ ariaAttributes, index, style, ...rowProps }`. **Do NOT install `@types/react-window`** — v2 ships its own types.
+
+### Backend State (`AppState`)
+
+Holds: `strings`, `sst_old_data`, `file_info`, `openai_api_key`, `deepl_api_key`, `current_provider`, `is_dirty`, `api_config`, `vocabulary`, `batch_queue`, `esp_file`, `codepage_table`. All behind `Mutex`.
+
+- **File-level batch:** `BatchExecutor` in `src-tauri/src/batch.rs` — separate `Mutex`-guarded state machine (Idle → Running → Done) with `AtomicBool` cancel flag.
+- **String-level batch:** `BatchQueue` in `crates/xt-core/src/batch_queue.rs` — concurrent translation with progress events.
+- **ESP write-back:** `esp_file: Mutex<Option<EspFile>>` holds in-memory record tree for `save_esp`/`finalize_esp`.
+
+### ESP Cache
+
+Three-layer cache system:
+
+1. **CacheIndex** (`cache_index.rs`): JSON file mapping `(path, mtime, size)` → SHA-256. Avoids full hash on unchanged files.
+2. **SQLite cache** (`sqlite_cache.rs`): WAL mode, NORMAL synchronous. `{sha256}.db` per cached ESP. Replaces legacy bincode format.
+3. **Legacy bincode** (`cache.rs`): Still present, being phased out.
+
+Location: `%LOCALAPPDATA%/xTranslator/cache/` (Windows) / `~/.cache/xTranslator/` (Unix).
+
+### T1-T4 Dictionary Matching
+
+Shared by XML import and SST load (`crates/xt-core/src/matching.rs`):
+
+| Tier | Key | Confidence |
+| --- | --- | --- |
+| T1 | `(str_id, record_sig, field_sig)` exact triple | very high |
+| T2 | `(edid_hash, record_sig, field_sig)` | high |
+| T3 | `(normalized_hash, record_sig, field_sig)` | high |
+| T4 | word_hashes Jaccard ≥ 0.5 | medium |
 
 Ambiguous matches (multiple candidates at same tier) are not auto-applied.
 
-### Key Type Mappings (Delphi → Rust)
+### Translation Cache
 
-| Delphi | Rust | File |
-| --- | --- | --- |
-| `tSkyStr` | `SkyString` | `crates/xt-core/src/types/sky_string.rs` |
-| `rEspPointer` | `EspPointer` | `crates/xt-core/src/types/esp_pointer.rs` |
-| `sStrParams` | `SkyStringParams` | `crates/xt-core/src/types/params.rs` |
-| `StringHash()` | `string_hash()` | `crates/xt-core/src/types/esp_pointer.rs` |
-| `parseStringsEx()` | `StringsFile::load()` | `crates/xt-core/src/strings/mod.rs` |
+Crash-safe JSONL journal (`translation_cache.rs`). Each translated string flushed immediately. On restart: `check_pending_cache` → `apply_translation_cache` → `discard_translation_cache`.
 
-## Common Development Tasks
+## Adding a New IPC Command
 
-### Adding a New IPC Command
-
-1. Add DTOs to `crates/xt-shared/src/dto.rs` (derive `Serialize, Deserialize`)
+1. Add DTOs to `crates/xt-shared/src/dto.rs` (`#[derive(Serialize, Deserialize)]`)
 2. Add TypeScript interfaces to `ui/src/api/strings.ts`
-3. Implement command in `src-tauri/src/commands.rs`
+3. Implement in `src-tauri/src/commands.rs`
 4. Register in `src-tauri/src/main.rs` via `generate_handler!`
 5. Export frontend wrapper from `ui/src/api/strings.ts`
-6. Build and test: `cargo test -p xt-core --lib` + `npx tsc --noEmit`
+6. Verify: `cargo test -p xt-core --lib` + `npx tsc --noEmit`
 
-### Adding a New Translation Provider
-
-1. Implement `TranslationProvider` trait in `crates/xt-core/src/translation_api/`
-2. Add provider variant to enum
-3. Add command handler in `src-tauri/src/commands.rs`
-4. Add UI in EditorPanel for provider selection
-
-### Parsing New Record Types
-
-1. Add field signature to record definitions in `crates/xt-core/src/esp/`
-2. Update string extraction logic
-3. Add tests with actual game data
-
-## Important Files to Know
+## Important Files
 
 | File | Purpose |
 | --- | --- |
 | `crates/xt-core/src/types/sky_string.rs` | Core string data structure |
-| `crates/xt-core/src/strings/mod.rs` | Strings file parsing/writing |
-| `crates/xt-core/src/sst/v8.rs` | SST dictionary format |
+| `crates/xt-core/src/esp/parser.rs` | ESP/ESM binary parser |
+| `crates/xt-core/src/esp/record_tree.rs` | ESP record tree for write-back |
+| `crates/xt-core/src/matching.rs` | T1-T4 dictionary matcher |
+| `crates/xt-core/src/sqlite_cache.rs` | SQLite ESP cache |
+| `crates/xt-core/src/cache_index.rs` | mtime+size→SHA-256 cache index |
+| `crates/xt-core/src/translation_cache.rs` | JSONL translation recovery journal |
+| `crates/xt-core/src/sst/v8.rs` | SST v8 format |
 | `crates/xt-core/src/xml/mod.rs` | XML import/export |
-| `crates/xt-core/src/matching.rs` | Shared tiered dictionary matcher (T1-T4) |
-| `crates/xt-core/src/heuristic/mod.rs` | Similarity search algorithms |
-| `crates/xt-core/src/vmad.rs` | VMAD script string decoder |
-| `crates/xt-core/src/cache.rs` | SHA-256 content-addressed ESP cache |
-| `crates/xt-core/src/tcsc.rs` | Traditional/Simplified Chinese conversion |
-| `crates/xt-core/src/config.rs` | App config persistence (JSON) |
-| `crates/xt-core/src/translation_api/config.rs` | API translator config (ApiTranslator.txt) |
-| `crates/xt-shared/src/dto.rs` | IPC data transfer objects |
-| `src-tauri/src/commands.rs` | All Tauri command implementations |
-| `src-tauri/src/batch.rs` | Batch processing state machine |
-| `ui/src/stores/appStore.ts` | Frontend state management |
-| `ui/src/api/strings.ts` | Tauri invoke wrappers + TypeScript DTOs |
-| `ui/src/components/StringTable.tsx` | Virtual scroll table component |
-| `ui/src/components/EditorPanel.tsx` | Translation editor UI |
+| `crates/xt-core/src/heuristic/mod.rs` | Similarity search |
+| `crates/xt-core/src/heuristic/delphi_scoring.rs` | Delphi 6-dimension scoring |
+| `crates/xt-core/src/translation_api/` | Translation providers |
+| `crates/xt-core/src/pex/decompile.rs` | PEX decompiler |
+| `crates/xt-core/src/batch_queue.rs` | String-level batch translation |
+| `crates/xt-core/src/rtl.rs` | RTL/Arabic text processing |
+| `crates/xt-shared/src/dto.rs` | IPC DTOs |
+| `src-tauri/src/commands.rs` | All Tauri commands |
+| `src-tauri/src/batch.rs` | File-level batch state machine |
+| `ui/src/stores/appStore.ts` | Frontend Zustand store |
+| `ui/src/api/strings.ts` | Tauri invoke wrappers + TS DTOs |
+| `ui/src/components/StringTable.tsx` | Virtual scroll table |
+| `ui/src/components/EditorPanel.tsx` | Translation editor |
+
+## Gotchas & Edge Cases
+
+1. **Tauri Dev Workaround**: `tauri.conf.json` sets `beforeDevCommand: "echo ok"` because `cd ui && npm run dev` fails in PowerShell. Use `.\dev.ps1` or two terminals.
+
+2. **FNV-1a Hash Quirk**: Delphi's `StringHash()` uses FNV-1a on UTF-16 **low bytes only**. Must match exactly for SST compatibility.
+
+3. **ESP dsize Semantics**: Record `dsize` excludes the 16-byte header; GRUP `dsize` includes its own 24-byte header. Critical for correct parsing.
+
+4. **Codepage Fallback**: Don't assume UTF-8. Always use `CodepageConfig` when reading/writing strings files.
+
+5. **Update by ID, Not Index**: After filtering/sorting, array indices don't match backend. Always use `id` field for updates.
+
+6. **Bethesda Compression**: 44,153+ compressed records in Skyrim.esm (NAVM, LAND, CELL, NPC_). Format is `[4-byte decompressedSize LE] + [zlib data]`.
+
+7. **GMST:DATA Filtering**: If GMST `EDID` starts with `'s'`, treat `DATA` as string ID → look up in `.STRINGS`. Otherwise (`f`/`i`/`b` or missing) → numeric, skip.
+
+8. **VMAD Negative str_id**: VMAD script strings encode byte offset as negative `str_id`. `is_vmad: esp_ptr.str_id < 0`.
+
+9. **ESP mode**: When `esp_mode=true` (persisted in config.json), save operations write back to ESP file directly. Otherwise write .STRINGS files.
+
+10. **MCM Partial Detection**: Translation is "partial" if non-empty, differs from source, and < 30% of source length.
+
+## Version Compatibility
+
+- **Rust**: 1.70+ (edition 2021)
+- **Tauri**: 2.x
+- **Node.js**: 18+
+- **Platforms**: Windows (primary), macOS, Linux
 
 ## Documentation
 
@@ -292,46 +273,3 @@ Ambiguous matches (multiple candidates at same tier) are not auto-applied.
 - `docs/feature_comparison.md` - Full gap analysis vs Delphi original
 - `docs/execution_plan.md` - Execution plan for remaining tasks
 - `docs/toolchain_and_roadmap.md` - Dependencies, warnings cleanup, v2 roadmap
-
-## Gotchas & Edge Cases
-
-1. **Tauri Dev Workaround**: `tauri.conf.json` sets `beforeDevCommand: "echo ok"` because `cd ui && npm run dev` fails in Windows PowerShell. Development requires two terminals.
-
-2. **FNV-1a Hash Quirk**: Delphi's `StringHash()` uses FNV-1a on UTF-16 **low bytes only**. Must match exactly for SST compatibility.
-
-3. **ESP dsize Semantics**: Record `dsize` excludes the 16-byte header; GRUP `dsize` includes its own 24-byte header. Critical for correct parsing.
-
-4. **Codepage Fallback**: Don't assume UTF-8. Always use `CodepageConfig` when reading/writing strings files.
-
-5. **Virtual Scroll Performance**: `get_all_strings()` transfers ~15-20MB for 76k items. Client-side filter/sort is near-instant after initial load.
-
-6. **Update by ID, Not Index**: After filtering/sorting, array indices don't match backend. Always use `id` field for updates.
-
-7. **Bethesda Compression**: 44,153+ compressed records in Skyrim.esm (NAVM, LAND, CELL, NPC_). Format is `[4-byte decompressedSize LE] + [zlib data]`.
-
-## Version Compatibility
-
-- **Rust**: 1.70+ (edition 2021)
-- **Tauri**: 2.x
-- **Node.js**: 18+
-- **Platforms**: Windows (primary), macOS, Linux
-
-## Delphi Compatibility Matrix
-
-| Feature | Status |
-| --- | --- |
-| SST v8 Read/Write | Full roundtrip |
-| Strings File Read | All three formats |
-| Strings File Write | Codepage support |
-| ESP Parsing | 76k+ strings from Skyrim.esm |
-| XML Import/Export | Delphi-compatible |
-| Heuristic Search | Levenshtein + LCS + LCP |
-| Translation API | OpenAI + DeepL + API config |
-| PEX String Extraction | Parser + PexPanel, write-back v2 |
-| BSA/BA2 Archive Browser | BsaBrowser + list_all_files + extract |
-| FUZ Audio Mapping | FuzFile parse + WAV playback |
-| Dialog/NPC View | DialogView component |
-| UI i18n | 10 languages (react-i18next) |
-| Batch Processor | BatchExecutor + BatchPanel |
-| Config Persistence | JSON config (theme/language/API key/proxy) |
-| TCSC Conversion | Full (OpenCC + Delphi dicts, IPC + UI) |
