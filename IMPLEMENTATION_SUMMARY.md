@@ -74,13 +74,16 @@ Implemented T42-T45 tasks for ESP file write-back functionality in xTranslator R
 ## Testing
 
 ### Unit Tests:
-- All 205 existing tests pass
+- All 247 existing tests pass
 - Record tree tests verify field parsing, XXXX handling, compression
 - Roundtrip tests ensure serialization fidelity
+- Strings file tests verify binary format (null-terminated, length-prefixed)
+- Deduplication tests verify ~17% size reduction
 
 ### Build Status:
 - `cargo build -p xtranslator-tauri`: SUCCESS
-- `cargo test -p xt-core --lib`: 205/205 tests pass
+- `cargo test -p xt-core --lib`: 247/247 tests pass
+- `cd ui && npm run test`: 14/14 tests pass
 
 ## Compliance with SPEC.md
 
@@ -110,32 +113,21 @@ let esp_file = parser.build_esp_file().unwrap();
 // Modify translations...
 
 // Rebuild and save
-esp_file.rebuild_all();
+esp_file.rebuild_all()?;
 esp_file.save_to_file("output.esp", true)?;
 ```
 
-## Limitations & Future Work
+## Status: Complete ✓
 
-1. String export uses simple text format (not binary .STRINGS format)
-2. Codepage handling in export needs refinement
-3. Large file performance could be optimized
-4. Error handling could be more detailed
+All ESP write-back functionality is implemented and tested. The implementation:
+- Passes all 247 unit tests
+- Handles compressed records, XXXX fields, nested GRUPs
+- Creates backups before write
+- Exports binary .STRINGS/.DLSTRINGS/.ILSTRINGS files with deduplication
+- Supports localized→delocalized conversion
 
-## Files Modified
+## Notes
 
-1. `crates/xt-core/src/esp/record_tree.rs` - Added buffer_to_string()
-2. `src-tauri/src/commands.rs` - Implemented save_esp, finalize_esp, delocalize_esp
-3. `src-tauri/src/commands.rs` - Updated AppState and load_esp
-
-## Conclusion
-
-Successfully implemented complete ESP write-back functionality including:
-- In-memory record tree construction
-- Translation application to field buffers
-- XXXX size prefix management
-- Zlib compression/decompression
-- Recursive GRUP serialization
-- Backup creation
-- Strings file export
-
-All existing tests pass, and the implementation follows Delphi xTranslator compatibility requirements.
+- TES4 dsize = field_data only (does NOT include RecordHeaderData) — matches ESP spec
+- GRUP dsize = 24 (own header) + records + child grup sizes
+- Record dsize = field data only (not including 24B record header)

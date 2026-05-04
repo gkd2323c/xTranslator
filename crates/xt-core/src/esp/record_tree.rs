@@ -295,11 +295,24 @@ impl EspGrup {
         self.header.dsize = total;
     }
 
+    /// Total serialized size of this GRUP (including its own 24-byte header).
+    fn serialized_size(&self) -> u32 {
+        let mut total: u32 = 24;
+        for record in &self.records {
+            total += record.serialized_size() as u32;
+        }
+        for child in &self.children {
+            total += child.serialized_size();
+        }
+        total
+    }
+
     /// Serialize this GRUP to a writer (recursive).
     pub fn serialize<W: Write>(&self, writer: &mut W) -> std::io::Result<()> {
-        // Write GenericHeader
+        // Write GenericHeader with correct dsize (computed, not stored)
+        let dsize = self.serialized_size();
         writer.write_all(&self.header.name)?;
-        writer.write_u32::<LittleEndian>(self.header.dsize)?;
+        writer.write_u32::<LittleEndian>(dsize)?;
 
         // Write GrupHeader (16 bytes)
         writer.write_all(&self.grup_header.s_ident)?;
@@ -465,10 +478,14 @@ impl EspFile {
     /// Serialize the entire ESP file to a writer.
     ///
     /// Writes: TES4 header record + all top-level GRUPs.
+    /// Note: TES4 dsize = field_data only (does NOT include RecordHeaderData).
     pub fn serialize<W: Write>(&self, writer: &mut W) -> std::io::Result<()> {
+        // TES4 dsize = field_data length only (not including RecordHeaderData)
+        let tes4_dsize = self.tes4.field_data.len() as u32;
+
         // Write TES4 GenericHeader
         writer.write_all(&self.tes4.generic.name)?;
-        writer.write_u32::<LittleEndian>(self.tes4.generic.dsize)?;
+        writer.write_u32::<LittleEndian>(tes4_dsize)?;
 
         // Write TES4 RecordHeaderData (16 bytes)
         writer.write_u32::<LittleEndian>(self.tes4.record_header_data.flags)?;

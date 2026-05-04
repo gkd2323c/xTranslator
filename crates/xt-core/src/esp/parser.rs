@@ -587,18 +587,18 @@ impl EspParser {
         // 直接解析 TES4 字段；RecordHeaderData 已在上方消费。
         self.parse_record_fields_direct(b"TES4", 0, &tes4_data)?;
 
-        // 流式解析后续记录/组。Delphi 原版顺序读取 GenericHeader →
-        // 判断 GRUP/Record → 按需读取数据，避免 read_to_end 大内存分配。
-        let mut grup_count = 0u32;
-        let mut record_count = 0u32;
+// 流式解析后续记录/组。Delphi 原版顺序读取 GenericHeader →
+    // 判断 GRUP/Record → 按需读取数据，避免 read_to_end 大内存分配。
+    let mut grup_count = 0u32;
+    let mut record_count = 0u32;
 
-        loop {
-            match self.parse_top_level_debug(reader, &mut grup_count, &mut record_count) {
-                Ok(()) => {}
-                Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => break,
-                Err(e) => return Err(e),
-            }
+    loop {
+        match self.parse_top_level_debug(reader, &mut grup_count, &mut record_count) {
+            Ok(()) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => break,
+            Err(e) => return Err(e),
         }
+    }
 
         Ok(())
     }
@@ -608,17 +608,17 @@ impl EspParser {
         self.parse_top_level_debug(reader, &mut 0, &mut 0)
     }
 
-    fn parse_top_level_debug<R: Read>(
-        &mut self,
-        reader: &mut R,
-        grup_count: &mut u32,
-        record_count: &mut u32,
-    ) -> Result<()> {
-        let header = match GenericHeader::read_from(reader) {
-            Ok(h) => h,
-            Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => return Ok(()),
-            Err(e) => return Err(e),
-        };
+fn parse_top_level_debug<R: Read>(
+    &mut self,
+    reader: &mut R,
+    grup_count: &mut u32,
+    record_count: &mut u32,
+) -> Result<()> {
+    let header = match GenericHeader::read_from(reader) {
+        Ok(h) => h,
+        Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => return Ok(()),
+        Err(e) => return Err(e),
+    };
 
         if header.is_grup() {
             *grup_count += 1;

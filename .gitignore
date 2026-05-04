@@ -47,7 +47,7 @@ tests/fixtures/delphi_golden/*.ILSTRINGS
 .trae/
 .codex/
 .deepseek/
-
+.cline/
 # OS
 .DS_Store
 Thumbs.db
