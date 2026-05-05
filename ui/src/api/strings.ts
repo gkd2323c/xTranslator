@@ -82,6 +82,8 @@ export interface TranslationProvidersResponse {
   available: string[];
   openaiConfigured: boolean;
   deeplConfigured: boolean;
+  baiduConfigured: boolean;
+  youdaoConfigured: boolean;
 }
 
 export async function queryStrings(request: QueryRequest): Promise<QueryResponse> {
@@ -147,14 +149,33 @@ export async function setDeeplApiKey(apiKey: string): Promise<void> {
   saveConfig({ deepl_api_key: apiKey || undefined }).catch(() => {});
 }
 
+export async function setBaiduApiKey(appId: string, key: string): Promise<void> {
+  await invoke("set_baidu_api_key", { appId, key });
+  saveConfig({ baidu_app_id: appId || undefined, baidu_key: key || undefined }).catch(() => {});
+}
+
+export async function setYoudaoApiKey(appKey: string, secretKey: string): Promise<void> {
+  await invoke("set_yooudao_api_key", { appKey, secretKey });
+  saveConfig({ youdao_app_key: appKey || undefined, youdao_secret_key: secretKey || undefined }).catch(() => {});
+}
+
+export async function toolboxTransform(
+  tool: string,
+  target: string,
+  ids: number[],
+  headerText?: string,
+): Promise<number> {
+  return invoke("toolbox_transform", { tool, target, ids, headerText });
+}
+
 export async function setTranslationProvider(provider: string): Promise<void> {
   await invoke("set_translation_provider", { provider });
   saveConfig({ current_provider: provider }).catch(() => {});
 }
 
 export async function getTranslationProviders(): Promise<TranslationProvidersResponse> {
-  const [current, available, openaiConfigured, deeplConfigured] = await invoke<[string, string[], boolean, boolean]>("get_translation_providers");
-  return { current, available, openaiConfigured, deeplConfigured };
+  const [current, available, openaiConfigured, deeplConfigured, baiduConfigured, youdaoConfigured] = await invoke<[string, string[], boolean, boolean, boolean, boolean]>("get_translation_providers");
+  return { current, available, openaiConfigured, deeplConfigured, baiduConfigured, youdaoConfigured };
 }
 
 /** @deprecated Use setOpenAiApiKey instead */
@@ -523,6 +544,10 @@ export interface McmSaveRequest {
 export interface AppConfigDto {
   openai_api_key?: string;
   deepl_api_key?: string;
+  baidu_app_id?: string;
+  baidu_key?: string;
+  youdao_app_key?: string;
+  youdao_secret_key?: string;
   current_provider?: string;
   theme?: string;
   language?: string;

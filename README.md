@@ -24,8 +24,9 @@ A modern Rust-based translator for Bethesda game mods (Skyrim, Skyrim SE, Fallou
 
 ### Translation APIs
 - **DeepL**: Free and Pro API support (auto-detected from API key)
+- **Baidu**: Chinese translation via Baidu Translate API (AppId + Key)
+- **Youdao**: Chinese translation via Youdao Translate API (AppKey + SecretKey)
 - **OpenAI Compatible**: OpenAI, DeepSeek, and other Chat Completions API providers (supports prompt templates)
-- Other translation providers from the Delphi original are not yet implemented here.
 
 ### Advanced Features
 - **GMST:DATA Filtering**: Automatic detection of translatable vs numeric GMST records
@@ -44,6 +45,7 @@ A modern Rust-based translator for Bethesda game mods (Skyrim, Skyrim SE, Fallou
 - **FUZ Audio Mapping**: Map dialog strings to WAV audio with playback
 - **NPC/Dialog View**: Dialog tree grouped by QUST→DIAL→INFO with NPC association
 - **Multi-Language UI**: 10 languages (zh-CN, en, de, es, fr, ja, ko, pl, pt, ru)
+- **Toolbox**: 7 text transformation tools (case conversion, alias fixing, header adding, trimming)
 
 ## Project Structure
 

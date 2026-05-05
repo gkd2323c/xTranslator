@@ -6,11 +6,12 @@ import type { LoadSstResponse, XmlImportResponse } from "../api/strings";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
-import { FolderOpen, FileUp, FileDown, FileCode, Save, RotateCcw, RefreshCw, FileArchive, Braces, Volume2, MessagesSquare, FileText, GitCompare, CheckCircle, Settings, ArrowLeftRight, Database } from "lucide-react";
+import { FolderOpen, FileUp, FileDown, FileCode, Save, RotateCcw, RefreshCw, FileArchive, Braces, Volume2, MessagesSquare, FileText, GitCompare, CheckCircle, Settings, ArrowLeftRight, Database, Wrench } from "lucide-react";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import { setI18nLanguage, SUPPORTED_LANGS } from "../i18n";
 import { SettingsDialog } from "./SettingsDialog";
+import { ToolboxDialog } from "./ToolboxDialog";
 
 type ApplyStats = Pick<
   LoadSstResponse | XmlImportResponse,
@@ -59,6 +60,7 @@ function formatApplyStats(stats: ApplyStats): string {
 export function MenuBar() {
   const { t, i18n } = useTranslation();
   const [showSettings, setShowSettings] = useState(false);
+  const [showToolbox, setShowToolbox] = useState(false);
   const isParsing = useAppStore((s) => s.isParsing);
   const isLoading = useAppStore((s) => s.isLoading);
   const espPath = useAppStore((s) => s.espPath);
@@ -746,6 +748,14 @@ export function MenuBar() {
           <Button
             variant="ghost"
             size="sm"
+            icon={<Wrench size={16} />}
+            onClick={() => setShowToolbox(true)}
+            title="Toolbox"
+            aria-label="Toolbox"
+          />
+          <Button
+            variant="ghost"
+            size="sm"
             icon={<RotateCcw size={16} />}
             onClick={() => {
               if (isDirty && !confirm(t("app.resetConfirm"))) return;
@@ -766,6 +776,15 @@ export function MenuBar() {
         </span>
       )}
       <SettingsDialog open={showSettings} onClose={() => setShowSettings(false)} />
+      <ToolboxDialog
+        open={showToolbox}
+        onClose={() => setShowToolbox(false)}
+        selectedIds={Array.from(useAppStore.getState().selectedIds)}
+        onApplied={() => {
+          useAppStore.getState().loadAllStrings();
+          setShowToolbox(false);
+        }}
+      />
     </div>
   );
 }

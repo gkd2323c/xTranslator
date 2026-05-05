@@ -48,6 +48,7 @@ tests/fixtures/delphi_golden/*.ILSTRINGS
 .codex/
 .deepseek/
 .cline/
+.joycode/
 # OS
 .DS_Store
 Thumbs.db

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { loadConfig, saveConfig, setOpenAiApiKey, setDeeplApiKey, setTranslationProvider, getTranslationProviders, type AppConfigDto, type TranslationProvidersResponse } from "../api/strings";
+import { loadConfig, saveConfig, setOpenAiApiKey, setDeeplApiKey, setBaiduApiKey, setYoudaoApiKey, setTranslationProvider, getTranslationProviders, type AppConfigDto, type TranslationProvidersResponse } from "../api/strings";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import { Button, Modal, Input, Select } from "./ui";
@@ -40,6 +40,12 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
       }
       if (config.deepl_api_key !== undefined) {
         await setDeeplApiKey(config.deepl_api_key);
+      }
+      if (config.baidu_app_id && config.baidu_key) {
+        await setBaiduApiKey(config.baidu_app_id, config.baidu_key);
+      }
+      if (config.youdao_app_key && config.youdao_secret_key) {
+        await setYoudaoApiKey(config.youdao_app_key, config.youdao_secret_key);
       }
       if (config.current_provider) {
         await setTranslationProvider(config.current_provider);
@@ -84,6 +90,8 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
           options={[
             { value: "openai", label: "OpenAI" },
             { value: "deepl", label: "DeepL" },
+            { value: "baidu", label: "Baidu" },
+            { value: "youdao", label: "Youdao" },
           ]}
         />
 
@@ -108,6 +116,46 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
           value={config.deepl_api_key || ""}
           onChange={(e) => handleChange("deepl_api_key", e.target.value)}
           placeholder={t("settings.deeplPlaceholder", { defaultValue: "DeepL API key (free: xxx:fx, pro: xxx)" })}
+        />
+
+        <label className="dialog-label">
+          Baidu App ID
+        </label>
+        <Input
+          type="text"
+          value={config.baidu_app_id || ""}
+          onChange={(e) => handleChange("baidu_app_id", e.target.value)}
+          placeholder="Baidu AppId"
+        />
+
+        <label className="dialog-label">
+          Baidu Key
+        </label>
+        <Input
+          type="password"
+          value={config.baidu_key || ""}
+          onChange={(e) => handleChange("baidu_key", e.target.value)}
+          placeholder="Baidu secret key"
+        />
+
+        <label className="dialog-label">
+          Youdao App Key
+        </label>
+        <Input
+          type="text"
+          value={config.youdao_app_key || ""}
+          onChange={(e) => handleChange("youdao_app_key", e.target.value)}
+          placeholder="Youdao AppKey"
+        />
+
+        <label className="dialog-label">
+          Youdao Secret Key
+        </label>
+        <Input
+          type="password"
+          value={config.youdao_secret_key || ""}
+          onChange={(e) => handleChange("youdao_secret_key", e.target.value)}
+          placeholder="Youdao SecretKey"
         />
       </div>
 

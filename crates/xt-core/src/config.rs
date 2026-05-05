@@ -12,6 +12,14 @@ pub struct AppConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub deepl_api_key: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub baidu_app_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub baidu_key: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub youdao_app_key: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub youdao_secret_key: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub current_provider: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub theme: Option<String>,
@@ -55,6 +63,10 @@ impl AppConfig {
     pub fn apply(&mut self, other: &Self) {
         if other.openai_api_key.is_some() { self.openai_api_key = other.openai_api_key.clone(); }
         if other.deepl_api_key.is_some() { self.deepl_api_key = other.deepl_api_key.clone(); }
+        if other.baidu_app_id.is_some() { self.baidu_app_id = other.baidu_app_id.clone(); }
+        if other.baidu_key.is_some() { self.baidu_key = other.baidu_key.clone(); }
+        if other.youdao_app_key.is_some() { self.youdao_app_key = other.youdao_app_key.clone(); }
+        if other.youdao_secret_key.is_some() { self.youdao_secret_key = other.youdao_secret_key.clone(); }
         if other.current_provider.is_some() { self.current_provider = other.current_provider.clone(); }
         if other.theme.is_some() { self.theme = other.theme.clone(); }
         if other.language.is_some() { self.language = other.language.clone(); }

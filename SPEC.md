@@ -74,8 +74,10 @@ api: `heuristic_search` → `Vec<HeuristicMatchDTO>` (candidates from translated
 api: `translate_string` → `String` (current provider, `spawn_blocking`)
 api: `set_openai_api_key` → `()` (memory only, no disk persistence)
 api: `set_deepl_api_key` → `()` (memory only, no disk persistence)
-api: `set_translation_provider` → `()` (switch between openai/deepl)
-api: `get_translation_providers` → `TranslationProvidersResponse { providers[], openaiConfigured, deeplConfigured }`
+api: `set_translation_provider` → `()` (switch between openai/deepl/baidu/youdao)
+api: `get_translation_providers` → `TranslationProvidersResponse { providers[], openaiConfigured, deeplConfigured, baiduConfigured, youdaoConfigured }`
+api: `set_baidu_api_key` → `()` (takes app_id + key, memory only)
+api: `set_yooudao_api_key` → `()` (takes app_key + secret_key, memory only)
 api: `tcsc_batch_convert` → `Vec<u32>` (batch convert filtered translations; direction: "to_simplified"|"to_traditional", optional ids)
 api: `tcsc_convert` → `String` (single-string TCSC conversion; takes text + direction)
 api: `rtl_reverse` → `String` (reverse RTL text for Arabic/Hebrew display)
@@ -147,6 +149,10 @@ api: `discard_translation_cache` → `()` (discard journal)
 #### Auto-Backup
 
 api: `auto_backup_sst` → `AutoBackupResponse { backup_path, total_backups }` (takes `AutoBackupRequest { sst_path, max_backups }`)
+
+#### Tooling
+
+api: `toolbox_transform` → `u32` (modified count; takes tool name, target [source|translation|both], optional ids, optional header_text)
 
 ### Events
 
@@ -383,6 +389,13 @@ T78|x|Batch update translations command|G7
 T79|x|Auto-backup SST command|G3
 T80|x|Vocabulary panel component|G7
 T81|x|ESP tree panel component|G7
+T82|x|Baidu translation provider (MD5 sign: appId+text+salt+key)|G6
+T83|x|Youdao translation provider (MD5 sign: appKey+text+salt+secret)|G6
+T84|x|Inline MD5 implementation for API signing|G6
+T85|x|Baidu/Youdao API key set/get commands + config persistence|G6,G7
+T86|x|Toolbox: 7 text transformation tools (uppercase/lowercase/title case/fix alias/add header/trim)|G7
+T87|x|Toolbox IPC command (toolbox_transform) with tag-aware word splitting|G7
+T88|x|ToolboxDialog UI component + MenuBar integration|G7
 
 ## §B Bugs
 

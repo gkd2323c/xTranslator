@@ -720,6 +720,14 @@ pub struct AppConfigDto {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub deepl_api_key: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub baidu_app_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub baidu_key: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub youdao_app_key: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub youdao_secret_key: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub current_provider: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub theme: Option<String>,

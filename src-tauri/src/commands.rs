@@ -10,7 +10,7 @@ use xt_core::matching::{apply_dictionary_entries_with_policy, ApplyPolicy, Dicti
 use xt_core::pex::types::PexTranslatableString;
 use xt_core::sst::v8::SstDictionary;
 use xt_core::strings::CodepageTable;
-use xt_core::translation_api::{DeepLProvider, OpenAIProvider, ProviderType, TranslationProvider};
+use xt_core::translation_api::{BaiduProvider, DeepLProvider, OpenAIProvider, ProviderType, TranslationProvider, YoudaoProvider};
 use xt_core::translation_api::config::ApiTranslatorConfig;
 use xt_core::translation_cache::TranslationCache;
 use xt_core::types::game_id::GameId;
@@ -49,6 +49,14 @@ pub struct AppState {
     pub openai_api_key: Mutex<Option<String>>,
     /// DeepL API Key（内存存储，不持久化）
     pub deepl_api_key: Mutex<Option<String>>,
+    /// 百度翻译 AppId（内存存储，不持久化）
+    pub baidu_app_id: Mutex<Option<String>>,
+    /// 百度翻译 Key（内存存储，不持久化）
+    pub baidu_key: Mutex<Option<String>>,
+    /// 有道翻译 AppKey（内存存储，不持久化）
+    pub youdao_app_key: Mutex<Option<String>>,
+    /// 有道翻译 SecretKey（内存存储，不持久化）
+    pub youdao_secret_key: Mutex<Option<String>>,
     /// 当前选中的翻译提供方
     pub current_provider: Mutex<ProviderType>,
     /// 是否有未保存的翻译修改
@@ -84,6 +92,10 @@ impl AppState {
             file_info: Mutex::new(None),
             openai_api_key: Mutex::new(openai_env_key),
             deepl_api_key: Mutex::new(deepl_env_key),
+            baidu_app_id: Mutex::new(None),
+            baidu_key: Mutex::new(None),
+            youdao_app_key: Mutex::new(None),
+            youdao_secret_key: Mutex::new(None),
             current_provider: Mutex::new(default_provider),
             is_dirty: Mutex::new(false),
             api_config,
@@ -921,6 +933,14 @@ pub async fn translate_string(
                     .to_string()
             })?
         }
+        ProviderType::Baidu => {
+            // Baidu doesn't use a single API key; credentials checked below
+            String::new()
+        }
+        ProviderType::Youdao => {
+            // Youdao doesn't use a single API key; credentials checked below
+            String::new()
+        }
     };
 
     // 保持默认语言兜底，避免前端漏传参数导致请求失败。
@@ -948,6 +968,32 @@ pub async fn translate_string(
         }
         ProviderType::DeepL => {
             let provider = DeepLProvider::new(api_key);
+            provider
+                .translate(&text, &resolved_source, &resolved_target, proxy_config.as_ref())
+                .await
+                .map_err(|e| e.to_string())?
+        }
+        ProviderType::Baidu => {
+            let app_id = state.baidu_app_id.lock().map_err(|e| e.to_string())?
+                .clone()
+                .ok_or_else(|| "Baidu AppId not set".to_string())?;
+            let key = state.baidu_key.lock().map_err(|e| e.to_string())?
+                .clone()
+                .ok_or_else(|| "Baidu Key not set".to_string())?;
+            let provider = BaiduProvider::new(app_id, key);
+            provider
+                .translate(&text, &resolved_source, &resolved_target, proxy_config.as_ref())
+                .await
+                .map_err(|e| e.to_string())?
+        }
+        ProviderType::Youdao => {
+            let app_key = state.youdao_app_key.lock().map_err(|e| e.to_string())?
+                .clone()
+                .ok_or_else(|| "Youdao AppKey not set".to_string())?;
+            let secret_key = state.youdao_secret_key.lock().map_err(|e| e.to_string())?
+                .clone()
+                .ok_or_else(|| "Youdao SecretKey not set".to_string())?;
+            let provider = YoudaoProvider::new(app_key, secret_key);
             provider
                 .translate(&text, &resolved_source, &resolved_target, proxy_config.as_ref())
                 .await
@@ -993,6 +1039,34 @@ pub async fn set_deepl_api_key(
     Ok(())
 }
 
+/// 设置（或清空）运行期百度翻译 AppId 和 Key。
+#[tauri::command]
+pub async fn set_baidu_api_key(
+    state: tauri::State<'_, Arc<AppState>>,
+    app_id: String,
+    key: String,
+) -> Result<(), String> {
+    let mut aid = state.baidu_app_id.lock().map_err(|e| e.to_string())?;
+    *aid = if app_id.is_empty() { None } else { Some(app_id) };
+    let mut k = state.baidu_key.lock().map_err(|e| e.to_string())?;
+    *k = if key.is_empty() { None } else { Some(key) };
+    Ok(())
+}
+
+/// 设置（或清空）运行期有道翻译 AppKey 和 SecretKey。
+#[tauri::command]
+pub async fn set_yooudao_api_key(
+    state: tauri::State<'_, Arc<AppState>>,
+    app_key: String,
+    secret_key: String,
+) -> Result<(), String> {
+    let mut ak = state.youdao_app_key.lock().map_err(|e| e.to_string())?;
+    *ak = if app_key.is_empty() { None } else { Some(app_key) };
+    let mut sk = state.youdao_secret_key.lock().map_err(|e| e.to_string())?;
+    *sk = if secret_key.is_empty() { None } else { Some(secret_key) };
+    Ok(())
+}
+
 /// 设置当前默认翻译提供方。
 #[tauri::command]
 pub async fn set_translation_provider(
@@ -1008,7 +1082,7 @@ pub async fn set_translation_provider(
 #[tauri::command]
 pub async fn get_translation_providers(
     state: tauri::State<'_, Arc<AppState>>,
-) -> Result<(String, Vec<String>, bool, bool), String> {
+) -> Result<(String, Vec<String>, bool, bool, bool, bool), String> {
     let current = state.current_provider.lock().map_err(|e| e.to_string())?;
     let openai_set = state
         .openai_api_key
@@ -1020,6 +1094,10 @@ pub async fn get_translation_providers(
         .lock()
         .map_err(|e| e.to_string())?
         .is_some();
+    let baidu_set = state.baidu_app_id.lock().map_err(|e| e.to_string())?.is_some()
+        && state.baidu_key.lock().map_err(|e| e.to_string())?.is_some();
+    let youdao_set = state.youdao_app_key.lock().map_err(|e| e.to_string())?.is_some()
+        && state.youdao_secret_key.lock().map_err(|e| e.to_string())?.is_some();
 
     Ok((
         current.to_string(),
@@ -1029,6 +1107,8 @@ pub async fn get_translation_providers(
             .collect(),
         openai_set,
         deepl_set,
+        baidu_set,
+        youdao_set,
     ))
 }
 
@@ -2540,6 +2620,82 @@ pub async fn compare_source_dest(
     Ok(count)
 }
 
+/// Apply a toolbox text transformation to selected strings.
+///
+/// `tool`: One of "uppercase_all", "lowercase_all", "uppercase_first", "title_case",
+///         "fix_alias", "add_header", "trim"
+/// `target`: "source" | "translation" | "both"
+/// `ids`: String IDs to operate on (empty = all strings)
+/// `header_text`: Header prefix for "add_header" tool
+#[tauri::command]
+pub async fn toolbox_transform(
+    state: tauri::State<'_, Arc<AppState>>,
+    tool: String,
+    target: String,
+    ids: Vec<u32>,
+    header_text: Option<String>,
+) -> Result<u32, String> {
+    let tool_type = xt_core::toolbox::ToolType::from_str(&tool)
+        .ok_or_else(|| format!("Unknown tool: {}", tool))?;
+
+    let mut strings = state.strings.lock().map_err(|e| e.to_string())?;
+    let mut count = 0u32;
+
+    let apply_to_source = target == "source" || target == "both";
+    let apply_to_translation = target == "translation" || target == "both";
+
+    let id_set: Option<std::collections::HashSet<u32>> = if ids.is_empty() {
+        None
+    } else {
+        Some(ids.iter().copied().collect())
+    };
+
+    for sk in strings.iter_mut() {
+        if let Some(ref id_set) = id_set {
+            if !id_set.contains(&sk.id) {
+                continue;
+            }
+        }
+        if sk.params.is_locked() {
+            continue;
+        }
+
+        let mut modified = false;
+
+        if apply_to_source {
+            let new_source = xt_core::toolbox::apply_tool(
+                tool_type, &sk.source, &sk.source, header_text.as_deref(),
+            );
+            if new_source != sk.source {
+                sk.source = new_source;
+                modified = true;
+            }
+        }
+
+        if apply_to_translation {
+            let new_trans = xt_core::toolbox::apply_tool(
+                tool_type, &sk.translation, &sk.source, header_text.as_deref(),
+            );
+            if new_trans != sk.translation {
+                sk.translation = new_trans;
+                sk.params.set(SkyStringParams::TRANSLATED, true);
+                sk.params.set(SkyStringParams::INCOMPLETE_TRANS, false);
+                modified = true;
+            }
+        }
+
+        if modified {
+            count += 1;
+        }
+    }
+
+    if count > 0 {
+        *state.is_dirty.lock().map_err(|e| e.to_string())? = true;
+    }
+
+    Ok(count)
+}
+
 /// Check alias integrity between source and translation.
 ///
 /// Extracts `<Alias=...>` style tags from both source and translation,
@@ -2607,6 +2763,10 @@ fn config_to_dto(cfg: &xt_core::config::AppConfig) -> AppConfigDto {
     AppConfigDto {
         openai_api_key: cfg.openai_api_key.clone(),
         deepl_api_key: cfg.deepl_api_key.clone(),
+        baidu_app_id: cfg.baidu_app_id.clone(),
+        baidu_key: cfg.baidu_key.clone(),
+        youdao_app_key: cfg.youdao_app_key.clone(),
+        youdao_secret_key: cfg.youdao_secret_key.clone(),
         current_provider: cfg.current_provider.clone(),
         theme: cfg.theme.clone(),
         language: cfg.language.clone(),
@@ -2622,6 +2782,10 @@ fn dto_to_config(dto: &AppConfigDto) -> xt_core::config::AppConfig {
     xt_core::config::AppConfig {
         openai_api_key: dto.openai_api_key.clone(),
         deepl_api_key: dto.deepl_api_key.clone(),
+        baidu_app_id: dto.baidu_app_id.clone(),
+        baidu_key: dto.baidu_key.clone(),
+        youdao_app_key: dto.youdao_app_key.clone(),
+        youdao_secret_key: dto.youdao_secret_key.clone(),
         current_provider: dto.current_provider.clone(),
         theme: dto.theme.clone(),
         language: dto.language.clone(),
@@ -3414,14 +3578,24 @@ pub async fn start_string_batch_translate(
     let provider_type = *state.current_provider.lock().map_err(|e| e.to_string())?;
     let openai_key = state.openai_api_key.lock().map_err(|e| e.to_string())?.clone();
     let deepl_key = state.deepl_api_key.lock().map_err(|e| e.to_string())?.clone();
+    let baidu_app_id = state.baidu_app_id.lock().map_err(|e| e.to_string())?.clone();
+    let baidu_key = state.baidu_key.lock().map_err(|e| e.to_string())?.clone();
+    let youdao_app_key = state.youdao_app_key.lock().map_err(|e| e.to_string())?.clone();
+    let youdao_secret_key = state.youdao_secret_key.lock().map_err(|e| e.to_string())?.clone();
     let api_config = state.api_config.clone();
 
     match provider_type {
         ProviderType::OpenAI if openai_key.is_none() => {
-            return Err("请先配置 OpenAI API Key".to_string());
+            return Err("Please configure OpenAI API Key first".to_string());
         }
         ProviderType::DeepL if deepl_key.is_none() => {
-            return Err("请先配置 DeepL API Key".to_string());
+            return Err("Please configure DeepL API Key first".to_string());
+        }
+        ProviderType::Baidu if baidu_app_id.is_none() || baidu_key.is_none() => {
+            return Err("Please configure Baidu AppId/Key first".to_string());
+        }
+        ProviderType::Youdao if youdao_app_key.is_none() || youdao_secret_key.is_none() => {
+            return Err("Please configure Youdao AppKey/SecretKey first".to_string());
         }
         _ => {}
     }
@@ -3471,6 +3645,10 @@ pub async fn start_string_batch_translate(
             let provider_type = provider_type;
             let openai_key = openai_key.clone();
             let deepl_key = deepl_key.clone();
+            let baidu_app_id = baidu_app_id.clone();
+            let baidu_key = baidu_key.clone();
+            let youdao_app_key = youdao_app_key.clone();
+            let youdao_secret_key = youdao_secret_key.clone();
             let api_config = api_config.clone();
             let window = window.clone();
 
@@ -3482,6 +3660,10 @@ pub async fn start_string_batch_translate(
                     provider_type,
                     &openai_key,
                     &deepl_key,
+                    &baidu_app_id,
+                    &baidu_key,
+                    &youdao_app_key,
+                    &youdao_secret_key,
                     &api_config,
                 )
                 .await;
@@ -3560,6 +3742,10 @@ async fn translate_single_with_retry(
     provider_type: ProviderType,
     openai_key: &Option<String>,
     deepl_key: &Option<String>,
+    baidu_app_id: &Option<String>,
+    baidu_key: &Option<String>,
+    youdao_app_key: &Option<String>,
+    youdao_secret_key: &Option<String>,
     _api_config: &ApiTranslatorConfig,
 ) -> Result<String, String> {
     let mut delay = 1u64;
@@ -3575,6 +3761,20 @@ async fn translate_single_with_retry(
             ProviderType::DeepL => {
                 let key = deepl_key.as_ref().ok_or("No DeepL API key")?;
                 let provider = DeepLProvider::new(key.clone());
+                provider.translate(source, "", "", None).await
+                    .map_err(|e| e.to_string())
+            }
+            ProviderType::Baidu => {
+                let app_id = baidu_app_id.as_ref().ok_or("No Baidu AppId")?;
+                let key = baidu_key.as_ref().ok_or("No Baidu Key")?;
+                let provider = BaiduProvider::new(app_id.clone(), key.clone());
+                provider.translate(source, "", "", None).await
+                    .map_err(|e| e.to_string())
+            }
+            ProviderType::Youdao => {
+                let app_key = youdao_app_key.as_ref().ok_or("No Youdao AppKey")?;
+                let secret_key = youdao_secret_key.as_ref().ok_or("No Youdao SecretKey")?;
+                let provider = YoudaoProvider::new(app_key.clone(), secret_key.clone());
                 provider.translate(source, "", "", None).await
                     .map_err(|e| e.to_string())
             }

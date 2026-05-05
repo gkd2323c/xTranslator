@@ -211,6 +211,10 @@ pub enum ProviderType {
     OpenAI,
     /// DeepL API（自动检测免费版/专业版）
     DeepL,
+    /// 百度翻译 API
+    Baidu,
+    /// 有道翻译 API
+    Youdao,
 }
 
 impl fmt::Display for ProviderType {
@@ -218,6 +222,8 @@ impl fmt::Display for ProviderType {
         match self {
             ProviderType::OpenAI => write!(f, "openai"),
             ProviderType::DeepL => write!(f, "deepl"),
+            ProviderType::Baidu => write!(f, "baidu"),
+            ProviderType::Youdao => write!(f, "youdao"),
         }
     }
 }
@@ -227,13 +233,15 @@ impl ProviderType {
     pub fn from_str(s: &str) -> Self {
         match s.to_lowercase().as_str() {
             "deepl" => ProviderType::DeepL,
+            "baidu" => ProviderType::Baidu,
+            "youdao" => ProviderType::Youdao,
             _ => ProviderType::OpenAI,
         }
     }
 
     /// 获取所有可用 Provider 列表
     pub fn all() -> Vec<&'static str> {
-        vec!["openai", "deepl"]
+        vec!["openai", "deepl", "baidu", "youdao"]
     }
 }
 
@@ -256,3 +264,11 @@ pub use openai::OpenAIProvider;
 /// DeepL 翻译 Provider
 pub mod deepl;
 pub use deepl::DeepLProvider;
+
+/// 百度翻译 Provider
+pub mod baidu;
+pub use baidu::BaiduProvider;
+
+/// 有道翻译 Provider
+pub mod youdao;
+pub use youdao::YoudaoProvider;

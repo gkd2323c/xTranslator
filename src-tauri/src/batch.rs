@@ -4,7 +4,7 @@ use tauri::Emitter;
 use xt_core::config::AppConfig;
 use xt_core::esp::parser::{EspParser, StringsFiles};
 use xt_core::strings::CodepageTable;
-use xt_core::translation_api::{DeepLProvider, OpenAIProvider, ProviderType, TranslationProvider};
+use xt_core::translation_api::{BaiduProvider, DeepLProvider, OpenAIProvider, ProviderType, TranslationProvider, YoudaoProvider};
 use xt_core::types::game_id::GameId;
 use xt_core::types::params::SkyStringParams;
 use xt_core::types::sky_string::SkyString;
@@ -406,6 +406,8 @@ async fn run_batch_translate(
     let api_key = match provider {
         ProviderType::OpenAI => std::env::var("XT_TRANSLATE_API_KEY").unwrap_or_default(),
         ProviderType::DeepL => std::env::var("XT_DEEPL_API_KEY").unwrap_or_default(),
+        ProviderType::Baidu => std::env::var("XT_BAIDU_API_APP_ID").unwrap_or_default(),
+        ProviderType::Youdao => std::env::var("XT_YOUDAO_API_APP_KEY").unwrap_or_default(),
     };
 
     let source_api_code = "EN";
@@ -563,6 +565,36 @@ async fn run_batch_translate(
                     } else {
                         let proxy_config = AppConfig::load(&crate::commands::config_dir()).ok();
                         let provider = DeepLProvider::new(api_key.clone());
+                        provider
+                            .translate(source_text, source_api_code, target_api_code, proxy_config.as_ref())
+                            .await
+                            .map_err(|e| e.to_string())
+                    }
+                }
+                ProviderType::Baidu => {
+                    let config = AppConfig::load(&crate::commands::config_dir()).ok();
+                    let app_id = config.as_ref().and_then(|c| c.baidu_app_id.clone()).unwrap_or_default();
+                    let key = config.as_ref().and_then(|c| c.baidu_key.clone()).unwrap_or_default();
+                    if app_id.is_empty() || key.is_empty() {
+                        Err("Baidu AppId/Key not set".to_string())
+                    } else {
+                        let proxy_config = config;
+                        let provider = BaiduProvider::new(app_id, key);
+                        provider
+                            .translate(source_text, source_api_code, target_api_code, proxy_config.as_ref())
+                            .await
+                            .map_err(|e| e.to_string())
+                    }
+                }
+                ProviderType::Youdao => {
+                    let config = AppConfig::load(&crate::commands::config_dir()).ok();
+                    let app_key = config.as_ref().and_then(|c| c.youdao_app_key.clone()).unwrap_or_default();
+                    let secret_key = config.as_ref().and_then(|c| c.youdao_secret_key.clone()).unwrap_or_default();
+                    if app_key.is_empty() || secret_key.is_empty() {
+                        Err("Youdao AppKey/SecretKey not set".to_string())
+                    } else {
+                        let proxy_config = config;
+                        let provider = YoudaoProvider::new(app_key, secret_key);
                         provider
                             .translate(source_text, source_api_code, target_api_code, proxy_config.as_ref())
                             .await

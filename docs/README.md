@@ -26,6 +26,7 @@ This directory is organized by reader need. Start with the repository entry poin
 |----------|------------|
 | [`feature_comparison.md`](feature_comparison.md) | Gap analysis against Delphi xTranslator and next-priority candidates |
 | [`toolchain_and_roadmap.md`](toolchain_and_roadmap.md) | Dependency map, warning-cleanup notes, and v2 roadmap |
+| [`development_roadmap.md`](development_roadmap.md) | Comprehensive Delphi parity gaps and development roadmap with priorities and effort estimates |
 | [`delphi_analysis.md`](delphi_analysis.md) | Delphi source findings mapped to Rust implementation areas |
 | [`../legacy/original-delphi/README.md`](../legacy/original-delphi/README.md) | Original Delphi project archive layout |
 

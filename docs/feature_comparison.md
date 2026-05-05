@@ -14,7 +14,7 @@
 | 开发时间 | 10+ 年 | ~10 周 | - |
 | 数据格式解析 | 全格式 | 核心格式 | ~95% |
 | 编码系统 | 完整 | 完整 | ~90% |
-| 翻译工作流 | 完整 | 核心就绪 | ~75% |
+| 翻译工作流 | 完整 | 核心就绪 | ~80% |
 | UI 交互 | 完整 VCL | Tauri 基础 | ~65% |
 | 辅助工具 | 完整 | 部分 | ~40% |
 
@@ -61,7 +61,7 @@
 |------|------|----------|--------|------|
 | **字典应用 (apply)** | ✅ ID+EDID+词汇匹配+状态语义 | ✅ 共享 matcher + Delphi 状态语义 | ~90% | exact/EDID/normalized/vocab 已实现；pending、oldData、warning、tagOnly、stringID 语义有回归测试覆盖；仍需 Delphi 实机对照确认 |
 | **启发式搜索** | ✅ Levenshtein/LCS | ✅ | ~80% | xt-core heuristic 模块，Levenshtein+LCS+LCP，IPC+UI 已集成 |
-| **翻译 API** | ✅ DeepL/MS/Google/OpenAI/Youdao/Baidu | ✅ OpenAI + DeepL + API config | ~70% | OpenAIProvider + DeepLProvider 已就绪；ApiTranslator.txt 配置解析 + 语言代码映射 + provider 元数据 IPC；CRLF 保护（`<L_F>` 标签）已集成到两个 provider |
+| **翻译 API** | ✅ DeepL/MS/Google/OpenAI/Youdao/Baidu | ✅ OpenAI + DeepL + Baidu + Youdao + API config | ~75% | OpenAIProvider + DeepLProvider + BaiduProvider + YoudaoProvider 已就绪（内联 MD5 签名）；待补齐 MS Azure / Google |
 | **字符串编辑** | ✅ 行内+窗口编辑 | ⚠️ 基础编辑 | ~70% | EditorPanel：文本编辑、Ctrl+Enter 保存、状态切换、启发式搜索、翻译 API |
 | **正则搜索/替换** | ✅ PCRE+批量 | ✅ Regex filter toggle + Replace All | ~80% | Regex toggle + Replace All with confirmation + capture groups ($1/$2) |
 | **直接搜索** | ✅ | ✅ 实时筛选 | ~80% | 客户端 filter+sort：文本/Regex/状态/Record 类型/排序，零延迟，76K+ 条 |
