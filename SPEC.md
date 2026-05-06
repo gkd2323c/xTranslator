@@ -396,6 +396,12 @@ T85|x|Baidu/Youdao API key set/get commands + config persistence|G6,G7
 T86|x|Toolbox: 7 text transformation tools (uppercase/lowercase/title case/fix alias/add header/trim)|G7
 T87|x|Toolbox IPC command (toolbox_transform) with tag-aware word splitting|G7
 T88|x|ToolboxDialog UI component + MenuBar integration|G7
+T89|x|MS Azure Translator provider (Ocp-Apim-Subscription-Key, POST JSON array)|G6
+T90|x|Google Translate provider (keyless public endpoint, nested JSON response)|G6
+T91|x|App startup: restore Baidu/Youdao/Azure API keys from config.json|G6,G7
+T92|x|Header Processor core engine: rule struct, INI load/save, match, apply|G7
+T93|x|Header Processor IPC commands: load/list/toggle/apply/save|G7
+T94|x|HeaderProcessorPanel bottom tab: load rules, toggle enable, apply to strings|G7
 
 ## §B Bugs
 

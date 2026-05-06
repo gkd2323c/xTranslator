@@ -22,6 +22,7 @@ use commands::{
     load_config, save_config, get_api_config, load_data_configs, rtl_reverse, AppState,
     spell_check_load, spell_check_unload, spell_check_toggle, spell_check_config,
     spell_check_text, spell_check_suggestions, spell_check_ignore,
+    header_rules_load, header_rules_list, header_rules_toggle, header_rules_apply, header_rules_save,
     save_esp, finalize_esp, delocalize_esp, decompile_pex, get_esp_header, shape_arabic, deshape_arabic,
 };
 use std::sync::Arc;
@@ -121,6 +122,12 @@ fn main() {
             spell_check_text,
             spell_check_suggestions,
             spell_check_ignore,
+            // Header Processor
+            header_rules_load,
+            header_rules_list,
+            header_rules_toggle,
+            header_rules_apply,
+            header_rules_save,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

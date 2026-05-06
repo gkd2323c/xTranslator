@@ -23,6 +23,7 @@ import { HeuristicPanel } from "./components/bottom/HeuristicPanel";
 import { EspTreePanel } from "./components/bottom/EspTreePanel";
 import { QuestsPanel } from "./components/bottom/QuestsPanel";
 import { LogPanel } from "./components/bottom/LogPanel";
+import { HeaderProcessorPanel } from "./components/bottom/HeaderProcessorPanel";
 import { StringTable } from "./components/StringTable";
 import { EditorPanel } from "./components/EditorPanel";
 import { BatchTranslateBar } from "./components/BatchTranslateBar";
@@ -206,7 +207,7 @@ function App() {
               <div className="app-bottom-splitter" />
               <div className="app-bottom-panel">
                 <div className="bottom-panel-tabs">
-                  {(["home", "vocabulary", "heuristic", "espTree", "pex", "quests", "dialogs", "log"] as const).map((tab) => (
+                  {(["home", "vocabulary", "heuristic", "espTree", "pex", "quests", "dialogs", "log", "headerProc"] as const).map((tab) => (
                     <button
                       key={tab}
                       className={`bottom-tab ${activeBottomTab === tab ? "bottom-tab-active" : ""}`}
@@ -218,8 +219,9 @@ function App() {
                        tab === "espTree" ? t("bottomTabs.espTree", { defaultValue: "ESP Tree" }) :
                        tab === "pex" ? t("bottomTabs.pex", { defaultValue: "PEX" }) :
                        tab === "quests" ? t("bottomTabs.quests", { defaultValue: "Quests" }) :
-                       tab === "dialogs" ? t("bottomTabs.dialogs", { defaultValue: "Dialogs" }) :
-                       t("bottomTabs.log", { defaultValue: "Log" })}
+                        tab === "dialogs" ? t("bottomTabs.dialogs", { defaultValue: "Dialogs" }) :
+                        tab === "headerProc" ? "Header Proc" :
+                        t("bottomTabs.log", { defaultValue: "Log" })}
                     </button>
                   ))}
                   <button
@@ -239,6 +241,7 @@ function App() {
                   {activeBottomTab === "quests" && <QuestsPanel />}
                   {activeBottomTab === "dialogs" && <DialogView />}
                   {activeBottomTab === "log" && <LogPanel />}
+                  {activeBottomTab === "headerProc" && <HeaderProcessorPanel />}
                 </div>
               </div>
             </>

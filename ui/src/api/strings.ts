@@ -225,6 +225,60 @@ export async function spellCheckIgnore(word: string, ignorePath: string): Promis
   return invoke("spell_check_ignore", { word, ignorePath });
 }
 
+// ── Header Processor ──────────────────────────────────────────────
+
+export interface HeaderRuleDto {
+  index: number;
+  header: string;
+  r_sig: string;
+  f_sig: string;
+  enabled: boolean;
+  in_edid: string[];
+  ex_edid: string[];
+  no_kw: boolean;
+  any_kw: boolean;
+  has_component: boolean;
+  include_keywords: HeaderKeywordDto[];
+  pre_process: boolean;
+  full_replace: boolean;
+  include_or: boolean;
+  is_fallback: boolean;
+  regex: string | null;
+  tag_id: number;
+}
+
+export interface HeaderKeywordDto {
+  kw_type: string;
+  name: string;
+  form_id: number;
+}
+
+export interface HeaderApplyResult {
+  total_rules: number;
+  enabled_rules: number;
+  strings_matched: number;
+}
+
+export async function headerRulesLoad(path: string): Promise<HeaderRuleDto[]> {
+  return invoke("header_rules_load", { path });
+}
+
+export async function headerRulesList(): Promise<HeaderRuleDto[]> {
+  return invoke("header_rules_list");
+}
+
+export async function headerRulesToggle(index: number, enabled: boolean): Promise<void> {
+  return invoke("header_rules_toggle", { index, enabled });
+}
+
+export async function headerRulesApply(): Promise<HeaderApplyResult> {
+  return invoke("header_rules_apply");
+}
+
+export async function headerRulesSave(path: string): Promise<void> {
+  return invoke("header_rules_save", { path });
+}
+
 export async function setTranslationProvider(provider: string): Promise<void> {
   await invoke("set_translation_provider", { provider });
   saveConfig({ current_provider: provider }).catch(() => {});

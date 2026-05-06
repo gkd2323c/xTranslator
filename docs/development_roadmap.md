@@ -12,7 +12,7 @@
 | 优先级 | 数量 | 预估总工作量 | 说明 |
 |--------|------|-------------|------|
 | P0 - 影响使用体验 | 4 项 | ~1 周 | 缺失的翻译 API 提供商 |
-| P1 - 核心功能补全 | 3 项 | ~5-6 周 | Header Processor 规则模板系统 |
+| P1 - 核心功能补全 | ~~3~~ 1 项 | ~5-6 周 | Header Processor 规则模板系统（核心引擎已完成 ✅） |
 | P2 - 实用工具增强 | ~~4~~ 3 项 | ~1.5 周 | ~~拼写检查、工具箱、SST 合并~~ 工具箱已完成 ✅ |
 | P3 - UI/UX 完善 | 3 项 | ~1 周 | RTL 预览、HTML 导出、协作系统 |
 | P4 - 质量保证 | 4 项 | ~3-4 周 | 跨游戏验证、Delphi 交叉验证 |
@@ -37,38 +37,40 @@
 
 ## P1 — Header Processor / 规则模板系统
 
-**当前状态：** Rust `BatchPanel` 只有基础的多文件翻译/导出，缺少规则引擎。这是 Delphi 原版最重量级的功能模块（合计 ~2,555 行 Pascal）。
+**当前状态：** Rust `header_processor.rs` 核心引擎已完成（规则匹配、INI 加载/保存、apply 流程）。
+`HeaderProcessorPanel` 提供了基础的加载/列表/禁用/应用 UI。
+Delphi 原版更复杂的 Editor UI（VirtualStringTree、关键词列表编辑、正则编辑、拖放排序、模板系统、预处理选项）待后续实现。
 
 ### P1.1 规则编辑器（核心）— `FormData` 对应
 
-| 功能 | 说明 | 预估 |
+| 功能 | 说明 | 状态 |
 |------|------|------|
-| 分层规则树 | `VirtualStringTree` 节点（rSig/fSig/关键词/行为标记），可拖拽排序，复选框启用/禁用 | 1 周 |
-| 规则定义 | 每条规则包含：record_sig、field_sig、include/exclude EDID 关键词列表、tag_id、header 文本、正则、布尔标记（noKW/anyKW/hasComponent/preProcess/fullReplace/includeOr/isFallback） | 3-4 天 |
-| 文件 I/O | INI 格式 `[StartRule]...[EndRule]` section，版本跟踪，按游戏默认规则（`Data/<Game>/HeaderProcessor/*.txt`） | 2-3 天 |
-| 搜索/过滤 | 按 header 文本、记录名、关键词过滤规则 | 1-2 天 |
-| 批量执行 | 对加载的字符串执行已启用规则，输出翻译/转换结果 | 2-3 天 |
+| 分层规则树 | `VirtualStringTree` 节点，可拖拽排序，复选框启用/禁用 | 基础实现：列表 + 勾选 |
+| 规则定义 | record_sig、field_sig、关键词列表、tag_id、header 文本、正则、布尔标记 | ✅ 核心完成 |
+| 文件 I/O | INI 格式 `[StartRule]...[EndRule]`，与 Delphi 兼容 | ✅ 完成（`from_ini_text`/`to_ini_text`） |
+| 搜索/过滤 | 按 header 文本、记录名、关键词过滤规则 | 待实现 |
+| 批量执行 | 对加载的字符串执行已启用规则 | ✅ 完成（`header_rules_apply` IPC） |
 
 ### P1.2 模板管理器 — `Templates` 对应
 
-| 功能 | 说明 | 预估 |
+| 功能 | 说明 | 状态 |
 |------|------|------|
-| 命名模板 | 保存/加载规则的启用/禁用/回退状态作为命名模板 | 2 天 |
-| 拖放编辑 | 左右列表拖放管理关键词（启用/禁用/回退三类） | 1 天 |
+| 命名模板 | 保存/加载规则的启用/禁用/回退状态作为命名模板 | 待实现 |
+| 拖放编辑 | 左右列表拖放管理关键词 | 待实现 |
 
 ### P1.3 批量向导 — `HeaderWizard` 对应
 
-| 功能 | 说明 | 预估 |
+| 功能 | 说明 | 状态 |
 |------|------|------|
-| 多文件批处理 | 选定源文件夹和语言，按模板批量处理 ESP | 2-3 天 |
-| BSA 注入器 | `tinjector` 类：bsaName + filesName + 按语言限制 | 2-3 天 |
-| MCM 模式 | MCM 菜单文件翻译切换（`mcmRecName = '*MCM'`） | 1-2 天 |
+| 多文件批处理 | 选定源文件夹和语言，按模板批量处理 ESP | 待实现 |
+| BSA 注入器 | `tinjector` 类：bsaName + filesName + 按语言限制 | 待实现 |
+| MCM 模式 | MCM 菜单文件翻译切换 | 待实现 |
 
 ### P1.4 预处理选项 — `preProcessingOpts` 对应
 
-| 功能 | 说明 | 预估 |
+| 功能 | 说明 | 状态 |
 |------|------|------|
-| 处理选项 UI | `key=value` 网格编辑器（布尔开关 + sTemplate 下拉），剪贴板复制/粘贴 | 1 天 |
+| 处理选项 UI | `key=value` 网格编辑器 | 待实现 |
 
 ---
 
@@ -225,7 +227,7 @@ Phase F (按需): P5 低优先级
 | Delphi 文件 | 行数 | 功能 | Rust 覆盖 |
 |------------|------|------|----------|
 | `TESVT_TranslatorApi.pas` | 1,280 | 8 个翻译 API 提供商 | 4/8 (OpenAI, DeepL, Baidu, Youdao) |
-| `TESVT_FormData.pas` | 1,774 | Header Processor 规则编辑器 | 未实现 (P1) |
+| `TESVT_FormData.pas` | 1,774 | Header Processor 规则编辑器 | 核心引擎+基础 UI 已完成 (header_processor.rs) |
 | `TESVT_FastSearch.pas` | 708 | 30+ 比较器 + 二分搜索 | 部分 (matching.rs 覆盖核心) |
 | `TESVT_SpellCheck.pas` | 499 | Hunspell/MS Word 拼写检查 | 未实现 |
 | `TESVT_HeaderWizard.pas` | 493 | 多文件批处理向导 | 未实现 (P1) |

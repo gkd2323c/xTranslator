@@ -7,6 +7,7 @@ pub mod config;
 pub mod data_config;
 pub mod esp;
 pub mod fuz;
+pub mod header_processor;
 pub mod heuristic;
 pub mod mcm;
 pub mod matching;

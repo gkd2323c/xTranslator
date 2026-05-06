@@ -75,6 +75,8 @@ pub struct AppState {
     pub codepage_table: Mutex<Option<CodepageTable>>,
     /// 拼写检查器
     pub spell_checker: Mutex<xt_core::spell::SpellChecker>,
+    /// Header Processor rule set
+    pub header_rules: Mutex<xt_core::header_processor::HeaderRuleSet>,
 }
 
 impl AppState {
@@ -109,6 +111,7 @@ impl AppState {
             esp_file: Mutex::new(None),
             codepage_table: Mutex::new(None),
             spell_checker: Mutex::new(xt_core::spell::SpellChecker::new()),
+            header_rules: Mutex::new(xt_core::header_processor::HeaderRuleSet::new()),
         }
     }
 }
@@ -2835,6 +2838,116 @@ pub async fn spell_check_ignore(
     let mut checker = state.spell_checker.lock().map_err(|e| e.to_string())?;
     checker.add_ignore(&word);
     checker.save_ignore_list(&ignore_path).map_err(|e| e.to_string())
+}
+
+// ── Header Processor Commands ──────────────────────────────────────
+
+use xt_core::header_processor::{HeaderRuleDto, HeaderApplyResult};
+
+/// Load header processor rules from an INI file.
+#[tauri::command]
+pub async fn header_rules_load(
+    state: tauri::State<'_, Arc<AppState>>,
+    path: String,
+) -> Result<Vec<HeaderRuleDto>, String> {
+    let text = std::fs::read_to_string(&path)
+        .map_err(|e| format!("Failed to read rules file: {}", e))?;
+    let rule_set = xt_core::header_processor::HeaderRuleSet::from_ini_text(&text);
+    let mut dtos: Vec<HeaderRuleDto> = rule_set.rules.iter().enumerate().map(|(i, r)| {
+        let mut d = HeaderRuleDto::from(r);
+        d.index = i;
+        d
+    }).collect();
+    *state.header_rules.lock().map_err(|e| e.to_string())? = rule_set;
+    Ok(dtos)
+}
+
+/// Get current loaded rules.
+#[tauri::command]
+pub async fn header_rules_list(
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<Vec<HeaderRuleDto>, String> {
+    let rules = state.header_rules.lock().map_err(|e| e.to_string())?;
+    Ok(rules.rules.iter().enumerate().map(|(i, r)| {
+        let mut d = HeaderRuleDto::from(r);
+        d.index = i;
+        d
+    }).collect())
+}
+
+/// Toggle a rule's enabled state by index.
+#[tauri::command]
+pub async fn header_rules_toggle(
+    state: tauri::State<'_, Arc<AppState>>,
+    index: usize,
+    enabled: bool,
+) -> Result<(), String> {
+    let mut rules = state.header_rules.lock().map_err(|e| e.to_string())?;
+    if let Some(rule) = rules.rules.get_mut(index) {
+        rule.enabled = enabled;
+    }
+    Ok(())
+}
+
+/// Apply all enabled header rules to loaded strings.
+/// Returns count of strings that matched at least one rule.
+#[tauri::command]
+pub async fn header_rules_apply(
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<HeaderApplyResult, String> {
+    let rules = state.header_rules.lock().map_err(|e| e.to_string())?;
+    let mut strings = state.strings.lock().map_err(|e| e.to_string())?;
+
+    let total = rules.rules.len();
+    let enabled = rules.rules.iter().filter(|r| r.enabled).count();
+    let mut matched = 0u32;
+
+    for sk in strings.iter_mut() {
+        if sk.params.is_locked() || sk.params.is_translated() {
+            continue;
+        }
+        // Extract record/field sigs and EDID from SkyString
+        let record_sig = String::from_utf8_lossy(&sk.record_sig).to_string();
+        let field_sig = String::from_utf8_lossy(&sk.field_sig).to_string();
+        let edid = String::new(); // EDID not directly on SkyString in batch context
+        let form_id = 0u32; // SkyString doesn't directly expose form_id
+
+        if let Some(new_text) = rules.apply_rules(
+            &record_sig,
+            &field_sig,
+            &edid,
+            form_id,
+            &[],
+            &sk.translation,
+            &sk.source,
+        ) {
+            sk.translation = new_text;
+            sk.params.set(SkyStringParams::INCOMPLETE_TRANS, true);
+            matched += 1;
+        }
+    }
+
+    if matched > 0 {
+        *state.is_dirty.lock().map_err(|e| e.to_string())? = true;
+    }
+
+    Ok(HeaderApplyResult {
+        total_rules: total,
+        enabled_rules: enabled,
+        strings_matched: matched,
+    })
+}
+
+/// Save current rules to INI file.
+#[tauri::command]
+pub async fn header_rules_save(
+    state: tauri::State<'_, Arc<AppState>>,
+    path: String,
+) -> Result<(), String> {
+    let rules = state.header_rules.lock().map_err(|e| e.to_string())?;
+    let text = rules.to_ini_text();
+    std::fs::write(&path, text)
+        .map_err(|e| format!("Failed to save rules: {}", e))
 }
 
 /// Check alias integrity between source and translation.
