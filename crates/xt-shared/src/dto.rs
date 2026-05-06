@@ -838,6 +838,32 @@ pub struct RecoveryInfo {
     pub cache_file_path: String,
 }
 
+/// Spell check fault word with byte positions.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SpellFaultDto {
+    pub word: String,
+    pub start_byte: usize,
+    pub end_byte: usize,
+}
+
+/// Spell check analysis result.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SpellCheckResultDto {
+    pub faults: Vec<SpellFaultDto>,
+    pub total_words: usize,
+    pub fault_ratio_locked: bool,
+    pub active: bool,
+}
+
+/// Spell check configuration.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SpellCheckConfigDto {
+    pub available_dictionaries: Vec<String>,
+    pub current_dictionary: Option<String>,
+    pub active: bool,
+    pub loaded: bool,
+}
+
 /// Response for applying translation cache recovery.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ApplyCacheResponse {

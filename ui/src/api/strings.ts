@@ -168,6 +168,56 @@ export async function toolboxTransform(
   return invoke("toolbox_transform", { tool, target, ids, headerText });
 }
 
+// ── Spell Check ────────────────────────────────────────────────────
+
+export interface SpellFaultDto {
+  word: string;
+  start_byte: number;
+  end_byte: number;
+}
+
+export interface SpellCheckResultDto {
+  faults: SpellFaultDto[];
+  total_words: number;
+  fault_ratio_locked: boolean;
+  active: boolean;
+}
+
+export interface SpellCheckConfigDto {
+  available_dictionaries: string[];
+  current_dictionary: string | null;
+  active: boolean;
+  loaded: boolean;
+}
+
+export async function spellCheckLoad(dllPath: string, dictDir: string, dictName: string): Promise<SpellCheckConfigDto> {
+  return invoke("spell_check_load", { dllPath, dictDir, dictName });
+}
+
+export async function spellCheckUnload(): Promise<void> {
+  return invoke("spell_check_unload");
+}
+
+export async function spellCheckToggle(): Promise<boolean> {
+  return invoke("spell_check_toggle");
+}
+
+export async function spellCheckConfig(dictDir: string): Promise<SpellCheckConfigDto> {
+  return invoke("spell_check_config", { dictDir });
+}
+
+export async function spellCheckText(text: string): Promise<SpellCheckResultDto> {
+  return invoke("spell_check_text", { text });
+}
+
+export async function spellCheckSuggestions(word: string): Promise<string[]> {
+  return invoke("spell_check_suggestions", { word });
+}
+
+export async function spellCheckIgnore(word: string, ignorePath: string): Promise<void> {
+  return invoke("spell_check_ignore", { word, ignorePath });
+}
+
 export async function setTranslationProvider(provider: string): Promise<void> {
   await invoke("set_translation_provider", { provider });
   saveConfig({ current_provider: provider }).catch(() => {});

@@ -71,6 +71,8 @@ pub struct AppState {
     pub esp_file: Mutex<Option<xt_core::esp::record_tree::EspFile>>,
     /// Codepage 表（用于正确的字符串文件编码加载/写入）
     pub codepage_table: Mutex<Option<CodepageTable>>,
+    /// 拼写检查器
+    pub spell_checker: Mutex<xt_core::spell::SpellChecker>,
 }
 
 impl AppState {
@@ -103,6 +105,7 @@ impl AppState {
             batch_queue: Mutex::new(None),
             esp_file: Mutex::new(None),
             codepage_table: Mutex::new(None),
+            spell_checker: Mutex::new(xt_core::spell::SpellChecker::new()),
         }
     }
 }
@@ -2694,6 +2697,113 @@ pub async fn toolbox_transform(
     }
 
     Ok(count)
+}
+
+// ── Spell Check Commands ───────────────────────────────────────────
+
+use xt_shared::dto::{SpellCheckConfigDto, SpellCheckResultDto, SpellFaultDto};
+
+/// Load Hunspell DLL and dictionary for spell checking.
+#[tauri::command]
+pub async fn spell_check_load(
+    state: tauri::State<'_, Arc<AppState>>,
+    dll_path: String,
+    dict_dir: String,
+    dict_name: String,
+) -> Result<SpellCheckConfigDto, String> {
+    let mut checker = state.spell_checker.lock().map_err(|e| e.to_string())?;
+    checker.load(&dll_path, &dict_dir, &dict_name)?;
+    checker.config.active = true;
+
+    let config = checker.config.clone();
+    Ok(SpellCheckConfigDto {
+        available_dictionaries: xt_core::spell::SpellChecker::scan_dictionaries(&dict_dir),
+        current_dictionary: config.current_dictionary,
+        active: config.active,
+        loaded: config.loaded,
+    })
+}
+
+/// Unload the spell checker.
+#[tauri::command]
+pub async fn spell_check_unload(
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<(), String> {
+    let mut checker = state.spell_checker.lock().map_err(|e| e.to_string())?;
+    checker.unload();
+    Ok(())
+}
+
+/// Toggle spell check active state.
+#[tauri::command]
+pub async fn spell_check_toggle(
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<bool, String> {
+    let mut checker = state.spell_checker.lock().map_err(|e| e.to_string())?;
+    checker.config.active = !checker.config.active;
+    Ok(checker.config.active)
+}
+
+/// Get spell check configuration (available dictionaries, status).
+#[tauri::command]
+pub async fn spell_check_config(
+    state: tauri::State<'_, Arc<AppState>>,
+    dict_dir: String,
+) -> Result<SpellCheckConfigDto, String> {
+    let checker = state.spell_checker.lock().map_err(|e| e.to_string())?;
+    Ok(SpellCheckConfigDto {
+        available_dictionaries: xt_core::spell::SpellChecker::scan_dictionaries(&dict_dir),
+        current_dictionary: checker.config.current_dictionary.clone(),
+        active: checker.config.active,
+        loaded: checker.config.loaded,
+    })
+}
+
+/// Analyze text for spelling errors. Returns fault word positions.
+#[tauri::command]
+pub async fn spell_check_text(
+    state: tauri::State<'_, Arc<AppState>>,
+    text: String,
+) -> Result<SpellCheckResultDto, String> {
+    let mut checker = state.spell_checker.lock().map_err(|e| e.to_string())?;
+    let active = checker.is_active();
+    let result = checker.analyze(&text);
+    Ok(SpellCheckResultDto {
+        faults: result
+            .fault_words
+            .iter()
+            .map(|w| SpellFaultDto {
+                word: w.word.clone(),
+                start_byte: w.start_byte,
+                end_byte: w.end_byte,
+            })
+            .collect(),
+        total_words: result.total_words,
+        fault_ratio_locked: result.fault_ratio_locked,
+        active,
+    })
+}
+
+/// Get spelling suggestions for a word.
+#[tauri::command]
+pub async fn spell_check_suggestions(
+    state: tauri::State<'_, Arc<AppState>>,
+    word: String,
+) -> Result<Vec<String>, String> {
+    let checker = state.spell_checker.lock().map_err(|e| e.to_string())?;
+    Ok(checker.suggestions(&word))
+}
+
+/// Add a word to the spell check ignore list.
+#[tauri::command]
+pub async fn spell_check_ignore(
+    state: tauri::State<'_, Arc<AppState>>,
+    word: String,
+    ignore_path: String,
+) -> Result<(), String> {
+    let mut checker = state.spell_checker.lock().map_err(|e| e.to_string())?;
+    checker.add_ignore(&word);
+    checker.save_ignore_list(&ignore_path).map_err(|e| e.to_string())
 }
 
 /// Check alias integrity between source and translation.

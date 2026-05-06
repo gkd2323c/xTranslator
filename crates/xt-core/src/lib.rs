@@ -14,6 +14,7 @@ pub mod md5;
 pub mod normalization;
 pub mod pex;
 pub mod rtl;
+pub mod spell;
 pub mod sqlite_cache;
 pub mod sst;
 pub mod strings;

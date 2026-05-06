@@ -20,6 +20,8 @@ use commands::{
     scan_fuz_directory, set_deepl_api_key, set_openai_api_key, set_baidu_api_key, set_yooudao_api_key, set_translation_provider,
     start_batch_export, start_batch_translate, tcsc_convert, tcsc_batch_convert, translate_string, update_translation,
     load_config, save_config, get_api_config, load_data_configs, rtl_reverse, AppState,
+    spell_check_load, spell_check_unload, spell_check_toggle, spell_check_config,
+    spell_check_text, spell_check_suggestions, spell_check_ignore,
     save_esp, finalize_esp, delocalize_esp, decompile_pex, get_esp_header, shape_arabic, deshape_arabic,
 };
 use std::sync::Arc;
@@ -109,7 +111,15 @@ fn main() {
             discard_translation_cache,
             // String-level batch translation
             start_string_batch_translate,
-            cancel_string_batch_translate
+            cancel_string_batch_translate,
+            // Spell check
+            spell_check_load,
+            spell_check_unload,
+            spell_check_toggle,
+            spell_check_config,
+            spell_check_text,
+            spell_check_suggestions,
+            spell_check_ignore,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
