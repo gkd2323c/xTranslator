@@ -239,6 +239,7 @@ export interface HeaderRuleDto {
   any_kw: boolean;
   has_component: boolean;
   include_keywords: HeaderKeywordDto[];
+  exclude_keywords: HeaderKeywordDto[];
   pre_process: boolean;
   full_replace: boolean;
   include_or: boolean;
@@ -277,6 +278,104 @@ export async function headerRulesApply(): Promise<HeaderApplyResult> {
 
 export async function headerRulesSave(path: string): Promise<void> {
   return invoke("header_rules_save", { path });
+}
+
+export async function headerRulesDelete(index: number): Promise<HeaderRuleDto[]> {
+  return invoke("header_rules_delete", { index });
+}
+
+export async function headerRulesMove(index: number, direction: "up" | "down"): Promise<HeaderRuleDto[]> {
+  return invoke("header_rules_move", { index, direction });
+}
+
+export async function headerRulesUpdate(index: number, field: string, value: string): Promise<HeaderRuleDto[]> {
+  return invoke("header_rules_update", { index, field, value });
+}
+
+export async function headerRulesAdd(): Promise<HeaderRuleDto[]> {
+  return invoke("header_rules_add");
+}
+
+// ── Template Manager ──────────────────────────────────────────────
+
+export interface TemplateInfo {
+  name: string;
+  rule_count: number;
+  enabled_count: number;
+}
+
+export async function headerTemplatesList(dir: string): Promise<TemplateInfo[]> {
+  return invoke("header_templates_list", { dir });
+}
+
+export async function headerTemplatesSave(dir: string, name: string): Promise<void> {
+  return invoke("header_templates_save", { dir, name });
+}
+
+export async function headerTemplatesLoad(dir: string, name: string): Promise<HeaderRuleDto[]> {
+  return invoke("header_templates_load", { dir, name });
+}
+
+export async function headerTemplatesDelete(dir: string, name: string): Promise<void> {
+  return invoke("header_templates_delete", { dir, name });
+}
+
+// ── Pre-Processing Options ─────────────────────────────────────────
+
+export interface PreProcOptsDto {
+  options: [string, string][];
+}
+
+export async function preprocOptsLoad(path: string): Promise<PreProcOptsDto> {
+  return invoke("preproc_opts_load", { path });
+}
+
+export async function preprocOptsList(): Promise<PreProcOptsDto> {
+  return invoke("preproc_opts_list");
+}
+
+export async function preprocOptsSet(key: string, value: string): Promise<PreProcOptsDto> {
+  return invoke("preproc_opts_set", { key, value });
+}
+
+export async function preprocOptsDelete(key: string): Promise<PreProcOptsDto> {
+  return invoke("preproc_opts_delete", { key });
+}
+
+export async function preprocOptsSave(path: string): Promise<void> {
+  return invoke("preproc_opts_save", { path });
+}
+
+// ── Header Batch Wizard ───────────────────────────────────────────
+
+export interface HeaderBatchConfig {
+  source_dir: string;
+  game_id: string;
+  data_dir: string;
+  create_backup: boolean;
+}
+
+export interface HeaderBatchProgress {
+  current: number;
+  total: number;
+  file_path: string;
+  strings_matched: number;
+  stage: string;
+  message: string;
+}
+
+export interface HeaderBatchComplete {
+  total_files: number;
+  success: number;
+  failed: number;
+  total_strings_matched: number;
+  duration_ms: number;
+  is_cancelled: boolean;
+  errors: string[];
+}
+
+export async function headerBatchProcess(config: HeaderBatchConfig): Promise<HeaderBatchComplete> {
+  return invoke("header_batch_process", { config });
 }
 
 export async function setTranslationProvider(provider: string): Promise<void> {

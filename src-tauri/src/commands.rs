@@ -77,6 +77,8 @@ pub struct AppState {
     pub spell_checker: Mutex<xt_core::spell::SpellChecker>,
     /// Header Processor rule set
     pub header_rules: Mutex<xt_core::header_processor::HeaderRuleSet>,
+    /// Header Processor pre-processing options
+    pub pre_processing_opts: Mutex<xt_core::header_processor::PreProcessingOpts>,
 }
 
 impl AppState {
@@ -112,6 +114,7 @@ impl AppState {
             codepage_table: Mutex::new(None),
             spell_checker: Mutex::new(xt_core::spell::SpellChecker::new()),
             header_rules: Mutex::new(xt_core::header_processor::HeaderRuleSet::new()),
+            pre_processing_opts: Mutex::new(xt_core::header_processor::PreProcessingOpts::default()),
         }
     }
 }
@@ -2853,7 +2856,7 @@ pub async fn header_rules_load(
     let text = std::fs::read_to_string(&path)
         .map_err(|e| format!("Failed to read rules file: {}", e))?;
     let rule_set = xt_core::header_processor::HeaderRuleSet::from_ini_text(&text);
-    let mut dtos: Vec<HeaderRuleDto> = rule_set.rules.iter().enumerate().map(|(i, r)| {
+    let dtos: Vec<HeaderRuleDto> = rule_set.rules.iter().enumerate().map(|(i, r)| {
         let mut d = HeaderRuleDto::from(r);
         d.index = i;
         d
@@ -2898,6 +2901,28 @@ pub async fn header_rules_apply(
     let rules = state.header_rules.lock().map_err(|e| e.to_string())?;
     let mut strings = state.strings.lock().map_err(|e| e.to_string())?;
 
+    // Build EDID lookup from record tree (if available)
+    let edid_map = {
+        let esp_file = state.esp_file.lock().map_err(|e| e.to_string())?;
+        if let Some(ref ef) = *esp_file {
+            let mut map = std::collections::HashMap::new();
+            fn collect_edids(groups: &[xt_core::esp::record_tree::EspGrup], map: &mut std::collections::HashMap<u32, String>) {
+                for grup in groups {
+                    for rec in &grup.records {
+                        if let Some(ref edid) = rec.editor_id {
+                            map.insert(rec.form_id, edid.clone());
+                        }
+                    }
+                    collect_edids(&grup.children, map);
+                }
+            }
+            collect_edids(&ef.top_level_grups, &mut map);
+            map
+        } else {
+            std::collections::HashMap::new()
+        }
+    };
+
     let total = rules.rules.len();
     let enabled = rules.rules.iter().filter(|r| r.enabled).count();
     let mut matched = 0u32;
@@ -2906,11 +2931,10 @@ pub async fn header_rules_apply(
         if sk.params.is_locked() || sk.params.is_translated() {
             continue;
         }
-        // Extract record/field sigs and EDID from SkyString
         let record_sig = String::from_utf8_lossy(&sk.record_sig).to_string();
         let field_sig = String::from_utf8_lossy(&sk.field_sig).to_string();
-        let edid = String::new(); // EDID not directly on SkyString in batch context
-        let form_id = 0u32; // SkyString doesn't directly expose form_id
+        let form_id = sk.esp_ptr.form_id;
+        let edid = edid_map.get(&form_id).cloned().unwrap_or_default();
 
         if let Some(new_text) = rules.apply_rules(
             &record_sig,
@@ -2938,6 +2962,183 @@ pub async fn header_rules_apply(
     })
 }
 
+// ── Header Batch Wizard Command ────────────────────────────────────
+
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
+pub struct HeaderBatchConfig {
+    pub source_dir: String,
+    pub game_id: String,
+    pub data_dir: String,
+    pub create_backup: bool,
+}
+
+#[derive(Clone, serde::Serialize)]
+pub struct HeaderBatchProgress {
+    pub current: usize,
+    pub total: usize,
+    pub file_path: String,
+    pub strings_matched: u32,
+    pub stage: String,
+    pub message: String,
+}
+
+#[derive(Clone, serde::Serialize)]
+pub struct HeaderBatchComplete {
+    pub total_files: usize,
+    pub success: usize,
+    pub failed: usize,
+    pub total_strings_matched: u32,
+    pub duration_ms: u64,
+    pub is_cancelled: bool,
+    pub errors: Vec<String>,
+}
+
+/// Process all ESP files in a directory with the currently loaded header rules.
+#[tauri::command]
+pub async fn header_batch_process(
+    window: tauri::Window,
+    state: tauri::State<'_, Arc<AppState>>,
+    config: HeaderBatchConfig,
+) -> Result<HeaderBatchComplete, String> {
+    let start = std::time::Instant::now();
+
+    // Collect ESP files
+    let dir = std::path::Path::new(&config.source_dir);
+    if !dir.is_dir() {
+        return Err("Source directory does not exist".into());
+    }
+    let mut esp_files: Vec<_> = std::fs::read_dir(dir)
+        .map_err(|e| format!("Read dir error: {}", e))?
+        .filter_map(|e| e.ok())
+        .map(|e| e.path())
+        .filter(|p| {
+            let ext = p.extension().and_then(|s| s.to_str()).unwrap_or("");
+            let ext_lower = ext.to_lowercase();
+            ext_lower == "esp" || ext_lower == "esm"
+        })
+        .collect();
+    esp_files.sort();
+
+    let game_id: xt_core::types::game_id::GameId = match config.game_id.as_str() {
+        "Skyrim" => xt_core::types::game_id::GameId::Skyrim,
+        "SkyrimSE" => xt_core::types::game_id::GameId::SkyrimSE,
+        "Fallout4" => xt_core::types::game_id::GameId::Fallout4,
+        "FalloutNV" => xt_core::types::game_id::GameId::FalloutNV,
+        "Fallout76" => xt_core::types::game_id::GameId::Fallout76,
+        "Starfield" => xt_core::types::game_id::GameId::Starfield,
+        _ => return Err(format!("Unknown game ID: {}", config.game_id)),
+    };
+    let rules = state.header_rules.lock().map_err(|e| e.to_string())?.clone();
+    let total = esp_files.len();
+    let mut success = 0usize;
+    let mut failed = 0usize;
+    let mut total_matched = 0u32;
+    let mut errors: Vec<String> = Vec::new();
+
+    for (i, path) in esp_files.iter().enumerate() {
+        let fname = path.file_name().unwrap_or_default().to_string_lossy().to_string();
+
+        let _ = window.emit("header-batch-progress", HeaderBatchProgress {
+            current: i + 1,
+            total,
+            file_path: fname.clone(),
+            strings_matched: total_matched,
+            stage: "parsing".into(),
+            message: format!("Processing {}/{}: {}", i + 1, total, fname),
+        });
+
+        // Parse ESP
+        let esp_data = std::fs::read(path)
+            .map_err(|e| format!("Failed to read {}: {}", fname, e))?;
+
+        let mut parser = match xt_core::esp::parser::EspParser::with_game(
+            std::path::Path::new(&config.data_dir), game_id,
+        ) {
+            Ok(p) => p,
+            Err(e) => {
+                failed += 1;
+                let err = format!("Parser init failed {}: {}", fname, e);
+                errors.push(err.clone());
+                continue;
+            }
+        };
+        parser.enable_esp_mode();
+
+        if let Err(e) = parser.parse(&mut std::io::Cursor::new(&esp_data)) {
+            failed += 1;
+            let err = format!("Parse failed {}: {}", fname, e);
+            errors.push(err.clone());
+            let _ = window.emit("header-batch-progress", HeaderBatchProgress {
+                current: i + 1, total, file_path: fname.clone(),
+                strings_matched: total_matched, stage: "error".into(), message: err,
+            });
+            continue;
+        }
+
+        let _ = window.emit("header-batch-progress", HeaderBatchProgress {
+            current: i + 1, total, file_path: fname.clone(),
+            strings_matched: total_matched, stage: "applying".into(),
+            message: format!("Applying rules to {} strings", parser.strings.len()),
+        });
+
+        // Build EDID map from record tree
+        let edid_map: std::collections::HashMap<u32, String> = {
+            let mut map = std::collections::HashMap::new();
+            fn collect_edids(grups: &[xt_core::esp::record_tree::EspGrup], map: &mut std::collections::HashMap<u32, String>) {
+                for grup in grups {
+                    for rec in &grup.records {
+                        if let Some(ref edid) = rec.editor_id {
+                            map.insert(rec.form_id, edid.clone());
+                        }
+                    }
+                    collect_edids(&grup.children, map);
+                }
+            }
+            collect_edids(&parser.record_tree, &mut map);
+            map
+        };
+
+        // Apply rules
+        let mut file_matched = 0u32;
+        for sk in &parser.strings {
+            if sk.params.is_locked() || sk.params.is_translated() {
+                continue;
+            }
+            let record_sig = String::from_utf8_lossy(&sk.record_sig).to_string();
+            let field_sig = String::from_utf8_lossy(&sk.field_sig).to_string();
+            let form_id = sk.esp_ptr.form_id;
+            let edid = edid_map.get(&form_id).cloned().unwrap_or_default();
+
+            if let Some(_new_text) = rules.apply_rules(
+                &record_sig, &field_sig, &edid, form_id, &[],
+                &sk.translation, &sk.source,
+            ) {
+                file_matched += 1;
+            }
+        }
+
+        total_matched += file_matched;
+
+        let _ = window.emit("header-batch-progress", HeaderBatchProgress {
+            current: i + 1, total, file_path: fname.clone(),
+            strings_matched: total_matched, stage: "complete".into(),
+            message: format!("{} matched {} strings", fname, file_matched),
+        });
+
+        success += 1;
+    }
+
+    let duration_ms = start.elapsed().as_millis() as u64;
+    let result = HeaderBatchComplete {
+        total_files: total, success, failed,
+        total_strings_matched: total_matched,
+        duration_ms, is_cancelled: false, errors,
+    };
+
+    let _ = window.emit("header-batch-complete", result.clone());
+    Ok(result)
+}
+
 /// Save current rules to INI file.
 #[tauri::command]
 pub async fn header_rules_save(
@@ -2948,6 +3149,209 @@ pub async fn header_rules_save(
     let text = rules.to_ini_text();
     std::fs::write(&path, text)
         .map_err(|e| format!("Failed to save rules: {}", e))
+}
+
+/// Delete a rule at the given index. Returns updated rule list.
+#[tauri::command]
+pub async fn header_rules_delete(
+    state: tauri::State<'_, Arc<AppState>>,
+    index: usize,
+) -> Result<Vec<HeaderRuleDto>, String> {
+    let mut rules = state.header_rules.lock().map_err(|e| e.to_string())?;
+    if index < rules.rules.len() {
+        rules.rules.remove(index);
+    }
+    Ok(rules.rules.iter().enumerate().map(|(i, r)| {
+        let mut d = HeaderRuleDto::from(r);
+        d.index = i;
+        d
+    }).collect())
+}
+
+/// Move a rule up or down. Returns updated rule list.
+#[tauri::command]
+pub async fn header_rules_move(
+    state: tauri::State<'_, Arc<AppState>>,
+    index: usize,
+    direction: String,
+) -> Result<Vec<HeaderRuleDto>, String> {
+    let mut rules = state.header_rules.lock().map_err(|e| e.to_string())?;
+    if direction == "up" && index > 0 && index < rules.rules.len() {
+        rules.rules.swap(index, index - 1);
+    } else if direction == "down" && index + 1 < rules.rules.len() {
+        rules.rules.swap(index, index + 1);
+    }
+    Ok(rules.rules.iter().enumerate().map(|(i, r)| {
+        let mut d = HeaderRuleDto::from(r);
+        d.index = i;
+        d
+    }).collect())
+}
+
+/// Update a rule's field at the given index. Returns updated rule list.
+#[tauri::command]
+pub async fn header_rules_update(
+    state: tauri::State<'_, Arc<AppState>>,
+    index: usize,
+    field: String,
+    value: String,
+) -> Result<Vec<HeaderRuleDto>, String> {
+    let mut rules = state.header_rules.lock().map_err(|e| e.to_string())?;
+    if let Some(rule) = rules.rules.get_mut(index) {
+        match field.as_str() {
+            "header" => rule.header = value,
+            "r_sig" => rule.r_sig = value,
+            "f_sig" => rule.f_sig = value,
+            "in_edid" => rule.in_edid = value.split('|').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect(),
+            "ex_edid" => rule.ex_edid = value.split('|').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect(),
+            "regex" => rule.regex = if value.is_empty() { None } else { Some(value) },
+            "full_replace" => rule.full_replace = value == "true",
+            "pre_process" => rule.pre_process = value == "true",
+            _ => {}
+        }
+    }
+    Ok(rules.rules.iter().enumerate().map(|(i, r)| {
+        let mut d = HeaderRuleDto::from(r);
+        d.index = i;
+        d
+    }).collect())
+}
+
+/// Add a new blank rule. Returns updated rule list.
+#[tauri::command]
+pub async fn header_rules_add(
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<Vec<HeaderRuleDto>, String> {
+    let mut rules = state.header_rules.lock().map_err(|e| e.to_string())?;
+    rules.rules.push(xt_core::header_processor::HeaderRule::default());
+    Ok(rules.rules.iter().enumerate().map(|(i, r)| {
+        let mut d = HeaderRuleDto::from(r);
+        d.index = i;
+        d
+    }).collect())
+}
+
+// ── Template Manager Commands ───────────────────────────────────────
+
+use xt_core::header_processor::{TemplateInfo, TemplateManager, PreProcessingOpts};
+
+/// List available templates in a directory.
+#[tauri::command]
+pub async fn header_templates_list(
+    dir: String,
+) -> Result<Vec<TemplateInfo>, String> {
+    TemplateManager::list_templates(&dir)
+}
+
+/// Save current rules as a named template.
+#[tauri::command]
+pub async fn header_templates_save(
+    state: tauri::State<'_, Arc<AppState>>,
+    dir: String,
+    name: String,
+) -> Result<(), String> {
+    let rules = state.header_rules.lock().map_err(|e| e.to_string())?;
+    TemplateManager::save_template(&dir, &name, &rules)
+}
+
+/// Load a named template (replaces current rules). Returns updated rule list.
+#[tauri::command]
+pub async fn header_templates_load(
+    state: tauri::State<'_, Arc<AppState>>,
+    dir: String,
+    name: String,
+) -> Result<Vec<HeaderRuleDto>, String> {
+    let rule_set = TemplateManager::load_template(&dir, &name)?;
+    let dtos: Vec<HeaderRuleDto> = rule_set.rules.iter().enumerate().map(|(i, r)| {
+        let mut d = HeaderRuleDto::from(r);
+        d.index = i;
+        d
+    }).collect();
+    *state.header_rules.lock().map_err(|e| e.to_string())? = rule_set;
+    Ok(dtos)
+}
+
+/// Delete a named template.
+#[tauri::command]
+pub async fn header_templates_delete(
+    dir: String,
+    name: String,
+) -> Result<(), String> {
+    TemplateManager::delete_template(&dir, &name)
+}
+
+// ── Pre-Processing Options Commands ─────────────────────────────────
+
+#[derive(serde::Serialize)]
+pub struct PreProcOptsDto {
+    pub options: Vec<(String, String)>,
+}
+
+/// Load pre-processing options from INI file.
+#[tauri::command]
+pub async fn preproc_opts_load(
+    state: tauri::State<'_, Arc<AppState>>,
+    path: String,
+) -> Result<PreProcOptsDto, String> {
+    let text = std::fs::read_to_string(&path)
+        .map_err(|e| format!("Failed to read opts file: {}", e))?;
+    let opts = xt_core::header_processor::PreProcessingOpts::from_ini_text(&text);
+    let mut sorted: Vec<_> = opts.options.into_iter().collect();
+    sorted.sort_by(|a, b| a.0.cmp(&b.0));
+    *state.pre_processing_opts.lock().map_err(|e| e.to_string())? = PreProcessingOpts {
+        options: sorted.iter().cloned().collect(),
+    };
+    Ok(PreProcOptsDto { options: sorted })
+}
+
+/// Get current pre-processing options.
+#[tauri::command]
+pub async fn preproc_opts_list(
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<PreProcOptsDto, String> {
+    let opts = state.pre_processing_opts.lock().map_err(|e| e.to_string())?;
+    let mut sorted: Vec<_> = opts.options.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+    sorted.sort_by(|a, b| a.0.cmp(&b.0));
+    Ok(PreProcOptsDto { options: sorted })
+}
+
+/// Update a pre-processing option key-value pair.
+#[tauri::command]
+pub async fn preproc_opts_set(
+    state: tauri::State<'_, Arc<AppState>>,
+    key: String,
+    value: String,
+) -> Result<PreProcOptsDto, String> {
+    let mut opts = state.pre_processing_opts.lock().map_err(|e| e.to_string())?;
+    opts.set(&key, &value);
+    let mut sorted: Vec<_> = opts.options.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+    sorted.sort_by(|a, b| a.0.cmp(&b.0));
+    Ok(PreProcOptsDto { options: sorted })
+}
+
+/// Delete a pre-processing option key.
+#[tauri::command]
+pub async fn preproc_opts_delete(
+    state: tauri::State<'_, Arc<AppState>>,
+    key: String,
+) -> Result<PreProcOptsDto, String> {
+    let mut opts = state.pre_processing_opts.lock().map_err(|e| e.to_string())?;
+    opts.options.remove(&key);
+    let mut sorted: Vec<_> = opts.options.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+    sorted.sort_by(|a, b| a.0.cmp(&b.0));
+    Ok(PreProcOptsDto { options: sorted })
+}
+
+/// Save pre-processing options to INI file.
+#[tauri::command]
+pub async fn preproc_opts_save(
+    state: tauri::State<'_, Arc<AppState>>,
+    path: String,
+) -> Result<(), String> {
+    let opts = state.pre_processing_opts.lock().map_err(|e| e.to_string())?;
+    let text = opts.to_ini_text();
+    std::fs::write(&path, text)
+        .map_err(|e| format!("Failed to save opts: {}", e))
 }
 
 /// Check alias integrity between source and translation.

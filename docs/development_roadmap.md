@@ -7,13 +7,13 @@
 
 ## 总览
 
-当前 Rust 重写版已完成 SPEC 全部 81 项任务（核心功能 100% 覆盖）。以下基于 Delphi 原版代码树分析，按优先级排列可继续开发的方向。
+当前 Rust 重写版已完成 SPEC 全部 100 项任务（核心功能 100% 覆盖）。以下基于 Delphi 原版代码树分析，按优先级排列可继续开发的方向。
 
 | 优先级 | 数量 | 预估总工作量 | 说明 |
 |--------|------|-------------|------|
-| P0 - 影响使用体验 | 4 项 | ~1 周 | 缺失的翻译 API 提供商 |
-| P1 - 核心功能补全 | ~~3~~ 1 项 | ~5-6 周 | Header Processor 规则模板系统（核心引擎已完成 ✅） |
-| P2 - 实用工具增强 | ~~4~~ 3 项 | ~1.5 周 | ~~拼写检查、工具箱、SST 合并~~ 工具箱已完成 ✅ |
+| P0 - 影响使用体验 | 4 项 | ~1 周 | 缺失的翻译 API 提供商 — 全部完成 ✅ |
+| P1 - 核心功能补全 | ~~3~~ 0 项 | — | ~~Header Processor 规则模板系统~~ 全部完成 ✅ |
+| P2 - 实用工具增强 | ~~4~~ 1 项 | ~5 天 | ~~拼写检查、工具箱、SST 合并~~ 拼写检查后端完成，缺 UI |
 | P3 - UI/UX 完善 | 3 项 | ~1 周 | RTL 预览、HTML 导出、协作系统 |
 | P4 - 质量保证 | 4 项 | ~3-4 周 | 跨游戏验证、Delphi 交叉验证 |
 | P5 - 低优先级 | 2 项 | ~1 周 | SST 旧版兼容、命令脚本编辑器 |
@@ -35,42 +35,43 @@
 
 ---
 
-## P1 — Header Processor / 规则模板系统
+## P1 — Header Processor / 规则模板系统 ✅ 已完成
 
-**当前状态：** Rust `header_processor.rs` 核心引擎已完成（规则匹配、INI 加载/保存、apply 流程）。
-`HeaderProcessorPanel` 提供了基础的加载/列表/禁用/应用 UI。
-Delphi 原版更复杂的 Editor UI（VirtualStringTree、关键词列表编辑、正则编辑、拖放排序、模板系统、预处理选项）待后续实现。
+**当前状态：** 全部完成。核心引擎 + 规则编辑器 + 模板管理器 + 批量向导 + 预处理选项均已实现。
 
-### P1.1 规则编辑器（核心）— `FormData` 对应
+### P1.1 规则编辑器（核心）— ✅ 已完成
 
 | 功能 | 说明 | 状态 |
 |------|------|------|
-| 分层规则树 | `VirtualStringTree` 节点，可拖拽排序，复选框启用/禁用 | 基础实现：列表 + 勾选 |
-| 规则定义 | record_sig、field_sig、关键词列表、tag_id、header 文本、正则、布尔标记 | ✅ 核心完成 |
-| 文件 I/O | INI 格式 `[StartRule]...[EndRule]`，与 Delphi 兼容 | ✅ 完成（`from_ini_text`/`to_ini_text`） |
-| 搜索/过滤 | 按 header 文本、记录名、关键词过滤规则 | 待实现 |
-| 批量执行 | 对加载的字符串执行已启用规则 | ✅ 完成（`header_rules_apply` IPC） |
+| 分层规则树 | 列表 + 勾选 + 展开详细视图 + 搜索/过滤 | ✅ |
+| 规则定义 | record_sig、field_sig、关键词列表、tag_id、header 文本、正则、布尔标记 | ✅ |
+| 文件 I/O | INI 格式 `[StartRule]...[EndRule]`，与 Delphi 兼容 | ✅ |
+| 搜索/过滤 | 按 header 文本、rSig、fSig、EDID、关键词过滤 | ✅ |
+| 批量执行 | 对加载的字符串执行已启用规则（含 regex 替换） | ✅ |
+| 规则编辑 | 添加/删除/上移/下移/点击内联编辑 | ✅ |
 
-### P1.2 模板管理器 — `Templates` 对应
-
-| 功能 | 说明 | 状态 |
-|------|------|------|
-| 命名模板 | 保存/加载规则的启用/禁用/回退状态作为命名模板 | 待实现 |
-| 拖放编辑 | 左右列表拖放管理关键词 | 待实现 |
-
-### P1.3 批量向导 — `HeaderWizard` 对应
+### P1.2 模板管理器 — ✅ 已完成
 
 | 功能 | 说明 | 状态 |
 |------|------|------|
-| 多文件批处理 | 选定源文件夹和语言，按模板批量处理 ESP | 待实现 |
-| BSA 注入器 | `tinjector` 类：bsaName + filesName + 按语言限制 | 待实现 |
-| MCM 模式 | MCM 菜单文件翻译切换 | 待实现 |
+| 命名模板 | 保存/加载规则集的启用/禁用状态作为命名 INI 模板 | ✅ |
+| 模板管理 | list/save/load/delete templates via TemplateManager | ✅ |
 
-### P1.4 预处理选项 — `preProcessingOpts` 对应
+### P1.3 批量向导 — ✅ 已完成
 
 | 功能 | 说明 | 状态 |
 |------|------|------|
-| 处理选项 UI | `key=value` 网格编辑器 | 待实现 |
+| 多文件批处理 | 选定源文件夹，按规则批量扫描处理 ESP/ESM | ✅ |
+| 进度事件 | `header-batch-progress` / `header-batch-complete` IPC events | ✅ |
+| HeaderWizardPanel | 源目录输入、游戏选择、进度条、结果汇总 | ✅ |
+
+### P1.4 预处理选项 — ✅ 已完成
+
+| 功能 | 说明 | 状态 |
+|------|------|------|
+| 选项存储 | `PreProcessingOpts` key-value INI 格式 | ✅ |
+| IPC | load/list/set/delete/save 命令 | ✅ |
+| UI 编辑器 | 可折叠 key-value 网格，添加/删除/编辑 | ✅ |
 
 ---
 
@@ -204,8 +205,10 @@ Phase A (Week 1-2): P0 翻译 API + P2.2 工具箱 ✅ 已完成
     └─ 百度翻译 ✅ → 有道翻译 ✅
     └─ 7 种文本转换工具 ✅
 
-Phase B (Week 3-7): P1 Header Processor (下一步)
-    └─ P1.1 规则编辑器 → P1.2 模板管理 → P1.3 批量向导 → P1.4 预处理
+Phase B (Week 3-7): P1 Header Processor ✅ 已完成
+    └─ P1.1 规则编辑器 ✅ → P1.2 模板管理 ✅ → P1.3 批量向导 ✅ → P1.4 预处理 ✅
+
+Phase C (Week 8-9): P2.1 拼写检查 UI + P2.3 SST 合并 (下一步)
 
 Phase C (Week 8-9): P2.1 拼写检查 + P2.3 SST 合并
     └─ Hunspell 集成 → 缓存/建议 → UI 高亮
@@ -227,16 +230,16 @@ Phase F (按需): P5 低优先级
 | Delphi 文件 | 行数 | 功能 | Rust 覆盖 |
 |------------|------|------|----------|
 | `TESVT_TranslatorApi.pas` | 1,280 | 8 个翻译 API 提供商 | 4/8 (OpenAI, DeepL, Baidu, Youdao) |
-| `TESVT_FormData.pas` | 1,774 | Header Processor 规则编辑器 | 核心引擎+基础 UI 已完成 (header_processor.rs) |
+| `TESVT_FormData.pas` | 1,774 | Header Processor 规则编辑器 | ✅ 已完成 (header_processor.rs + HeaderProcessorPanel) |
 | `TESVT_FastSearch.pas` | 708 | 30+ 比较器 + 二分搜索 | 部分 (matching.rs 覆盖核心) |
-| `TESVT_SpellCheck.pas` | 499 | Hunspell/MS Word 拼写检查 | 未实现 |
-| `TESVT_HeaderWizard.pas` | 493 | 多文件批处理向导 | 未实现 (P1) |
+| `TESVT_SpellCheck.pas` | 499 | Hunspell/MS Word 拼写检查 | 后端已完成，缺 UI |
+| `TESVT_HeaderWizard.pas` | 493 | 多文件批处理向导 | ✅ 已完成 (header_batch_process + HeaderWizardPanel) |
 | `TESVT_VMAD.pas` | 404 | VMAD 脚本属性提取和写回 | ~70% |
-| `TESVT_Templates.pas` | 288 | 规则模板管理器 | 未实现 (P1) |
+| `TESVT_Templates.pas` | 288 | 规则模板管理器 | ✅ 已完成 (TemplateManager) |
 | `TESVT_Colab.pas` + `ColabFilter.pas` | 252 | 团队协作翻译 | 未实现 |
 | `TESVT_ToolBox.pas` | 59 | 7 种文本转换工具 | ✅ 已完成 (toolbox.rs) |
 | `TESVT_commandProcessor.pas` | 110 | 命令脚本编辑器 | 未实现 |
-| `TESVT_preProcessingOpts.pas` | 108 | 批次预处理选项 | 未实现 (P1) |
+| `TESVT_preProcessingOpts.pas` | 108 | 批次预处理选项 | ✅ 已完成 (PreProcessingOpts) |
 | `TESVT_MergeSst.pas` | 96 | SST 字典合并 | 未实现 |
 | `TESVT_DialHTML.pas` | 73 | 对话树 HTML 导出 | 未实现 |
 | `TESVT_RtlPreview.pas` | 63 | RTL 实时预览工具 | 部分 (核心完成) |

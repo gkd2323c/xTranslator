@@ -24,6 +24,7 @@ import { EspTreePanel } from "./components/bottom/EspTreePanel";
 import { QuestsPanel } from "./components/bottom/QuestsPanel";
 import { LogPanel } from "./components/bottom/LogPanel";
 import { HeaderProcessorPanel } from "./components/bottom/HeaderProcessorPanel";
+import { HeaderWizardPanel } from "./components/bottom/HeaderWizardPanel";
 import { StringTable } from "./components/StringTable";
 import { EditorPanel } from "./components/EditorPanel";
 import { BatchTranslateBar } from "./components/BatchTranslateBar";
@@ -207,7 +208,7 @@ function App() {
               <div className="app-bottom-splitter" />
               <div className="app-bottom-panel">
                 <div className="bottom-panel-tabs">
-                  {(["home", "vocabulary", "heuristic", "espTree", "pex", "quests", "dialogs", "log", "headerProc"] as const).map((tab) => (
+                  {(["home", "vocabulary", "heuristic", "espTree", "pex", "quests", "dialogs", "log", "headerProc", "headerWizard"] as const).map((tab) => (
                     <button
                       key={tab}
                       className={`bottom-tab ${activeBottomTab === tab ? "bottom-tab-active" : ""}`}
@@ -221,6 +222,7 @@ function App() {
                        tab === "quests" ? t("bottomTabs.quests", { defaultValue: "Quests" }) :
                         tab === "dialogs" ? t("bottomTabs.dialogs", { defaultValue: "Dialogs" }) :
                         tab === "headerProc" ? "Header Proc" :
+                        tab === "headerWizard" ? "Wizard" :
                         t("bottomTabs.log", { defaultValue: "Log" })}
                     </button>
                   ))}
@@ -242,6 +244,7 @@ function App() {
                   {activeBottomTab === "dialogs" && <DialogView />}
                   {activeBottomTab === "log" && <LogPanel />}
                   {activeBottomTab === "headerProc" && <HeaderProcessorPanel />}
+                  {activeBottomTab === "headerWizard" && <HeaderWizardPanel />}
                 </div>
               </div>
             </>

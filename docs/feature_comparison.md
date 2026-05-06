@@ -10,13 +10,13 @@
 
 | 维度 | 原版 Delphi | Rust 重写 | 覆盖度 |
 |------|------------|----------|--------|
-| 代码量 | ~67,000 行 | ~15,900 行 Rust + ~4,700 行 TS | - |
-| 开发时间 | 10+ 年 | ~10 周 | - |
+| 代码量 | ~67,000 行 | ~16,500 行 Rust + ~5,300 行 TS | - |
+| 开发时间 | 10+ 年 | ~12 周 | - |
 | 数据格式解析 | 全格式 | 核心格式 | ~95% |
 | 编码系统 | 完整 | 完整 | ~90% |
-| 翻译工作流 | 完整 | 核心就绪 | ~85% |
-| UI 交互 | 完整 VCL | Tauri 基础 | ~65% |
-| 辅助工具 | 完整 | 部分 | ~40% |
+| 翻译工作流 | 完整 | 核心就绪 | ~90% |
+| UI 交互 | 完整 VCL | Tauri 基础 | ~75% |
+| 辅助工具 | 完整 | 基本完成 | ~55% |
 
 ---
 
@@ -175,7 +175,7 @@
 | Batch TCSC | `tcsc_batch_convert` IPC + MenuBar 按钮 | Done |
 | ~~CRLF 保护~~ | ✅ 翻译 API `<L_F>` 标签保护/恢复，两个 provider 均已集成 | Done |
 | ~~ESP 写入（record tree + serialize）~~ | ✅ `record_tree.rs` + `save_esp`/`finalize_esp`/`delocalize_esp` 命令，XXXX 字段管理，备份机制 | Done |
-| ~~Header 处理器~~ | ESP 头部修改 | 1 周 |
+| ~~Header 处理器~~ | ✅ 规则引擎 + 编辑器 + 模板管理器 + 批量向导 + 预处理选项 | Done |
 | ~~主题系统~~ | ✅ Dark/Light/Gray/Auto | Done |
 | ~~UI 多语言~~ | ✅ react-i18next 10 languages | Done |
 | ~~自动备份~~ | ✅ 5-min SST snapshots | Done |

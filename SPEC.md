@@ -304,6 +304,12 @@ V44: ∀ delocalize_esp → reassign string IDs sequentially from 1; export .STR
 V45: ∀ `shape_arabic` → logical-order Unicode chars → presentation forms; `deshape_arabic` reverses
 V46: ∀ `rtl_reverse` → reverse string for RTL display in LTR UI context
 V47: ∀ `finalize_esp` → apply SST translations → rebuild record tree → serialize → export Strings files
+V48: ∀ `header_rules_apply` → build EDID map from EspFile top_level_grups (recursive); use `sk.esp_ptr.form_id` as form_id
+V49: ∀ `HeaderRule.matches_string` → exclude_keywords negate match regardless of no_kw flag
+V50: ∀ `HeaderRule.apply` → if regex set, use `regex.replace(source)` instead of header prepend/full_replace
+V51: ∀ templates → each stored as `<name>.txt` INI file in templates directory; list/save/load/delete via TemplateManager
+V52: ∀ `header_batch_process` → scan source_dir for .esp/.esm files; parse each with EspParser::with_game; apply rules; emit header-batch-progress/comple te events
+V53: ∀ `PreProcessingOpts` → key-value HashMap stored as `[PreProcessingOpts]\nkey=value` INI section
 
 ## §T Tasks
 
@@ -402,6 +408,12 @@ T91|x|App startup: restore Baidu/Youdao/Azure API keys from config.json|G6,G7
 T92|x|Header Processor core engine: rule struct, INI load/save, match, apply|G7
 T93|x|Header Processor IPC commands: load/list/toggle/apply/save|G7
 T94|x|HeaderProcessorPanel bottom tab: load rules, toggle enable, apply to strings|G7
+T95|x|Header Processor: Exclude_ keyword parsing, EDID/form_id lookup via record tree, regex matching|G7
+T96|x|Rule editor enhancements: search/filter, add/delete/reorder, inline field editing|G7
+T97|x|Template manager: save/load/delete named rule templates as INI files|G7
+T98|x|Pre-processing options: key-value INI storage + IPC (load/list/set/delete/save) + UI editor|G7
+T99|x|Batch wizard: multi-ESP header processing (scan dir + parse + apply rules) with progress events|G7
+T100|x|HeaderWizardPanel bottom tab: source dir, game selector, progress bar, result summary|G7
 
 ## §B Bugs
 

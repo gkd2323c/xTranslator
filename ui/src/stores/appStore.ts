@@ -29,7 +29,8 @@ export type BottomTabId =
   | "quests"
   | "dialogs"
   | "log"
-  | "headerProc";
+  | "headerProc"
+  | "headerWizard";
 
 const THEME_STORAGE_KEY = "xtranslator-theme";
 

@@ -23,6 +23,10 @@ use commands::{
     spell_check_load, spell_check_unload, spell_check_toggle, spell_check_config,
     spell_check_text, spell_check_suggestions, spell_check_ignore,
     header_rules_load, header_rules_list, header_rules_toggle, header_rules_apply, header_rules_save,
+    header_rules_delete, header_rules_move, header_rules_update, header_rules_add,
+    header_templates_list, header_templates_save, header_templates_load, header_templates_delete,
+    preproc_opts_load, preproc_opts_list, preproc_opts_set,     preproc_opts_delete, preproc_opts_save,
+    header_batch_process,
     save_esp, finalize_esp, delocalize_esp, decompile_pex, get_esp_header, shape_arabic, deshape_arabic,
 };
 use std::sync::Arc;
@@ -128,6 +132,23 @@ fn main() {
             header_rules_toggle,
             header_rules_apply,
             header_rules_save,
+            header_rules_delete,
+            header_rules_move,
+            header_rules_update,
+            header_rules_add,
+            // Templates
+            header_templates_list,
+            header_templates_save,
+            header_templates_load,
+            header_templates_delete,
+            // Pre-processing options
+            preproc_opts_load,
+            preproc_opts_list,
+            preproc_opts_set,
+            preproc_opts_delete,
+            preproc_opts_save,
+            // Header batch wizard
+            header_batch_process,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

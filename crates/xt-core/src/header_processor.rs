@@ -19,6 +19,7 @@ pub struct HeaderRuleDto {
     pub any_kw: bool,
     pub has_component: bool,
     pub include_keywords: Vec<HeaderKeywordDto>,
+    pub exclude_keywords: Vec<HeaderKeywordDto>,
     pub pre_process: bool,
     pub full_replace: bool,
     pub include_or: bool,
@@ -62,6 +63,7 @@ pub struct HeaderRule {
     pub any_kw: bool,
     pub has_component: bool,
     pub include_keywords: Vec<HeaderKeyword>,
+    pub exclude_keywords: Vec<HeaderKeyword>,
     pub pre_process: bool,
     pub full_replace: bool,
     pub include_or: bool,
@@ -76,7 +78,8 @@ impl Default for HeaderRule {
             header: String::new(), r_sig: String::new(), f_sig: String::new(),
             enabled: true, in_edid: vec![], ex_edid: vec![],
             no_kw: false, any_kw: false, has_component: false,
-            include_keywords: vec![], pre_process: false, full_replace: false,
+            include_keywords: vec![], exclude_keywords: vec![],
+            pre_process: false, full_replace: false,
             include_or: false, is_fallback: false, regex: None, tag_id: 0,
         }
     }
@@ -90,6 +93,9 @@ impl From<&HeaderRule> for HeaderRuleDto {
             in_edid: r.in_edid.clone(), ex_edid: r.ex_edid.clone(),
             no_kw: r.no_kw, any_kw: r.any_kw, has_component: r.has_component,
             include_keywords: r.include_keywords.iter().map(|kw| HeaderKeywordDto {
+                kw_type: kw.kw_type.clone(), name: kw.name.clone(), form_id: kw.form_id,
+            }).collect(),
+            exclude_keywords: r.exclude_keywords.iter().map(|kw| HeaderKeywordDto {
                 kw_type: kw.kw_type.clone(), name: kw.name.clone(), form_id: kw.form_id,
             }).collect(),
             pre_process: r.pre_process, full_replace: r.full_replace,
@@ -124,11 +130,22 @@ impl HeaderRule {
             };
             if self.no_kw { if kw_match { return false; } } else { if !kw_match { return false; } }
         }
+        if !self.exclude_keywords.is_empty() {
+            let excluded = self.exclude_keywords.iter().any(|kw| match kw.kw_type.as_str() {
+                "form" => kw.form_id == form_id, "kwd_" => keywords.contains(&kw.form_id), _ => false,
+            });
+            if excluded { return false; }
+        }
         true
     }
 
-    pub fn apply(&self, translation: &str, _source: &str) -> String {
+    pub fn apply(&self, translation: &str, source: &str) -> String {
         if self.full_replace { return self.header.clone(); }
+        if let Some(ref re_str) = self.regex {
+            if let Ok(re) = regex::Regex::new(re_str) {
+                return re.replace(source, self.header.as_str()).to_string();
+            }
+        }
         if self.header.is_empty() { return translation.to_string(); }
         format!("{} {}", self.header, translation)
     }
@@ -172,12 +189,21 @@ impl HeaderRuleSet {
                         "fullReplace" => rule.full_replace = value != "0",
                         "includeOr" => rule.include_or = value != "0",
                         "isFallback" => rule.is_fallback = value != "0",
-                        "RegEx" => rule.regex = Some(value.to_string()),
+                        "RegEx" | "regex" => rule.regex = Some(value.to_string()),
                         "tagID" => rule.tag_id = value.parse().unwrap_or(0),
                         k if k.starts_with("Include_") => {
                             let parts: Vec<&str> = value.split('|').collect();
                             if parts.len() >= 3 {
                                 rule.include_keywords.push(HeaderKeyword {
+                                    kw_type: parts[0].to_string(), name: parts[1].to_string(),
+                                    form_id: u32::from_str_radix(parts[2], 16).unwrap_or(0),
+                                });
+                            }
+                        }
+                        k if k.starts_with("Exclude_") => {
+                            let parts: Vec<&str> = value.split('|').collect();
+                            if parts.len() >= 3 {
+                                rule.exclude_keywords.push(HeaderKeyword {
                                     kw_type: parts[0].to_string(), name: parts[1].to_string(),
                                     form_id: u32::from_str_radix(parts[2], 16).unwrap_or(0),
                                 });
@@ -205,8 +231,12 @@ impl HeaderRuleSet {
             for (i, kw) in rule.include_keywords.iter().enumerate() {
                 out.push_str(&format!("\tInclude_{}={}|{}|{:08X}\n", i, kw.kw_type, kw.name, kw.form_id));
             }
+            for (i, kw) in rule.exclude_keywords.iter().enumerate() {
+                out.push_str(&format!("\tExclude_{}={}|{}|{:08X}\n", i, kw.kw_type, kw.name, kw.form_id));
+            }
             if rule.pre_process { out.push_str("\tpreProcess=1\n"); }
             if rule.full_replace { out.push_str("\tfullReplace=1\n"); }
+            if let Some(ref re) = rule.regex { out.push_str(&format!("\tRegEx={}\n", re)); }
             out.push_str("[EndRule]\n\n");
         }
         out
@@ -220,6 +250,128 @@ impl HeaderRuleSet {
             }
         }
         None
+    }
+}
+
+// ── Template Manager ────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TemplateInfo {
+    pub name: String,
+    pub rule_count: usize,
+    pub enabled_count: usize,
+}
+
+pub struct TemplateManager;
+
+impl TemplateManager {
+    /// List available templates in the given directory.
+    /// Templates are .txt files containing valid Header Processor INI.
+    pub fn list_templates(dir: &str) -> Result<Vec<TemplateInfo>, String> {
+        let path = std::path::Path::new(dir);
+        if !path.exists() {
+            return Ok(Vec::new());
+        }
+        let mut templates = Vec::new();
+        let entries = std::fs::read_dir(path)
+            .map_err(|e| format!("Failed to read templates dir: {}", e))?;
+        for entry in entries {
+            let entry = entry.map_err(|e| format!("Dir entry error: {}", e))?;
+            let fname = entry.file_name().to_string_lossy().to_string();
+            if fname.ends_with(".txt") {
+                let name = fname.trim_end_matches(".txt").to_string();
+                if let Ok(text) = std::fs::read_to_string(entry.path()) {
+                    let rule_set = HeaderRuleSet::from_ini_text(&text);
+                    let enabled = rule_set.rules.iter().filter(|r| r.enabled).count();
+                    templates.push(TemplateInfo {
+                        name,
+                        rule_count: rule_set.rules.len(),
+                        enabled_count: enabled,
+                    });
+                }
+            }
+        }
+        templates.sort_by(|a, b| a.name.cmp(&b.name));
+        Ok(templates)
+    }
+
+    /// Save current rules as a named template.
+    pub fn save_template(dir: &str, name: &str, rule_set: &HeaderRuleSet) -> Result<(), String> {
+        let path = std::path::Path::new(dir);
+        std::fs::create_dir_all(path)
+            .map_err(|e| format!("Failed to create templates dir: {}", e))?;
+        let file_path = path.join(format!("{}.txt", name));
+        let text = rule_set.to_ini_text();
+        std::fs::write(&file_path, text)
+            .map_err(|e| format!("Failed to save template: {}", e))
+    }
+
+    /// Load a named template.
+    pub fn load_template(dir: &str, name: &str) -> Result<HeaderRuleSet, String> {
+        let path = std::path::Path::new(dir).join(format!("{}.txt", name));
+        let text = std::fs::read_to_string(&path)
+            .map_err(|e| format!("Failed to read template: {}", e))?;
+        Ok(HeaderRuleSet::from_ini_text(&text))
+    }
+
+    /// Delete a named template.
+    pub fn delete_template(dir: &str, name: &str) -> Result<(), String> {
+        let path = std::path::Path::new(dir).join(format!("{}.txt", name));
+        std::fs::remove_file(&path)
+            .map_err(|e| format!("Failed to delete template: {}", e))
+    }
+}
+
+// ── Pre-Processing Options ──────────────────────────────────────────
+
+/// Key-value store for batch wizard pre-processing options.
+/// Corresponds to Delphi TESVT_preProcessingOpts.pas.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PreProcessingOpts {
+    pub options: std::collections::HashMap<String, String>,
+}
+
+impl Default for PreProcessingOpts {
+    fn default() -> Self {
+        Self { options: std::collections::HashMap::new() }
+    }
+}
+
+impl PreProcessingOpts {
+    /// Parse options from INI text. Expected format:
+    /// ```ini
+    /// [PreProcessingOpts]
+    /// key1=value1
+    /// key2=value2
+    /// ```
+    pub fn from_ini_text(text: &str) -> Self {
+        let mut opts = Self::default();
+        for line in text.lines() {
+            let line = line.trim();
+            if line.is_empty() || line.starts_with('#') || line.starts_with('\u{FEFF}') { continue; }
+            if line.starts_with('[') { continue; }
+            if let Some((key, value)) = line.find('=').map(|p| (line[..p].trim().to_string(), line[p+1..].trim())) {
+                opts.options.insert(key, value.to_string());
+            }
+        }
+        opts
+    }
+
+    /// Serialize options to INI text.
+    pub fn to_ini_text(&self) -> String {
+        let mut out = String::from("[PreProcessingOpts]\n");
+        for (key, value) in &self.options {
+            out.push_str(&format!("{}={}\n", key, value));
+        }
+        out
+    }
+
+    pub fn get(&self, key: &str) -> Option<&str> {
+        self.options.get(key).map(|s| s.as_str())
+    }
+
+    pub fn set(&mut self, key: &str, value: &str) {
+        self.options.insert(key.to_string(), value.to_string());
     }
 }
 
