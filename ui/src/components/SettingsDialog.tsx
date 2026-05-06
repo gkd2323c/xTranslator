@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { loadConfig, saveConfig, setOpenAiApiKey, setDeeplApiKey, setBaiduApiKey, setYoudaoApiKey, setTranslationProvider, getTranslationProviders, type AppConfigDto, type TranslationProvidersResponse } from "../api/strings";
+import { loadConfig, saveConfig, setOpenAiApiKey, setDeeplApiKey, setBaiduApiKey, setYoudaoApiKey, setAzureApiKey, setTranslationProvider, getTranslationProviders, type AppConfigDto, type TranslationProvidersResponse } from "../api/strings";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import { Button, Modal, Input, Select } from "./ui";
@@ -47,6 +47,9 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
       if (config.youdao_app_key && config.youdao_secret_key) {
         await setYoudaoApiKey(config.youdao_app_key, config.youdao_secret_key);
       }
+      if (config.azure_key) {
+        await setAzureApiKey(config.azure_key);
+      }
       if (config.current_provider) {
         await setTranslationProvider(config.current_provider);
       }
@@ -92,6 +95,8 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
             { value: "deepl", label: "DeepL" },
             { value: "baidu", label: "Baidu" },
             { value: "youdao", label: "Youdao" },
+            { value: "azure", label: "Azure" },
+            { value: "google", label: "Google" },
           ]}
         />
 
@@ -156,6 +161,16 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
           value={config.youdao_secret_key || ""}
           onChange={(e) => handleChange("youdao_secret_key", e.target.value)}
           placeholder="Youdao SecretKey"
+        />
+
+        <label className="dialog-label">
+          Azure Key
+        </label>
+        <Input
+          type="password"
+          value={config.azure_key || ""}
+          onChange={(e) => handleChange("azure_key", e.target.value)}
+          placeholder="Azure subscription key"
         />
       </div>
 

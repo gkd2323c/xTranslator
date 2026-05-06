@@ -215,6 +215,10 @@ pub enum ProviderType {
     Baidu,
     /// 有道翻译 API
     Youdao,
+    /// 微软 Azure 翻译 API
+    Azure,
+    /// Google 翻译 API
+    Google,
 }
 
 impl fmt::Display for ProviderType {
@@ -224,6 +228,8 @@ impl fmt::Display for ProviderType {
             ProviderType::DeepL => write!(f, "deepl"),
             ProviderType::Baidu => write!(f, "baidu"),
             ProviderType::Youdao => write!(f, "youdao"),
+            ProviderType::Azure => write!(f, "azure"),
+            ProviderType::Google => write!(f, "google"),
         }
     }
 }
@@ -235,13 +241,15 @@ impl ProviderType {
             "deepl" => ProviderType::DeepL,
             "baidu" => ProviderType::Baidu,
             "youdao" => ProviderType::Youdao,
+            "azure" => ProviderType::Azure,
+            "google" => ProviderType::Google,
             _ => ProviderType::OpenAI,
         }
     }
 
     /// 获取所有可用 Provider 列表
     pub fn all() -> Vec<&'static str> {
-        vec!["openai", "deepl", "baidu", "youdao"]
+        vec!["openai", "deepl", "baidu", "youdao", "azure", "google"]
     }
 }
 
@@ -272,3 +280,11 @@ pub use baidu::BaiduProvider;
 /// 有道翻译 Provider
 pub mod youdao;
 pub use youdao::YoudaoProvider;
+
+/// 微软 Azure 翻译 Provider
+pub mod azure;
+pub use azure::AzureProvider;
+
+/// Google 翻译 Provider
+pub mod google;
+pub use google::GoogleProvider;

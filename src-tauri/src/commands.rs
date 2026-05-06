@@ -10,7 +10,7 @@ use xt_core::matching::{apply_dictionary_entries_with_policy, ApplyPolicy, Dicti
 use xt_core::pex::types::PexTranslatableString;
 use xt_core::sst::v8::SstDictionary;
 use xt_core::strings::CodepageTable;
-use xt_core::translation_api::{BaiduProvider, DeepLProvider, OpenAIProvider, ProviderType, TranslationProvider, YoudaoProvider};
+use xt_core::translation_api::{AzureProvider, BaiduProvider, DeepLProvider, GoogleProvider, OpenAIProvider, ProviderType, TranslationProvider, YoudaoProvider};
 use xt_core::translation_api::config::ApiTranslatorConfig;
 use xt_core::translation_cache::TranslationCache;
 use xt_core::types::game_id::GameId;
@@ -57,6 +57,8 @@ pub struct AppState {
     pub youdao_app_key: Mutex<Option<String>>,
     /// 有道翻译 SecretKey（内存存储，不持久化）
     pub youdao_secret_key: Mutex<Option<String>>,
+    /// Azure 翻译 subscription key（内存存储，不持久化）
+    pub azure_key: Mutex<Option<String>>,
     /// 当前选中的翻译提供方
     pub current_provider: Mutex<ProviderType>,
     /// 是否有未保存的翻译修改
@@ -98,6 +100,7 @@ impl AppState {
             baidu_key: Mutex::new(None),
             youdao_app_key: Mutex::new(None),
             youdao_secret_key: Mutex::new(None),
+            azure_key: Mutex::new(None),
             current_provider: Mutex::new(default_provider),
             is_dirty: Mutex::new(false),
             api_config,
@@ -944,6 +947,14 @@ pub async fn translate_string(
             // Youdao doesn't use a single API key; credentials checked below
             String::new()
         }
+        ProviderType::Azure => {
+            // Uses subscription key; checked below
+            String::new()
+        }
+        ProviderType::Google => {
+            // No API key needed
+            String::new()
+        }
     };
 
     // 保持默认语言兜底，避免前端漏传参数导致请求失败。
@@ -997,6 +1008,23 @@ pub async fn translate_string(
                 .clone()
                 .ok_or_else(|| "Youdao SecretKey not set".to_string())?;
             let provider = YoudaoProvider::new(app_key, secret_key);
+            provider
+                .translate(&text, &resolved_source, &resolved_target, proxy_config.as_ref())
+                .await
+                .map_err(|e| e.to_string())?
+        }
+        ProviderType::Azure => {
+            let key = state.azure_key.lock().map_err(|e| e.to_string())?
+                .clone()
+                .ok_or_else(|| "Azure subscription key not set".to_string())?;
+            let provider = AzureProvider::new(key);
+            provider
+                .translate(&text, &resolved_source, &resolved_target, proxy_config.as_ref())
+                .await
+                .map_err(|e| e.to_string())?
+        }
+        ProviderType::Google => {
+            let provider = GoogleProvider::new();
             provider
                 .translate(&text, &resolved_source, &resolved_target, proxy_config.as_ref())
                 .await
@@ -1070,6 +1098,21 @@ pub async fn set_yooudao_api_key(
     Ok(())
 }
 
+/// 设置（或清空）运行期 Azure subscription key。
+#[tauri::command]
+pub async fn set_azure_api_key(
+    state: tauri::State<'_, Arc<AppState>>,
+    api_key: String,
+) -> Result<(), String> {
+    let mut key = state.azure_key.lock().map_err(|e| e.to_string())?;
+    *key = if api_key.is_empty() {
+        None
+    } else {
+        Some(api_key)
+    };
+    Ok(())
+}
+
 /// 设置当前默认翻译提供方。
 #[tauri::command]
 pub async fn set_translation_provider(
@@ -1085,33 +1128,21 @@ pub async fn set_translation_provider(
 #[tauri::command]
 pub async fn get_translation_providers(
     state: tauri::State<'_, Arc<AppState>>,
-) -> Result<(String, Vec<String>, bool, bool, bool, bool), String> {
+) -> Result<(String, Vec<String>, bool, bool, bool, bool, bool, bool), String> {
     let current = state.current_provider.lock().map_err(|e| e.to_string())?;
-    let openai_set = state
-        .openai_api_key
-        .lock()
-        .map_err(|e| e.to_string())?
-        .is_some();
-    let deepl_set = state
-        .deepl_api_key
-        .lock()
-        .map_err(|e| e.to_string())?
-        .is_some();
+    let openai_set = state.openai_api_key.lock().map_err(|e| e.to_string())?.is_some();
+    let deepl_set = state.deepl_api_key.lock().map_err(|e| e.to_string())?.is_some();
     let baidu_set = state.baidu_app_id.lock().map_err(|e| e.to_string())?.is_some()
         && state.baidu_key.lock().map_err(|e| e.to_string())?.is_some();
     let youdao_set = state.youdao_app_key.lock().map_err(|e| e.to_string())?.is_some()
         && state.youdao_secret_key.lock().map_err(|e| e.to_string())?.is_some();
+    let azure_set = state.azure_key.lock().map_err(|e| e.to_string())?.is_some();
+    let google_set = true; // Google is keyless
 
     Ok((
         current.to_string(),
-        ProviderType::all()
-            .into_iter()
-            .map(|s| s.to_string())
-            .collect(),
-        openai_set,
-        deepl_set,
-        baidu_set,
-        youdao_set,
+        ProviderType::all().into_iter().map(|s| s.to_string()).collect(),
+        openai_set, deepl_set, baidu_set, youdao_set, azure_set, google_set,
     ))
 }
 
@@ -2877,6 +2908,7 @@ fn config_to_dto(cfg: &xt_core::config::AppConfig) -> AppConfigDto {
         baidu_key: cfg.baidu_key.clone(),
         youdao_app_key: cfg.youdao_app_key.clone(),
         youdao_secret_key: cfg.youdao_secret_key.clone(),
+        azure_key: cfg.azure_key.clone(),
         current_provider: cfg.current_provider.clone(),
         theme: cfg.theme.clone(),
         language: cfg.language.clone(),
@@ -2896,6 +2928,7 @@ fn dto_to_config(dto: &AppConfigDto) -> xt_core::config::AppConfig {
         baidu_key: dto.baidu_key.clone(),
         youdao_app_key: dto.youdao_app_key.clone(),
         youdao_secret_key: dto.youdao_secret_key.clone(),
+        azure_key: dto.azure_key.clone(),
         current_provider: dto.current_provider.clone(),
         theme: dto.theme.clone(),
         language: dto.language.clone(),
@@ -3692,6 +3725,7 @@ pub async fn start_string_batch_translate(
     let baidu_key = state.baidu_key.lock().map_err(|e| e.to_string())?.clone();
     let youdao_app_key = state.youdao_app_key.lock().map_err(|e| e.to_string())?.clone();
     let youdao_secret_key = state.youdao_secret_key.lock().map_err(|e| e.to_string())?.clone();
+    let azure_key = state.azure_key.lock().map_err(|e| e.to_string())?.clone();
     let api_config = state.api_config.clone();
 
     match provider_type {
@@ -3707,6 +3741,10 @@ pub async fn start_string_batch_translate(
         ProviderType::Youdao if youdao_app_key.is_none() || youdao_secret_key.is_none() => {
             return Err("Please configure Youdao AppKey/SecretKey first".to_string());
         }
+        ProviderType::Azure if azure_key.is_none() => {
+            return Err("Please configure Azure subscription key first".to_string());
+        }
+        ProviderType::Google => {} // keyless
         _ => {}
     }
 
@@ -3759,6 +3797,7 @@ pub async fn start_string_batch_translate(
             let baidu_key = baidu_key.clone();
             let youdao_app_key = youdao_app_key.clone();
             let youdao_secret_key = youdao_secret_key.clone();
+            let azure_key = azure_key.clone();
             let api_config = api_config.clone();
             let window = window.clone();
 
@@ -3774,6 +3813,7 @@ pub async fn start_string_batch_translate(
                     &baidu_key,
                     &youdao_app_key,
                     &youdao_secret_key,
+                    &azure_key,
                     &api_config,
                 )
                 .await;
@@ -3856,6 +3896,7 @@ async fn translate_single_with_retry(
     baidu_key: &Option<String>,
     youdao_app_key: &Option<String>,
     youdao_secret_key: &Option<String>,
+    azure_key: &Option<String>,
     _api_config: &ApiTranslatorConfig,
 ) -> Result<String, String> {
     let mut delay = 1u64;
@@ -3885,6 +3926,17 @@ async fn translate_single_with_retry(
                 let app_key = youdao_app_key.as_ref().ok_or("No Youdao AppKey")?;
                 let secret_key = youdao_secret_key.as_ref().ok_or("No Youdao SecretKey")?;
                 let provider = YoudaoProvider::new(app_key.clone(), secret_key.clone());
+                provider.translate(source, "", "", None).await
+                    .map_err(|e| e.to_string())
+            }
+            ProviderType::Azure => {
+                let key = azure_key.as_ref().ok_or("No Azure subscription key")?;
+                let provider = AzureProvider::new(key.clone());
+                provider.translate(source, "", "", None).await
+                    .map_err(|e| e.to_string())
+            }
+            ProviderType::Google => {
+                let provider = GoogleProvider::new();
                 provider.translate(source, "", "", None).await
                     .map_err(|e| e.to_string())
             }

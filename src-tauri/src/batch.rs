@@ -4,7 +4,7 @@ use tauri::Emitter;
 use xt_core::config::AppConfig;
 use xt_core::esp::parser::{EspParser, StringsFiles};
 use xt_core::strings::CodepageTable;
-use xt_core::translation_api::{BaiduProvider, DeepLProvider, OpenAIProvider, ProviderType, TranslationProvider, YoudaoProvider};
+use xt_core::translation_api::{AzureProvider, BaiduProvider, DeepLProvider, GoogleProvider, OpenAIProvider, ProviderType, TranslationProvider, YoudaoProvider};
 use xt_core::types::game_id::GameId;
 use xt_core::types::params::SkyStringParams;
 use xt_core::types::sky_string::SkyString;
@@ -408,6 +408,8 @@ async fn run_batch_translate(
         ProviderType::DeepL => std::env::var("XT_DEEPL_API_KEY").unwrap_or_default(),
         ProviderType::Baidu => std::env::var("XT_BAIDU_API_APP_ID").unwrap_or_default(),
         ProviderType::Youdao => std::env::var("XT_YOUDAO_API_APP_KEY").unwrap_or_default(),
+        ProviderType::Azure => std::env::var("XT_AZURE_API_KEY").unwrap_or_default(),
+        ProviderType::Google => String::new(), // keyless
     };
 
     let source_api_code = "EN";
@@ -600,6 +602,28 @@ async fn run_batch_translate(
                             .await
                             .map_err(|e| e.to_string())
                     }
+                }
+                ProviderType::Azure => {
+                    let config = AppConfig::load(&crate::commands::config_dir()).ok();
+                    let key = config.as_ref().and_then(|c| c.azure_key.clone()).unwrap_or_default();
+                    if key.is_empty() {
+                        Err("Azure subscription key not set".to_string())
+                    } else {
+                        let proxy_config = config;
+                        let provider = AzureProvider::new(key);
+                        provider
+                            .translate(source_text, source_api_code, target_api_code, proxy_config.as_ref())
+                            .await
+                            .map_err(|e| e.to_string())
+                    }
+                }
+                ProviderType::Google => {
+                    let proxy_config = AppConfig::load(&crate::commands::config_dir()).ok();
+                    let provider = GoogleProvider::new();
+                    provider
+                        .translate(source_text, source_api_code, target_api_code, proxy_config.as_ref())
+                        .await
+                        .map_err(|e| e.to_string())
                 }
             };
 

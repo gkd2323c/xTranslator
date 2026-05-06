@@ -728,6 +728,8 @@ pub struct AppConfigDto {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub youdao_secret_key: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub azure_key: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub current_provider: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub theme: Option<String>,

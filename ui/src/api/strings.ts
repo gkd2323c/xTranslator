@@ -84,6 +84,8 @@ export interface TranslationProvidersResponse {
   deeplConfigured: boolean;
   baiduConfigured: boolean;
   youdaoConfigured: boolean;
+  azureConfigured: boolean;
+  googleConfigured: boolean;
 }
 
 export async function queryStrings(request: QueryRequest): Promise<QueryResponse> {
@@ -159,6 +161,11 @@ export async function setYoudaoApiKey(appKey: string, secretKey: string): Promis
   saveConfig({ youdao_app_key: appKey || undefined, youdao_secret_key: secretKey || undefined }).catch(() => {});
 }
 
+export async function setAzureApiKey(apiKey: string): Promise<void> {
+  await invoke("set_azure_api_key", { apiKey });
+  saveConfig({ azure_key: apiKey || undefined }).catch(() => {});
+}
+
 export async function toolboxTransform(
   tool: string,
   target: string,
@@ -224,8 +231,8 @@ export async function setTranslationProvider(provider: string): Promise<void> {
 }
 
 export async function getTranslationProviders(): Promise<TranslationProvidersResponse> {
-  const [current, available, openaiConfigured, deeplConfigured, baiduConfigured, youdaoConfigured] = await invoke<[string, string[], boolean, boolean, boolean, boolean]>("get_translation_providers");
-  return { current, available, openaiConfigured, deeplConfigured, baiduConfigured, youdaoConfigured };
+  const [current, available, openaiConfigured, deeplConfigured, baiduConfigured, youdaoConfigured, azureConfigured, googleConfigured] = await invoke<[string, string[], boolean, boolean, boolean, boolean, boolean, boolean]>("get_translation_providers");
+  return { current, available, openaiConfigured, deeplConfigured, baiduConfigured, youdaoConfigured, azureConfigured, googleConfigured };
 }
 
 /** @deprecated Use setOpenAiApiKey instead */
@@ -598,6 +605,7 @@ export interface AppConfigDto {
   baidu_key?: string;
   youdao_app_key?: string;
   youdao_secret_key?: string;
+  azure_key?: string;
   current_provider?: string;
   theme?: string;
   language?: string;

@@ -20,6 +20,8 @@ pub struct AppConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub youdao_secret_key: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub azure_key: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub current_provider: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub theme: Option<String>,
@@ -67,6 +69,7 @@ impl AppConfig {
         if other.baidu_key.is_some() { self.baidu_key = other.baidu_key.clone(); }
         if other.youdao_app_key.is_some() { self.youdao_app_key = other.youdao_app_key.clone(); }
         if other.youdao_secret_key.is_some() { self.youdao_secret_key = other.youdao_secret_key.clone(); }
+        if other.azure_key.is_some() { self.azure_key = other.azure_key.clone(); }
         if other.current_provider.is_some() { self.current_provider = other.current_provider.clone(); }
         if other.theme.is_some() { self.theme = other.theme.clone(); }
         if other.language.is_some() { self.language = other.language.clone(); }
