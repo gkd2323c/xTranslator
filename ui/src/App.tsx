@@ -28,7 +28,7 @@ import { EditorPanel } from "./components/EditorPanel";
 import { BatchTranslateBar } from "./components/BatchTranslateBar";
 import { RecoveryPromptModal } from "./components/RecoveryPromptModal";
 import { StatusBar } from "./components/StatusBar";
-import { autoBackupSst, loadConfig, setOpenAiApiKey, setDeeplApiKey, setTranslationProvider } from "./api/strings";
+import { autoBackupSst, loadConfig, setOpenAiApiKey, setDeeplApiKey, setBaiduApiKey, setYoudaoApiKey, setAzureApiKey, setTranslationProvider } from "./api/strings";
 import "./App.css";
 import "./components/ui/ui.css";
 
@@ -98,6 +98,9 @@ function App() {
       if (cfg.language) setI18nLanguage(cfg.language);
       if (cfg.openai_api_key) setOpenAiApiKey(cfg.openai_api_key);
       if (cfg.deepl_api_key) setDeeplApiKey(cfg.deepl_api_key);
+      if (cfg.baidu_app_id && cfg.baidu_key) setBaiduApiKey(cfg.baidu_app_id, cfg.baidu_key);
+      if (cfg.youdao_app_key && cfg.youdao_secret_key) setYoudaoApiKey(cfg.youdao_app_key, cfg.youdao_secret_key);
+      if (cfg.azure_key) setAzureApiKey(cfg.azure_key);
       if (cfg.current_provider) setTranslationProvider(cfg.current_provider);
       if (cfg.esp_mode !== undefined) useAppStore.getState().setEspMode(cfg.esp_mode);
     }).catch(() => {});
