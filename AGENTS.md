@@ -184,6 +184,18 @@ App
 - PEX script editor / FUZ LIP / BA2 texture archives
 - More auxiliary panels (File Browser, Quest Stage Editor)
 
+## Document Maintenance
+
+After every significant feature commit, verify key metrics across all docs. See `docs/README.md#maintenance-rules` for the full checklist and audit commands.
+
+Quick checks:
+- `cargo test -p xt-core --lib` → update test count in `ARCHITECTURE.md` + `RELEASE.md`
+- SPEC task count → update `README.md`(中/英) + `RELEASE.md`
+- API provider count → `README.md` + `ARCHITECTURE.md` + `docs/development_roadmap.md`
+- Batch size → `README.md` + `ARCHITECTURE.md` (all should say 25K)
+- Latest commit → `RELEASE.md`
+- When deleting a doc file, run `rg <filename> --include '*.md'` to find stale references
+
 ## Known Limitations
 
 - E2E tests need real Skyrim.esm.

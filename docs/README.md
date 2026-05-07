@@ -65,9 +65,51 @@ Completed implementation plans and historical documents live in [`archive/`](arc
 
 ## Maintenance Rules
 
-- Keep `AGENTS.md` as the primary AI development guide.
-- Keep `SPEC.md` as the canonical source for goals, interfaces, invariants, and task completion.
-- Keep `README.md` concise and user-facing; detailed implementation notes belong here or in `ARCHITECTURE.md`.
-- Move completed execution plans to `docs/archive/` instead of leaving them in the active docs list.
-- When support status changes, update `README.md`, `SPEC.md`, `feature_comparison.md`, and this index together.
-- Keep the original Delphi project under `legacy/original-delphi/`; keep `Data/` at the repository root because the rewrite uses it at runtime/tests.
+### 文档角色与优先级
+
+| 文档 | 角色 | 受众 | 更新触发条件 |
+|------|------|------|------------|
+| `AGENTS.md` | AI 开发主指南 | AI 编码助手 | 新增模块/命令/模式时 |
+| `SPEC.md` | 规范真相源（caveman 编码） | 开发者、AI | 任何行为变更 |
+| `ARCHITECTURE.md` | 架构设计文档 | 开发者 | IPC/数据流/模块边界变更 |
+| `README.md` / `README_zh-CN.md` | 产品入口 | 用户、新开发者 | 功能增删、状态变化 |
+| `LAYOUT_REDESIGN_PLAN.md` | 布局复刻记录 | 前端开发者 | UI 布局变更 |
+| `RELEASE.md` | 发布流程 + 当前版本 | 发布者 | 每次提交后更新元数据 |
+| `docs/feature_comparison.md` | Delphi vs Rust 差距分析 | 开发者、AI | 功能覆盖度变化 |
+| `docs/development_roadmap.md` | 开发路线图 | 开发者 | 任务完成/新增 |
+| `docs/release_qa.md` | 发布 QA 清单 | QA | 每次发布前 |
+| `docs/archive/` | 历史计划归档 | 历史参考 | 计划完成后移入 |
+
+### 每次功能变更后的必做检查
+
+提交重大功能后，必须检查以下数字是否同步（用 `cargo test -p xt-core --lib` 和 `npx tsc --noEmit` 获取最新值）：
+
+| 检查项 | 分布位置 |
+|--------|---------|
+| 测试数量 | `ARCHITECTURE.md`·`RELEASE.md`·`LAYOUT_REDESIGN_PLAN.md` |
+| SPEC 任务完成数 | `README.md`·`README_zh-CN.md`·`RELEASE.md` |
+| 翻译 API 提供商数 | `README.md`(2处)·`README_zh-CN.md`(2处)·`ARCHITECTURE.md`·`docs/development_roadmap.md`(2处) |
+| 分块大小 (25K) | `README.md`(2处)·`README_zh-CN.md`(2处)·`ARCHITECTURE.md` |
+| 最新提交哈希 | `RELEASE.md` |
+
+### 文档清理规则
+
+1. **误放文件立即删除** — 不属于本项目的文档（如其他产品的设计稿）不应存在于仓库中。
+2. **被取代的文件应删除或归档** — 新版本就绪后，旧版本移入 `docs/archive/` 或直接删除（如果是一次性日计划/QA记录）。
+3. **AI 代理指南合并** — `AGENTS.md` 是主指南，`CLAUDE.md` 仅作存根引用。不要在两者间分裂信息。
+4. **中英文 README 同步** — `README.md` 和 `README_zh-CN.md` 的事实数据（数字、功能列表、状态）必须一致。
+5. **外部工具产物不入库** — `superpowers/`、`.waylog/` 等第三方工具生成的目录不应提交。
+6. **死引用立即修正** — 删除文件后，运行 `rg <deleted_file_name> --include '*.md'` 检查所有残留引用。
+
+### 定期审计命令
+
+```bash
+# 检查是否有引用已删除文件的过时链接
+rg "toolchain_and_roadmap|IMPLEMENTATION_SUMMARY|DESIGN\.md" --include "*.md" docs/ *.md
+
+# 检查数字一致性
+rg "283 tests|181 tests|247 tests" *.md docs/
+rg "45.*task|100.*task" *.md docs/
+rg "4/8|6/8.*provider|翻译 API.*OpenAI.*DeepL" *.md docs/
+rg "10K items|25K items" *.md docs/
+```
