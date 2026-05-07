@@ -1386,6 +1386,14 @@ html, body, #root {
   box-shadow: inset 2px 0 0 var(--color-primary);
 }
 
+/* Row status background tints */
+.virtual-row.status-translated { background: rgba(78, 201, 176, 0.04); }
+.virtual-row.status-incomplete { background: rgba(212, 160, 23, 0.04); }
+.virtual-row.status-locked { background: rgba(139, 139, 139, 0.04); }
+.virtual-row.status-translated.virtual-row-selected { background: rgba(78, 201, 176, 0.10); box-shadow: inset 2px 0 0 var(--color-success); }
+.virtual-row.status-incomplete.virtual-row-selected { background: rgba(212, 160, 23, 0.10); box-shadow: inset 2px 0 0 var(--color-warning); }
+.virtual-row.status-locked.virtual-row-selected { background: rgba(139, 139, 139, 0.10); }
+
 /* Virtual list row cells */
 .row-cell {
   padding: 0 16px;
@@ -1441,6 +1449,14 @@ html, body, #root {
   font-size: 10px;
   color: var(--color-muted);
   padding: 0 4px;
+}
+
+/* Search highlight in table cells */
+.search-highlight {
+  background: rgba(212, 160, 23, 0.35);
+  color: inherit;
+  border-radius: 2px;
+  padding: 0 1px;
 }
 
 .virtual-list-container {
@@ -1604,6 +1620,25 @@ html, body, #root {
   align-items: center;
   gap: 3px;
   font-weight: 500;
+}
+
+.editor-field-bar {
+  height: 3px;
+  background: var(--color-hairline);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-top: 2px;
+}
+
+.editor-field-bar-fill {
+  height: 100%;
+  background: var(--color-success);
+  transition: width 0.3s ease;
+  border-radius: 2px;
+}
+
+.editor-field-bar-over {
+  background: var(--color-error);
 }
 
 .tag-highlight {
@@ -2016,21 +2051,40 @@ html, body, #root {
   font-weight: 500;
 }
 
+.statusbar-dirty {
+  color: var(--color-warning);
+  font-weight: 700;
+}
+
 .statusbar-progress {
   flex: 1;
   color: var(--color-body);
 }
 
+.statusbar-selection {
+  flex: 0 0 70px;
+  text-align: center;
+  color: var(--color-primary);
+  font-weight: 500;
+}
+
 .statusbar-mode {
-  flex: 0 0 50px;
+  flex: 0 0 45px;
   text-align: center;
   color: var(--color-accent-teal);
   font-weight: 600;
 }
 
 .statusbar-lang {
-  flex: 0 0 160px;
+  flex: 0 0 140px;
   text-align: right;
+}
+
+.statusbar-theme {
+  flex: 0 0 60px;
+  text-align: center;
+  color: var(--color-muted-soft);
+  text-transform: capitalize;
 }
 
 /* === App Overlay (locks UI during critical operations) === */

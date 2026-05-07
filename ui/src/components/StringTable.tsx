@@ -12,9 +12,21 @@ const ROW_HEIGHT = 32;
 interface RowData {
   items: SkyStringDTO[];
   selectedId: number | null;
+  filter: string;
   onSelect: (id: number) => void;
   onDoubleClick: (id: number) => void;
   onContextMenu: (e: React.MouseEvent, item: SkyStringDTO) => void;
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function highlightText(text: string, filter: string): string {
+  if (!filter) return escapeHtml(text);
+  const escaped = filter.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const regex = new RegExp(`(${escaped})`, 'gi');
+  return escapeHtml(text).replace(regex, '<mark class="search-highlight">$1</mark>');
 }
 
 function VirtualRow(props: {
@@ -27,11 +39,12 @@ function VirtualRow(props: {
   style: React.CSSProperties;
   items: SkyStringDTO[];
   selectedId: number | null;
+  filter: string;
   onSelect: (id: number) => void;
   onDoubleClick: (id: number) => void;
   onContextMenu: (e: React.MouseEvent, item: SkyStringDTO) => void;
 }): ReactElement | null {
-  const { index, style, items, selectedId, onSelect, onDoubleClick, onContextMenu } = props;
+  const { index, style, items, selectedId, filter, onSelect, onDoubleClick, onContextMenu } = props;
   const item = items[index];
   if (!item) return null;
 
@@ -64,10 +77,10 @@ function VirtualRow(props: {
       </div>
       <div className="row-cell row-cell-id">{item.id}</div>
       <div className="row-cell text-cell source-text" title={item.source}>
-        {item.source}
+        <span dangerouslySetInnerHTML={{ __html: highlightText(item.source, filter) }} />
       </div>
       <div className="row-cell text-cell trans-text" title={item.translation}>
-        {item.translation || "—"}
+        <span dangerouslySetInnerHTML={{ __html: highlightText(item.translation || "—", filter) }} />
       </div>
       <div className="row-cell row-cell-ld">
         {item.ld > 0 ? item.ld : "—"}
@@ -141,6 +154,7 @@ export function StringTable() {
   const rowData: RowData = {
     items,
     selectedId,
+    filter,
     onSelect: handleSelect,
     onDoubleClick: (id) => openEditorForItem(id),
     onContextMenu: handleContextMenu,

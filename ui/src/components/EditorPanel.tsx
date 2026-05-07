@@ -366,6 +366,14 @@ export function EditorDialog({ open, onClose }: EditorDialogProps) {
                   </span>
                 )}
               </span>
+              {fieldSizeWarning && (
+                <div className="editor-field-bar">
+                  <div
+                    className={`editor-field-bar-fill ${fieldSizeWarning.current > fieldSizeWarning.max ? "editor-field-bar-over" : ""}`}
+                    style={{ width: `${Math.min(100, (fieldSizeWarning.current / fieldSizeWarning.max) * 100)}%` }}
+                  />
+                </div>
+              )}
             </div>
             <div className="editor-dialog-footer-right">
               <ProgressBar
