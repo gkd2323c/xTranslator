@@ -243,7 +243,7 @@ export function EditorDialog({ open, onClose }: EditorDialogProps) {
                   title={t("editor.findSimilarTooltip")}
                 >
                   <Search size={16} />
-                  <span>{t("editor.findSimilar")}</span>
+                  <span>{t("editor.findSimilar", { defaultValue: "Find Similar" })}</span>
                 </button>
                 <button
                   className="editor-action-btn"
@@ -252,7 +252,7 @@ export function EditorDialog({ open, onClose }: EditorDialogProps) {
                   title={t("editor.machineTranslateTooltip")}
                 >
                   <Languages size={16} />
-                  <span>{t("editor.machineTranslate")}</span>
+                  <span>{t("editor.machineTranslate", { defaultValue: "Translate" })}</span>
                 </button>
                 <button
                   className="editor-action-btn"
@@ -260,7 +260,7 @@ export function EditorDialog({ open, onClose }: EditorDialogProps) {
                   title={t("editor.copySourceTooltip")}
                 >
                   <ArrowRight size={16} />
-                  <span>{t("editor.copySource")}</span>
+                  <span>{t("editor.copySource", { defaultValue: "Copy Source" })}</span>
                 </button>
                 <div className="editor-action-sep" />
                 <button
@@ -269,7 +269,7 @@ export function EditorDialog({ open, onClose }: EditorDialogProps) {
                   title="Ctrl+↑"
                 >
                   <ArrowUp size={16} />
-                  <span>{t("editor.prevUntranslated")}</span>
+                  <span>{t("editor.prevUntranslated", { defaultValue: "Prev" })}</span>
                 </button>
                 <button
                   className="editor-action-btn"
@@ -277,7 +277,7 @@ export function EditorDialog({ open, onClose }: EditorDialogProps) {
                   title="Ctrl+↓"
                 >
                   <ArrowDown size={16} />
-                  <span>{t("editor.nextUntranslated")}</span>
+                  <span>{t("editor.nextUntranslated", { defaultValue: "Next" })}</span>
                 </button>
                 <div className="editor-action-sep" />
                 <button
@@ -286,7 +286,7 @@ export function EditorDialog({ open, onClose }: EditorDialogProps) {
                   title={t("editor.setApiKeyTooltip")}
                 >
                   <Key size={16} />
-                  <span>{t("editor.setApiKey")}</span>
+                  <span>{t("editor.setApiKey", { defaultValue: "API Key" })}</span>
                 </button>
               </div>
 
@@ -377,7 +377,7 @@ export function EditorDialog({ open, onClose }: EditorDialogProps) {
                 label={t("sidebar.progress")}
               />
               <div className="editor-actions">
-                <Button variant="ghost" size="sm" onClick={onClose}>{t("common.close")}</Button>
+                <Button variant="ghost" size="sm" onClick={onClose}>{t("common.close", { defaultValue: "Close" })}</Button>
                 <Button variant="primary" size="sm" onClick={handleSave} loading={isSaving} title="Ctrl+Enter" icon={isSaving ? undefined : <Save size={14} />}>
                   {t("editor.save")}
                 </Button>
