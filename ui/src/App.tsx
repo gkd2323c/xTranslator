@@ -6,7 +6,6 @@ import { useTranslation } from "react-i18next";
 import { listen } from "@tauri-apps/api/event";
 import { setI18nLanguage } from "./i18n";
 import { useAppStore } from "./stores/appStore";
-import type { ActivePanel } from "./stores/appStore";
 import { MenuBar } from "./components/MenuBar";
 import { SidePanel } from "./components/SidePanel";
 import { BatchPanel } from "./components/BatchPanel";
@@ -26,40 +25,28 @@ import { LogPanel } from "./components/bottom/LogPanel";
 import { HeaderProcessorPanel } from "./components/bottom/HeaderProcessorPanel";
 import { HeaderWizardPanel } from "./components/bottom/HeaderWizardPanel";
 import { StringTable } from "./components/StringTable";
-import { EditorPanel } from "./components/EditorPanel";
+import { EditorDialog } from "./components/EditorPanel";
 import { BatchTranslateBar } from "./components/BatchTranslateBar";
 import { RecoveryPromptModal } from "./components/RecoveryPromptModal";
 import { StatusBar } from "./components/StatusBar";
+import { Modal } from "./components/ui";
 import { autoBackupSst, loadConfig, setOpenAiApiKey, setDeeplApiKey, setBaiduApiKey, setYoudaoApiKey, setAzureApiKey, setTranslationProvider } from "./api/strings";
 import "./App.css";
 import "./components/ui/ui.css";
 
 const AUTO_BACKUP_INTERVAL_MS = 5 * 60 * 1000;
 
-function renderActivePanel(panel: ActivePanel) {
-  switch (panel) {
-    case "mcm":
-      return <McmPanel />;
-    case "espCompare":
-      return <EspComparePanel />;
-    case "bsa":
-      return <BsaBrowser />;
-    case "pex":
-      return <PexPanel />;
-    case "fuz":
-      return <FuzPanel />;
-    case "dialog":
-      return <DialogView />;
-    case "batch":
-      return <BatchPanel />;
-    case "finalize":
-      return <FinalizePanel />;
-    case "dataConfigs":
-      return <DataConfigsPanel />;
-    default:
-      return null;
-  }
-}
+const DIALOG_TITLES: Record<string, string> = {
+  batch: "Batch Processor",
+  bsa: "BSA Browser",
+  pex: "PEX Decompiler",
+  fuz: "Voice/FUZ",
+  dialog: "Dialog Viewer",
+  mcm: "MCM Translator",
+  espCompare: "ESP Compare",
+  finalize: "Finalize",
+  dataConfigs: "Data Configs",
+};
 
 function App() {
   const { t } = useTranslation();
@@ -69,8 +56,11 @@ function App() {
   const loadProgress = useAppStore((s) => s.loadProgress);
   const theme = useAppStore((s) => s.theme);
   const activePanel = useAppStore((s) => s.activePanel);
+  const setActivePanel = useAppStore((s) => s.setActivePanel);
   const activeBottomTab = useAppStore((s) => s.activeBottomTab);
   const showBottomPanel = useAppStore((s) => s.showBottomPanel);
+  const editorOpen = useAppStore((s) => s.editorOpen);
+  const setEditorOpen = useAppStore((s) => s.setEditorOpen);
   const isDirty = useAppStore((s) => s.isDirty);
   const sstPath = useAppStore((s) => s.sstPath);
   const undo = useAppStore((s) => s.undo);
@@ -81,7 +71,13 @@ function App() {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        setSelectedById(null);
+        if (editorOpen) {
+          setEditorOpen(false);
+        } else if (activePanel) {
+          setActivePanel(null);
+        } else {
+          setSelectedById(null);
+        }
       } else if ((e.ctrlKey || e.metaKey) && e.key === "z" && !e.shiftKey) {
         e.preventDefault();
         undo();
@@ -92,7 +88,7 @@ function App() {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [setSelectedById, undo, redo]);
+  }, [setSelectedById, undo, redo, editorOpen, setEditorOpen, activePanel, setActivePanel]);
 
   useEffect(() => {
     loadConfig().then((cfg) => {
@@ -184,23 +180,23 @@ function App() {
     <div className="app">
       <Toaster position="top-right" />
       <RecoveryPromptModal />
+      <EditorDialog open={editorOpen} onClose={() => setEditorOpen(false)} />
+      <Modal open={activePanel === "batch"} onClose={() => setActivePanel(null)} title={DIALOG_TITLES.batch} size="lg"><BatchPanel /></Modal>
+      <Modal open={activePanel === "bsa"} onClose={() => setActivePanel(null)} title={DIALOG_TITLES.bsa} size="lg"><BsaBrowser /></Modal>
+      <Modal open={activePanel === "pex"} onClose={() => setActivePanel(null)} title={DIALOG_TITLES.pex} size="lg"><PexPanel /></Modal>
+      <Modal open={activePanel === "fuz"} onClose={() => setActivePanel(null)} title={DIALOG_TITLES.fuz} size="lg"><FuzPanel /></Modal>
+      <Modal open={activePanel === "dialog"} onClose={() => setActivePanel(null)} title={DIALOG_TITLES.dialog} size="lg"><DialogView /></Modal>
+      <Modal open={activePanel === "mcm"} onClose={() => setActivePanel(null)} title={DIALOG_TITLES.mcm} size="lg"><McmPanel /></Modal>
+      <Modal open={activePanel === "espCompare"} onClose={() => setActivePanel(null)} title={DIALOG_TITLES.espCompare} size="lg"><EspComparePanel /></Modal>
+      <Modal open={activePanel === "finalize"} onClose={() => setActivePanel(null)} title={DIALOG_TITLES.finalize} size="lg"><FinalizePanel /></Modal>
+      <Modal open={activePanel === "dataConfigs"} onClose={() => setActivePanel(null)} title={DIALOG_TITLES.dataConfigs} size="lg"><DataConfigsPanel /></Modal>
       <MenuBar />
       <BatchTranslateBar />
       <div className="app-body">
-        {/* Active tool panel (overlay/drawer for BSA, PEX, FUZ, etc.) */}
-        {activePanel && (
-          <aside className="app-side-panel" aria-label="Active tool panel">
-            {renderActivePanel(activePanel)}
-          </aside>
-        )}
         <main className="app-main">
           {/* String table area */}
           <div className="app-table-area">
             <StringTable />
-          </div>
-          {/* Editor area */}
-          <div className="app-editor-area">
-            <EditorPanel />
           </div>
           {/* Bottom panel (tabbed auxiliary views) */}
           {showBottomPanel && (

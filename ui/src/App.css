@@ -1753,6 +1753,121 @@ html, body, #root {
   justify-content: space-between;
 }
 
+/* === Editor Dialog (popup) === */
+.editor-empty-dialog {
+  padding: 40px;
+  text-align: center;
+  color: var(--color-muted);
+  font-size: 14px;
+}
+
+.editor-dialog-body {
+  display: flex;
+  flex-direction: column;
+  min-height: 400px;
+}
+
+.editor-dialog-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 0 10px;
+  border-bottom: 1px solid var(--color-hairline-soft);
+  margin-bottom: 10px;
+}
+
+.editor-dialog-main {
+  display: flex;
+  gap: 16px;
+  flex: 1;
+  min-height: 0;
+}
+
+.editor-dialog-left {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.editor-dialog-right {
+  width: 240px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border-left: 1px solid var(--color-hairline);
+  padding-left: 16px;
+}
+
+.editor-dialog-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.editor-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-sm);
+  color: var(--color-body);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  text-align: left;
+  width: 100%;
+}
+
+.editor-action-btn:hover:not(:disabled) {
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+}
+
+.editor-action-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.editor-action-sep {
+  height: 1px;
+  background: var(--color-hairline);
+  margin: 4px 0;
+}
+
+.editor-dialog-footer {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  padding-top: 10px;
+  border-top: 1px solid var(--color-hairline-soft);
+  margin-top: 10px;
+}
+
+.editor-dialog-footer-left {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.editor-dialog-footer-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  min-width: 280px;
+}
+
+/* (reuse .editor-source, .editor-translation, .editor-source-text,
+    .editor-textarea, .editor-matches, .editor-tcsc-buttons,
+    .editor-char-count, .editor-field-warning, .editor-formid,
+    .editor-alias-warning, .tag-highlight, .match-*, .editor-actions) */
+
 /* === Scrollbar === */
 ::-webkit-scrollbar {
   width: 6px;

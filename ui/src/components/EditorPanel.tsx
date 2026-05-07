@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useAppStore, computeTranslationProgress } from "../stores/appStore";
 import { updateTranslation, heuristicSearch, translateString, setApiKey, tcscConvert, rtlReverse, shapeArabic, deshapeArabic, checkAliases, type HeuristicMatchDTO, type AliasCheckResult } from "../api/strings";
-import { Save, X, Type, Search, Languages, Key, AlertTriangle, ArrowRight, Copy, ArrowUp, ArrowDown } from "lucide-react";
+import { Save, Search, Languages, Key, AlertTriangle, ArrowRight, Copy, ArrowUp, ArrowDown } from "lucide-react";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
-import { Button, Textarea, Badge, Modal, Input, ProgressBar, EmptyState } from "./ui";
+import { Button, Textarea, Badge, Modal, Input, ProgressBar } from "./ui";
 
 const TAG_REGEX = /(<\/?[A-Za-z][^>]*>)/g;
 
@@ -25,7 +25,12 @@ function highlightTags(text: string): string {
     .join("");
 }
 
-export function EditorPanel() {
+export interface EditorDialogProps {
+  open: boolean;
+  onClose: () => void;
+}
+
+export function EditorDialog({ open, onClose }: EditorDialogProps) {
   const { t } = useTranslation();
   const selectedItem = useAppStore((s) => s.selectedItem);
   const selectedId = useAppStore((s) => s.selectedId);
@@ -158,11 +163,8 @@ export function EditorPanel() {
   };
 
   useEffect(() => {
+    if (!open) return;
     const handler = (e: KeyboardEvent) => {
-      if (e.key === "F2" && selectedItem) {
-        const textarea = document.querySelector(".editor-textarea") as HTMLTextAreaElement;
-        textarea?.focus();
-      }
       if (e.ctrlKey && e.key === "ArrowDown") {
         e.preventDefault();
         jumpToUntranslated("next");
@@ -182,277 +184,230 @@ export function EditorPanel() {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [selectedItem, jumpToUntranslated, handleHeuristicSearch, handleTranslate]);
+  }, [open, selectedItem, jumpToUntranslated, handleHeuristicSearch, handleTranslate]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.ctrlKey && e.key === "Enter") handleSave();
   };
 
-  if (!selectedItem) {
-    return (
-      <div className="editor-panel">
-        <EmptyState
-          icon={<Type size={24} />}
-          title={t("editor.selectToEdit")}
-        />
-      </div>
-    );
-  }
+  const title = selectedItem
+    ? `#${selectedItem.id}  ${selectedItem.record_sig}:${selectedItem.field_sig}`
+    : t("editor.selectToEdit");
 
   return (
-    <div className="editor-panel">
-      {/* Header: metadata only */}
-      <div className="editor-header">
-        <div className="editor-meta">
-          <span className="editor-id">#{selectedItem.id}</span>
-          <span className="editor-sig mono">
-            {selectedItem.record_sig}:{selectedItem.field_sig}
-          </span>
-          <span className="editor-formid mono">{selectedItem.form_id}</span>
-          <Badge variant={selectedItem.status === "translated" ? "translated" : selectedItem.status === "incomplete" ? "incomplete" : "locked"}>
-            {selectedItem.status}
-          </Badge>
-          {aliasResult && aliasResult.has_mismatch && (
-            <span className="editor-alias-warning" title={aliasResult.missing_in_trans.join(", ")}>
-              <AlertTriangle size={12} /> {t("editor.aliasMismatch")}
-            </span>
-          )}
-        </div>
-        <Button variant="ghost" size="sm" onClick={() => setSelectedById(null)} icon={<X size={14} />} />
-      </div>
-
-      {/* Body: source | vertical toolbar | translation */}
-      <div className="editor-body">
-        <div className="editor-source">
-          <label>{t("common.source")}</label>
-          <div className="editor-source-text" dangerouslySetInnerHTML={{ __html: highlightTags(selectedItem.source) }} />
-        </div>
-
-        <div className="editor-vtoolbar">
-          <button
-            className="vtoolbar-btn"
-            onClick={handleHeuristicSearch}
-            disabled={isSearching || selectedItem.status === "translated"}
-            title={t("editor.findSimilarTooltip")}
-          >
-            <Search size={14} />
-          </button>
-          <button
-            className="vtoolbar-btn"
-            onClick={handleTranslate}
-            disabled={isTranslating}
-            title={t("editor.machineTranslateTooltip")}
-          >
-            <Languages size={14} />
-          </button>
-          <button
-            className="vtoolbar-btn"
-            onClick={() => setLocalTrans(selectedItem.source)}
-            title={t("editor.copySourceTooltip")}
-          >
-            <ArrowRight size={14} />
-          </button>
-          <div className="vtoolbar-sep" />
-          <button
-            className="vtoolbar-btn"
-            onClick={() => jumpToUntranslated("prev")}
-            title="Ctrl+↑"
-          >
-            <ArrowUp size={14} />
-          </button>
-          <button
-            className="vtoolbar-btn"
-            onClick={() => jumpToUntranslated("next")}
-            title="Ctrl+↓"
-          >
-            <ArrowDown size={14} />
-          </button>
-          <div className="vtoolbar-sep" />
-          <button
-            className="vtoolbar-btn"
-            onClick={() => setShowApiKeyDialog(true)}
-            title={t("editor.setApiKeyTooltip")}
-          >
-            <Key size={14} />
-          </button>
-        </div>
-
-        <div className="editor-translation">
-          <label>{t("common.translation")}</label>
-          <Textarea
-            value={localTrans}
-            onChange={(e) => setLocalTrans(e.target.value)}
-            onKeyDown={handleKeyDown}
-            rows={3}
-            className="editor-textarea"
-            placeholder={t("editor.enterTranslation")}
-            autoFocus
-          />
-          <div className="editor-info-row">
-            <span className="editor-char-count">
-              {t("editor.sourceChars")}: {selectedItem.source.length} | {t("editor.transChars")}: {localTrans.length}
-            </span>
-            {fieldSizeWarning && (
-              <span className="editor-field-warning" title={t("editor.fieldSizeExceeded")}>
-                <AlertTriangle size={12} /> {t("editor.fieldSizeWarning", { current: fieldSizeWarning.current, max: fieldSizeWarning.max })}
+    <Modal open={open} onClose={onClose} title={title} size="xl">
+      {!selectedItem ? (
+        <div className="editor-empty-dialog">{t("editor.selectToEdit")}</div>
+      ) : (
+        <div className="editor-dialog-body">
+          <div className="editor-dialog-header">
+            <span className="editor-formid mono">{selectedItem.form_id}</span>
+            <Badge variant={selectedItem.status === "translated" ? "translated" : selectedItem.status === "incomplete" ? "incomplete" : "locked"}>
+              {selectedItem.status}
+            </Badge>
+            {selectedItem.is_vmad && <Badge variant="script" size="sm">VMAD</Badge>}
+            {aliasResult && aliasResult.has_mismatch && (
+              <span className="editor-alias-warning" title={aliasResult.missing_in_trans.join(", ")}>
+                <AlertTriangle size={12} /> {t("editor.aliasMismatch")}
               </span>
             )}
           </div>
-        </div>
 
-        {matches.length > 0 && (
-          <div className="editor-matches">
-            <label>{t("editor.similarTranslations")}</label>
-            <div className="matches-list">
-              {matches.map((m, i) => (
-                <div key={i} className="match-item" onClick={() => applyMatch(m.translation)}>
-                  <div className="match-source" title={m.source}>{m.source}</div>
-                  <div className="match-translation">{m.translation}</div>
-                  <div className="match-meta">
-                    <span className="match-sim">{(m.similarity * 100).toFixed(0)}%</span>
-                    <Copy size={12} />
+          <div className="editor-dialog-main">
+            <div className="editor-dialog-left">
+              <div className="editor-source">
+                <label>{t("common.source")}</label>
+                <div className="editor-source-text" dangerouslySetInnerHTML={{ __html: highlightTags(selectedItem.source) }} />
+              </div>
+
+              <div className="editor-translation">
+                <label>{t("common.translation")}</label>
+                <Textarea
+                  value={localTrans}
+                  onChange={(e) => setLocalTrans(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  rows={4}
+                  className="editor-textarea"
+                  placeholder={t("editor.enterTranslation")}
+                  autoFocus
+                />
+              </div>
+            </div>
+
+            <div className="editor-dialog-right">
+              <div className="editor-dialog-actions">
+                <button
+                  className="editor-action-btn"
+                  onClick={handleHeuristicSearch}
+                  disabled={isSearching || selectedItem.status === "translated"}
+                  title={t("editor.findSimilarTooltip")}
+                >
+                  <Search size={16} />
+                  <span>{t("editor.findSimilar")}</span>
+                </button>
+                <button
+                  className="editor-action-btn"
+                  onClick={handleTranslate}
+                  disabled={isTranslating}
+                  title={t("editor.machineTranslateTooltip")}
+                >
+                  <Languages size={16} />
+                  <span>{t("editor.machineTranslate")}</span>
+                </button>
+                <button
+                  className="editor-action-btn"
+                  onClick={() => setLocalTrans(selectedItem.source)}
+                  title={t("editor.copySourceTooltip")}
+                >
+                  <ArrowRight size={16} />
+                  <span>{t("editor.copySource")}</span>
+                </button>
+                <div className="editor-action-sep" />
+                <button
+                  className="editor-action-btn"
+                  onClick={() => jumpToUntranslated("prev")}
+                  title="Ctrl+↑"
+                >
+                  <ArrowUp size={16} />
+                  <span>{t("editor.prevUntranslated")}</span>
+                </button>
+                <button
+                  className="editor-action-btn"
+                  onClick={() => jumpToUntranslated("next")}
+                  title="Ctrl+↓"
+                >
+                  <ArrowDown size={16} />
+                  <span>{t("editor.nextUntranslated")}</span>
+                </button>
+                <div className="editor-action-sep" />
+                <button
+                  className="editor-action-btn"
+                  onClick={() => setShowApiKeyDialog(true)}
+                  title={t("editor.setApiKeyTooltip")}
+                >
+                  <Key size={16} />
+                  <span>{t("editor.setApiKey")}</span>
+                </button>
+              </div>
+
+              {matches.length > 0 && (
+                <div className="editor-matches">
+                  <label>{t("editor.similarTranslations")}</label>
+                  <div className="matches-list">
+                    {matches.map((m, i) => (
+                      <div key={i} className="match-item" onClick={() => applyMatch(m.translation)}>
+                        <div className="match-source" title={m.source}>{m.source}</div>
+                        <div className="match-translation">{m.translation}</div>
+                        <div className="match-meta">
+                          <span className="match-sim">{(m.similarity * 100).toFixed(0)}%</span>
+                          <Copy size={12} />
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
-              ))}
+              )}
             </div>
           </div>
-        )}
-      </div>
 
-      {/* Footer: TCSC/RTL + actions + progress */}
-      <div className="editor-footer">
-        <div className="editor-footer-row">
-          <div className="editor-tcsc-buttons">
-            <Button
-              variant="ghost"
-              size="xs"
-              onClick={async () => {
-                if (!localTrans) return;
-                try {
-                  const result = await tcscConvert(localTrans, "to_simplified");
-                  setLocalTrans(result);
-                  toast.success(t("editor.convertedToSimplified"));
-                } catch (e: any) {
-                  toast.error(`${t("editor.tcscFailed")}: ${e}`);
-                }
-              }}
-              title={t("editor.tcsc_simplified")}
-            >
-              {t("editor.tcsc_simplified")}
-            </Button>
-            <Button
-              variant="ghost"
-              size="xs"
-              onClick={async () => {
-                if (!localTrans) return;
-                try {
-                  const result = await tcscConvert(localTrans, "to_traditional");
-                  setLocalTrans(result);
-                  toast.success(t("editor.convertedToTraditional"));
-                } catch (e: any) {
-                  toast.error(`${t("editor.tcscFailed")}: ${e}`);
-                }
-              }}
-              title={t("editor.tcsc_traditional")}
-            >
-              {t("editor.tcsc_traditional")}
-            </Button>
-            <Button
-              variant="ghost"
-              size="xs"
-              onClick={async () => {
-                if (!localTrans) return;
-                try {
-                  const result = await rtlReverse(localTrans);
-                  setLocalTrans(result);
-                  toast.success(t("editor.rtlApplied"));
-                } catch (e: any) {
-                  toast.error(`${t("editor.rtlFailed")}: ${e}`);
-                }
-              }}
-              title={t("editor.rtlTooltip")}
-            >
-              RTL
-            </Button>
-            <Button
-              variant="ghost"
-              size="xs"
-              onClick={async () => {
-                if (!localTrans) return;
-                try {
-                  const result = await shapeArabic(localTrans);
-                  setLocalTrans(result);
-                  toast.success(t("editor.shapeApplied", { defaultValue: "Arabic shaped" }));
-                } catch (e: any) {
-                  toast.error(`${t("editor.shapeFailed", { defaultValue: "Shape failed" })}: ${e}`);
-                }
-              }}
-              title={t("editor.shapeTooltip", { defaultValue: "Shape Arabic (logical → presentation forms)" })}
-            >
-              Shape
-            </Button>
-            <Button
-              variant="ghost"
-              size="xs"
-              onClick={async () => {
-                if (!localTrans) return;
-                try {
-                  const result = await deshapeArabic(localTrans);
-                  setLocalTrans(result);
-                  toast.success(t("editor.deshapeApplied", { defaultValue: "Arabic deshaped" }));
-                } catch (e: any) {
-                  toast.error(`${t("editor.deshapeFailed", { defaultValue: "Deshape failed" })}: ${e}`);
-                }
-              }}
-              title={t("editor.deshapeTooltip", { defaultValue: "Deshape Arabic (presentation forms → logical)" })}
-            >
-              Deshape
-            </Button>
+          <div className="editor-dialog-footer">
+            <div className="editor-dialog-footer-left">
+              <div className="editor-tcsc-buttons">
+                <Button variant="ghost" size="xs" onClick={async () => {
+                  if (!localTrans) return;
+                  try {
+                    const result = await tcscConvert(localTrans, "to_simplified");
+                    setLocalTrans(result);
+                    toast.success(t("editor.convertedToSimplified"));
+                  } catch (e: any) { toast.error(`${t("editor.tcscFailed")}: ${e}`); }
+                }} title={t("editor.tcsc_simplified")}>
+                  {t("editor.tcsc_simplified")}
+                </Button>
+                <Button variant="ghost" size="xs" onClick={async () => {
+                  if (!localTrans) return;
+                  try {
+                    const result = await tcscConvert(localTrans, "to_traditional");
+                    setLocalTrans(result);
+                    toast.success(t("editor.convertedToTraditional"));
+                  } catch (e: any) { toast.error(`${t("editor.tcscFailed")}: ${e}`); }
+                }} title={t("editor.tcsc_traditional")}>
+                  {t("editor.tcsc_traditional")}
+                </Button>
+                <Button variant="ghost" size="xs" onClick={async () => {
+                  if (!localTrans) return;
+                  try {
+                    const result = await rtlReverse(localTrans);
+                    setLocalTrans(result);
+                    toast.success(t("editor.rtlApplied"));
+                  } catch (e: any) { toast.error(`${t("editor.rtlFailed")}: ${e}`); }
+                }} title={t("editor.rtlTooltip")}>RTL</Button>
+                <Button variant="ghost" size="xs" onClick={async () => {
+                  if (!localTrans) return;
+                  try {
+                    const result = await shapeArabic(localTrans);
+                    setLocalTrans(result);
+                    toast.success(t("editor.shapeApplied", { defaultValue: "Arabic shaped" }));
+                  } catch (e: any) { toast.error(`${t("editor.shapeFailed", { defaultValue: "Shape failed" })}: ${e}`); }
+                }} title={t("editor.shapeTooltip", { defaultValue: "Shape Arabic" })}>Shape</Button>
+                <Button variant="ghost" size="xs" onClick={async () => {
+                  if (!localTrans) return;
+                  try {
+                    const result = await deshapeArabic(localTrans);
+                    setLocalTrans(result);
+                    toast.success(t("editor.deshapeApplied", { defaultValue: "Arabic deshaped" }));
+                  } catch (e: any) { toast.error(`${t("editor.deshapeFailed", { defaultValue: "Deshape failed" })}: ${e}`); }
+                }} title={t("editor.deshapeTooltip", { defaultValue: "Deshape Arabic" })}>Deshape</Button>
+              </div>
+              <span className="editor-char-count">
+                {t("editor.sourceChars")}: {selectedItem.source.length} | {t("editor.transChars")}: {localTrans.length}
+                {fieldSizeWarning && (
+                  <span className="editor-field-warning" title={t("editor.fieldSizeExceeded")}>
+                    <AlertTriangle size={12} /> {fieldSizeWarning.current}/{fieldSizeWarning.max}
+                  </span>
+                )}
+              </span>
+            </div>
+            <div className="editor-dialog-footer-right">
+              <ProgressBar
+                value={translationProgress.translated}
+                max={translationProgress.total}
+                variant="gradient"
+                size="sm"
+                showLabel
+                label={t("sidebar.progress")}
+              />
+              <div className="editor-actions">
+                <Button variant="ghost" size="sm" onClick={onClose}>{t("common.close")}</Button>
+                <Button variant="primary" size="sm" onClick={handleSave} loading={isSaving} title="Ctrl+Enter" icon={isSaving ? undefined : <Save size={14} />}>
+                  {t("editor.save")}
+                </Button>
+              </div>
+            </div>
           </div>
-          <div className="editor-actions">
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={handleSave}
-              loading={isSaving}
-              title="Ctrl+Enter"
-              icon={isSaving ? undefined : <Save size={14} />}
-            >
-              {t("editor.save")}
-            </Button>
-          </div>
+
+          <Modal
+            open={showApiKeyDialog}
+            onClose={() => setShowApiKeyDialog(false)}
+            title={t("editor.setTranslationApiKey")}
+            size="sm"
+            footer={
+              <>
+                <Button variant="ghost" onClick={() => setShowApiKeyDialog(false)}>{t("common.cancel")}</Button>
+                <Button variant="primary" onClick={handleSetApiKey}>{t("common.save")}</Button>
+              </>
+            }
+          >
+            <p className="ui-modal-hint">{t("editor.apiKeyHint")}</p>
+            <Input
+              type="password"
+              value={apiKeyInput}
+              onChange={(e) => setApiKeyInput(e.target.value)}
+              placeholder={t("editor.skPlaceholder")}
+              onKeyDown={(e) => { if (e.key === "Enter") handleSetApiKey(); }}
+            />
+          </Modal>
         </div>
-        <ProgressBar
-          value={translationProgress.translated}
-          max={translationProgress.total}
-          variant="gradient"
-          size="sm"
-          showLabel
-          label={t("sidebar.progress")}
-        />
-      </div>
-
-      <Modal
-        open={showApiKeyDialog}
-        onClose={() => setShowApiKeyDialog(false)}
-        title={t("editor.setTranslationApiKey")}
-        size="sm"
-        footer={
-          <>
-            <Button variant="ghost" onClick={() => setShowApiKeyDialog(false)}>{t("common.cancel")}</Button>
-            <Button variant="primary" onClick={handleSetApiKey}>{t("common.save")}</Button>
-          </>
-        }
-      >
-        <p className="ui-modal-hint">{t("editor.apiKeyHint")}</p>
-        <Input
-          type="password"
-          value={apiKeyInput}
-          onChange={(e) => setApiKeyInput(e.target.value)}
-          placeholder={t("editor.skPlaceholder")}
-          onKeyDown={(e) => { if (e.key === "Enter") handleSetApiKey(); }}
-        />
-      </Modal>
-    </div>
+      )}
+    </Modal>
   );
 }

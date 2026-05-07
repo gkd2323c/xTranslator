@@ -13,6 +13,7 @@ interface RowData {
   items: SkyStringDTO[];
   selectedId: number | null;
   onSelect: (id: number) => void;
+  onDoubleClick: (id: number) => void;
   onContextMenu: (e: React.MouseEvent, item: SkyStringDTO) => void;
 }
 
@@ -27,9 +28,10 @@ function VirtualRow(props: {
   items: SkyStringDTO[];
   selectedId: number | null;
   onSelect: (id: number) => void;
+  onDoubleClick: (id: number) => void;
   onContextMenu: (e: React.MouseEvent, item: SkyStringDTO) => void;
 }): ReactElement | null {
-  const { index, style, items, selectedId, onSelect, onContextMenu } = props;
+  const { index, style, items, selectedId, onSelect, onDoubleClick, onContextMenu } = props;
   const item = items[index];
   if (!item) return null;
 
@@ -39,6 +41,7 @@ function VirtualRow(props: {
       style={style}
       className={`virtual-row status-${item.status} ${isSelected ? "virtual-row-selected" : ""}`}
       onClick={() => onSelect(item.id)}
+      onDoubleClick={() => onDoubleClick(item.id)}
       onContextMenu={(e) => onContextMenu(e, item)}
       onMouseEnter={(e) => {
         if (!isSelected) {
@@ -95,6 +98,7 @@ export function StringTable() {
   const selectNextRow = useAppStore((s) => s.selectNextRow);
   const selectPrevRow = useAppStore((s) => s.selectPrevRow);
   const replaceAll = useAppStore((s) => s.replaceAll);
+  const openEditorForItem = useAppStore((s) => s.openEditorForItem);
 
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; item: SkyStringDTO } | null>(null);
 
@@ -112,9 +116,12 @@ export function StringTable() {
       } else if (e.key === "ArrowUp") {
         e.preventDefault();
         selectPrevRow();
+      } else if (e.key === "Enter" && selectedId !== null) {
+        e.preventDefault();
+        openEditorForItem(selectedId);
       }
     },
-    [selectNextRow, selectPrevRow]
+    [selectNextRow, selectPrevRow, selectedId, openEditorForItem]
   );
 
   useEffect(() => {
@@ -135,6 +142,7 @@ export function StringTable() {
     items,
     selectedId,
     onSelect: handleSelect,
+    onDoubleClick: (id) => openEditorForItem(id),
     onContextMenu: handleContextMenu,
   };
 

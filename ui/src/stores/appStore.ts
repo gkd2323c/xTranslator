@@ -130,6 +130,7 @@ interface AppState {
   activePanel: ActivePanel;
   activeBottomTab: BottomTabId;
   showBottomPanel: boolean;
+  editorOpen: boolean;
 
   // Batch processor
   batchEntries: BatchEntry[];
@@ -185,6 +186,8 @@ interface AppState {
   setActivePanel: (panel: ActivePanel) => void;
   setActiveBottomTab: (tab: BottomTabId) => void;
   toggleBottomPanel: () => void;
+  setEditorOpen: (open: boolean) => void;
+  openEditorForItem: (id: number) => void;
   setDataConfigs: (configs: DataConfigsDto | null) => void;
   setEspMode: (espMode: boolean) => void;
   setBatchEntries: (entries: BatchEntry[]) => void;
@@ -338,6 +341,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   activePanel: null,
   activeBottomTab: "home",
   showBottomPanel: true,
+  editorOpen: false,
   batchEntries: [],
   batchStatus: null,
   selectedIds: new Set<number>(),
@@ -707,6 +711,12 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ sortField, sortDir, items, filtered: items.length });
   },
 
+  setEditorOpen: (open) => set({ editorOpen: open }),
+  openEditorForItem: (id) => {
+    const state = get();
+    const item = state.allItems.find((i) => i.id === id) || null;
+    set({ selectedId: id, selectedItem: item, editorOpen: true });
+  },
   setSelectedById: (id) => {
     if (id === null) {
       set({ selectedId: null, selectedItem: null });
