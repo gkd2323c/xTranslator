@@ -100,6 +100,8 @@ Shared by XML import and SST load (`crates/xt-core/src/matching.rs`):
 - **Codepage fallback:** UTF-8 primary; on decode failure → Windows codepage (932/936/949/950/1250-1257). Always use `CodepageConfig`.
 - **FNV-1a hash quirk:** Delphi's `StringHash()` hashes UTF-16 **low bytes only**. Must match exactly for SST roundtrip.
 - **GMST:DATA filtering:** If GMST `EDID` starts with `'s'`, treat `DATA` as string ID → look up in `.STRINGS`. Otherwise (`f`/`i`/`b` or missing) → numeric, skip.
+- **VMAD negative str_id:** VMAD script strings encode byte offset as negative `str_id`. `is_vmad: esp_ptr.str_id < 0`.
+- **MCM partial detection:** Translation is "partial" if non-empty, differs from source, and < 30% of source length.
 
 ## Adding a New IPC Command
 
