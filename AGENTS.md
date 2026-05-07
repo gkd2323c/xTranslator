@@ -137,6 +137,51 @@ Shared by XML import and SST load (`crates/xt-core/src/matching.rs`):
 - **Remove** imports/variables/functions that your changes made unused.
 - **Match** existing code style; surgical changes only. No speculative abstractions.
 
+## Frontend Architecture (Layout Redesign — v2)
+
+See `LAYOUT_REDESIGN_PLAN.md` for full details. All three phases completed.
+
+### Component Tree
+```
+App
+├── EditorDialog        (Modal xl, opened by double-click/Enter)
+├── 9× Tool Dialogs     (Modal lg, gated by activePanel store)
+│   ├── BatchPanel, BsaBrowser, PexPanel, FuzPanel, DialogView
+│   ├── McmPanel, EspComparePanel, FinalizePanel, DataConfigsPanel
+├── MenuBar             (compact 32px toolbar: search, filters, file ops, TCSC, tools, theme/lang)
+├── BatchTranslateBar   (inline progress bar for string-level batch)
+├── app-body
+│   └── app-main
+│       ├── app-table-area  → StringTable (react-window v2)
+│       └── app-bottom-panel (flex:1, 10 tabs)
+│           ├── home → SidePanel (stats)
+│           ├── vocabulary/heuristic/espTree/quests/log
+│           ├── pex/dialogs (PexPanel/DialogView, also available as dialogs)
+│           └── headerProc/headerWizard
+├── StatusBar
+└── (SettingsDialog, ToolboxDialog — opened via MenuBar buttons)
+```
+
+### Store State (appStore.ts)
+- **activePanel** — single-value mutex for 9 tool dialogs (replaces 9 booleans)
+- **editorOpen** — EditorDialog visibility
+- **selectedId/selectedItem** — current editing target
+- **allItems/items** — full dataset vs filtered display set
+- **Theme** — `"obsidian" | "dark" | "light" | "slate" | "auto"` (dark → obsidian alias)
+
+### Key Interaction Patterns
+- **Escape chain:** editor close → panel close → deselect row
+- **Double-click/Enter:** opens EditorDialog for selected row
+- **Ctrl+Enter:** save translation in EditorDialog
+- **Ctrl+↑/↓:** jump to next/prev untranslated item (in EditorDialog)
+- **Ctrl+Z/Y:** undo/redo translation changes
+
+### Known Gaps vs Delphi Original (see docs/feature_comparison.md)
+- Syntax highlighting in editor (SynEdit → not yet implemented)
+- VirtualTreeView multi-select / inline edit (react-window v2 is simpler)
+- PEX script editor / FUZ LIP / BA2 texture archives
+- More auxiliary panels (File Browser, Quest Stage Editor)
+
 ## Known Limitations
 
 - E2E tests need real Skyrim.esm.

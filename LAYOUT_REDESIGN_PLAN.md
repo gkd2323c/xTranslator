@@ -218,3 +218,68 @@ Week 3+ ────────────────────────
 - 编辑器弹窗化保持 `EditorPanel.tsx` 文件名不变，导出为 `EditorDialog`，避免无关文件改动。
 - Escape 链式关闭顺序：editor → panel → deselect，确保用户按 Esc 逐层退出。
 - 底部面板 tabs（pex/dialogs）暂保留，因为它们的实现与弹窗版是同一个组件（`PexPanel`/`DialogView`），无冲突。
+
+---
+
+## 复刻完成度总评
+
+基于 `docs/feature_comparison.md` 和 `docs/delphi_analysis.md` 对原版 Delphi xTranslator 1.6.0（~67,000 行，10+ 年迭代）的对照分析：
+
+### 后端引擎（xt-core）— ~85%
+
+| 类别 | 完成度 | 备注 |
+|------|--------|------|
+| ESP/ESM 解析写入 | ~100% | record tree + rebuild + serialize + backup (T42-T45) |
+| Strings 文件 | ~95% | 三格式读写 + codepage |
+| SST v8 字典 | 100% | roundtrip 验证通过 |
+| T1-T4 字典匹配 | ~90% | exact/EDID/normalized/vocab + 12 种状态语义 |
+| XML 导入导出 | ~95% | Delphi 兼容格式 |
+| BSA/BA2 归档 | ~80% | 提取+浏览，BA2 GNRL 全支持 |
+| PEX 脚本 | ~90% | 字符串提取+写回，roundtrip 验证 |
+| 翻译 API | ~75% | 6/8 provider（缺 MS Azure / Google 未实际联通） |
+| 启发式搜索 | ~80% | Levenshtein+LCS+LCP |
+| 繁简转换 TCSC | ~90% | OpenCC+Delphi 字典 |
+| RTL 阿拉伯语 | ~80% | 反转+整形+去整形 |
+| Header Processor | ~80% | 规则引擎+INI 加载+批量向导 |
+| 拼写检查 | ~80% | Hunspell FFI + word splitter |
+| 工具箱 | 80% | 7 种文本变换 |
+
+**总计：30 个模块，92 个 IPC 命令，283 个单元测试，0 警告**
+
+### 前端 UI — ~60%
+
+| 组件 | 完成度 | 备注 |
+|------|--------|------|
+| 虚拟字符串表格 | ~70% | react-window v2，客户端过滤排序 |
+| 主窗口布局 | ~65% | 三阶段复刻刚完成 |
+| 工具栏 MenuBar | ~80% | 紧凑化完成，搜索/过滤/主题/语言均集成 |
+| 翻译编辑器 | ~55% | 弹窗化完成，缺语法高亮（SynEdit 对应） |
+| 底部面板 (10 tabs) | ~70% | 各 tab 功能可用 |
+| 9 工具弹窗面板 | ~65% | 功能均可用，交互细节待打磨 |
+| BSA 浏览器 | ~60% | 基础浏览+提取 |
+| PEX 面板 | ~50% | 字符串提取可用，编辑器待完善 |
+| FUZ 面板 | ~50% | 基础解析，LIP 未处理 |
+| MCM 面板 | ~50% | 翻译文件加载/编辑/保存 |
+| 对话视图 DialogView | ~60% | NPC→DIAL→INFO 树 |
+| ESP 对比 | ~90% | 功能较完整 |
+| Finalize 面板 | ~90% | 功能完整 |
+| Data Configs 面板 | ~95% | 功能完整 |
+| Header Proc/Wizard | ~80% | Phase B 刚完成 |
+| 批量处理面板 | ~70% | 文件级+字符串级 |
+| 设置对话框 | ~95% | 功能完整 |
+| 工具箱 | ~80% | 7 种工具 |
+| 多语言 i18n | ~80% | 10 种语言 |
+| 主题系统 | ~90% | 4 种主题（Obsidian/Slate/Light/Auto） |
+| ContextMenu | ~80% | 复制/编辑/过滤 |
+| StatusBar | ~70% | 基础状态信息 |
+
+**总计：22 顶层组件 + 7 底部面板 + 14 UI 组件 = 43 个组件文件**
+
+### 与 Delphi 原版的核心差距
+
+1. **语法高亮编辑器** — 原版使用 SynEdit 组件，支持 XML/HTML 标签着色。当前 Textarea 为纯文本。
+2. **字符串编辑器的完整信息展示** — 原版编辑器显示 FormID、EDID、字符串类型、字段大小限制、别名检查结果等，信息密度更高。
+3. **VirtualTreeView 的丰富交互** — 原版支持多选、拖放排序、行内编辑、列自定义。react-window v2 提供基础虚拟滚动。
+4. **更多辅助工具面板** — 原版有 File Browser、Quest Stage Editor、Script Property Editor 等。
+5. **BA2 纹理归档** — 明确标记为 out of scope。
+6. **完整的 PEX 脚本编辑器** — 反编译伪代码编辑+编译写回（后端有，前端编辑器待完善）。

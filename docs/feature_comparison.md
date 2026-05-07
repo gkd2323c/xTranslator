@@ -1,8 +1,8 @@
 # xTranslator 功能对比：Delphi 原版 vs Rust 重写
 
-> **更新日期**：2026-05-04
+> **更新日期**：2026-05-07
 > **原版版本**：xTranslator 1.6.0（Delphi 12.1 CE，~6.7 万行代码，10+ 年迭代）
-> **重写版本**：v0.1.0 — SPEC 当前记录 45 项已完成任务（xt-core 247 个单元测试通过，0 警告）
+> **重写版本**：v0.1.0 — 后端 ~85%（283 单元测试，92 IPC 命令），前端 ~60%（43 组件，三阶段布局复刻完成）
 
 ---
 
@@ -15,7 +15,7 @@
 | 数据格式解析 | 全格式 | 核心格式 | ~95% |
 | 编码系统 | 完整 | 完整 | ~90% |
 | 翻译工作流 | 完整 | 核心就绪 | ~90% |
-| UI 交互 | 完整 VCL | Tauri 基础 | ~75% |
+| UI 交互 | 完整 VCL | Tauri 基础 | ~65% | 三阶段布局复刻完成，主窗口结构对齐原版 |
 | 辅助工具 | 完整 | 基本完成 | ~55% |
 
 ---
@@ -62,7 +62,7 @@
 | **字典应用 (apply)** | ✅ ID+EDID+词汇匹配+状态语义 | ✅ 共享 matcher + Delphi 状态语义 | ~90% | exact/EDID/normalized/vocab 已实现；pending、oldData、warning、tagOnly、stringID 语义有回归测试覆盖；仍需 Delphi 实机对照确认 |
 | **启发式搜索** | ✅ Levenshtein/LCS | ✅ | ~80% | xt-core heuristic 模块，Levenshtein+LCS+LCP，IPC+UI 已集成 |
 | **翻译 API** | ✅ DeepL/MS/Google/OpenAI/Youdao/Baidu | ✅ OpenAI + DeepL + Baidu + Youdao + API config | ~75% | OpenAIProvider + DeepLProvider + BaiduProvider + YoudaoProvider 已就绪（内联 MD5 签名）；待补齐 MS Azure / Google |
-| **字符串编辑** | ✅ 行内+窗口编辑 | ⚠️ 基础编辑 | ~70% | EditorPanel：文本编辑、Ctrl+Enter 保存、状态切换、启发式搜索、翻译 API |
+| **字符串编辑** | ✅ 行内+窗口编辑 | ⚠️ 弹窗编辑（Modal xl） | ~60% | EditorDialog：双击/Enter 打开，左右分栏（原文+译文｜操作+匹配），Ctrl+Enter 保存；缺语法高亮 |
 | **正则搜索/替换** | ✅ PCRE+批量 | ✅ Regex filter toggle + Replace All | ~80% | Regex toggle + Replace All with confirmation + capture groups ($1/$2) |
 | **直接搜索** | ✅ | ✅ 实时筛选 | ~80% | 客户端 filter+sort：文本/Regex/状态/Record 类型/排序，零延迟，76K+ 条 |
 | **撤销/重做** | ✅ | ✅ Stack-based (max 100) | ~80% | Ctrl+Z/Y + Ctrl+Shift+Z, IPC-synced, session-only |
