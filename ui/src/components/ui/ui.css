@@ -27,7 +27,7 @@
 
 .ui-btn:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px rgba(204, 120, 92, 0.2);
+  box-shadow: 0 0 0 2px rgba(0, 122, 204, 0.2);
 }
 
 .ui-btn:disabled {
@@ -104,7 +104,7 @@
 
 .ui-input-wrap:focus-within {
   border-color: var(--color-primary);
-  box-shadow: 0 0 0 2px rgba(204, 120, 92, 0.12);
+  box-shadow: 0 0 0 2px rgba(0, 122, 204, 0.12);
 }
 
 .ui-input-wrap .ui-input-icon {
@@ -160,7 +160,7 @@
 
 .ui-textarea:focus {
   border-color: var(--color-primary);
-  box-shadow: 0 0 0 2px rgba(204, 120, 92, 0.12);
+  box-shadow: 0 0 0 2px rgba(0, 122, 204, 0.12);
 }
 
 /* === Select === */
@@ -177,7 +177,7 @@
   cursor: pointer;
   outline: none;
   appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236c6a64' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238B8B8B' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 8px center;
   transition: border-color 0.15s ease;

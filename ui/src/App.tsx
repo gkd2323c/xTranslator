@@ -226,13 +226,7 @@ function App() {
                         t("bottomTabs.log", { defaultValue: "Log" })}
                     </button>
                   ))}
-                  <button
-                    className="bottom-tab bottom-tab-close"
-                    onClick={() => useAppStore.getState().toggleBottomPanel()}
-                    title="Close panel"
-                  >
-                    ×
-                  </button>
+
                 </div>
                 <div className="bottom-panel-content">
                   {activeBottomTab === "home" && <SidePanel />}

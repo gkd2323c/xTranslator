@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback, ReactElement } from "react";
 import { List } from "react-window";
 import { useAppStore } from "../stores/appStore";
-import { Search, ArrowUpDown, Code2, Replace, Cpu, Edit3, Copy, Filter } from "lucide-react";
+import { ArrowUpDown, Replace, Edit3, Copy, Filter } from "lucide-react";
 import type { SkyStringDTO } from "../api/strings";
 import { useTranslation } from "react-i18next";
-import { Input, Button, Badge, Spinner } from "./ui";
+import { Input, Button, Spinner } from "./ui";
 import { ContextMenu } from "./ContextMenu";
 
 const ROW_HEIGHT = 32;
@@ -29,7 +29,6 @@ function VirtualRow(props: {
   onSelect: (id: number) => void;
   onContextMenu: (e: React.MouseEvent, item: SkyStringDTO) => void;
 }): ReactElement | null {
-  const { t } = useTranslation();
   const { index, style, items, selectedId, onSelect, onContextMenu } = props;
   const item = items[index];
   if (!item) return null;
@@ -52,21 +51,23 @@ function VirtualRow(props: {
         }
       }}
     >
-      <div className="row-cell row-cell-id">{item.id}</div>
-      <div className="row-cell row-cell-status">
-        <Badge variant={item.status === "translated" ? "translated" : item.status === "incomplete" ? "incomplete" : "locked"} size="sm">
-          {item.status[0].toUpperCase()}
-        </Badge>
-        {item.is_vmad && <span title={t("table.vmadTooltip")}><Badge variant="script" size="sm">VM</Badge></span>}
+      <div className="row-cell row-cell-status-icon" title={`${item.record_sig}:${item.field_sig} #${item.form_id}`}>
+        <span className={`status-dot status-${item.status}${item.is_vmad ? " status-vmad" : ""}`}>
+          {item.status === "translated" ? "●" : item.status === "locked" ? "◆" : "○"}
+        </span>
       </div>
-      <div className="row-cell row-cell-rec">{item.record_sig}</div>
-      <div className="row-cell row-cell-field">{item.field_sig}</div>
-      <div className="row-cell row-cell-formid">{item.form_id}</div>
+      <div className="row-cell row-cell-edid" title={`${item.record_sig}:${item.field_sig}`}>
+        {item.record_sig}:{item.field_sig}
+      </div>
+      <div className="row-cell row-cell-id">{item.id}</div>
       <div className="row-cell text-cell source-text" title={item.source}>
         {item.source}
       </div>
       <div className="row-cell text-cell trans-text" title={item.translation}>
         {item.translation || "—"}
+      </div>
+      <div className="row-cell row-cell-ld">
+        {(item as any).ld ?? "—"}
       </div>
     </div>
   );
@@ -79,10 +80,7 @@ export function StringTable() {
   const items = useAppStore((s) => s.items);
   const isLoading = useAppStore((s) => s.isLoading);
   const filter = useAppStore((s) => s.filter);
-  const useRegex = useAppStore((s) => s.useRegex);
   const replaceText = useAppStore((s) => s.replaceText);
-  const statusFilter = useAppStore((s) => s.statusFilter);
-  const vmadFilter = useAppStore((s) => s.vmadFilter);
   const listIndex = useAppStore((s) => s.listIndex);
   const selectedId = useAppStore((s) => s.selectedId);
   const total = useAppStore((s) => s.total);
@@ -90,11 +88,8 @@ export function StringTable() {
 
   const loadAllStrings = useAppStore((s) => s.loadAllStrings);
   const setFilter = useAppStore((s) => s.setFilter);
-  const setUseRegex = useAppStore((s) => s.setUseRegex);
   const setReplaceText = useAppStore((s) => s.setReplaceText);
   const setSort = useAppStore((s) => s.setSort);
-  const setStatusFilter = useAppStore((s) => s.setStatusFilter);
-  const setVmadFilter = useAppStore((s) => s.setVmadFilter);
   const setListIndex = useAppStore((s) => s.setListIndex);
   const setSelectedById = useAppStore((s) => s.setSelectedById);
   const selectNextRow = useAppStore((s) => s.selectNextRow);
@@ -174,52 +169,6 @@ export function StringTable() {
       </div>
       <div className="table-toolbar">
         <div className="table-toolbar-row">
-          <Input
-            size="sm"
-            icon={<Search size={14} />}
-            placeholder={useRegex ? t("common.regexFilter") : t("common.filter")}
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-            suffix={
-              <Button
-                variant="ghost"
-                size="xs"
-                onClick={() => setUseRegex(!useRegex)}
-                title={useRegex ? t("table.regexSwitchTip") : t("table.plainSwitchTip")}
-                active={useRegex}
-              >
-                <Code2 size={14} />
-              </Button>
-            }
-          />
-          <div className="status-filters">
-            {[
-              { key: null, label: t("common.all") },
-              { key: "incomplete", label: t("common.incomplete") },
-              { key: "translated", label: t("common.translated") },
-              { key: "locked", label: t("common.locked") },
-            ].map((s) => (
-              <Button
-                key={s.label}
-                variant="ghost"
-                size="sm"
-                active={statusFilter === s.key}
-                onClick={() => setStatusFilter(statusFilter === s.key ? null : (s.key as string))}
-              >
-                {s.label}
-              </Button>
-            ))}
-            <Button
-              variant="ghost"
-              size="sm"
-              active={vmadFilter}
-              onClick={() => setVmadFilter(!vmadFilter)}
-              title={t("table.vmadFilterTooltip", { defaultValue: "Filter VMAD script strings" })}
-              icon={<Cpu size={12} />}
-            >
-              VMAD
-            </Button>
-          </div>
           <div className="table-info">
             {filtered.toLocaleString()} / {total.toLocaleString()}
             {allItems.length === 0 && !isLoading && (
@@ -251,17 +200,16 @@ export function StringTable() {
       </div>
 
       <div className="virtual-table-header">
+        <div className="header-cell" style={{ width: 28 }} />
+        <div className="header-cell" style={{ width: 100 }} onClick={() => handleSort("record_sig")}>
+          EDID <ArrowUpDown size={10} />
+        </div>
         <div className="header-cell" style={{ width: 60 }} onClick={() => handleSort("id")}>
           ID <ArrowUpDown size={10} />
         </div>
-        <div className="header-cell" style={{ width: 80 }}>{t("table.status")}</div>
-        <div className="header-cell" style={{ width: 80 }} onClick={() => handleSort("record_sig")}>
-          Rec <ArrowUpDown size={10} />
-        </div>
-        <div className="header-cell" style={{ width: 80 }}>{t("table.field")}</div>
-        <div className="header-cell" style={{ width: 100 }}>{t("table.formId")}</div>
         <div className="header-cell" style={{ flex: 1 }}>{t("table.source")}</div>
         <div className="header-cell" style={{ flex: 1 }}>{t("table.translation")}</div>
+        <div className="header-cell" style={{ width: 40 }}>LD</div>
       </div>
 
       <div className="virtual-list-container">

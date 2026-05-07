@@ -5,7 +5,7 @@ import { saveConfig } from "../api/strings";
 import toast from "react-hot-toast";
 import i18n from "../i18n";
 
-export type Theme = "dark" | "light" | "auto";
+export type Theme = "obsidian" | "dark" | "light" | "slate" | "auto";
 
 // Panel system: unified panel/tab management (replaces 9 boolean flags)
 export type ActivePanel =
@@ -38,10 +38,11 @@ function getSystemPrefersDark(): boolean {
   return window.matchMedia("(prefers-color-scheme: dark)").matches;
 }
 
-function resolveTheme(theme: Theme): "dark" | "light" {
+function resolveTheme(theme: Theme): string {
   if (theme === "auto") {
-    return getSystemPrefersDark() ? "dark" : "light";
+    return getSystemPrefersDark() ? "obsidian" : "light";
   }
+  if (theme === "dark") return "obsidian";
   return theme;
 }
 
@@ -197,14 +198,15 @@ interface AppState {
 function getInitialTheme(): Theme {
   try {
     const stored = localStorage.getItem(THEME_STORAGE_KEY);
-    if (stored === "light" || stored === "dark" || stored === "auto") return stored;
-    if (stored === "gray") return "dark"; // legacy migration
+    if (stored === "dark") return "obsidian"; // migrate legacy
+    if (stored === "obsidian" || stored === "light" || stored === "slate" || stored === "auto") return stored;
+    if (stored === "gray") return "slate"; // legacy migration
   } catch { /* localStorage unavailable */ }
-  return "light";
+  return "obsidian";
 }
 
-const THEME_LABELS: Record<Theme, string> = { dark: "Dark", light: "Light", auto: "Auto" };
-const THEME_NEXT: Record<Theme, Theme> = { dark: "light", light: "auto", auto: "dark" };
+const THEME_LABELS: Record<Theme, string> = { obsidian: "Obsidian", dark: "Obsidian", light: "Light", slate: "Slate", auto: "Auto" };
+const THEME_NEXT: Record<Theme, Theme> = { obsidian: "slate", slate: "light", light: "auto", auto: "obsidian", dark: "obsidian" };
 
 function applyFilterAndSort(
   allItems: SkyStringDTO[],

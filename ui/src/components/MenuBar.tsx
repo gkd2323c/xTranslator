@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAppStore } from "../stores/appStore";
-import { Button } from "./ui";
+import { Button, Input } from "./ui";
 import { loadEsp, loadSst, saveSst, exportXml, importXml, saveStrings, saveEsp, tcscConvert, tcscBatchConvert, updateTranslation, loadVocabulary, compareSourceDest, loadDataConfigs, delocalizeEsp, type BatchProgress } from "../api/strings";
 import type { LoadSstResponse, XmlImportResponse } from "../api/strings";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
-import { FolderOpen, FileUp, FileDown, FileCode, Save, RotateCcw, RefreshCw, FileArchive, Braces, Volume2, MessagesSquare, FileText, GitCompare, CheckCircle, Settings, ArrowLeftRight, Database, Wrench } from "lucide-react";
+import { FolderOpen, FileUp, FileDown, FileCode, Save, RotateCcw, RefreshCw, FileArchive, Braces, Volume2, MessagesSquare, FileText, GitCompare, CheckCircle, Settings, ArrowLeftRight, Database, Wrench, Search, Code2 } from "lucide-react";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import { setI18nLanguage, SUPPORTED_LANGS } from "../i18n";
@@ -84,6 +84,14 @@ export function MenuBar() {
   const setDataConfigs = useAppStore((s) => s.setDataConfigs);
   const espMode = useAppStore((s) => s.espMode);
   const batchEntries = useAppStore((s) => s.batchEntries);
+  const filter = useAppStore((s) => s.filter);
+  const useRegex = useAppStore((s) => s.useRegex);
+  const statusFilter = useAppStore((s) => s.statusFilter);
+  const vmadFilter = useAppStore((s) => s.vmadFilter);
+  const setFilter = useAppStore((s) => s.setFilter);
+  const setUseRegex = useAppStore((s) => s.setUseRegex);
+  const setStatusFilter = useAppStore((s) => s.setStatusFilter);
+  const setVmadFilter = useAppStore((s) => s.setVmadFilter);
   const [batchProgress, setBatchProgress] = useState<BatchProgress | null>(null);
 
   const warnIfBatchFile = useCallback((path: string) => {
@@ -459,26 +467,76 @@ export function MenuBar() {
     <div className="menubar">
       <div className="menubar-brand">xTranslator</div>
       <div className="menubar-actions" role="toolbar" aria-label="Application actions">
+        <div className="toolbar-group" role="group" aria-label="Search">
+          <Input
+            size="sm"
+            icon={<Search size={14} />}
+            placeholder={useRegex ? t("common.regexFilter") : t("common.filter")}
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            wrapperClassName="menubar-search-input"
+            suffix={
+              <Button
+                variant="ghost"
+                size="xs"
+                onClick={() => setUseRegex(!useRegex)}
+                title={useRegex ? t("table.regexSwitchTip") : t("table.plainSwitchTip")}
+                active={useRegex}
+              >
+                <Code2 size={12} />
+              </Button>
+            }
+          />
+        </div>
+
+        <div className="toolbar-group" role="group" aria-label="Status filters">
+          {[
+            { key: "translated", label: "✓", title: t("common.translated") },
+            { key: "incomplete", label: "✗", title: t("common.incomplete") },
+            { key: "locked", label: "🔒", title: t("common.locked") },
+          ].map((s) => (
+            <Button
+              key={s.key}
+              variant="ghost"
+              size="xs"
+              active={statusFilter === s.key}
+              onClick={() => setStatusFilter(statusFilter === s.key ? null : s.key)}
+              title={s.title}
+            >
+              {s.label}
+            </Button>
+          ))}
+          <Button
+            variant="ghost"
+            size="xs"
+            active={vmadFilter}
+            onClick={() => setVmadFilter(!vmadFilter)}
+            title={t("table.vmadFilterTooltip", { defaultValue: "Filter VMAD script strings" })}
+          >
+            VMAD
+          </Button>
+        </div>
+
         <div className="toolbar-group toolbar-group-primary" role="group" aria-label="Files">
-          <Button variant="primary" icon={<FolderOpen size={16} />} onClick={handleLoadEsp} disabled={isParsing}>
+          <Button variant="primary" size="sm" icon={<FolderOpen size={14} />} onClick={handleLoadEsp} disabled={isParsing}>
             {t("common.loadEsp")}
           </Button>
-          <Button icon={<FileUp size={16} />} onClick={handleLoadSst} disabled={isLoading || !espPath}>
+          <Button size="sm" icon={<FileUp size={14} />} onClick={handleLoadSst} disabled={isLoading || !espPath}>
             {t("common.loadSst")}
           </Button>
-          <Button icon={<FileDown size={16} />} onClick={handleSaveSst} disabled={isLoading || !espPath}>
+          <Button size="sm" icon={<FileDown size={14} />} onClick={handleSaveSst} disabled={isLoading || !espPath}>
             {t("common.saveSst")}
           </Button>
-          <Button icon={<Save size={16} />} onClick={handleSaveStrings} disabled={isLoading || !espPath}>
+          <Button size="sm" icon={<Save size={14} />} onClick={handleSaveStrings} disabled={isLoading || !espPath}>
             {t("common.saveStrings")}
           </Button>
         </div>
 
         <div className="toolbar-group" role="group" aria-label="Exchange formats">
-          <Button icon={<FileCode size={16} />} onClick={handleExportXml} disabled={isLoading || !espPath}>
+          <Button size="sm" icon={<FileCode size={14} />} onClick={handleExportXml} disabled={isLoading || !espPath}>
             {t("common.exportXml")}
           </Button>
-          <Button icon={<FileCode size={16} />} onClick={handleImportXml} disabled={isLoading || !espPath}>
+          <Button size="sm" icon={<FileCode size={14} />} onClick={handleImportXml} disabled={isLoading || !espPath}>
             {t("common.importXml")}
           </Button>
         </div>
@@ -486,7 +544,8 @@ export function MenuBar() {
         <div className="toolbar-group" role="group" aria-label="Finalize">
           <Button
             variant="primary"
-            icon={<CheckCircle size={16} />}
+            size="sm"
+            icon={<CheckCircle size={14} />}
             onClick={() => setActivePanel("finalize")}
             disabled={isLoading || !espPath}
             active={activePanel === "finalize"}
@@ -497,7 +556,8 @@ export function MenuBar() {
           {espMode && (
             <Button
               variant="ghost"
-              icon={<FileCode size={16} />}
+              size="sm"
+              icon={<FileCode size={14} />}
               onClick={async () => {
                 if (!espPath) return;
                 try {
@@ -525,6 +585,7 @@ export function MenuBar() {
 
         <div className="toolbar-group" role="group" aria-label="TCSC conversion">
           <Button
+            size="xs"
             onClick={async () => {
               const selectedItem = useAppStore.getState().selectedItem;
               if (!selectedItem?.translation) {
@@ -543,9 +604,10 @@ export function MenuBar() {
             disabled={isLoading}
             title={t("menu.tcsc_simplified")}
           >
-            {t("menu.tcsc_simplified")}
+            简
           </Button>
           <Button
+            size="xs"
             onClick={async () => {
               const selectedItem = useAppStore.getState().selectedItem;
               if (!selectedItem?.translation) {
@@ -564,10 +626,11 @@ export function MenuBar() {
             disabled={isLoading}
             title={t("menu.tcsc_traditional")}
           >
-            {t("menu.tcsc_traditional")}
+            繁
           </Button>
           <Button
             variant="ghost"
+            size="xs"
             onClick={async () => {
               const allItems = useAppStore.getState().allItems;
               const hasTranslations = allItems.some((item) => item.translation && item.translation.trim() !== "");
@@ -594,10 +657,11 @@ export function MenuBar() {
             disabled={isLoading || !espPath}
             title={t("menu.tcsc_batch_simplified", { defaultValue: "Batch: Convert all to Simplified Chinese" })}
           >
-            {t("menu.tcsc_batch_simplified", { defaultValue: "简↹" })}
+            简↹
           </Button>
           <Button
             variant="ghost"
+            size="xs"
             onClick={async () => {
               const allItems = useAppStore.getState().allItems;
               const hasTranslations = allItems.some((item) => item.translation && item.translation.trim() !== "");
@@ -624,11 +688,12 @@ export function MenuBar() {
             disabled={isLoading || !espPath}
             title={t("menu.tcsc_batch_traditional", { defaultValue: "Batch: Convert all to Traditional Chinese" })}
           >
-            {t("menu.tcsc_batch_traditional", { defaultValue: "繁↹" })}
+            繁↹
           </Button>
           <Button
             variant="ghost"
-            icon={<ArrowLeftRight size={16} />}
+            size="xs"
+            icon={<ArrowLeftRight size={14} />}
             onClick={async () => {
               if (!espPath) return;
               try {
@@ -648,7 +713,8 @@ export function MenuBar() {
           </Button>
           <Button
             variant="ghost"
-            icon={<ArrowLeftRight size={16} />}
+            size="xs"
+            icon={<ArrowLeftRight size={14} />}
             onClick={async () => {
               if (!espPath) return;
               try {
@@ -670,14 +736,14 @@ export function MenuBar() {
 
         <div className="toolbar-group toolbar-icon-group" role="group" aria-label="Tool panels">
           {([
-            { id: "batch" as const, icon: <RefreshCw size={16} />, openKey: "menu.openBatchPanel", closeKey: "menu.closeBatchPanel" },
-            { id: "bsa" as const, icon: <FileArchive size={16} />, openKey: "menu.openBSABrowser", closeKey: "menu.closeBSABrowser" },
-            { id: "pex" as const, icon: <Braces size={16} />, openKey: "menu.openPEXPanel", closeKey: "menu.closePEXPanel" },
-            { id: "fuz" as const, icon: <Volume2 size={16} />, openKey: "menu.openVoicePanel", closeKey: "menu.closeVoicePanel" },
-            { id: "dialog" as const, icon: <MessagesSquare size={16} />, openKey: "menu.openDialogView", closeKey: "menu.closeDialogView" },
-            { id: "mcm" as const, icon: <FileText size={16} />, openKey: "menu.openMCMPanel", closeKey: "menu.closeMCMPanel" },
-            { id: "espCompare" as const, icon: <GitCompare size={16} />, openKey: "menu.openESPCompare", closeKey: "menu.closeESPCompare" },
-            { id: "dataConfigs" as const, icon: <Database size={16} />, openKey: "menu.openDataConfigs", closeKey: "menu.closeDataConfigs" },
+            { id: "batch" as const, icon: <RefreshCw size={14} />, openKey: "menu.openBatchPanel", closeKey: "menu.closeBatchPanel" },
+            { id: "bsa" as const, icon: <FileArchive size={14} />, openKey: "menu.openBSABrowser", closeKey: "menu.closeBSABrowser" },
+            { id: "pex" as const, icon: <Braces size={14} />, openKey: "menu.openPEXPanel", closeKey: "menu.closePEXPanel" },
+            { id: "fuz" as const, icon: <Volume2 size={14} />, openKey: "menu.openVoicePanel", closeKey: "menu.closeVoicePanel" },
+            { id: "dialog" as const, icon: <MessagesSquare size={14} />, openKey: "menu.openDialogView", closeKey: "menu.closeDialogView" },
+            { id: "mcm" as const, icon: <FileText size={14} />, openKey: "menu.openMCMPanel", closeKey: "menu.closeMCMPanel" },
+            { id: "espCompare" as const, icon: <GitCompare size={14} />, openKey: "menu.openESPCompare", closeKey: "menu.closeESPCompare" },
+            { id: "dataConfigs" as const, icon: <Database size={14} />, openKey: "menu.openDataConfigs", closeKey: "menu.closeDataConfigs" },
           ]).map(({ id, icon, openKey, closeKey }) => (
             <Button
               key={id}
@@ -722,9 +788,10 @@ export function MenuBar() {
             title="Theme"
             aria-label="Theme"
           >
-            <option value="auto">Auto</option>
+            <option value="obsidian">Obsidian</option>
+            <option value="slate">Slate</option>
             <option value="light">Light</option>
-            <option value="dark">Dark</option>
+            <option value="auto">Auto</option>
           </select>
           <select
             value={i18n.language}
@@ -739,24 +806,24 @@ export function MenuBar() {
           </select>
           <Button
             variant="ghost"
-            size="sm"
-            icon={<Settings size={16} />}
+            size="xs"
+            icon={<Settings size={14} />}
             onClick={() => setShowSettings(true)}
             title={t("settings.title", { defaultValue: "Settings" })}
             aria-label={t("settings.title", { defaultValue: "Settings" })}
           />
           <Button
             variant="ghost"
-            size="sm"
-            icon={<Wrench size={16} />}
+            size="xs"
+            icon={<Wrench size={14} />}
             onClick={() => setShowToolbox(true)}
             title="Toolbox"
             aria-label="Toolbox"
           />
           <Button
             variant="ghost"
-            size="sm"
-            icon={<RotateCcw size={16} />}
+            size="xs"
+            icon={<RotateCcw size={14} />}
             onClick={() => {
               if (isDirty && !confirm(t("app.resetConfirm"))) return;
               reset();
