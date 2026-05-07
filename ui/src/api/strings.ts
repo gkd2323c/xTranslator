@@ -362,6 +362,7 @@ export interface HeaderBatchProgress {
   file_path: string;
   strings_matched: number;
   stage: string;
+  detail_count?: number | null;
   message: string;
 }
 

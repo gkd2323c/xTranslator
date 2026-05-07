@@ -405,14 +405,13 @@ html, body, #root {
 /* === MenuBar === */
 .menubar {
   min-height: var(--menubar-height);
-  height: auto;
   background: var(--color-surface-soft);
   border-bottom: 1px solid var(--color-hairline);
   display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  padding: 4px 12px;
-  gap: 8px;
+  flex-direction: column;
+  align-items: stretch;
+  padding: 4px 8px 6px;
+  gap: 4px;
   flex-shrink: 0;
   position: relative;
 }
@@ -423,29 +422,128 @@ html, body, #root {
   bottom: 0;
   left: 0;
   right: 0;
-  height: 2px;
+  height: 1px;
   background: var(--color-primary);
-  opacity: 0.6;
+  opacity: 0.35;
+}
+
+.menubar-topline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 22px;
 }
 
 .menubar-brand {
   font-family: var(--font-display);
-  font-size: 16px;
+  font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.5px;
-  color: var(--color-primary);
+  letter-spacing: 0.4px;
+  color: var(--color-muted);
   flex: 0 0 auto;
-  margin-right: 6px;
+  padding-right: 8px;
+  border-right: 1px solid var(--color-hairline-soft);
+}
+
+.menubar-menu-strip {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.menubar-menu {
+  position: relative;
+}
+
+.menubar-menu-trigger {
+  border: none;
+  background: transparent;
+  color: var(--color-body-strong);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 3px 10px;
+  min-height: 22px;
+  cursor: default;
+  border-radius: var(--radius-sm);
+}
+
+.menubar-menu-trigger:hover,
+.menubar-menu.open .menubar-menu-trigger {
+  background: rgba(0, 122, 204, 0.16);
+  color: var(--color-on-primary);
+}
+
+.menubar-menu-trigger:focus-visible {
+  outline: 1px solid var(--color-primary);
+  outline-offset: -1px;
+}
+
+.menubar-menu-panel {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 0;
+  min-width: 220px;
+  padding: 4px 0;
+  border: 1px solid var(--color-hairline);
+  background: var(--color-canvas);
+  box-shadow: var(--shadow-card);
+  z-index: 40;
+}
+
+.menubar-menu-item {
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: var(--color-ink);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 12px;
+  text-align: left;
+  font: inherit;
+  font-size: 12px;
+}
+
+.menubar-menu-item:hover:not(:disabled) {
+  background: rgba(0, 122, 204, 0.14);
+}
+
+.menubar-menu-item:disabled {
+  color: var(--color-muted-soft);
+}
+
+.menubar-menu-item-shortcut {
+  color: var(--color-muted);
+  font-size: 11px;
+  font-family: var(--font-mono);
+}
+
+.menubar-menu-separator {
+  height: 1px;
+  margin: 4px 0;
+  background: var(--color-hairline);
 }
 
 .menubar-actions {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  flex: 1 1 auto;
+  justify-content: flex-start;
   flex-wrap: wrap;
   gap: 6px;
   min-width: 0;
+}
+
+.menubar-status-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  flex-wrap: wrap;
 }
 
 .toolbar-group {
@@ -532,7 +630,13 @@ html, body, #root {
 
 /* === SidePanel === */
 .sidepanel {
-  padding: 16px;
+  padding: 12px;
+  height: 100%;
+  overflow-y: auto;
+}
+
+.sidepanel-status-block {
+  margin-top: 0;
 }
 
 .sidepanel-empty {

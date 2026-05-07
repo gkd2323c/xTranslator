@@ -9,8 +9,8 @@ export function LogPanel() {
     <div className="bottom-panel-inner">
       <EmptyState
         icon={<ScrollText size={32} />}
-        title={t("bottomTabs.log", { defaultValue: "Application Log" })}
-        hint="Application events and operation logs will appear here."
+        title={t("bottomTabs.log")}
+        hint={t("logPanel.hint")}
       />
     </div>
   );

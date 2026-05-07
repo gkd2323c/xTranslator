@@ -50,6 +50,7 @@ fn benchmark_full_ipc_pipeline() {
             list_index: 0,
             str_id: sk.esp_ptr.str_id,
             is_vmad: false,
+            ld: 0,
         })
         .collect();
     let dto_ms = t2.elapsed().as_micros() as u64;

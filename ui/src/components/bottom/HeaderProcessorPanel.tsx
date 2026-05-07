@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import {
   headerRulesLoad,
   headerRulesList,
@@ -44,6 +45,7 @@ function editableField(
 }
 
 export function HeaderProcessorPanel() {
+  const { t } = useTranslation();
   const [rules, setRules] = useState<HeaderRuleDto[]>([]);
   const [result, setResult] = useState<HeaderApplyResult | null>(null);
   const [filePath, setFilePath] = useState("");
@@ -82,9 +84,9 @@ export function HeaderProcessorPanel() {
     try {
       const loaded = await headerRulesLoad(filePath);
       setRules(loaded);
-      toast.success(`Loaded ${loaded.length} rules`);
+      toast.success(t("headerProcessor.loadedRules", { count: loaded.length }));
     } catch (e: any) {
-      toast.error(`Load failed: ${e}`);
+      toast.error(t("headerProcessor.loadFailed", { error: String(e) }));
     } finally {
       setLoading(false);
     }
@@ -95,7 +97,7 @@ export function HeaderProcessorPanel() {
       await headerRulesToggle(index, enabled);
       setRules((prev) => prev.map((r) => (r.index === index ? { ...r, enabled } : r)));
     } catch (e: any) {
-      toast.error(`Toggle failed: ${e}`);
+      toast.error(t("headerProcessor.toggleFailed", { error: String(e) }));
     }
   };
 
@@ -104,9 +106,13 @@ export function HeaderProcessorPanel() {
     try {
       const res = await headerRulesApply();
       setResult(res);
-      toast.success(`${res.strings_matched} strings matched (${res.enabled_rules}/${res.total_rules} rules enabled)`);
+      toast.success(t("headerProcessor.applyResult", {
+        matched: res.strings_matched,
+        enabled: res.enabled_rules,
+        total: res.total_rules,
+      }));
     } catch (e: any) {
-      toast.error(`Apply failed: ${e}`);
+      toast.error(t("headerProcessor.applyFailed", { error: String(e) }));
     } finally {
       setLoading(false);
     }
@@ -117,9 +123,9 @@ export function HeaderProcessorPanel() {
     setLoading(true);
     try {
       await headerRulesSave(filePath);
-      toast.success(`Saved ${rules.length} rules`);
+      toast.success(t("headerProcessor.savedRules", { count: rules.length }));
     } catch (e: any) {
-      toast.error(`Save failed: ${e}`);
+      toast.error(t("headerProcessor.saveFailed", { error: String(e) }));
     } finally {
       setLoading(false);
     }
@@ -129,9 +135,9 @@ export function HeaderProcessorPanel() {
     try {
       const updated = await headerRulesDelete(index);
       setRules(updated);
-      toast.success("Rule deleted");
+      toast.success(t("headerProcessor.ruleDeleted"));
     } catch (e: any) {
-      toast.error(`Delete failed: ${e}`);
+      toast.error(t("headerProcessor.deleteFailed", { error: String(e) }));
     }
   };
 
@@ -140,7 +146,7 @@ export function HeaderProcessorPanel() {
       const updated = await headerRulesMove(index, dir);
       setRules(updated);
     } catch (e: any) {
-      toast.error(`Move failed: ${e}`);
+      toast.error(t("headerProcessor.moveFailed", { error: String(e) }));
     }
   };
 
@@ -148,9 +154,9 @@ export function HeaderProcessorPanel() {
     try {
       const updated = await headerRulesAdd();
       setRules(updated);
-      toast.success("Rule added");
+      toast.success(t("headerProcessor.ruleAdded"));
     } catch (e: any) {
-      toast.error(`Add failed: ${e}`);
+      toast.error(t("headerProcessor.addFailed", { error: String(e) }));
     }
   };
 
@@ -160,7 +166,7 @@ export function HeaderProcessorPanel() {
       const updated = await headerRulesUpdate(index, field, value);
       setRules(updated);
     } catch (e: any) {
-      toast.error(`Update failed: ${e}`);
+      toast.error(t("headerProcessor.updateFailed", { error: String(e) }));
     }
   };
 
@@ -185,11 +191,11 @@ export function HeaderProcessorPanel() {
     if (!templateDir || !templateName) return;
     try {
       await headerTemplatesSave(templateDir, templateName);
-      toast.success(`Template "${templateName}" saved`);
+      toast.success(t("headerProcessor.templateSaved", { name: templateName }));
       setTemplateName("");
       refreshTemplates();
     } catch (e: any) {
-      toast.error(`Save template failed: ${e}`);
+      toast.error(t("headerProcessor.saveTemplateFailed", { error: String(e) }));
     }
   };
 
@@ -198,9 +204,9 @@ export function HeaderProcessorPanel() {
     try {
       const loaded = await headerTemplatesLoad(templateDir, name);
       setRules(loaded);
-      toast.success(`Loaded template "${name}" (${loaded.length} rules)`);
+      toast.success(t("headerProcessor.templateLoaded", { name, count: loaded.length }));
     } catch (e: any) {
-      toast.error(`Load template failed: ${e}`);
+      toast.error(t("headerProcessor.loadTemplateFailed", { error: String(e) }));
     }
   };
 
@@ -208,10 +214,10 @@ export function HeaderProcessorPanel() {
     if (!templateDir) return;
     try {
       await headerTemplatesDelete(templateDir, name);
-      toast.success(`Template "${name}" deleted`);
+      toast.success(t("headerProcessor.templateDeleted", { name }));
       refreshTemplates();
     } catch (e: any) {
-      toast.error(`Delete template failed: ${e}`);
+      toast.error(t("headerProcessor.deleteTemplateFailed", { error: String(e) }));
     }
   };
 
@@ -220,9 +226,9 @@ export function HeaderProcessorPanel() {
     try {
       const dto = await preprocOptsLoad(optsPath);
       setOpts(dto.options);
-      toast.success(`Loaded ${dto.options.length} options`);
+      toast.success(t("headerProcessor.loadedOptions", { count: dto.options.length }));
     } catch (e: any) {
-      toast.error(`Load opts failed: ${e}`);
+      toast.error(t("headerProcessor.loadOptionsFailed", { error: String(e) }));
     }
   };
 
@@ -230,9 +236,9 @@ export function HeaderProcessorPanel() {
     if (!optsPath) return;
     try {
       await preprocOptsSave(optsPath);
-      toast.success("Options saved");
+      toast.success(t("headerProcessor.optionsSaved"));
     } catch (e: any) {
-      toast.error(`Save opts failed: ${e}`);
+      toast.error(t("headerProcessor.saveOptionsFailed", { error: String(e) }));
     }
   };
 
@@ -244,7 +250,7 @@ export function HeaderProcessorPanel() {
       setNewOptKey("");
       setNewOptVal("");
     } catch (e: any) {
-      toast.error(`Set opt failed: ${e}`);
+      toast.error(t("headerProcessor.setOptionFailed", { error: String(e) }));
     }
   };
 
@@ -253,7 +259,7 @@ export function HeaderProcessorPanel() {
       const dto = await preprocOptsDelete(key);
       setOpts(dto.options);
     } catch (e: any) {
-      toast.error(`Delete opt failed: ${e}`);
+      toast.error(t("headerProcessor.deleteOptionFailed", { error: String(e) }));
     }
   };
 
@@ -270,21 +276,21 @@ export function HeaderProcessorPanel() {
             type="text"
             value={filePath}
             onChange={(e) => setFilePath(e.target.value)}
-            placeholder="Path to rules INI (e.g. Data/SkyrimSE/HeaderProcessor/defaultRules_Text.txt)"
+            placeholder={t("headerProcessor.rulesPathPlaceholder")}
           />
           <Button variant="ghost" size="xs" onClick={loadFile} loading={loading}>
-            Load
+            {t("headerProcessor.load")}
           </Button>
           <Button variant="ghost" size="xs" onClick={saveRules} loading={loading} disabled={!filePath}>
             <Save size={12} />
           </Button>
         </div>
         <div style={{ display: "flex", gap: "4px", alignItems: "center" }}>
-          <Button variant="ghost" size="xs" onClick={addRule} loading={loading} title="Add rule">
+          <Button variant="ghost" size="xs" onClick={addRule} loading={loading} title={t("headerProcessor.addRule")}>
             <Plus size={12} />
           </Button>
           <Button variant="primary" size="xs" onClick={applyRules} loading={loading} disabled={rules.length === 0}>
-            Apply ({enabledCount})
+            {t("headerProcessor.apply", { count: enabledCount })}
           </Button>
         </div>
       </div>
@@ -297,9 +303,9 @@ export function HeaderProcessorPanel() {
           type="text"
           value={templateDir}
           onChange={(e) => setTemplateDir(e.target.value)}
-          placeholder="Templates dir (e.g. Data/SkyrimSE/HeaderProcessor/templates)"
+          placeholder={t("headerProcessor.templatesDirPlaceholder")}
         />
-        <Button variant="ghost" size="xs" onClick={refreshTemplates} title="List templates">
+        <Button variant="ghost" size="xs" onClick={refreshTemplates} title={t("headerProcessor.listTemplates")}>
           <FolderOpen size={12} />
         </Button>
         <input
@@ -308,9 +314,9 @@ export function HeaderProcessorPanel() {
           type="text"
           value={templateName}
           onChange={(e) => setTemplateName(e.target.value)}
-          placeholder="Template name"
+          placeholder={t("headerProcessor.templateName")}
         />
-        <Button variant="ghost" size="xs" onClick={saveTemplate} disabled={!templateDir || !templateName} title="Save as template">
+        <Button variant="ghost" size="xs" onClick={saveTemplate} disabled={!templateDir || !templateName} title={t("headerProcessor.saveTemplate")}>
           <Save size={12} />
         </Button>
         {templates.length > 0 && (
@@ -323,7 +329,7 @@ export function HeaderProcessorPanel() {
               if (e.target.value) loadTemplate(e.target.value);
             }}
           >
-            <option value="">Load...</option>
+            <option value="">{t("headerProcessor.loadTemplate")}</option>
             {templates.map((t) => (
               <option key={t.name} value={t.name}>
                 {t.name} ({t.enabled_count}/{t.rule_count})
@@ -340,7 +346,7 @@ export function HeaderProcessorPanel() {
               if (e.target.value) deleteTemplate(e.target.value);
             }}
           >
-            <option value="">Del...</option>
+            <option value="">{t("headerProcessor.deleteTemplate")}</option>
             {templates.map((t) => (
               <option key={t.name} value={t.name}>
                 {t.name}
@@ -353,20 +359,20 @@ export function HeaderProcessorPanel() {
       {/* Search */}
       <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
         <Search size={12} style={{ color: "var(--color-muted)", flexShrink: 0 }} />
-        <input
-          className="ui-input"
-          style={{ flex: 1, fontSize: "12px", padding: "2px 6px" }}
-          type="text"
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-          placeholder="Filter rules..."
-        />
+          <input
+            className="ui-input"
+            style={{ flex: 1, fontSize: "12px", padding: "2px 6px" }}
+            type="text"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            placeholder={t("headerProcessor.filterRules")}
+          />
       </div>
 
       {/* Result */}
       {result && (
         <div className="dialog-section" style={{ padding: "2px 8px", fontSize: "12px" }}>
-          Matched: <strong>{result.strings_matched}</strong> strings ({result.enabled_rules}/{result.total_rules} rules)
+          {t("headerProcessor.matched")}: <strong>{result.strings_matched}</strong> {t("headerProcessor.strings")} ({result.enabled_rules}/{result.total_rules} {t("headerProcessor.rules")})
         </div>
       )}
 
@@ -374,6 +380,14 @@ export function HeaderProcessorPanel() {
       <div style={{ flex: 1, overflow: "auto" }}>
         {filteredRules.map((rule) => {
           const isExpanded = expanded.has(rule.index);
+          const summaryParts = [
+            rule.in_edid.length > 0 ? t("headerProcessor.summaryEdid", { count: rule.in_edid.length }) : null,
+            rule.include_keywords.length > 0 ? t("headerProcessor.summaryInclude", { count: rule.include_keywords.length }) : null,
+            rule.exclude_keywords.length > 0 ? t("headerProcessor.summaryExclude", { count: rule.exclude_keywords.length }) : null,
+            rule.regex ? t("headerProcessor.summaryRegex") : null,
+            rule.full_replace ? t("headerProcessor.summaryFull") : null,
+          ].filter((part): part is string => Boolean(part));
+
           return (
             <div
               key={rule.index}
@@ -405,7 +419,7 @@ export function HeaderProcessorPanel() {
                       <span
                         style={{ color: "var(--color-accent)", fontWeight: 600, cursor: "pointer" }}
                         onClick={(e) => { e.stopPropagation(); setEditing({ index: rule.index, field: "r_sig" }); }}
-                        title="Click to edit"
+                        title={t("headerProcessor.clickToEdit")}
                       >
                         {rule.r_sig || "?"}
                       </span>
@@ -417,20 +431,20 @@ export function HeaderProcessorPanel() {
                       <span
                         style={{ color: "var(--color-accent)", fontWeight: 600, cursor: "pointer" }}
                         onClick={(e) => { e.stopPropagation(); setEditing({ index: rule.index, field: "f_sig" }); }}
-                        title="Click to edit"
+                        title={t("headerProcessor.clickToEdit")}
                       >
                         {rule.f_sig || "?"}
                       </span>
                     )}
                     {editing?.index === rule.index && editing?.field === "header" ? (
-                      editableField(rule.header, "header", (v) => updateField(rule.index, "header", v), { minWidth: "80px" })
+                      editableField(rule.header, t("headerProcessor.header"), (v) => updateField(rule.index, "header", v), { minWidth: "80px" })
                     ) : (
                       <span
                         style={{ marginLeft: "4px", cursor: "pointer" }}
                         onClick={(e) => { e.stopPropagation(); setEditing({ index: rule.index, field: "header" }); }}
-                        title="Click to edit"
+                        title={t("headerProcessor.clickToEdit")}
                       >
-                        {rule.header || <span style={{ color: "var(--color-muted)", fontStyle: "italic" }}>(no header)</span>}
+                        {rule.header || <span style={{ color: "var(--color-muted)", fontStyle: "italic" }}>{t("headerProcessor.noHeader")}</span>}
                       </span>
                     )}
                   </div>
@@ -440,25 +454,21 @@ export function HeaderProcessorPanel() {
                       {rule.r_sig}:{rule.f_sig}
                     </span>
                     <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {rule.header || "(no header)"}
+                      {rule.header || t("headerProcessor.noHeader")}
                     </span>
                   </span>
                 )}
                 <span style={{ color: "var(--color-muted)", fontSize: "10px", flexShrink: 0 }}>
-                  {rule.in_edid.length > 0 && `edid:${rule.in_edid.length}`}
-                  {rule.include_keywords.length > 0 && ` kw:${rule.include_keywords.length}`}
-                  {rule.exclude_keywords.length > 0 && ` ex:${rule.exclude_keywords.length}`}
-                  {rule.regex && " /re/"}
-                  {rule.full_replace && " [full]"}
+                  {summaryParts.join(" ")}
                 </span>
                 {/* Action buttons */}
                 <div style={{ display: "flex", gap: "1px", flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
-                  <button
+                    <button
                     className="ui-btn ui-btn-xs ui-btn-ghost"
                     style={{ padding: "0 2px" }}
                     onClick={() => moveRule(rule.index, "up")}
                     disabled={rule.index === 0}
-                    title="Move up"
+                    title={t("headerProcessor.moveUp")}
                   >
                     <ChevronUp size={11} />
                   </button>
@@ -467,7 +477,7 @@ export function HeaderProcessorPanel() {
                     style={{ padding: "0 2px" }}
                     onClick={() => moveRule(rule.index, "down")}
                     disabled={rule.index === rules.length - 1}
-                    title="Move down"
+                    title={t("headerProcessor.moveDown")}
                   >
                     <ChevronDown size={11} />
                   </button>
@@ -475,7 +485,7 @@ export function HeaderProcessorPanel() {
                     className="ui-btn ui-btn-xs ui-btn-ghost"
                     style={{ padding: "0 2px", color: "var(--color-danger)" }}
                     onClick={() => deleteRule(rule.index)}
-                    title="Delete rule"
+                    title={t("headerProcessor.deleteRule")}
                   >
                     <Trash2 size={11} />
                   </button>
@@ -516,7 +526,7 @@ export function HeaderProcessorPanel() {
                         {rule.f_sig || "—"}
                       </span>
                     )}
-                    <label style={{ color: "var(--color-muted)", flexShrink: 0, marginLeft: "8px" }}>full</label>
+                    <label style={{ color: "var(--color-muted)", flexShrink: 0, marginLeft: "8px" }}>{t("headerProcessor.full")}</label>
                     <input
                       type="checkbox"
                       checked={rule.full_replace}
@@ -525,12 +535,12 @@ export function HeaderProcessorPanel() {
                   </div>
 
                   <div style={{ display: "flex", gap: "4px", alignItems: "center" }}>
-                    <label style={{ width: "55px", color: "var(--color-muted)", flexShrink: 0 }}>Header</label>
+                    <label style={{ width: "55px", color: "var(--color-muted)", flexShrink: 0 }}>{t("headerProcessor.header")}</label>
                     {editing?.index === rule.index && editing?.field === "header" ? (
-                      editableField(rule.header, "Header text", (v) => updateField(rule.index, "header", v), { flex: 1 })
+                      editableField(rule.header, t("headerProcessor.headerText"), (v) => updateField(rule.index, "header", v), { flex: 1 })
                     ) : (
                       <span style={{ flex: 1, cursor: "pointer" }} onClick={() => setEditing({ index: rule.index, field: "header" })}>
-                        {rule.header || <span style={{ color: "var(--color-muted)", fontStyle: "italic" }}>empty</span>}
+                        {rule.header || <span style={{ color: "var(--color-muted)", fontStyle: "italic" }}>{t("headerProcessor.empty")}</span>}
                       </span>
                     )}
                   </div>
@@ -538,11 +548,11 @@ export function HeaderProcessorPanel() {
                   <div style={{ display: "flex", gap: "4px", alignItems: "center" }}>
                     <label style={{ width: "55px", color: "var(--color-muted)", flexShrink: 0 }}>inEDID</label>
                     {editing?.index === rule.index && editing?.field === "in_edid" ? (
-                      editableField(rule.in_edid.join("|"), "patterns | separated", (v) => updateField(rule.index, "in_edid", v), { flex: 1 })
+                      editableField(rule.in_edid.join("|"), t("headerProcessor.patternsPlaceholder"), (v) => updateField(rule.index, "in_edid", v), { flex: 1 })
                     ) : (
                       <span style={{ flex: 1, cursor: "pointer", color: rule.in_edid.length ? "inherit" : "var(--color-muted)", fontStyle: rule.in_edid.length ? "inherit" : "italic" }}
                         onClick={() => setEditing({ index: rule.index, field: "in_edid" })}>
-                        {rule.in_edid.length ? rule.in_edid.join(" | ") : "none"}
+                        {rule.in_edid.length ? rule.in_edid.join(" | ") : t("headerProcessor.none")}
                       </span>
                     )}
                   </div>
@@ -550,35 +560,35 @@ export function HeaderProcessorPanel() {
                   <div style={{ display: "flex", gap: "4px", alignItems: "center" }}>
                     <label style={{ width: "55px", color: "var(--color-muted)", flexShrink: 0 }}>exEDID</label>
                     {editing?.index === rule.index && editing?.field === "ex_edid" ? (
-                      editableField(rule.ex_edid.join("|"), "exclude patterns", (v) => updateField(rule.index, "ex_edid", v), { flex: 1 })
+                      editableField(rule.ex_edid.join("|"), t("headerProcessor.excludePatternsPlaceholder"), (v) => updateField(rule.index, "ex_edid", v), { flex: 1 })
                     ) : (
                       <span style={{ flex: 1, cursor: "pointer", color: rule.ex_edid.length ? "inherit" : "var(--color-muted)", fontStyle: rule.ex_edid.length ? "inherit" : "italic" }}
                         onClick={() => setEditing({ index: rule.index, field: "ex_edid" })}>
-                        {rule.ex_edid.length ? rule.ex_edid.join(" | ") : "none"}
+                        {rule.ex_edid.length ? rule.ex_edid.join(" | ") : t("headerProcessor.none")}
                       </span>
                     )}
                   </div>
 
                   <div style={{ display: "flex", gap: "4px", alignItems: "center" }}>
-                    <label style={{ width: "55px", color: "var(--color-muted)", flexShrink: 0 }}>Regex</label>
+                    <label style={{ width: "55px", color: "var(--color-muted)", flexShrink: 0 }}>{t("headerProcessor.regex")}</label>
                     {editing?.index === rule.index && editing?.field === "regex" ? (
-                      editableField(rule.regex || "", "regex pattern", (v) => updateField(rule.index, "regex", v), { flex: 1 })
+                      editableField(rule.regex || "", t("headerProcessor.regexPlaceholder"), (v) => updateField(rule.index, "regex", v), { flex: 1 })
                     ) : (
                       <span style={{ flex: 1, cursor: "pointer", color: rule.regex ? "inherit" : "var(--color-muted)", fontStyle: rule.regex ? "inherit" : "italic" }}
                         onClick={() => setEditing({ index: rule.index, field: "regex" })}>
-                        {rule.regex || "none"}
+                        {rule.regex || t("headerProcessor.none")}
                       </span>
                     )}
                   </div>
 
                   {rule.include_keywords.length > 0 && (
                     <div style={{ fontSize: "11px", color: "var(--color-muted)" }}>
-                      Include:{rule.include_keywords.map((k) => `${k.kw_type}:${k.name}`).join(", ")}
+                      {t("headerProcessor.include")}:{rule.include_keywords.map((k) => `${k.kw_type}:${k.name}`).join(", ")}
                     </div>
                   )}
                   {rule.exclude_keywords.length > 0 && (
                     <div style={{ fontSize: "11px", color: "var(--color-muted)" }}>
-                      Exclude:{rule.exclude_keywords.map((k) => `${k.kw_type}:${k.name}`).join(", ")}
+                      {t("headerProcessor.exclude")}:{rule.exclude_keywords.map((k) => `${k.kw_type}:${k.name}`).join(", ")}
                     </div>
                   )}
                 </div>
@@ -588,7 +598,7 @@ export function HeaderProcessorPanel() {
         })}
         {filteredRules.length === 0 && (
           <div style={{ padding: "16px", textAlign: "center", color: "var(--color-muted)", fontSize: "13px" }}>
-            {rules.length === 0 ? "No rules loaded. Load an INI file or add a new rule." : "No rules match filter."}
+            {rules.length === 0 ? t("headerProcessor.noRulesLoaded") : t("headerProcessor.noRulesMatch")}
           </div>
         )}
       </div>
@@ -596,20 +606,20 @@ export function HeaderProcessorPanel() {
       {/* Pre-processing Options */}
       <details style={{ fontSize: "12px" }}>
         <summary style={{ cursor: "pointer", padding: "2px 0", color: "var(--color-muted)" }}>
-          Pre-processing Options ({opts.length})
+          {t("headerProcessor.optionsTitle", { count: opts.length })}
         </summary>
         <div style={{ display: "flex", gap: "4px", marginTop: "4px", alignItems: "center" }}>
           <input className="ui-input" style={{ flex: 1, fontSize: "11px", padding: "2px 6px" }} type="text"
             value={optsPath} onChange={(e) => setOptsPath(e.target.value)}
-            placeholder="Options INI path (e.g. Data/SkyrimSE/HeaderProcessor/preproc.txt)" />
-          <Button variant="ghost" size="xs" onClick={loadOpts}>Load</Button>
+            placeholder={t("headerProcessor.optionsPathPlaceholder")} />
+          <Button variant="ghost" size="xs" onClick={loadOpts}>{t("headerProcessor.load")}</Button>
           <Button variant="ghost" size="xs" onClick={saveOpts}><Save size={11} /></Button>
         </div>
         <div style={{ display: "flex", gap: "4px", marginTop: "4px" }}>
           <input className="ui-input" style={{ width: "100px", fontSize: "11px", padding: "2px 4px" }} type="text"
-            value={newOptKey} onChange={(e) => setNewOptKey(e.target.value)} placeholder="Key" />
+            value={newOptKey} onChange={(e) => setNewOptKey(e.target.value)} placeholder={t("headerProcessor.key")} />
           <input className="ui-input" style={{ flex: 1, fontSize: "11px", padding: "2px 4px" }} type="text"
-            value={newOptVal} onChange={(e) => setNewOptVal(e.target.value)} placeholder="Value" />
+            value={newOptVal} onChange={(e) => setNewOptVal(e.target.value)} placeholder={t("headerProcessor.value")} />
           <Button variant="ghost" size="xs" onClick={addOpt} disabled={!newOptKey}><Plus size={11} /></Button>
         </div>
         <div style={{ maxHeight: "120px", overflow: "auto", marginTop: "4px" }}>

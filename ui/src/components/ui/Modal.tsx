@@ -1,5 +1,6 @@
 import React, { useEffect } from "react";
 import { X } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Button } from "./Button";
 
 export interface ModalProps {
@@ -12,6 +13,7 @@ export interface ModalProps {
 }
 
 export function Modal({ open, onClose, title, size = "md", children, footer }: ModalProps) {
+  const { t } = useTranslation();
   useEffect(() => {
     if (!open) return;
     const handler = (e: KeyboardEvent) => {
@@ -34,7 +36,7 @@ export function Modal({ open, onClose, title, size = "md", children, footer }: M
       >
         <div className="ui-modal-header">
           <h3>{title}</h3>
-          <Button variant="ghost" size="sm" icon={<X size={16} />} onClick={onClose} aria-label="Close" />
+          <Button variant="ghost" size="sm" icon={<X size={16} />} onClick={onClose} aria-label={t("common.close")} />
         </div>
         <div className="ui-modal-body">{children}</div>
         {footer && <div className="ui-modal-footer">{footer}</div>}

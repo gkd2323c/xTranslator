@@ -18,17 +18,17 @@ export function EspTreePanel() {
     setLoading(true);
     getEspHeader()
       .then(setHeader)
-      .catch((e) => toast.error(`Failed to load ESP header: ${e}`))
+      .catch((e) => toast.error(t("espTreePanel.loadFailed", { error: String(e) })))
       .finally(() => setLoading(false));
-  }, [espPath]);
+  }, [espPath, t]);
 
   if (!espPath) {
     return (
       <div className="bottom-panel-inner">
         <EmptyState
           icon={<TreePine size={32} />}
-          title={t("bottomTabs.espTree", { defaultValue: "ESP Tree" })}
-          hint="Load an ESP/ESM file to view its header information"
+          title={t("bottomTabs.espTree")}
+          hint={t("espTreePanel.emptyHint")}
         />
       </div>
     );
@@ -48,40 +48,40 @@ export function EspTreePanel() {
         <div className="esp-tree-content">
           <div className="esp-tree-info">
             <div className="esp-tree-row">
-              <span className="esp-tree-label">Version:</span>
+              <span className="esp-tree-label">{t("espTreePanel.version")}:</span>
               <span className="esp-tree-value">{header.version}</span>
             </div>
             <div className="esp-tree-row">
-              <span className="esp-tree-label">Records:</span>
+              <span className="esp-tree-label">{t("espTreePanel.records")}:</span>
               <span className="esp-tree-value">{header.num_records.toLocaleString()}</span>
             </div>
             <div className="esp-tree-row">
-              <span className="esp-tree-label">Masters:</span>
+              <span className="esp-tree-label">{t("espTreePanel.masters")}:</span>
               <span className="esp-tree-value">{header.masters?.join(", ") || "—"}</span>
             </div>
             <div className="esp-tree-row">
-              <span className="esp-tree-label">Author:</span>
+              <span className="esp-tree-label">{t("espTreePanel.author")}:</span>
               <span className="esp-tree-value">{header.author || "—"}</span>
             </div>
             <div className="esp-tree-row">
-              <span className="esp-tree-label">Description:</span>
+              <span className="esp-tree-label">{t("espTreePanel.description")}:</span>
               <span className="esp-tree-value">{header.description || "—"}</span>
             </div>
             <div className="esp-tree-row">
-              <span className="esp-tree-label">Flags:</span>
+              <span className="esp-tree-label">{t("espTreePanel.flags")}:</span>
               <span className="esp-tree-value">
-                {header.is_master ? "Master" : "Plugin"}
-                {header.is_localized ? " · Localized" : ""}
+                {header.is_master ? t("espTreePanel.master") : t("espTreePanel.plugin")}
+                {header.is_localized ? ` · ${t("espTreePanel.localized")}` : ""}
               </span>
             </div>
           </div>
-          <p className="esp-tree-hint">Full GRUP tree view coming soon</p>
+          <p className="esp-tree-hint">{t("espTreePanel.comingSoon")}</p>
         </div>
       ) : (
         <EmptyState
           icon={<TreePine size={32} />}
-          title="No ESP data"
-          hint="Failed to load ESP header information"
+          title={t("espTreePanel.noData")}
+          hint={t("espTreePanel.loadFailedShort")}
         />
       )}
     </div>

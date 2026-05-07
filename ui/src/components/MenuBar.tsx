@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAppStore } from "../stores/appStore";
 import { Button, Input } from "./ui";
 import { loadEsp, loadSst, saveSst, exportXml, importXml, saveStrings, saveEsp, tcscConvert, tcscBatchConvert, updateTranslation, loadVocabulary, compareSourceDest, loadDataConfigs, delocalizeEsp, type BatchProgress } from "../api/strings";
@@ -25,6 +25,48 @@ type ApplyStats = Pick<
   | "warning"
   | "big_warning"
 >;
+
+type MenuId = "file" | "translate" | "options" | "tools" | "wizards";
+
+type MenuItem = {
+  label: string;
+  onClick?: () => void;
+  shortcut?: string;
+  disabled?: boolean;
+  separator?: boolean;
+};
+
+const TARGET_LANGUAGE_CODES: Record<string, string> = {
+  chinese: "zh",
+  japanese: "ja",
+  korean: "ko",
+  french: "fr",
+  german: "de",
+  spanish: "es",
+  italian: "it",
+  russian: "ru",
+  polish: "pl",
+  portuguese: "pt",
+  brazilian: "pt-BR",
+  czech: "cs",
+  hungarian: "hu",
+};
+
+const TARGET_LANGUAGE_FALLBACKS: Record<string, string> = {
+  chinese: "Chinese",
+  japanese: "Japanese",
+  korean: "Korean",
+  french: "French",
+  german: "German",
+  spanish: "Spanish",
+  italian: "Italian",
+  russian: "Russian",
+  polish: "Polish",
+  portuguese: "Portuguese",
+  brazilian: "Brazilian Portuguese",
+  czech: "Czech",
+  hungarian: "Hungarian",
+};
 
 function getPathExt(path: string): string {
   const fileName = path.replace(/\\/g, "/").split("/").pop() ?? "";
@@ -59,14 +101,32 @@ function formatApplyStats(stats: ApplyStats): string {
 
 export function MenuBar() {
   const { t, i18n } = useTranslation();
+  const menuStripRef = useRef<HTMLDivElement | null>(null);
+  const [openMenu, setOpenMenu] = useState<MenuId | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [showToolbox, setShowToolbox] = useState(false);
+  const targetLanguageLabels = useMemo(() => {
+    let displayNames: Intl.DisplayNames | null = null;
+    try {
+      displayNames = new Intl.DisplayNames([i18n.language], { type: "language" });
+    } catch {
+      displayNames = null;
+    }
+
+    return Object.fromEntries(
+      Object.entries(TARGET_LANGUAGE_CODES).map(([key, code]) => [
+        key,
+        displayNames?.of(code) ?? TARGET_LANGUAGE_FALLBACKS[key] ?? code,
+      ])
+    ) as Record<string, string>;
+  }, [i18n.language]);
   const isParsing = useAppStore((s) => s.isParsing);
   const isLoading = useAppStore((s) => s.isLoading);
   const espPath = useAppStore((s) => s.espPath);
   const language = useAppStore((s) => s.language);
   const isDirty = useAppStore((s) => s.isDirty);
   const targetLang = useAppStore((s) => s.targetLang);
+  const selectedId = useAppStore((s) => s.selectedId);
   const setParsing = useAppStore((s) => s.setParsing);
   const setLoading = useAppStore((s) => s.setLoading);
   const setError = useAppStore((s) => s.setError);
@@ -81,6 +141,7 @@ export function MenuBar() {
   const setTheme = useAppStore((s) => s.setTheme);
   const activePanel = useAppStore((s) => s.activePanel);
   const setActivePanel = useAppStore((s) => s.setActivePanel);
+  const toggleBottomPanel = useAppStore((s) => s.toggleBottomPanel);
   const setDataConfigs = useAppStore((s) => s.setDataConfigs);
   const espMode = useAppStore((s) => s.espMode);
   const batchEntries = useAppStore((s) => s.batchEntries);
@@ -94,21 +155,35 @@ export function MenuBar() {
   const setVmadFilter = useAppStore((s) => s.setVmadFilter);
   const [batchProgress, setBatchProgress] = useState<BatchProgress | null>(null);
 
+  useEffect(() => {
+    const closeMenu = (event: MouseEvent) => {
+      if (menuStripRef.current && !menuStripRef.current.contains(event.target as Node)) {
+        setOpenMenu(null);
+      }
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpenMenu(null);
+    };
+    document.addEventListener("mousedown", closeMenu);
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("mousedown", closeMenu);
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, []);
+
   const warnIfBatchFile = useCallback((path: string) => {
     const normalizedPath = path.replace(/\\/g, "/").toLowerCase();
     const isBatchFile = batchEntries.some(
       (entry) => entry.esp_path.replace(/\\/g, "/").toLowerCase() === normalizedPath
     );
     if (isBatchFile && activePanel !== "batch") {
-      toast(
-        "This file is also in the batch queue. Changes may be overwritten when the batch runs.",
-        { icon: "!", duration: 4000 }
-      );
+      toast(t("menu.batchConflictToast"), { icon: "!", duration: 4000 });
     }
-  }, [batchEntries, activePanel]);
+  }, [batchEntries, activePanel, t]);
 
   const loadEspFromPath = useCallback(async (path: string) => {
-    if (isDirty && !confirm(t("batch.batchConflict"))) return;
+    if (isDirty && !confirm(t("app.resetConfirm"))) return;
     warnIfBatchFile(path);
 
     const espDir = path.replace(/\\/g, "/").split("/").slice(0, -1).join("/");
@@ -129,7 +204,7 @@ export function MenuBar() {
         setEspLoaded(path, stats, stringsDir);
         await loadAllStrings();
         setIsDirty(false);
-        toast.success(`Loaded ${stats.total.toLocaleString()} ${t('sidebar.totalStrings').toLowerCase()}`);
+        toast.success(t("toast.espLoaded", { count: stats.total.toLocaleString() }));
 
         // Check for unapplied translation cache (crash recovery)
         if (stats.esp_hash) {
@@ -158,7 +233,7 @@ export function MenuBar() {
       }
     } catch (e: any) {
       setError(e.toString());
-      toast.error(`${t('app.loading')} ${e}`);
+      toast.error(`${t("toast.loadingFailed")}: ${e}`);
     } finally {
       setParsing(false);
       setLoadProgress(null);
@@ -202,10 +277,7 @@ export function MenuBar() {
       const stats = await loadSst(path);
       setSstLoaded(path, stats);
       setIsDirty(true);
-      toast.success(
-        `SST loaded: ${stats.matched} matched, ${stats.unmatched} unmatched` +
-          formatApplyStats(stats)
-      );
+      toast.success(t("toast.sstLoaded", { matched: stats.matched, unmatched: stats.unmatched }) + formatApplyStats(stats));
       await loadAllStrings();
     } catch (e: any) {
       toast.error(`${t("menu.sstSaveFailed")}: ${e}`);
@@ -344,17 +416,17 @@ export function MenuBar() {
     }
     if (ext === "bsa" || ext === "ba2") {
       setActivePanel("bsa");
-      toast(t("menu.dragDropBsa", { defaultValue: "BSA/BA2 file detected — use the BSA Browser panel to open it" }), { icon: "📦", duration: 3000 });
+      toast(t("menu.dragDropBsa"), { icon: "📦", duration: 3000 });
       return;
     }
     if (ext === "pex") {
       setActivePanel("pex");
-      toast(t("menu.dragDropPex", { defaultValue: "PEX file detected — use the PEX panel to open it" }), { icon: "📜", duration: 3000 });
+      toast(t("menu.dragDropPex"), { icon: "📜", duration: 3000 });
       return;
     }
     if (ext === "fuz") {
       setActivePanel("fuz");
-      toast(t("menu.dragDropFuz", { defaultValue: "FUZ file detected — use the Voice panel to scan" }), { icon: "🔊", duration: 3000 });
+      toast(t("menu.dragDropFuz"), { icon: "🔊", duration: 3000 });
       return;
     }
 
@@ -427,9 +499,9 @@ export function MenuBar() {
           create_backup: true,
         });
         setIsDirty(false);
-        toast.success(t("menu.espSaved", { defaultValue: "ESP saved: {{count}} records modified", count: result.records_modified }));
+        toast.success(t("menu.espSaved", { count: result.records_modified }));
       } catch (e: any) {
-        toast.error(`${t("menu.saveEspFailed", { defaultValue: "Failed to save ESP" })}: ${e}`);
+        toast.error(`${t("menu.saveEspFailed")}: ${e}`);
       } finally {
         setLoading(false);
       }
@@ -463,9 +535,161 @@ export function MenuBar() {
     }
   };
 
+  const closeAndRun = (action?: () => void) => {
+    setOpenMenu(null);
+    action?.();
+  };
+
+  const openSelectedEditor = () => {
+    if (selectedId === null) {
+      toast.error(t("menu.selectStringFirst"));
+      return;
+    }
+    useAppStore.getState().openEditorForItem(selectedId);
+  };
+
+  const convertSelectedTranslation = async (mode: "to_simplified" | "to_traditional") => {
+    const item = useAppStore.getState().selectedItem;
+    if (!item?.translation) {
+      toast.error(t("menu.noTranslationToConvert"));
+      return;
+    }
+    try {
+      const result = await tcscConvert(item.translation, mode);
+      await updateTranslation(item.id, result);
+      useAppStore.getState().updateItemTranslation(item.id, result);
+      toast.success(mode === "to_simplified" ? t("menu.tcsc_simplified") : t("menu.tcsc_traditional"));
+    } catch (e: any) {
+      toast.error(`${t("menu.tcscFailed")}: ${e}`);
+    }
+  };
+
+  const compareSourceDestFromMenu = async (mode: "diff" | "same") => {
+    if (!espPath) return;
+    try {
+      const count = await compareSourceDest(mode);
+      await useAppStore.getState().loadAllStrings();
+      toast.success(
+        mode === "diff"
+          ? t("menu.compare_diff_done", { count })
+          : t("menu.compare_same_done", { count })
+      );
+    } catch (e: any) {
+      toast.error(String(e));
+    }
+  };
+
+  const menuDefinitions: Array<{ id: MenuId; label: string; items: MenuItem[] }> = [
+    {
+      id: "file",
+      label: t("menu.file"),
+      items: [
+        { label: t("common.loadEsp"), onClick: () => void handleLoadEsp(), shortcut: "Ctrl+O" },
+        { label: t("common.loadSst"), onClick: () => void handleLoadSst(), shortcut: "Ctrl+L" },
+        { label: t("common.saveSst"), onClick: () => void handleSaveSst(), shortcut: "Ctrl+S" },
+        { label: t("common.saveStrings"), onClick: () => void handleSaveStrings() },
+        { separator: true, label: "" },
+        { label: t("common.exportXml"), onClick: () => void handleExportXml() },
+        { label: t("common.importXml"), onClick: () => void handleImportXml() },
+        { separator: true, label: "" },
+        { label: t("app.resetWorkspace"), onClick: () => reset() },
+      ],
+    },
+    {
+      id: "translate",
+      label: t("menu.translate"),
+      items: [
+        { label: t("menu.openEditor"), onClick: openSelectedEditor, shortcut: "Enter" },
+        { label: t("finalize.title"), onClick: () => setActivePanel("finalize") },
+        { separator: true, label: "" },
+        { label: t("menu.tcsc_simplified"), onClick: () => void convertSelectedTranslation("to_simplified"), shortcut: "简" },
+        { label: t("menu.tcsc_traditional"), onClick: () => void convertSelectedTranslation("to_traditional"), shortcut: "繁" },
+        { separator: true, label: "" },
+        { label: t("menu.compare_diff"), onClick: () => void compareSourceDestFromMenu("diff") },
+        { label: t("menu.compare_same"), onClick: () => void compareSourceDestFromMenu("same") },
+      ],
+    },
+    {
+      id: "options",
+      label: t("menu.options"),
+      items: [
+        { label: t("settings.title"), onClick: () => setShowSettings(true) },
+        { label: t("menu.toolbox"), onClick: () => setShowToolbox(true) },
+        { separator: true, label: "" },
+        { label: t("sidebar.espMode"), onClick: () => useAppStore.getState().setEspMode(!espMode) },
+        { label: t("menu.toggleBottomPanel"), onClick: () => toggleBottomPanel() },
+        { label: t("app.resetWorkspace"), onClick: () => reset() },
+      ],
+    },
+    {
+      id: "tools",
+      label: t("menu.tools"),
+      items: [
+        { label: t("batch.title"), onClick: () => setActivePanel("batch") },
+        { label: t("bsa.title"), onClick: () => setActivePanel("bsa") },
+        { label: t("pex.title"), onClick: () => setActivePanel("pex") },
+        { label: t("fuz.title"), onClick: () => setActivePanel("fuz") },
+        { label: t("dialog.title"), onClick: () => setActivePanel("dialog") },
+        { label: t("mcm.title"), onClick: () => setActivePanel("mcm") },
+        { label: t("espCompare.title"), onClick: () => setActivePanel("espCompare") },
+        { label: t("dataConfigs.title"), onClick: () => setActivePanel("dataConfigs") },
+      ],
+    },
+    {
+      id: "wizards",
+      label: t("menu.wizards"),
+      items: [
+        { label: t("bottomTabs.headerProc"), onClick: () => useAppStore.getState().setActiveBottomTab("headerProc") },
+        { label: t("bottomTabs.headerWizard"), onClick: () => useAppStore.getState().setActiveBottomTab("headerWizard") },
+        { separator: true, label: "" },
+        { label: t("bottomTabs.home"), onClick: () => useAppStore.getState().setActiveBottomTab("home") },
+      ],
+    },
+  ];
+
+  const renderMenu = (menu: { id: MenuId; label: string; items: MenuItem[] }) => (
+    <div className={`menubar-menu ${openMenu === menu.id ? "open" : ""}`} key={menu.id}>
+      <button
+        type="button"
+        className="menubar-menu-trigger"
+        onClick={() => setOpenMenu(openMenu === menu.id ? null : menu.id)}
+        aria-haspopup="menu"
+        aria-expanded={openMenu === menu.id}
+      >
+        {menu.label}
+      </button>
+      {openMenu === menu.id && (
+        <div className="menubar-menu-panel" role="menu">
+          {menu.items.map((item, index) =>
+            item.separator ? (
+              <div key={`sep-${index}`} className="menubar-menu-separator" />
+            ) : (
+              <button
+                key={item.label}
+                type="button"
+                className="menubar-menu-item"
+                onClick={() => closeAndRun(item.onClick)}
+                disabled={item.disabled}
+                role="menuitem"
+              >
+                <span className="menubar-menu-item-label">{item.label}</span>
+                {item.shortcut && <span className="menubar-menu-item-shortcut">{item.shortcut}</span>}
+              </button>
+            )
+          )}
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div className="menubar">
-      <div className="menubar-brand">xTranslator</div>
+      <div className="menubar-topline" ref={menuStripRef}>
+        <div className="menubar-brand">xTranslator(x64)</div>
+        <div className="menubar-menu-strip" role="menubar" aria-label="Application menus">
+          {menuDefinitions.map(renderMenu)}
+        </div>
+      </div>
       <div className="menubar-actions" role="toolbar" aria-label="Application actions">
         <div className="toolbar-group" role="group" aria-label="Search">
           <Input
@@ -511,7 +735,7 @@ export function MenuBar() {
             size="xs"
             active={vmadFilter}
             onClick={() => setVmadFilter(!vmadFilter)}
-            title={t("table.vmadFilterTooltip", { defaultValue: "Filter VMAD script strings" })}
+            title={vmadFilter ? t("vmad.showAll") : t("vmad.showOnly")}
           >
             VMAD
           </Button>
@@ -570,15 +794,15 @@ export function MenuBar() {
                     language: language,
                     create_backup: true,
                   });
-                  toast.success(`Delocalized: ${result.new_string_count} strings`);
+                  toast.success(t("menu.delocalizedEsp", { count: result.new_string_count }));
                 } catch (e: any) {
-                  toast.error(`Delocalize failed: ${e}`);
+                  toast.error(t("menu.delocalizeFailed", { error: String(e) }));
                 }
               }}
               disabled={isLoading || !espPath}
-              title={t("menu.delocalizeEsp", { defaultValue: "Delocalize ESP" })}
+              title={t("menu.delocalizeEsp")}
             >
-              {t("menu.delocalizeEsp", { defaultValue: "Delocalize" })}
+              {t("menu.delocalizeEsp")}
             </Button>
           )}
         </div>
@@ -611,7 +835,7 @@ export function MenuBar() {
             onClick={async () => {
               const selectedItem = useAppStore.getState().selectedItem;
               if (!selectedItem?.translation) {
-                toast.error("No translation to convert");
+                toast.error(t("menu.noTranslationToConvert"));
                 return;
               }
               try {
@@ -640,22 +864,20 @@ export function MenuBar() {
               }
               const confirmed = window.confirm(
                 t("menu.tcsc_batch_confirm_simplified", {
-                  defaultValue: `Convert ALL ${allItems.filter((i) => i.translation).length} translations to Simplified Chinese?`,
+                  count: allItems.filter((i) => i.translation).length,
                 })
               );
               if (!confirmed) return;
               try {
                 const updatedIds = await tcscBatchConvert("to_simplified");
                 await useAppStore.getState().loadAllStrings();
-                toast.success(
-                  t("menu.tcsc_batch_done", { defaultValue: `Converted ${updatedIds.length} translations` })
-                );
+                toast.success(t("menu.tcsc_batch_done", { count: updatedIds.length }));
               } catch (e: any) {
                 toast.error(`${t("menu.batchTcscFailed")}: ${e}`);
               }
             }}
             disabled={isLoading || !espPath}
-            title={t("menu.tcsc_batch_simplified", { defaultValue: "Batch: Convert all to Simplified Chinese" })}
+            title={t("menu.tcsc_batch_simplified")}
           >
             简↹
           </Button>
@@ -671,22 +893,20 @@ export function MenuBar() {
               }
               const confirmed = window.confirm(
                 t("menu.tcsc_batch_confirm_traditional", {
-                  defaultValue: `Convert ALL ${allItems.filter((i) => i.translation).length} translations to Traditional Chinese?`,
+                  count: allItems.filter((i) => i.translation).length,
                 })
               );
               if (!confirmed) return;
               try {
                 const updatedIds = await tcscBatchConvert("to_traditional");
                 await useAppStore.getState().loadAllStrings();
-                toast.success(
-                  t("menu.tcsc_batch_done", { defaultValue: `Converted ${updatedIds.length} translations` })
-                );
+                toast.success(t("menu.tcsc_batch_done", { count: updatedIds.length }));
               } catch (e: any) {
                 toast.error(`${t("menu.batchTcscFailed")}: ${e}`);
               }
             }}
             disabled={isLoading || !espPath}
-            title={t("menu.tcsc_batch_traditional", { defaultValue: "Batch: Convert all to Traditional Chinese" })}
+            title={t("menu.tcsc_batch_traditional")}
           >
             繁↹
           </Button>
@@ -699,15 +919,13 @@ export function MenuBar() {
               try {
                 const count = await compareSourceDest("diff");
                 await useAppStore.getState().loadAllStrings();
-                toast.success(
-                  t("menu.compare_diff_done", { defaultValue: `Tagged ${count} strings where source ≠ translation` })
-                );
+                toast.success(t("menu.compare_diff_done", { count }));
               } catch (e: any) {
                 toast.error(String(e));
               }
             }}
             disabled={isLoading || !espPath}
-            title={t("menu.compare_diff", { defaultValue: "Tag: source ≠ translation" })}
+            title={t("menu.compare_diff")}
           >
             ≠
           </Button>
@@ -720,15 +938,13 @@ export function MenuBar() {
               try {
                 const count = await compareSourceDest("same");
                 await useAppStore.getState().loadAllStrings();
-                toast.success(
-                  t("menu.compare_same_done", { defaultValue: `Tagged ${count} strings where source = translation` })
-                );
+                toast.success(t("menu.compare_same_done", { count }));
               } catch (e: any) {
                 toast.error(String(e));
               }
             }}
             disabled={isLoading || !espPath}
-            title={t("menu.compare_same", { defaultValue: "Tag: source = translation" })}
+            title={t("menu.compare_same")}
           >
             ＝
           </Button>
@@ -736,15 +952,15 @@ export function MenuBar() {
 
         <div className="toolbar-group toolbar-icon-group" role="group" aria-label="Tool panels">
           {([
-            { id: "batch" as const, icon: <RefreshCw size={14} />, openKey: "menu.openBatchPanel", closeKey: "menu.closeBatchPanel" },
-            { id: "bsa" as const, icon: <FileArchive size={14} />, openKey: "menu.openBSABrowser", closeKey: "menu.closeBSABrowser" },
-            { id: "pex" as const, icon: <Braces size={14} />, openKey: "menu.openPEXPanel", closeKey: "menu.closePEXPanel" },
-            { id: "fuz" as const, icon: <Volume2 size={14} />, openKey: "menu.openVoicePanel", closeKey: "menu.closeVoicePanel" },
-            { id: "dialog" as const, icon: <MessagesSquare size={14} />, openKey: "menu.openDialogView", closeKey: "menu.closeDialogView" },
-            { id: "mcm" as const, icon: <FileText size={14} />, openKey: "menu.openMCMPanel", closeKey: "menu.closeMCMPanel" },
-            { id: "espCompare" as const, icon: <GitCompare size={14} />, openKey: "menu.openESPCompare", closeKey: "menu.closeESPCompare" },
-            { id: "dataConfigs" as const, icon: <Database size={14} />, openKey: "menu.openDataConfigs", closeKey: "menu.closeDataConfigs" },
-          ]).map(({ id, icon, openKey, closeKey }) => (
+            { id: "batch" as const, icon: <RefreshCw size={14} />, openLabel: t("menu.openBatchPanel"), closeLabel: t("menu.closeBatchPanel") },
+            { id: "bsa" as const, icon: <FileArchive size={14} />, openLabel: t("menu.openBsaBrowser"), closeLabel: t("menu.closeBsaBrowser") },
+            { id: "pex" as const, icon: <Braces size={14} />, openLabel: t("menu.openPexPanel"), closeLabel: t("menu.closePexPanel") },
+            { id: "fuz" as const, icon: <Volume2 size={14} />, openLabel: t("menu.openVoicePanel"), closeLabel: t("menu.closeVoicePanel") },
+            { id: "dialog" as const, icon: <MessagesSquare size={14} />, openLabel: t("menu.openDialogView"), closeLabel: t("menu.closeDialogView") },
+            { id: "mcm" as const, icon: <FileText size={14} />, openLabel: t("menu.openMcmPanel"), closeLabel: t("menu.closeMcmPanel") },
+            { id: "espCompare" as const, icon: <GitCompare size={14} />, openLabel: t("menu.openEspCompare"), closeLabel: t("menu.closeEspCompare") },
+            { id: "dataConfigs" as const, icon: <Database size={14} />, openLabel: t("menu.openDataConfigs"), closeLabel: t("menu.closeDataConfigs") },
+          ]).map(({ id, icon, openLabel, closeLabel }) => (
             <Button
               key={id}
               variant="ghost"
@@ -752,8 +968,8 @@ export function MenuBar() {
               icon={icon}
               onClick={() => setActivePanel(id)}
               active={activePanel === id}
-              title={activePanel === id ? t(closeKey) : t(openKey)}
-              aria-label={activePanel === id ? t(closeKey) : t(openKey)}
+              title={activePanel === id ? closeLabel : openLabel}
+              aria-label={activePanel === id ? closeLabel : openLabel}
               aria-pressed={activePanel === id}
             />
           ))}
@@ -767,31 +983,23 @@ export function MenuBar() {
             title={t("menu.targetLanguage")}
             aria-label={t("menu.targetLanguage")}
           >
-            <option value="chinese">Chinese</option>
-            <option value="japanese">Japanese</option>
-            <option value="korean">Korean</option>
-            <option value="french">French</option>
-            <option value="german">German</option>
-            <option value="spanish">Spanish</option>
-            <option value="italian">Italian</option>
-            <option value="russian">Russian</option>
-            <option value="polish">Polish</option>
-            <option value="portuguese">Portuguese</option>
-            <option value="brazilian">Brazilian</option>
-            <option value="czech">Czech</option>
-            <option value="hungarian">Hungarian</option>
+            {Object.entries(TARGET_LANGUAGE_CODES).map(([key]) => (
+              <option key={key} value={key}>
+                {targetLanguageLabels[key]}
+              </option>
+            ))}
           </select>
           <select
             value={theme}
             onChange={(e) => setTheme(e.target.value as any)}
             className="lang-select"
-            title="Theme"
-            aria-label="Theme"
+            title={t("common.theme")}
+            aria-label={t("common.theme")}
           >
-            <option value="obsidian">Obsidian</option>
-            <option value="slate">Slate</option>
-            <option value="light">Light</option>
-            <option value="auto">Auto</option>
+            <option value="obsidian">{t("theme.obsidian")}</option>
+            <option value="slate">{t("theme.slate")}</option>
+            <option value="light">{t("theme.light")}</option>
+            <option value="auto">{t("theme.auto")}</option>
           </select>
           <select
             value={i18n.language}
@@ -809,16 +1017,16 @@ export function MenuBar() {
             size="xs"
             icon={<Settings size={14} />}
             onClick={() => setShowSettings(true)}
-            title={t("settings.title", { defaultValue: "Settings" })}
-            aria-label={t("settings.title", { defaultValue: "Settings" })}
+            title={t("settings.title")}
+            aria-label={t("settings.title")}
           />
           <Button
             variant="ghost"
             size="xs"
             icon={<Wrench size={14} />}
             onClick={() => setShowToolbox(true)}
-            title="Toolbox"
-            aria-label="Toolbox"
+            title={t("menu.toolbox")}
+            aria-label={t("menu.toolbox")}
           />
           <Button
             variant="ghost"
@@ -832,16 +1040,23 @@ export function MenuBar() {
             aria-label={t("app.resetWorkspace")}
           />
         </div>
+        <div className="menubar-status-group">
+          {isParsing && <span className="menubar-status parsing">{t("app.parsing")}</span>}
+          {isLoading && <span className="menubar-status loading">{t("app.loading")}</span>}
+          {isDirty && <span className="menubar-status dirty" title={t("app.unsavedChanges")}>●</span>}
+          {espMode && <span className="menubar-status esp-mode" title={t("sidebar.espMode")}>{t("sidebar.espMode")}</span>}
+          {batchProgress && batchProgress.total_files > 0 && (
+            <span className="menubar-status batch-progress" title={`${batchProgress.message}`}>
+              {t("batch.progressSummary", {
+                translated: batchProgress.strings_translated,
+                total: batchProgress.total_strings,
+                current: batchProgress.current_file,
+                files: batchProgress.total_files,
+              })}
+            </span>
+          )}
+        </div>
       </div>
-      {isParsing && <span className="menubar-status parsing">{t("app.parsing")}</span>}
-      {isLoading && <span className="menubar-status loading">{t("app.loading")}</span>}
-      {isDirty && <span className="menubar-status dirty" title={t("app.unsavedChanges")}>●</span>}
-      {espMode && <span className="menubar-status esp-mode" title={t("sidebar.espMode", { defaultValue: "ESP write-back mode" })}>ESP</span>}
-      {batchProgress && batchProgress.total_files > 0 && (
-        <span className="menubar-status batch-progress" title={`${batchProgress.message}`}>
-          Batch: {batchProgress.strings_translated}/{batchProgress.total_strings} ({batchProgress.current_file}/{batchProgress.total_files} files)
-        </span>
-      )}
       <SettingsDialog open={showSettings} onClose={() => setShowSettings(false)} />
       <ToolboxDialog
         open={showToolbox}

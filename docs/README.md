@@ -11,6 +11,7 @@ This directory is organized by reader need. Start with the repository entry poin
 | [`../SPEC.md`](../SPEC.md) | Canonical goals, constraints, interfaces, invariants, and task completion |
 | [`../ARCHITECTURE.md`](../ARCHITECTURE.md) | Data flow, module responsibilities, IPC patterns, and implementation rules |
 | [`../LAYOUT_REDESIGN_PLAN.md`](../LAYOUT_REDESIGN_PLAN.md) | UI layout redesign (3 phases completed) and completion assessment |
+| [`ui_reproduction_plan.md`](ui_reproduction_plan.md) | 原版 Delphi 界面复刻方案：截图对照、当前实现对比、后续复刻顺序 |
 | [`release_qa.md`](release_qa.md) | Reusable release verification checklist and real-data smoke test plan |
 
 ## Reading Order
@@ -26,6 +27,7 @@ This directory is organized by reader need. Start with the repository entry poin
 | Document | Use it for |
 |----------|------------|
 | [`feature_comparison.md`](feature_comparison.md) | Gap analysis against Delphi xTranslator and next-priority candidates |
+| [`ui_reproduction_plan.md`](ui_reproduction_plan.md) | Active Delphi UI recreation plan based on current screenshots, form mapping, and implementation gaps |
 | [`development_roadmap.md`](development_roadmap.md) | Comprehensive Delphi parity gaps and development roadmap with priorities and effort estimates |
 | [`delphi_analysis.md`](delphi_analysis.md) | Delphi source findings mapped to Rust implementation areas |
 | [`delphi_rust_fix_plan.md`](delphi_rust_fix_plan.md) | Delphi → Rust inconsistency remediation plan |

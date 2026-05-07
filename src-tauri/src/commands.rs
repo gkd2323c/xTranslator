@@ -2980,6 +2980,8 @@ pub struct HeaderBatchProgress {
     pub file_path: String,
     pub strings_matched: u32,
     pub stage: String,
+    #[serde(default)]
+    pub detail_count: Option<usize>,
     pub message: String,
 }
 
@@ -3045,7 +3047,8 @@ pub async fn header_batch_process(
             file_path: fname.clone(),
             strings_matched: total_matched,
             stage: "parsing".into(),
-            message: format!("Processing {}/{}: {}", i + 1, total, fname),
+            detail_count: None,
+            message: String::new(),
         });
 
         // Parse ESP
@@ -3071,7 +3074,10 @@ pub async fn header_batch_process(
             errors.push(err.clone());
             let _ = window.emit("header-batch-progress", HeaderBatchProgress {
                 current: i + 1, total, file_path: fname.clone(),
-                strings_matched: total_matched, stage: "error".into(), message: err,
+                strings_matched: total_matched,
+                stage: "error".into(),
+                detail_count: None,
+                message: err,
             });
             continue;
         }
@@ -3079,7 +3085,8 @@ pub async fn header_batch_process(
         let _ = window.emit("header-batch-progress", HeaderBatchProgress {
             current: i + 1, total, file_path: fname.clone(),
             strings_matched: total_matched, stage: "applying".into(),
-            message: format!("Applying rules to {} strings", parser.strings.len()),
+            detail_count: Some(parser.strings.len()),
+            message: String::new(),
         });
 
         // Build EDID map from record tree
@@ -3123,7 +3130,8 @@ pub async fn header_batch_process(
         let _ = window.emit("header-batch-progress", HeaderBatchProgress {
             current: i + 1, total, file_path: fname.clone(),
             strings_matched: total_matched, stage: "complete".into(),
-            message: format!("{} matched {} strings", fname, file_matched),
+            detail_count: Some(file_matched as usize),
+            message: String::new(),
         });
 
         success += 1;

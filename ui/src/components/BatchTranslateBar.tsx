@@ -1,8 +1,10 @@
+import { useTranslation } from "react-i18next";
 import { useAppStore } from "../stores/appStore";
 import { Play, Square } from "lucide-react";
 import { Button } from "./ui";
 
 export function BatchTranslateBar() {
+  const { t } = useTranslation();
   const selectedIds = useAppStore((s) => s.selectedIds);
   const batchState = useAppStore((s) => s.batchState);
   const batchProgress = useAppStore((s) => s.batchProgress);
@@ -18,7 +20,7 @@ export function BatchTranslateBar() {
     <div className="batch-translate-bar">
       {!isRunning ? (
         <>
-          <label className="batch-bar-label">Concurrency:</label>
+          <label className="batch-bar-label">{t("batch.concurrency")}</label>
           <input
             type="range"
             min={1}
@@ -35,24 +37,24 @@ export function BatchTranslateBar() {
             icon={<Play size={14} />}
             disabled={!hasSelection}
             onClick={startBatchTranslation}
-            title={hasSelection ? `Batch translate ${selectedIds.size} strings` : "Select strings first"}
+            title={hasSelection ? t("batch.batchTranslateSelected", { count: selectedIds.size }) : t("batch.selectStringsFirst")}
           >
-            Batch ({selectedIds.size})
+            {t("batch.batchButton", { count: selectedIds.size })}
           </Button>
         </>
       ) : (
         <>
           <span className="batch-bar-progress">
-            {batchProgress.completed}/{batchProgress.total} done
+            {t("batch.done", { completed: batchProgress.completed, total: batchProgress.total })}
           </span>
           <Button
             variant="default"
             size="sm"
             icon={<Square size={14} />}
             onClick={cancelBatchTranslation}
-            title="Cancel batch"
+            title={t("batch.cancelJob")}
           >
-            Cancel
+            {t("batch.cancel")}
           </Button>
         </>
       )}

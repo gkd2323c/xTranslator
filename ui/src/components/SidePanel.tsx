@@ -41,84 +41,60 @@ export function SidePanel() {
     return { translated: t, incomplete: inc, locked: allItems.length - t - inc, vmadCount: vmad };
   }, [allItems]);
 
-  if (loadProgress) {
-    const isXmlOp = loadProgress.stage === "parsing" || loadProgress.stage === "merging" || loadProgress.stage === "writing" || loadProgress.stage === "collecting";
-    const title = isXmlOp ? "Processing XML..." : "Loading ESP...";
-    return (
-      <div className="sidepanel">
-        <Section title={title}>
-          <ProgressBar
-            value={loadProgress.percentage}
-            max={100}
-            variant="gradient"
-            showLabel
-            label={loadProgress.stage}
-          />
-          <p style={{ fontSize: 12, color: "var(--color-muted)", marginTop: "var(--space-xs)" }}>
-            {loadProgress.message}
-          </p>
-        </Section>
-      </div>
-    );
-  }
-
-  if (!espStats) {
-    return (
-      <div className="sidepanel">
-        <EmptyState
-          icon={<FileText size={48} />}
-          title={t("sidebar.noEspLoaded")}
-          hint={t("sidebar.loadEspToStart")}
-        />
-      </div>
-    );
-  }
-
   const totalTranslatable = translated + incomplete;
   const progressPercent = totalTranslatable > 0 ? (translated / totalTranslatable) * 100 : 0;
+  const yesLabel = t("common.yes");
+  const noLabel = t("common.no");
 
-  return (
-    <div className="sidepanel">
+  const statusContent = !espStats ? (
+    <Section icon={<FileText size={16} />} title={t("sidebar.fileInfo")}>
+      <EmptyState
+        icon={<FileText size={36} />}
+        title={t("sidebar.noEspLoaded")}
+        hint={t("sidebar.loadEspToStart")}
+      />
+    </Section>
+  ) : (
+    <>
       <Section icon={<FileText size={16} />} title={t("sidebar.fileInfo")}>
         <KeyValueRow label="ESP" value={espPath?.split(/[\\/]/).pop() || "—"} />
         <KeyValueRow label={t("sidebar.strings")} value={`${espStats.strings_loaded} ${t("sidebar.filesLoaded")}`} />
         <KeyValueRow label={t("sidebar.parseTime")} value={`${espStats.parse_time_ms}ms`} />
         <KeyValueRow
-          label={t("sidebar.saveMode", { defaultValue: "Save Mode" })}
-          value={espMode ? t("sidebar.espMode", { defaultValue: "ESP mode" }) : t("sidebar.stringsMode", { defaultValue: "Strings mode" })}
+          label={t("sidebar.saveMode")}
+          value={espMode ? t("sidebar.espMode") : t("sidebar.stringsMode")}
           valueClassName={espMode ? "ui-status-translated" : ""}
         />
         <KeyValueRow
-          label={t("sidebar.localization", { defaultValue: "Localization" })}
+          label={t("sidebar.localization")}
           value={
             espStats.strings_loaded > 0
-              ? t("sidebar.delocalized", { defaultValue: "Delocalized" })
-              : t("sidebar.localized", { defaultValue: "Localized" })
+              ? t("sidebar.delocalized")
+              : t("sidebar.localized")
           }
           valueClassName={espStats.strings_loaded > 0 ? "" : "ui-status-incomplete"}
         />
       </Section>
 
-      {/* ESP Header info — only in ESP mode */}
       {espMode && headerInfo && (
-        <Section icon={<Info size={16} />} title={t("sidebar.espHeader", { defaultValue: "ESP Header" })}>
-          <KeyValueRow label={t("sidebar.author", { defaultValue: "Author" })} value={headerInfo.author || "—"} />
-          <KeyValueRow label={t("sidebar.description", { defaultValue: "Description" })} value={headerInfo.description || "—"} />
-          <KeyValueRow label={t("sidebar.version", { defaultValue: "Version" })} value={headerInfo.version.toFixed(2)} />
-          <KeyValueRow label={t("sidebar.records", { defaultValue: "Records" })} value={headerInfo.num_records.toLocaleString()} />
-          <KeyValueRow label={t("sidebar.nextObjectId", { defaultValue: "Next Object ID" })} value={`0x${headerInfo.next_object_id.toString(16).toUpperCase()}`} />
-          <KeyValueRow label={t("sidebar.masterFile", { defaultValue: "Master" })} value={headerInfo.is_master ? "Yes" : "No"} />
-          <KeyValueRow label={t("sidebar.localized", { defaultValue: "Localized" })} value={headerInfo.is_localized ? "Yes" : "No"} />
+        <Section icon={<Info size={16} />} title={t("sidebar.espHeader")}>
+          <KeyValueRow label={t("sidebar.author")} value={headerInfo.author || "—"} />
+          <KeyValueRow label={t("sidebar.description")} value={headerInfo.description || "—"} />
+          <KeyValueRow label={t("sidebar.version")} value={headerInfo.version.toFixed(2)} />
+          <KeyValueRow label={t("sidebar.records")} value={headerInfo.num_records.toLocaleString()} />
+          <KeyValueRow label={t("sidebar.nextObjectId")} value={`0x${headerInfo.next_object_id.toString(16).toUpperCase()}`} />
+          <KeyValueRow label={t("sidebar.masterFile")} value={headerInfo.is_master ? yesLabel : noLabel} />
+          <KeyValueRow label={t("sidebar.localized")} value={headerInfo.is_localized ? yesLabel : noLabel} />
           {headerInfo.masters.length > 0 && (
             <KeyValueRow
-              label={t("sidebar.masterFiles", { defaultValue: "Masters" })}
+              label={t("sidebar.masterFiles")}
               value={headerInfo.masters.join(", ")}
             />
           )}
         </Section>
       )}
 
-      <Section icon={<Database size={16} />} title="Statistics">
+      <Section icon={<Database size={16} />} title={t("sidebar.statistics")}>
         <KeyValueRow label={t("sidebar.totalStrings")} value={espStats.total.toLocaleString()} />
         <KeyValueRow
           label={t("sidebar.translatedCount")}
@@ -136,7 +112,7 @@ export function SidePanel() {
           labelClassName="ui-status-locked"
         />
         <KeyValueRow
-          label={t("sidebar.vmad", { defaultValue: "VMAD" })}
+          label={t("sidebar.vmad")}
           value={vmadCount.toLocaleString()}
           labelClassName="ui-status-script"
         />
@@ -153,7 +129,7 @@ export function SidePanel() {
       </Section>
 
       {sstStats && (
-        <Section icon={<Languages size={16} />} title="SST">
+        <Section icon={<Languages size={16} />} title={t("sidebar.sst")}>
           <KeyValueRow label={t("sidebar.matched")} value={sstStats.matched} valueClassName="ui-status-translated" />
           <KeyValueRow label={t("sidebar.unmatched")} value={sstStats.unmatched} valueClassName="ui-status-incomplete" />
           <KeyValueRow label={t("sidebar.exact")} value={sstStats.tier_exact} />
@@ -180,7 +156,7 @@ export function SidePanel() {
           {vmadFilter && (
             <div style={{ marginTop: "var(--space-xs)", textAlign: "center" }}>
               <Button variant="ghost" size="xs" onClick={() => setVmadFilter(false)}>
-                Clear filter
+                {t("common.clearFilter")}
               </Button>
             </div>
           )}
@@ -209,12 +185,41 @@ export function SidePanel() {
           {recordFilter && (
             <div style={{ marginTop: "var(--space-xs)", textAlign: "center" }}>
               <Button variant="ghost" size="xs" onClick={() => setRecordFilter(null)}>
-                Clear filter
+                {t("common.clearFilter")}
               </Button>
             </div>
           )}
         </Section>
       )}
+    </>
+  );
+
+  if (loadProgress) {
+    const isXmlOp = loadProgress.stage === "parsing" || loadProgress.stage === "merging" || loadProgress.stage === "writing" || loadProgress.stage === "collecting";
+    const title = isXmlOp ? t("sidebar.processingXml") : t("sidebar.loadingEsp");
+    return (
+      <div className="sidepanel">
+        <Section title={title}>
+          <ProgressBar
+            value={loadProgress.percentage}
+            max={100}
+            variant="gradient"
+            showLabel
+            label={loadProgress.stage}
+          />
+          <p style={{ fontSize: 12, color: "var(--color-muted)", marginTop: "var(--space-xs)" }}>
+            {loadProgress.message}
+          </p>
+        </Section>
+      </div>
+    );
+  }
+
+  return (
+    <div className="sidepanel">
+      <div className="sidepanel-status-block">
+        {statusContent}
+      </div>
     </div>
   );
 }

@@ -19,9 +19,9 @@ export function VocabularyPanel() {
     try {
       const result = await loadVocabulary("", language, targetLang);
       setInfo(result);
-      toast.success(`Loaded ${result.pair_count} vocabulary pairs from ${result.base_names.length} source(s)`);
+      toast.success(t("vocabularyPanel.loaded", { pairs: result.pair_count, sources: result.base_names.length }));
     } catch (e: any) {
-      toast.error(`Failed to load vocabulary: ${e}`);
+      toast.error(t("vocabularyPanel.loadFailed", { error: String(e) }));
     } finally {
       setLoading(false);
     }
@@ -33,21 +33,21 @@ export function VocabularyPanel() {
         <div className="vocabulary-empty">
           <EmptyState
             icon={<Book size={32} />}
-            title={t("bottomTabs.vocabulary", { defaultValue: "Vocabulary" })}
-            hint="Load translation vocabulary from game string files"
+            title={t("bottomTabs.vocabulary")}
+            hint={t("vocabularyPanel.emptyHint")}
           />
           <Button variant="default" size="sm" onClick={handleLoad} loading={loading} icon={<FolderOpen size={14} />}>
-            Load Vocabulary
+            {t("vocabularyPanel.load")}
           </Button>
         </div>
       ) : (
         <div className="vocabulary-content">
           <div className="vocabulary-stats">
             <span className="vocabulary-stat">
-              <strong>{info.pair_count.toLocaleString()}</strong> pairs
+              <strong>{info.pair_count.toLocaleString()}</strong> {t("vocabularyPanel.pairs")}
             </span>
             <span className="vocabulary-stat">
-              <strong>{info.base_names.length}</strong> source(s)
+              <strong>{info.base_names.length}</strong> {t("vocabularyPanel.sources")}
             </span>
           </div>
           <div className="vocabulary-sources">
@@ -56,7 +56,7 @@ export function VocabularyPanel() {
             ))}
           </div>
           <Button variant="ghost" size="sm" onClick={handleLoad} loading={loading}>
-            Reload
+            {t("vocabularyPanel.reload")}
           </Button>
         </div>
       )}

@@ -9,8 +9,8 @@ export function QuestsPanel() {
     <div className="bottom-panel-inner">
       <EmptyState
         icon={<MessageSquare size={32} />}
-        title={t("bottomTabs.quests", { defaultValue: "Quest Browser" })}
-        hint="Browse quest records and their dialogue chains. Use the Dialogs tab for NPC dialogue trees."
+        title={t("bottomTabs.quests")}
+        hint={t("questsPanel.hint")}
       />
     </div>
   );

@@ -36,18 +36,6 @@ import "./components/ui/ui.css";
 
 const AUTO_BACKUP_INTERVAL_MS = 5 * 60 * 1000;
 
-const DIALOG_TITLES: Record<string, string> = {
-  batch: "Batch Processor",
-  bsa: "BSA Browser",
-  pex: "PEX Decompiler",
-  fuz: "Voice/FUZ",
-  dialog: "Dialog Viewer",
-  mcm: "MCM Translator",
-  espCompare: "ESP Compare",
-  finalize: "Finalize",
-  dataConfigs: "Data Configs",
-};
-
 function App() {
   const { t } = useTranslation();
   const setSelectedById = useAppStore((s) => s.setSelectedById);
@@ -128,9 +116,9 @@ function App() {
       (event) => {
         const { succeeded, failed } = event.payload;
         if (failed > 0) {
-          toast(`Batch complete: ${succeeded} OK, ${failed} failed`);
+          toast(t("batch.completeWithFailures", { succeeded, failed }));
         } else {
-          toast.success(`Batch complete: ${succeeded} translated`);
+          toast.success(t("batch.completeSuccess", { succeeded }));
         }
         useAppStore.setState({ batchState: "completed" });
       }
@@ -181,15 +169,15 @@ function App() {
       <Toaster position="top-right" />
       <RecoveryPromptModal />
       <EditorDialog open={editorOpen} onClose={() => setEditorOpen(false)} />
-      <Modal open={activePanel === "batch"} onClose={() => setActivePanel(null)} title={DIALOG_TITLES.batch} size="lg"><BatchPanel /></Modal>
-      <Modal open={activePanel === "bsa"} onClose={() => setActivePanel(null)} title={DIALOG_TITLES.bsa} size="lg"><BsaBrowser /></Modal>
-      <Modal open={activePanel === "pex"} onClose={() => setActivePanel(null)} title={DIALOG_TITLES.pex} size="lg"><PexPanel /></Modal>
-      <Modal open={activePanel === "fuz"} onClose={() => setActivePanel(null)} title={DIALOG_TITLES.fuz} size="lg"><FuzPanel /></Modal>
-      <Modal open={activePanel === "dialog"} onClose={() => setActivePanel(null)} title={DIALOG_TITLES.dialog} size="lg"><DialogView /></Modal>
-      <Modal open={activePanel === "mcm"} onClose={() => setActivePanel(null)} title={DIALOG_TITLES.mcm} size="lg"><McmPanel /></Modal>
-      <Modal open={activePanel === "espCompare"} onClose={() => setActivePanel(null)} title={DIALOG_TITLES.espCompare} size="lg"><EspComparePanel /></Modal>
-      <Modal open={activePanel === "finalize"} onClose={() => setActivePanel(null)} title={DIALOG_TITLES.finalize} size="lg"><FinalizePanel /></Modal>
-      <Modal open={activePanel === "dataConfigs"} onClose={() => setActivePanel(null)} title={DIALOG_TITLES.dataConfigs} size="lg"><DataConfigsPanel /></Modal>
+      <Modal open={activePanel === "batch"} onClose={() => setActivePanel(null)} title={t("batch.title")} size="lg"><BatchPanel /></Modal>
+      <Modal open={activePanel === "bsa"} onClose={() => setActivePanel(null)} title={t("bsa.title")} size="lg"><BsaBrowser /></Modal>
+      <Modal open={activePanel === "pex"} onClose={() => setActivePanel(null)} title={t("pex.title")} size="lg"><PexPanel /></Modal>
+      <Modal open={activePanel === "fuz"} onClose={() => setActivePanel(null)} title={t("fuz.title")} size="lg"><FuzPanel /></Modal>
+      <Modal open={activePanel === "dialog"} onClose={() => setActivePanel(null)} title={t("dialog.title")} size="lg"><DialogView /></Modal>
+      <Modal open={activePanel === "mcm"} onClose={() => setActivePanel(null)} title={t("mcm.title")} size="lg"><McmPanel /></Modal>
+      <Modal open={activePanel === "espCompare"} onClose={() => setActivePanel(null)} title={t("espCompare.title")} size="lg"><EspComparePanel /></Modal>
+      <Modal open={activePanel === "finalize"} onClose={() => setActivePanel(null)} title={t("finalize.title")} size="lg"><FinalizePanel /></Modal>
+      <Modal open={activePanel === "dataConfigs"} onClose={() => setActivePanel(null)} title={t("dataConfigs.title")} size="lg"><DataConfigsPanel /></Modal>
       <MenuBar />
       <BatchTranslateBar />
       <div className="app-body">
@@ -210,16 +198,7 @@ function App() {
                       className={`bottom-tab ${activeBottomTab === tab ? "bottom-tab-active" : ""}`}
                       onClick={() => useAppStore.getState().setActiveBottomTab(tab)}
                     >
-                      {tab === "home" ? t("bottomTabs.home", { defaultValue: "Home" }) :
-                       tab === "vocabulary" ? t("bottomTabs.vocabulary", { defaultValue: "Vocabulary" }) :
-                       tab === "heuristic" ? t("bottomTabs.heuristic", { defaultValue: "Heuristic" }) :
-                       tab === "espTree" ? t("bottomTabs.espTree", { defaultValue: "ESP Tree" }) :
-                       tab === "pex" ? t("bottomTabs.pex", { defaultValue: "PEX" }) :
-                       tab === "quests" ? t("bottomTabs.quests", { defaultValue: "Quests" }) :
-                        tab === "dialogs" ? t("bottomTabs.dialogs", { defaultValue: "Dialogs" }) :
-                        tab === "headerProc" ? "Header Proc" :
-                        tab === "headerWizard" ? "Wizard" :
-                        t("bottomTabs.log", { defaultValue: "Log" })}
+                      {t(`bottomTabs.${tab}`)}
                     </button>
                   ))}
 
