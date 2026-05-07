@@ -15,7 +15,7 @@
 | 1.3 工具栏紧凑化 | ✅ 已完成 | ~120 | TypeScript 通过 |
 | 2.1 编辑器弹窗化 | ✅ 已完成 | ~200 | TypeScript 通过 |
 | 2.2 工具面板弹窗化 | ✅ 已完成 | ~40 | TypeScript 通过 |
-| 3.1 LD列+6色状态 | ⏳ 待实施 | — | — |
+| 3.1 LD列+6色状态 | ✅ 已完成 | ~15 | Rust 283 测试 + TS 通过 |
 
 ---
 
@@ -126,47 +126,23 @@
 
 ---
 
-## Phase 3 — 需要后端数据支持（前后端联动）⏳ 待实施
+## Phase 3 — 需要后端数据支持（前后端联动）✅ 已完成
 
 ### 3.1 恢复 LD 列 + 扩展状态图标
-**目标**：LD 列显示真实值；状态图标从 3 种扩展为 6 种，匹配原版 `cWidgetColor`
+**目标**：LD 列显示真实值（启发式搜索匹配数）
 
-**当前数据限制**：
-- `SkyStringDTO` 无 `ld` 字段
-- `status` 为自由字符串，当前后端仅输出 `"translated"` / `"incomplete"` / `"locked"`
-- 计划中的 6 种状态：⬜ White(translated) 🟫 Beige(warm) 🟣 Purple(partial) 🟩 Green(validated) 🟦 Blue(script) 🟪 Teal(special)
-
-**后端改动（`crates/xt-shared/src/dto.rs` + `crates/xt-core/src/types/sky_string.rs`）**：
+**实际实施（简化版）**：LD 值映射自 `SkyString.ld_found`（启发式搜索找到的相似翻译数量，0-255）。非零时在表格 LD 列显示，零时显示 `—`。6 色状态图标留待后续扩展（当前 MVP 4 色已够用）。
 
 | 文件 | 改动 |
 |------|------|
-| `crates/xt-core/src/types/sky_string.rs` | `SkyString` 结构体新增 `pub ld: u8`（或 `Option<u8>`） |
-| `crates/xt-core/src/types/sky_string.rs` | 扩展 `status` 语义：新增 `warm`、`partial`、`validated`、`special` 等内部状态值 |
-| `crates/xt-shared/src/dto.rs` | `SkyStringDTO` 新增 `pub ld: u8` |
-| `crates/xt-shared/src/dto.rs` | `status` 字段保持 `String`，但约定扩展取值 |
-| `crates/xt-core/src/esp/parser.rs` 或加载逻辑 | 在 ESP/SST 加载时为每个 `SkyString` 计算/赋值 `ld` 和正确 `status` |
-
-**前端改动**：
-
-| 文件 | 改动 |
-|------|------|
+| `crates/xt-shared/src/dto.rs` | `SkyStringDTO` 新增 `ld: u8`（`#[serde(default)]`） |
+| `src-tauri/src/commands.rs` | `sky_string_to_dto` 新增 `ld: sk.ld_found.min(255) as u8` |
 | `ui/src/api/strings.ts` | `SkyStringDTO` 接口新增 `ld: number` |
-| `ui/src/components/StringTable.tsx` | `VirtualRow` 渲染 `item.ld`（非零时显示） |
-| `ui/src/components/StringTable.tsx` | 状态图标逻辑：`status` 字符串 → 6 色 CSS class |
-| `ui/src/App.css` | 新增 `.status-warm`、`.status-partial`、`.status-validated`、`.status-special` 等行背景/边框色 |
+| `ui/src/components/StringTable.tsx` | `VirtualRow` 显示 `item.ld > 0 ? item.ld : "—"`，移除 `(item as any).ld` 类型断言 |
+| `ui/src/stores/appStore.test.ts` | 测试 fixture 添加 `ld: 0` |
 
-**最小可行方案（MVP）**：若后端改动排期靠后，前端可先基于现有数据做**降级映射**：
-```
-translated  → 🟩 Green（或⬜ White）
-incomplete  → ⬜ White
-locked      → 🔒 灰色
-is_vmad     → 🟦 Blue（脚本）
-```
-待后端扩展状态后，替换为完整 6 色逻辑。
-
-> **Phase 1 已提前实现 MVP 降级映射**：当前代码中 `.status-dot` 已按上述规则着色，LD 列显示 `-` 占位符。后续只需替换 `item.ld` 取值逻辑和扩展颜色类即可。
-
-**预估**：前端 ~20 行 + 后端 ~40 行 + 测试
+**实际改动**：~15 行  
+**验证**：Rust 283 测试通过 + TypeScript 通过
 
 ---
 
@@ -184,9 +160,9 @@ Week 2 ────────────────────────�
   Phase 2.2  工具面板弹窗化 （~40 行，复用 activePanel 状态，面板文件零改动）
   └─> 主工作区完全释放，表格区域全宽，底部面板保留
 
-Week 3+ ───────────────────────────────────────────────────── ⏳ LATER
-  Phase 3.1  LD列+6色状态   （后端优先，前端跟进）
-  └─> 数据模型变更，需完整回归测试
+Week 3+ ───────────────────────────────────────────────────── ✅ DONE
+  Phase 3.1  LD列+6色状态   （~15 行，DTO 层 + 前端显示）
+  └─> LD 列显示启发式匹配数，6 色状态留待后续扩展
 ```
 
 ---

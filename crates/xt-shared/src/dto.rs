@@ -65,6 +65,9 @@ pub struct SkyStringDTO {
     /// 是否为 VMAD 脚本字符串（负 str_id 编码偏移量）
     #[serde(default)]
     pub is_vmad: bool,
+    /// 启发式搜索匹配数量（0-255，对应 Delphi LD 列）
+    #[serde(default)]
+    pub ld: u8,
 }
 
 /// 加载 ESP 文件响应

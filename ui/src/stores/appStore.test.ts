@@ -14,6 +14,7 @@ function makeItem(overrides: Partial<SkyStringDTO> = {}): SkyStringDTO {
     list_index: 0,
     str_id: 1,
     is_vmad: false,
+    ld: 0,
     ...overrides,
   };
 }

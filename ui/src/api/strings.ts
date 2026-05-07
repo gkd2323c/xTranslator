@@ -21,6 +21,7 @@ export interface SkyStringDTO {
   list_index: number;
   str_id: number;
   is_vmad: boolean;
+  ld: number;
 }
 
 export interface QueryResponse {

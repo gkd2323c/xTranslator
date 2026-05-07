@@ -70,7 +70,7 @@ function VirtualRow(props: {
         {item.translation || "—"}
       </div>
       <div className="row-cell row-cell-ld">
-        {(item as any).ld ?? "—"}
+        {item.ld > 0 ? item.ld : "—"}
       </div>
     </div>
   );

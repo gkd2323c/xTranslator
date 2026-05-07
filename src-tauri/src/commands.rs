@@ -194,6 +194,7 @@ fn sky_string_to_dto(sk: &SkyString) -> SkyStringDTO {
         str_id: sk.esp_ptr.str_id,
         // VMAD 字符串使用负 str_id 编码偏移量
         is_vmad: sk.esp_ptr.str_id < 0,
+        ld: sk.ld_found.min(255) as u8,
     }
 }
 
