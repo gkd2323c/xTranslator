@@ -22,14 +22,14 @@
 
 ## P0 — 翻译 API 提供商补齐
 
-**当前状态：** 4/8 已实现（OpenAI + DeepL + Baidu + Youdao）。
+**当前状态：** 6/8 已实现（OpenAI + DeepL + Baidu + Youdao + Azure + Google）。
 
 | # | 提供商 | Delphi 实现 | 说明 | 状态 |
 |---|--------|-----------|------|------|
 | P0.1 | **百度翻译** | `TranslatorApi.pas` — AppId+Key→MD5 签名，GET 请求 | 国内用户最常用 | ✅ 已完成 |
 | P0.2 | **有道翻译** | `TranslatorApi.pas` — AppKey+Secret→MD5 签名，GET 请求 | 国内常用 | ✅ 已完成 |
-| P0.3 | **MS Azure Translator** | `TranslatorApi.pas` — `Ocp-Apim-Subscription-Key` 认证，POST JSON 数组 | 企业级 | 2-3 天 |
-| P0.4 | **Google Translate** | `TranslatorApi.pas` — 无密钥（旧端点），fake array 模式 | 备用 | 1-2 天 |
+| P0.3 | **MS Azure Translator** | `TranslatorApi.pas` — `Ocp-Apim-Subscription-Key` 认证，POST JSON 数组 | 企业级 | ✅ 已完成 |
+| P0.4 | **Google Translate** | `TranslatorApi.pas` — 无密钥（旧端点），fake array 模式 | 备用 | ✅ 已完成 |
 
 **实现路径：** 在 `crates/xt-core/src/translation_api/` 下新增对应 `*_provider.rs`，注册到 `build_provider()` 工厂函数。每个 provider 复用现有的 CRLF 保护（`<L_F>` 标签）和 proxy builder。需要更新 `ApiTranslator.txt` 解析逻辑以支持新 provider 的配置格式。
 
@@ -209,8 +209,6 @@ Phase B (Week 3-7): P1 Header Processor ✅ 已完成
     └─ P1.1 规则编辑器 ✅ → P1.2 模板管理 ✅ → P1.3 批量向导 ✅ → P1.4 预处理 ✅
 
 Phase C (Week 8-9): P2.1 拼写检查 UI + P2.3 SST 合并 (下一步)
-
-Phase C (Week 8-9): P2.1 拼写检查 + P2.3 SST 合并
     └─ Hunspell 集成 → 缓存/建议 → UI 高亮
 
 Phase D (Week 10-11): P3 UI 完善
@@ -229,7 +227,7 @@ Phase F (按需): P5 低优先级
 
 | Delphi 文件 | 行数 | 功能 | Rust 覆盖 |
 |------------|------|------|----------|
-| `TESVT_TranslatorApi.pas` | 1,280 | 8 个翻译 API 提供商 | 4/8 (OpenAI, DeepL, Baidu, Youdao) |
+| `TESVT_TranslatorApi.pas` | 1,280 | 8 个翻译 API 提供商 | 6/8 (OpenAI, DeepL, Baidu, Youdao, Azure, Google) |
 | `TESVT_FormData.pas` | 1,774 | Header Processor 规则编辑器 | ✅ 已完成 (header_processor.rs + HeaderProcessorPanel) |
 | `TESVT_FastSearch.pas` | 708 | 30+ 比较器 + 二分搜索 | 部分 (matching.rs 覆盖核心) |
 | `TESVT_SpellCheck.pas` | 499 | Hunspell/MS Word 拼写检查 | 后端已完成，缺 UI |

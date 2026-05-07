@@ -2,15 +2,16 @@
 
 ## 当前版本
 - **版本**: 0.1.0
-- **最后提交**: `b80816b` - feat: ESP write-back serialization fixes and test updates
-- **SPEC 完成度**: 45/45 任务完成 ✅
+- **最新提交**: `bbfebda` - docs: consolidate project documentation
+- **SPEC 完成度**: 100/100 任务完成 ✅
+- **测试**: Rust 283 tests · TypeScript 通过 · 0 warnings
 
 ## 发布步骤
 
 ### 1. 版本升级
 ```bash
 # 更新 workspace version
-# Cargo.toml: version = "0.1.0" → "0.2.0" (或 "1.0.0" 当稳定版发布时)
+# Cargo.toml: version = "0.1.0" → "0.2.0"（或 "1.0.0" 当稳定版发布时）
 
 # 更新 src-tauri/tauri.conf.json version
 # "version": "0.1.0" → "0.2.0"

@@ -32,7 +32,7 @@
 - **记录类型过滤**：按记录类型过滤字符串（INFO、QUST 等）
 - **状态过滤**：按翻译状态过滤（已翻译/不完整/锁定）
 - **虚拟渲染**：高效处理大型字符串列表（76K+ 项目）
-- **分块加载**：批量数据加载（每批 10K 项目，~2MB JSON）
+- **分块加载**：批量数据加载（每批 25K 项目，concurrency 3，~2MB JSON）
 - **正则搜索/替换**：完整正则表达式，支持捕获组（$1/$2），跨过滤项目全部替换
 - **主题系统**：深色/浅色/灰色/自动主题，使用 CSS 变量 + localStorage 持久化
 - **撤销/重做**：基于栈（最大 100），Ctrl+Z/Y，IPC 同步
@@ -61,7 +61,7 @@ xTranslator/
 
 ## 项目状态
 
-重写版本已完成主要桌面翻译工作流的完整功能。`SPEC.md` 跟踪 **45 个已完成任务**，涵盖解析、编辑、ESP 写入、比较工具、归档支持、翻译 API、配置持久化和语言工具。
+重写版本已完成主要桌面翻译工作流的完整功能。`SPEC.md` 跟踪 **100 个已完成任务**，涵盖解析、编辑、ESP 写入、比较工具、归档支持、翻译 API、配置持久化和语言工具。
 
 所有核心功能已实现并通过测试：
 - ✅ ESP 解析 + 记录树 + 写入（T42-T45）
@@ -73,7 +73,7 @@ xTranslator/
 - ✅ FUZ 音频映射
 - ✅ MCM 翻译文件支持
 - ✅ ESP 比较引擎
-- ✅ 翻译 API（OpenAI + DeepL）
+- ✅ 翻译 API（6 个提供商：OpenAI、DeepL、Baidu、Youdao、Azure、Google）
 - ✅ 启发式搜索（Levenshtein + LCS + LCP）
 - ✅ 配置持久化（JSON + 代理设置）
 - ✅ TCSC 繁简转换（OpenCC + Delphi 回退）
@@ -145,7 +145,7 @@ cargo run -p xtranslator-tauri
 
 ### 后端-前端 IPC
 - **DTO 源头**：`crates/xt-shared/src/dto.rs` 定义 Rust 结构体；`ui/src/api/strings.ts` 在 TypeScript 中镜像它们
-- **数据策略**：ESP 加载 → 前端通过 `get_strings_chunk` 分块获取（每批 10K 项目，~2MB JSON）→ 客户端过滤/排序/滚动
+- **数据策略**：ESP 加载 → 前端通过 `get_strings_chunk` 分块获取（每批 25K 项目，concurrency 3，~2MB JSON）→ 客户端过滤/排序/滚动
 - **按 ID 更新**：`update_translation` 接收 `u32 id` 并在 Vec 中查找字符串。前端使用 `selectedId`（非数组索引）— 过滤/排序后索引无效
 - **数据刷新**：SST 加载 / XML 导入 → 后端变异 `AppState.strings` → 前端重新调用 `loadAllStrings()` 以刷新块。单个翻译更新 → 前端本地 `updateItemTranslation(id, text)`（零 IPC）
 

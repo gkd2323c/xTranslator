@@ -23,10 +23,12 @@ A modern Rust-based translator for Bethesda game mods (Skyrim, Skyrim SE, Fallou
 - **CRLF Protection**: `<L_F>` tag protect/restore cycle for translation API calls
 
 ### Translation APIs
+- **OpenAI Compatible**: OpenAI, DeepSeek, and other Chat Completions API providers (supports prompt templates)
 - **DeepL**: Free and Pro API support (auto-detected from API key)
 - **Baidu**: Chinese translation via Baidu Translate API (AppId + Key)
 - **Youdao**: Chinese translation via Youdao Translate API (AppKey + SecretKey)
-- **OpenAI Compatible**: OpenAI, DeepSeek, and other Chat Completions API providers (supports prompt templates)
+- **Azure**: Microsoft Translator API (key-based auth)
+- **Google**: Google Cloud Translation API (key-based auth)
 
 ### Advanced Features
 - **GMST:DATA Filtering**: Automatic detection of translatable vs numeric GMST records
@@ -34,9 +36,9 @@ A modern Rust-based translator for Bethesda game mods (Skyrim, Skyrim SE, Fallou
 - **Record Type Filtering**: Filter strings by record type (INFO, QUST, etc.)
 - **Status Filtering**: Filter by translation status (translated/incomplete/locked)
 - **Virtual Rendering**: Efficient handling of large string lists (76K+ items)
-- **Chunked Loading**: Batch data loading (~10K items per batch, ~2MB JSON)
+- **Chunked Loading**: Batched data loading (25K items per batch, ~2MB JSON, concurrency 3)
 - **Regex Search/Replace**: Full regex with capture groups ($1/$2), replace-all across filtered items
-- **Theme System**: Dark/Light/Gray/Auto themes with CSS variables + localStorage persistence
+- **Theme System**: Obsidian/Slate/Light/Auto themes with CSS variables + localStorage persistence
 - **Undo/Redo**: Stack-based (max 100), Ctrl+Z/Y, IPC-synced
 - **Auto-Backup**: 5-min SST snapshots, rotate last 10
 - **Batch Processor**: Multi-file sequential ESP translate/export with progress events and cancellation
@@ -64,7 +66,7 @@ xTranslator/
 
 ## Project Status
 
-The rewrite is feature-complete for the main desktop translation workflow. `SPEC.md` tracks **45 completed tasks** covering parsing, editing, ESP write-back, compare tools, archive support, translation APIs, config persistence, and language tooling.
+The rewrite is feature-complete for the main desktop translation workflow. `SPEC.md` tracks **100 completed tasks** covering parsing, editing, ESP write-back, compare tools, archive support, translation APIs, config persistence, and language tooling.
 
 All core functionality is implemented and tested:
 - ✅ ESP parsing with record tree + write-back (T42-T45)
@@ -76,7 +78,7 @@ All core functionality is implemented and tested:
 - ✅ FUZ audio mapping
 - ✅ MCM translation file support
 - ✅ ESP comparison engine
-- ✅ Translation APIs (OpenAI + DeepL)
+- ✅ Translation APIs (6 providers: OpenAI, DeepL, Baidu, Youdao, Azure, Google)
 - ✅ Heuristic search (Levenshtein + LCS + LCP)
 - ✅ Config persistence (JSON + proxy settings)
 - ✅ TCSC 繁简转换 (OpenCC + Delphi fallback)
@@ -148,7 +150,7 @@ This script:
 
 ### Backend-Frontend IPC
 - **DTO Source of Truth**: `crates/xt-shared/src/dto.rs` defines Rust structs; `ui/src/api/strings.ts` mirrors them in TypeScript
-- **Data Strategy**: ESP loads → frontend fetches chunks via `get_strings_chunk` (10K items/batch, ~2MB JSON) → client-side filter/sort/scroll
+- **Data Strategy**: ESP loads → frontend fetches chunks via `get_strings_chunk` (25K items/batch, concurrency 3, ~2MB JSON) → client-side filter/sort/scroll
 - **Update by ID**: `update_translation` takes a `u32 id` and looks up the string in the Vec. Frontend uses `selectedId` (not array index) — indices become invalid after filtering/sorting
 - **Data Refresh**: SST load / XML import → backend mutates `AppState.strings` → frontend re-calls `loadAllStrings()` to refresh chunks. Single translation update → frontend local `updateItemTranslation(id, text)` (zero IPC)
 

@@ -19,7 +19,7 @@
 | 7 | 45 个内部诊断标记仅实现子集 | **低** | `types/sky_string.rs` | 多数是 UI 诊断标记，但部分影响匹配逻辑 |
 | 8 | 翻译 API 失败重试机制缺失 | **低** | `translation_api/` | Delphi 有 `OnTranslationRetry` 等标志位 |
 | 9 | `feature_comparison.md` 标记 Arabic shaping 为"未移植" | **无** | `docs/feature_comparison.md:72` | 实际 `rtl.rs` 已实现 `shape_arabic`/`deshape_arabic` |
-| 10 | `toolchain_and_roadmap.md` 标记 SQLite 缓存为"待实现" | **无** | `docs/toolchain_and_roadmap.md:44` | 实际 `sqlite_cache.rs` 已实现 |
+| 10 | `development_roadmap.md` 标记 SQLite 缓存为"待实现" | **无** | 原 `docs/toolchain_and_roadmap.md`（已删除，合并至 `development_roadmap.md`） | 实际 `sqlite_cache.rs` 已实现 |
 
 ---
 

@@ -45,7 +45,7 @@ xTranslator/
 
 | Member | Role | Key Files |
 |--------|------|-----------|
-| `xt-core` | Domain logic: ESP parsing + record tree + write-back, Bethesda strings formats, SST v8 read/write, XML import/export, BSA v0x68/v0x69 + BA2 General archive support, PEX script parsing + decompile + compile, FUZ audio, TCSC conversion, config persistence, heuristic similarity search, translation API providers (OpenAI, DeepL, Baidu, Youdao) with CRLF protection, ESP cache, ESP compare, MCM parsing, data configs, toolbox (7 text transformation tools) | `src/lib.rs`, `src/esp/`, `src/strings/`, `src/sst/`, `src/xml/`, `src/bsa/`, `src/ba2/`, `src/pex/`, `src/fuz/`, `src/tcsc.rs`, `src/config.rs`, `src/heuristic/`, `src/translation_api/`, `src/cache.rs`, `src/mcm.rs`, `src/data_config.rs`, `src/toolbox.rs`, `src/md5.rs` |
+| `xt-core` | Domain logic: ESP parsing + record tree + write-back, Bethesda strings formats, SST v8 read/write, XML import/export, BSA v0x68/v0x69 + BA2 General archive support, PEX script parsing + decompile + compile, FUZ audio, TCSC conversion, config persistence, heuristic similarity search, translation API providers (OpenAI, DeepL, Baidu, Youdao, Azure, Google) with CRLF protection, ESP cache, ESP compare, MCM parsing, data configs, toolbox (7 text transformation tools) | `src/lib.rs`, `src/esp/`, `src/strings/`, `src/sst/`, `src/xml/`, `src/bsa/`, `src/ba2/`, `src/pex/`, `src/fuz/`, `src/tcsc.rs`, `src/config.rs`, `src/heuristic/`, `src/translation_api/`, `src/cache.rs`, `src/mcm.rs`, `src/data_config.rs`, `src/toolbox.rs`, `src/md5.rs` |
 | `xt-shared` | Serializable DTOs for IPC. Source of truth for data shapes. | `src/dto.rs` |
 | `xt-cli` | Legacy CLI for testing core functionality without UI. | `src/main.rs` |
 | `src-tauri` | Tauri backend: holds `AppState`, exposes commands to frontend. | `src/main.rs`, `src/commands.rs` |
@@ -80,7 +80,7 @@ User selects ESP → MenuBar.tsx
 
 ```
 ESP loaded → StringTable.tsx useEffect
-  → invoke("get_strings_chunk") × N batches (~10K items/batch, ~2MB JSON)
+  → invoke("get_strings_chunk") × N batches (~25K items/batch, concurrency 3, ~2MB JSON)
   → src-tauri/src/commands.rs::get_strings_chunk()
     → Map SkyString → SkyStringDTO chunks
   → appStore.setAllItems(allItems) → client-side filter + sort
@@ -265,7 +265,7 @@ Delphi xTranslator compatible:
 # Full backend build
 cargo build -p xtranslator-tauri
 
-# Core library unit tests (181 tests)
+# Core library unit tests (283 tests)
 cargo test -p xt-core --lib
 
 # End-to-end tests (requires Skyrim SE at D:\SteamLibrary\...)
