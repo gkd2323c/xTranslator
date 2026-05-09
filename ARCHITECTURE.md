@@ -45,7 +45,7 @@ xTranslator/
 
 | Member | Role | Key Files |
 |--------|------|-----------|
-| `xt-core` | Domain logic: ESP parsing + record tree + write-back, Bethesda strings formats, SST v8 read/write, XML import/export, BSA v0x68/v0x69 + BA2 General archive support, PEX script parsing + decompile + compile, FUZ audio, TCSC conversion, config persistence, heuristic similarity search, translation API providers (OpenAI, DeepL, Baidu, Youdao, Azure, Google) with CRLF protection, ESP cache, ESP compare, MCM parsing, data configs, toolbox (7 text transformation tools) | `src/lib.rs`, `src/esp/`, `src/strings/`, `src/sst/`, `src/xml/`, `src/bsa/`, `src/ba2/`, `src/pex/`, `src/fuz/`, `src/tcsc.rs`, `src/config.rs`, `src/heuristic/`, `src/translation_api/`, `src/cache.rs`, `src/mcm.rs`, `src/data_config.rs`, `src/toolbox.rs`, `src/md5.rs` |
+| `xt-core` | Domain logic: ESP parsing + record tree + write-back, Bethesda strings formats, SST v8 read/write, XML import/export, BSA v0x68/v0x69 + BA2 General archive support, PEX script parsing + decompile + compile, FUZ audio, TCSC conversion, config persistence, heuristic similarity search, translation API providers (OpenAI, DeepL, Baidu, Youdao, Azure, Google) with CRLF protection, ESP cache, ESP compare, MCM parsing, data configs, toolbox (7 text transformation tools), spell check (Hunspell) | `src/lib.rs`, `src/esp/`, `src/strings/`, `src/sst/`, `src/xml/`, `src/bsa/`, `src/ba2/`, `src/pex/`, `src/fuz/`, `src/tcsc.rs`, `src/config.rs`, `src/heuristic/`, `src/translation_api/`, `src/cache.rs`, `src/mcm.rs`, `src/data_config.rs`, `src/toolbox.rs`, `src/md5.rs`, `src/spell.rs` |
 | `xt-shared` | Serializable DTOs for IPC. Source of truth for data shapes. | `src/dto.rs` |
 | `xt-cli` | Legacy CLI for testing core functionality without UI. | `src/main.rs` |
 | `src-tauri` | Tauri backend: holds `AppState`, exposes commands to frontend. | `src/main.rs`, `src/commands.rs` |
@@ -179,7 +179,8 @@ Format: `CachePayload { version: u32, strings: Vec<SkyString>, compressed_record
 | `heuristic` | Similarity search for translation suggestions: Levenshtein distance, longest common substring (LCS), longest common prefix (LCP) |
 | `normalization` | String normalization (case-folding, punctuation stripping, whitespace compression) for heuristic search and dictionary matching |
 | `cache` | ESP parse result cache (SHA-256 keyed, bincode blob, auto-prune oldest) |
-| `translation_api` | Translation provider trait; OpenAI + DeepL implementations. API config parsing (ApiTranslator.txt), language code resolution, CRLF protection (`<L_F>` tag), HTTP proxy builder (not yet wired). Supports API key via env var, runtime, or config persistence, provider switching |
+| `translation_api` | Translation provider trait; OpenAI, DeepL, Baidu, Youdao, Azure, Google implementations. API config parsing (ApiTranslator.txt), language code resolution, CRLF protection (`<L_F>` tag), HTTP proxy builder (not yet wired). Supports API key via env var, runtime, or config persistence, provider switching |
+| `spell` | Hunspell-based spell check: DLL loading via libloading, tag-aware word splitting, FNV-1a hash cache, fault-ratio lockout, persistent ignore list, suggestions |
 | `types` | Core types: `SkyString`, `EspPointer`, `SkyStringParams`, `GameId` |
 
 ### src-tauri
@@ -187,7 +188,7 @@ Format: `CachePayload { version: u32, strings: Vec<SkyString>, compressed_record
 | File | Responsibility |
 |------|----------------|
 | `main.rs` | Tauri app builder: plugin initialization (`shell`, `dialog`), `AppState` management, command handler registration |
-| `commands.rs` | IPC command implementations: `load_esp`, `load_sst`, `save_sst`, `update_translation`, `get_strings_chunk`, `query_strings_command`, `get_stats`, `heuristic_search`, `translate_string`, `set_api_key`, `export_xml`, `import_xml`, `save_strings`, `list_bsa_files`, `extract_bsa_file`, `parse_pex_strings`, `load_fuz_mapping`, `build_dialog_tree`, `start_batch_translate`, `start_batch_export`, `cancel_batch_job`, `load_config`, `save_config`, `get_api_config` |
+| `commands.rs` | IPC command implementations: `load_esp`, `load_sst`, `save_sst`, `update_translation`, `get_strings_chunk`, `query_strings_command`, `get_stats`, `heuristic_search`, `translate_string`, `set_openai_api_key`, `export_xml`, `import_xml`, `save_strings`, `list_bsa_files`, `extract_bsa_file`, `parse_pex_strings`, `load_fuz_mapping`, `build_dialog_tree`, `start_batch_translate`, `start_batch_export`, `cancel_batch_job`, `load_config`, `save_config`, `get_api_config`, `spell_check_load`, `spell_check_unload`, `spell_check_toggle`, `spell_check_config`, `spell_check_text`, `spell_check_suggestions`, `spell_check_ignore` |
 | `batch.rs` | Batch processor: sequential ESP file processing, cooperative cancellation, Tauri event emission |
 
 ### ui
@@ -200,7 +201,7 @@ Format: `CachePayload { version: u32, strings: Vec<SkyString>, compressed_record
 | `components/MenuBar.tsx` | Load ESP/SST, Save SST/Strings, Export/Import XML, Reset, language selector, theme switcher, batch panel toggle |
 | `components/SidePanel.tsx` | Stats display: total/translated/incomplete/locked counts, record type filter list, load progress |
 | `components/StringTable.tsx` | Virtual scroll list (react-window FixedSizeList): 76K+ strings seamless scroll, client-side filter/sort, status filter buttons, audio playback column |
-| `components/EditorPanel.tsx` | Translation editor: source text, textarea, Save (Ctrl+Enter), heuristic search, translate API, API Key dialog, status badge |
+| `components/EditorPanel.tsx` | Translation editor: source text, textarea, Save (Ctrl+Enter), heuristic search, translate API, API Key dialog, status badge, spell check (debounced) |
 | `components/BatchPanel.tsx` | Batch file list, game/language detection, translate/export, progress tracking, cancellation |
 | `components/BsaBrowser.tsx` | BSA archive browser: folder tree, file list, preview, extract single/batch |
 | `components/PexPanel.tsx` | PEX script viewer: object tree, translatable strings list, XML export |

@@ -38,6 +38,7 @@ A modern Rust-based translator for Bethesda game mods (Skyrim, Skyrim SE, Fallou
 - **Virtual Rendering**: Efficient handling of large string lists (76K+ items)
 - **Chunked Loading**: Batched data loading (25K items per batch, ~2MB JSON, concurrency 3)
 - **Regex Search/Replace**: Full regex with capture groups ($1/$2), replace-all across filtered items
+- **Spell Check**: Hunspell-based spell check with tag-aware word splitting, suggestions, and ignore list
 - **Theme System**: Obsidian/Slate/Light/Auto themes with CSS variables + localStorage persistence
 - **Undo/Redo**: Stack-based (max 100), Ctrl+Z/Y, IPC-synced
 - **Auto-Backup**: 5-min SST snapshots, rotate last 10
