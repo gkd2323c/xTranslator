@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useAppStore, computeTranslationProgress } from "../stores/appStore";
-import { updateTranslation, heuristicSearch, translateString, setApiKey, tcscConvert, rtlReverse, shapeArabic, deshapeArabic, checkAliases, type HeuristicMatchDTO, type AliasCheckResult } from "../api/strings";
-import { Save, Search, Languages, Key, AlertTriangle, ArrowRight, Copy, ArrowUp, ArrowDown } from "lucide-react";
+import { updateTranslation, heuristicSearch, translateString, setApiKey, tcscConvert, rtlReverse, shapeArabic, deshapeArabic, checkAliases, spellCheckText, spellCheckSuggestions, spellCheckIgnore, type HeuristicMatchDTO, type AliasCheckResult, type SpellCheckResultDto, type SpellFaultDto } from "../api/strings";
+import { Save, Search, Languages, Key, AlertTriangle, ArrowRight, Copy, ArrowUp, ArrowDown, Sparkles } from "lucide-react";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import { Button, Textarea, Badge, Modal, Input, ProgressBar } from "./ui";
@@ -53,6 +53,14 @@ export function EditorDialog({ open, onClose }: EditorDialogProps) {
   const [showApiKeyDialog, setShowApiKeyDialog] = useState(false);
   const [apiKeyInput, setApiKeyInput] = useState("");
 
+  // ── Spell Check State ──
+  const [spellResult, setSpellResult] = useState<SpellCheckResultDto | null>(null);
+  const [selectedFaultIdx, setSelectedFaultIdx] = useState<number | null>(null);
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
+  const spellTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const ignorePathRef = useRef<string>("");
+
   const fieldSizeWarning = useMemo(() => {
     if (!selectedItem || !dataConfigs?.field_size_ref || !localTrans) return null;
     const key = `${selectedItem.record_sig}:${selectedItem.field_sig}`.toUpperCase();
@@ -83,10 +91,93 @@ export function EditorDialog({ open, onClose }: EditorDialogProps) {
     setLocalTrans(selectedItem?.translation || "");
     setMatches([]);
     setAliasResult(null);
+    setSpellResult(null);
+    setSelectedFaultIdx(null);
+    setSuggestions([]);
     if (selectedItem) {
       checkAliases(selectedItem.id).then(setAliasResult).catch(() => {});
     }
   }, [selectedId]);
+
+  // ── Spell Check: debounced check on text change ──
+  const doSpellCheck = useCallback(async (text: string) => {
+    if (!text) {
+      setSpellResult(null);
+      return;
+    }
+    try {
+      const result = await spellCheckText(text);
+      if (result.active && result.faults.length > 0) {
+        setSpellResult(result);
+      } else if (result.active && result.faults.length === 0) {
+        // Show clean status
+        setSpellResult(result);
+      } else {
+        setSpellResult(null);
+      }
+    } catch {
+      // silently fail
+    }
+  }, []);
+
+  useEffect(() => {
+    if (spellTimerRef.current) {
+      clearTimeout(spellTimerRef.current);
+    }
+    spellTimerRef.current = setTimeout(() => {
+      doSpellCheck(localTrans);
+    }, 500);
+    return () => {
+      if (spellTimerRef.current) clearTimeout(spellTimerRef.current);
+    };
+  }, [localTrans, doSpellCheck]);
+
+  // ── Spell Check: fetch suggestions for selected fault ──
+  const handleSelectFault = useCallback(async (index: number) => {
+    if (!spellResult) return;
+    setSelectedFaultIdx(index);
+    setSuggestionsLoading(true);
+    try {
+      const suggs = await spellCheckSuggestions(spellResult.faults[index].word);
+      setSuggestions(suggs);
+    } catch {
+      setSuggestions([]);
+    } finally {
+      setSuggestionsLoading(false);
+    }
+  }, [spellResult]);
+
+  // ── Spell Check: apply suggestion ──
+  const handleApplySuggestion = useCallback((suggestion: string) => {
+    if (selectedFaultIdx === null || !spellResult) return;
+    const fault = spellResult.faults[selectedFaultIdx];
+    const before = localTrans.slice(0, fault.start_byte);
+    const after = localTrans.slice(fault.end_byte);
+    const newText = before + suggestion + after;
+    setLocalTrans(newText);
+    setSelectedFaultIdx(null);
+    setSuggestions([]);
+  }, [selectedFaultIdx, spellResult, localTrans]);
+
+  // ── Spell Check: ignore word ──
+  const handleIgnoreWord = useCallback(async (word: string) => {
+    try {
+      await spellCheckIgnore(word, ignorePathRef.current || "SpellCheck/ignore.txt");
+      // Remove from fault list
+      setSpellResult((prev) => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          faults: prev.faults.filter((f) => f.word !== word),
+        };
+      });
+      setSelectedFaultIdx(null);
+      setSuggestions([]);
+      toast.success(t("spellcheck.wordIgnored", { defaultValue: "Word added to ignore list" }));
+    } catch (e: any) {
+      toast.error(`${t("spellcheck.ignoreFailed", { defaultValue: "Failed to ignore word" })}: ${e}`);
+    }
+  }, []);
 
   const handleSave = useCallback(async () => {
     if (selectedId === null || !selectedItem) return;
@@ -309,6 +400,77 @@ export function EditorDialog({ open, onClose }: EditorDialogProps) {
               )}
             </div>
           </div>
+
+          {/* ── Spell Check Section ── */}
+          {spellResult && spellResult.active && (
+            <div className="editor-spellcheck">
+              <div className="spellcheck-summary">
+                <Sparkles size={14} />
+                {spellResult.faults.length === 0 ? (
+                  <span className="spellcheck-clean">{t("spellcheck.noErrors", { defaultValue: "No spelling errors" })}</span>
+                ) : (
+                  <span>
+                    {t("spellcheck.errorsFound", { count: spellResult.faults.length, defaultValue: `{{count}} misspelled word(s)` }).replace("{{count}}", String(spellResult.faults.length))}
+                  </span>
+                )}
+                {spellResult.fault_ratio_locked && (
+                  <span className="spellcheck-locked" title={t("spellcheck.ratioLockedTooltip", { defaultValue: "Too many errors detected, highlighting paused" })}>
+                    <AlertTriangle size={12} /> {t("spellcheck.ratioLocked", { defaultValue: "Ratio locked" })}
+                  </span>
+                )}
+              </div>
+
+              {spellResult.faults.length > 0 && (
+                <div className="spellcheck-faults">
+                  {spellResult.faults.map((fault: SpellFaultDto, idx: number) => (
+                    <button
+                      key={`${fault.word}-${idx}`}
+                      className={`spellcheck-chip ${selectedFaultIdx === idx ? "spellcheck-chip-selected" : ""}`}
+                      onClick={() => handleSelectFault(idx)}
+                      title={t("spellcheck.clickForSuggestions", { defaultValue: "Click for suggestions" })}
+                    >
+                      {fault.word}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Suggestions panel */}
+              {selectedFaultIdx !== null && spellResult.faults[selectedFaultIdx] && (
+                <div className="spellcheck-suggestions">
+                  <div className="spellcheck-suggestions-header">
+                    {t("spellcheck.suggestionsFor", { word: spellResult.faults[selectedFaultIdx].word, defaultValue: `Suggestions for "{{word}}"` }).replace("{{word}}", spellResult.faults[selectedFaultIdx].word)}
+                  </div>
+                  {suggestionsLoading ? (
+                    <span className="spellcheck-loading">{t("common.searching")}</span>
+                  ) : suggestions.length > 0 ? (
+                    <div className="spellcheck-suggestions-list">
+                      {suggestions.map((s, i) => (
+                        <button
+                          key={i}
+                          className="spellcheck-suggestion-btn"
+                          onClick={() => handleApplySuggestion(s)}
+                        >
+                          {s}
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="spellcheck-no-suggestions">{t("spellcheck.noSuggestions", { defaultValue: "No suggestions" })}</span>
+                  )}
+                  <div className="spellcheck-suggestions-actions">
+                    <Button
+                      variant="ghost"
+                      size="xs"
+                      onClick={() => handleIgnoreWord(spellResult.faults[selectedFaultIdx].word)}
+                    >
+                      {t("spellcheck.ignore", { defaultValue: "Ignore" })}
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="editor-dialog-footer">
             <div className="editor-dialog-footer-left">

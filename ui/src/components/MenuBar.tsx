@@ -6,12 +6,13 @@ import type { LoadSstResponse, XmlImportResponse } from "../api/strings";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
-import { FolderOpen, FileUp, FileDown, FileCode, Save, RotateCcw, RefreshCw, FileArchive, Braces, Volume2, MessagesSquare, FileText, GitCompare, CheckCircle, Settings, ArrowLeftRight, Database, Wrench, Search, Code2 } from "lucide-react";
+import { FolderOpen, FileUp, FileDown, FileCode, Save, RotateCcw, RefreshCw, FileArchive, Braces, Volume2, MessagesSquare, FileText, GitCompare, CheckCircle, Settings, ArrowLeftRight, Database, Wrench, Search, Code2, Sparkles } from "lucide-react";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import { setI18nLanguage, SUPPORTED_LANGS } from "../i18n";
 import { SettingsDialog } from "./SettingsDialog";
 import { ToolboxDialog } from "./ToolboxDialog";
+import { SpellCheckSettingsDialog } from "./SpellCheckSettingsDialog";
 
 type ApplyStats = Pick<
   LoadSstResponse | XmlImportResponse,
@@ -105,6 +106,8 @@ export function MenuBar() {
   const [openMenu, setOpenMenu] = useState<MenuId | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [showToolbox, setShowToolbox] = useState(false);
+  const [showSpellCheck, setShowSpellCheck] = useState(false);
+  const [spellCheckCfg, setSpellCheckCfg] = useState<import("../api/strings").SpellCheckConfigDto | null>(null);
   const targetLanguageLabels = useMemo(() => {
     let displayNames: Intl.DisplayNames | null = null;
     try {
@@ -615,6 +618,7 @@ export function MenuBar() {
       items: [
         { label: t("settings.title"), onClick: () => setShowSettings(true) },
         { label: t("menu.toolbox"), onClick: () => setShowToolbox(true) },
+        { label: t("spellcheck.title", { defaultValue: "Spell Check" }), onClick: () => setShowSpellCheck(true) },
         { separator: true, label: "" },
         { label: t("sidebar.espMode"), onClick: () => useAppStore.getState().setEspMode(!espMode) },
         { label: t("menu.toggleBottomPanel"), onClick: () => toggleBottomPanel() },
@@ -1031,6 +1035,15 @@ export function MenuBar() {
           <Button
             variant="ghost"
             size="xs"
+            icon={<Sparkles size={14} />}
+            onClick={() => setShowSpellCheck(true)}
+            title={t("spellcheck.title", { defaultValue: "Spell Check" })}
+            aria-label={t("spellcheck.title", { defaultValue: "Spell Check" })}
+            className={spellCheckCfg?.active ? "menubar-btn-active" : ""}
+          />
+          <Button
+            variant="ghost"
+            size="xs"
             icon={<RotateCcw size={14} />}
             onClick={() => {
               if (isDirty && !confirm(t("app.resetConfirm"))) return;
@@ -1058,6 +1071,13 @@ export function MenuBar() {
         </div>
       </div>
       <SettingsDialog open={showSettings} onClose={() => setShowSettings(false)} />
+      <SpellCheckSettingsDialog
+        open={showSpellCheck}
+        onClose={() => setShowSpellCheck(false)}
+        dllPath="Bin/x64/libhunspell.dll"
+        dictDir="SpellCheck/dictionaries"
+        onConfigChanged={setSpellCheckCfg}
+      />
       <ToolboxDialog
         open={showToolbox}
         onClose={() => setShowToolbox(false)}

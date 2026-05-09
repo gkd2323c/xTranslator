@@ -1,5 +1,8 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import path from "path";
+
+const isE2E = process.env.VITE_E2E === "true";
 
 // https://vitejs.dev/config/
 export default defineConfig(async () => ({
@@ -18,6 +21,17 @@ export default defineConfig(async () => ({
       ignored: ["**/src-tauri/**"],
     },
   },
+
+  // Resolve aliases: mock Tauri APIs in E2E test mode
+  resolve: isE2E
+    ? {
+        alias: {
+          "@tauri-apps/api/core": path.resolve(__dirname, "e2e/mocks/tauri-core.ts"),
+          "@tauri-apps/api/event": path.resolve(__dirname, "e2e/mocks/tauri-event.ts"),
+          "@tauri-apps/api/webview": path.resolve(__dirname, "e2e/mocks/tauri-webview.ts"),
+        },
+      }
+    : undefined,
 
   // Vitest configuration
   test: {
