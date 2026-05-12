@@ -1,0 +1,15 @@
+{
+  "name": "xtranslator-tauri",
+  "private": true,
+  "version": "0.2.0",
+  "type": "module",
+  "scripts": {
+    "build": "cd ../ui && npm run build",
+    "tauri": "tauri",
+    "tauri:build": "tauri build",
+    "tauri:dev": "tauri dev"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.10.3"
+  }
+}

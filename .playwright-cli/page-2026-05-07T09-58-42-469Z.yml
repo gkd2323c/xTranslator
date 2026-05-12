@@ -1,0 +1,189 @@
+- generic [ref=e3]:
+  - generic [ref=e4]:
+    - generic [ref=e5]:
+      - generic [ref=e6]: xTranslator(x64)
+      - menubar "Application menus" [ref=e7]:
+        - button "文件" [ref=e9]
+        - button "翻译" [ref=e11]
+        - button "选项" [ref=e13]
+        - button "工具" [ref=e15]
+        - button "向导" [ref=e17]
+    - toolbar "Application actions" [ref=e18]:
+      - group "Search" [ref=e19]:
+        - generic [ref=e20]:
+          - img [ref=e22]
+          - textbox "筛选字符串..." [ref=e25]
+          - button "切换为正则" [ref=e27] [cursor=pointer]:
+            - img [ref=e29]
+      - group "Status filters" [ref=e33]:
+        - button "✓" [ref=e34] [cursor=pointer]:
+          - generic [ref=e35]: ✓
+        - button "✗" [ref=e36] [cursor=pointer]:
+          - generic [ref=e37]: ✗
+        - button "🔒" [ref=e38] [cursor=pointer]:
+          - generic [ref=e39]: 🔒
+        - button "VMAD" [ref=e40] [cursor=pointer]:
+          - generic [ref=e41]: VMAD
+      - group "Files" [ref=e42]:
+        - button "加载 ESP" [ref=e43] [cursor=pointer]:
+          - img [ref=e44]
+          - generic [ref=e46]: 加载 ESP
+        - button "加载 SST" [disabled] [ref=e47]:
+          - img [ref=e48]
+          - generic [ref=e52]: 加载 SST
+        - button "保存 SST" [disabled] [ref=e53]:
+          - img [ref=e54]
+          - generic [ref=e58]: 保存 SST
+        - button "保存 Strings" [disabled] [ref=e59]:
+          - img [ref=e60]
+          - generic [ref=e64]: 保存 Strings
+      - group "Exchange formats" [ref=e65]:
+        - button "导出 XML" [disabled] [ref=e66]:
+          - img [ref=e67]
+          - generic [ref=e72]: 导出 XML
+        - button "导入 XML" [disabled] [ref=e73]:
+          - img [ref=e74]
+          - generic [ref=e79]: 导入 XML
+      - group "Finalize" [ref=e80]:
+        - button "完成导出" [disabled] [ref=e81]:
+          - img [ref=e82]
+          - generic [ref=e85]: 完成导出
+      - group "TCSC conversion" [ref=e86]:
+        - button "简" [ref=e87] [cursor=pointer]:
+          - generic [ref=e88]: 简
+        - button "繁" [ref=e89] [cursor=pointer]:
+          - generic [ref=e90]: 繁
+        - button "简↹" [disabled] [ref=e91]:
+          - generic [ref=e92]: 简↹
+        - button "繁↹" [disabled] [ref=e93]:
+          - generic [ref=e94]: 繁↹
+        - button "≠" [disabled] [ref=e95]:
+          - img [ref=e96]
+          - generic [ref=e99]: ≠
+        - button "＝" [disabled] [ref=e100]:
+          - img [ref=e101]
+          - generic [ref=e104]: ＝
+      - group "Tool panels" [ref=e105]:
+        - button "打开批处理面板" [ref=e106] [cursor=pointer]:
+          - img [ref=e107]
+        - button "打开 BSA 浏览器" [ref=e112] [cursor=pointer]:
+          - img [ref=e113]
+        - button "打开 PEX 面板" [ref=e117] [cursor=pointer]:
+          - img [ref=e118]
+        - button "打开语音面板" [ref=e121] [cursor=pointer]:
+          - img [ref=e122]
+        - button "打开对话视图" [ref=e126] [cursor=pointer]:
+          - img [ref=e127]
+        - button "打开 MCM 面板" [ref=e130] [cursor=pointer]:
+          - img [ref=e131]
+        - button "打开 ESP 对比" [ref=e134] [cursor=pointer]:
+          - img [ref=e135]
+        - button "打开数据配置" [ref=e140] [cursor=pointer]:
+          - img [ref=e141]
+      - group "Preferences" [ref=e145]:
+        - combobox "目标语言" [ref=e146] [cursor=pointer]:
+          - option "中文" [selected]
+          - option "日语"
+          - option "韩语"
+          - option "法语"
+          - option "德语"
+          - option "西班牙语"
+          - option "意大利语"
+          - option "俄语"
+          - option "波兰语"
+          - option "葡萄牙语"
+          - option "巴西葡萄牙语"
+          - option "捷克语"
+          - option "匈牙利语"
+        - combobox "主题" [ref=e147] [cursor=pointer]:
+          - option "黑曜石" [selected]
+          - option "灰石"
+          - option "浅色"
+          - option "自动"
+        - combobox "语言" [ref=e148] [cursor=pointer]:
+          - option "中文" [selected]
+          - option "English"
+          - option "日本語"
+          - option "한국어"
+          - option "Français"
+          - option "Deutsch"
+          - option "Español"
+          - option "Русский"
+          - option "Polski"
+          - option "Português"
+        - button "设置" [ref=e149] [cursor=pointer]:
+          - img [ref=e150]
+        - button "工具箱" [ref=e153] [cursor=pointer]:
+          - img [ref=e154]
+        - button "重置工作区" [ref=e156] [cursor=pointer]:
+          - img [ref=e157]
+  - generic [ref=e160]:
+    - generic [ref=e161]: 并发：
+    - slider [ref=e162]: "3"
+    - generic [ref=e163]: "3"
+    - button "批量 (0)" [disabled] [ref=e164]:
+      - img [ref=e165]
+      - generic [ref=e167]: 批量 (0)
+  - main [ref=e169]:
+    - generic [ref=e171]:
+      - generic [ref=e172]:
+        - button "全部" [ref=e173] [cursor=pointer]
+        - button "STRINGS" [ref=e174] [cursor=pointer]
+        - button "DLSTRINGS" [ref=e175] [cursor=pointer]
+        - button "ILSTRINGS" [ref=e176] [cursor=pointer]
+      - generic [ref=e179]: 0 / 0(无数据)
+      - generic [ref=e180]:
+        - generic [ref=e182] [cursor=pointer]:
+          - text: EDID
+          - img [ref=e183]
+        - generic [ref=e186] [cursor=pointer]:
+          - text: ID
+          - img [ref=e187]
+        - generic [ref=e190] [cursor=pointer]: 原文
+        - generic [ref=e191] [cursor=pointer]: 译文
+        - generic [ref=e192] [cursor=pointer]: LD
+      - list [ref=e194]
+    - generic [ref=e196]:
+      - generic [ref=e197]:
+        - button "主页" [ref=e198] [cursor=pointer]
+        - button "词汇库" [ref=e199] [cursor=pointer]
+        - button "启发式建议" [ref=e200] [cursor=pointer]
+        - button "Esp树状表" [ref=e201] [cursor=pointer]
+        - button "反编译脚本" [ref=e202] [cursor=pointer]
+        - button "任务列表" [ref=e203] [cursor=pointer]
+        - button "NPC/语音指向" [ref=e204] [cursor=pointer]
+        - button "日志" [ref=e205] [cursor=pointer]
+        - button "预处理器" [ref=e206] [cursor=pointer]
+        - button "向导" [active] [ref=e207] [cursor=pointer]
+      - generic [ref=e270]:
+        - generic [ref=e271]: 头部批处理向导
+        - generic [ref=e272]:
+          - generic [ref=e273]: 源目录（ESP/ESM 文件）
+          - textbox "例如 D:\\Mods\\MyPlugin\\esps" [ref=e274]
+        - generic [ref=e275]:
+          - generic [ref=e276]:
+            - generic [ref=e277]: 游戏
+            - combobox [ref=e278]:
+              - option "Skyrim SE" [selected]
+              - option "Skyrim"
+              - option "Fallout 4"
+              - option "Fallout NV"
+              - option "Fallout 76"
+              - option "Starfield"
+          - generic [ref=e279]:
+            - generic [ref=e280]: 数据目录
+            - textbox "Data" [ref=e281]
+        - generic [ref=e282] [cursor=pointer]:
+          - checkbox "保存前创建备份" [checked] [ref=e283]
+          - text: 保存前创建备份
+        - button "开始批处理" [disabled] [ref=e285]:
+          - generic [ref=e286]:
+            - img [ref=e287]
+            - text: 开始批处理
+  - generic [ref=e223]:
+    - generic [ref=e224]: —
+    - generic [ref=e225]: 0 / 0 (0.0%)
+    - generic [ref=e226]: —
+    - generic [ref=e227]: Strings 模式
+    - generic [ref=e228]: english → chinese
+    - generic [ref=e229]: 黑曜石

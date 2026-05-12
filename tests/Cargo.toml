@@ -1,0 +1,33 @@
+[package]
+name = "xtranslator-tests"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "test_data_generator"
+path = "test_data_generator.rs"
+
+[[test]]
+name = "e2e_comprehensive"
+path = "e2e_comprehensive.rs"
+
+[[test]]
+name = "performance_benchmarks"
+path = "performance_benchmarks.rs"
+
+[dependencies]
+xt-core = { path = "../crates/xt-core" }
+xt-shared = { path = "../crates/xt-shared" }
+anyhow = { workspace = true }
+tempfile = "3.8"
+regex = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[[bench]]
+name = "performance_benchmarks"
+harness = false
