@@ -5,6 +5,7 @@ members = [
     "crates/xt-shared",
     "crates/xt-cli",
     "src-tauri",
+    "tests",
 ]
 
 [workspace.package]
