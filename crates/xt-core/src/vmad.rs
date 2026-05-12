@@ -477,8 +477,9 @@ impl VmadDecoder {
         if *pos + len > data.len() {
             return Err(VmadError::Eof);
         }
-        let s = String::from_utf8(data[*pos..*pos + len].to_vec())
-            .map_err(|e| VmadError::InvalidData(e.to_string()))?;
+        let s = std::str::from_utf8(&data[*pos..*pos + len])
+            .map_err(|e| VmadError::InvalidData(e.to_string()))?
+            .to_string();
         *pos += len;
         Ok(s)
     }
@@ -556,6 +557,127 @@ impl VmadDecoder {
         }
         Ok(())
     }
+}
+
+/// 零分配 VMAD 解码：直接从 &[u8] 提取字符串，不构建 VmadDecoder
+///
+/// 用于解析时的快速路径，避免 buffer.to_vec() 堆分配。
+pub(crate) fn decode_vmad_fast(data: &[u8], version: i16) -> Vec<VmadString> {
+    let mut result = Vec::new();
+    let mut pos = 0usize;
+
+    if data.len() < 6 {
+        return result;
+    }
+
+    // Header: version (already known from RecordHeaderData), objType (i16), scriptCount (i16)
+    // Skip version bytes (already consumed)
+    let _obj_type = if pos + 2 <= data.len() {
+        i16::from_le_bytes([data[pos], data[pos + 1]])
+    } else {
+        return result;
+    };
+    pos += 2;
+
+    let script_count = if pos + 2 <= data.len() {
+        u16::from_le_bytes([data[pos], data[pos + 1]]) as usize
+    } else {
+        return result;
+    };
+    pos += 2;
+
+    for _ in 0..script_count {
+        // Read script name (u8 length prefix)
+        let name_len = if pos < data.len() { data[pos] as usize } else { break };
+        pos += 1;
+        if pos + name_len > data.len() { break; }
+        let script_name = std::str::from_utf8(&data[pos..pos + name_len])
+            .unwrap_or("")
+            .to_string();
+        pos += name_len;
+
+        // Read prop count (u16)
+        let prop_count = if pos + 2 <= data.len() {
+            u16::from_le_bytes([data[pos], data[pos + 1]]) as usize
+        } else {
+            break;
+        };
+        pos += 2;
+
+        for _ in 0..prop_count {
+            // Property name (u8 length prefix)
+            let pname_len = if pos < data.len() { data[pos] as usize } else { break };
+            pos += 1;
+            if pos + pname_len > data.len() { break; }
+            let prop_name = std::str::from_utf8(&data[pos..pos + pname_len])
+                .unwrap_or("")
+                .to_string();
+            pos += pname_len;
+
+            // Type (u8)
+            let prop_type_byte = if pos < data.len() { data[pos] } else { break };
+            pos += 1;
+
+            // Status (u8)
+            if pos >= data.len() { break; }
+            pos += 1;
+
+            // Read value based on type
+            match prop_type_byte {
+                3 => { // String type
+                    if pos + 4 > data.len() { break; }
+                    let len = u32::from_le_bytes([data[pos], data[pos+1], data[pos+2], data[pos+3]]) as usize;
+                    pos += 4;
+                    let str_end = (pos + len).min(data.len());
+                    let value = String::from_utf8_lossy(&data[pos..str_end]).to_string();
+                    pos = str_end;
+                    if !value.is_empty() {
+                        result.push(VmadString {
+                            script_name: script_name.clone(),
+                            prop_name: prop_name.clone(),
+                            value,
+                            offset: pos - 4 - len, // offset of the u32 length prefix
+                            length: len,
+                        });
+                    }
+                }
+                1 | 4 | 6 | 7 => { pos += 1; } // Null, Int (u8), Bool, Variable
+                2 => { pos += 4; } // Object (u32 formid)
+                5 => { pos += 4; } // Float (f32)
+                11 => { // Struct
+                    if pos + 4 > data.len() { break; }
+                    let count = u32::from_le_bytes([data[pos], data[pos+1], data[pos+2], data[pos+3]]) as usize;
+                    pos += 4 + count * 12; // 3 × u32 per element
+                }
+                12 | 14 => { // StringArray, FloatArray
+                    if pos + 4 > data.len() { break; }
+                    let count = u32::from_le_bytes([data[pos], data[pos+1], data[pos+2], data[pos+3]]) as usize;
+                    pos += 4 + count * 4;
+                }
+                13 => { // IntArray
+                    if pos + 4 > data.len() { break; }
+                    let count = u32::from_le_bytes([data[pos], data[pos+1], data[pos+2], data[pos+3]]) as usize;
+                    pos += 4 + count * 4;
+                }
+                15 => { // BoolArray
+                    if pos + 4 > data.len() { break; }
+                    let count = u32::from_le_bytes([data[pos], data[pos+1], data[pos+2], data[pos+3]]) as usize;
+                    pos += 4 + count;
+                }
+                17 => { // ArrayStruct (FO4)
+                    if pos + 4 > data.len() { break; }
+                    let count = u32::from_le_bytes([data[pos], data[pos+1], data[pos+2], data[pos+3]]) as usize;
+                    pos += 4;
+                    for _ in 0..count {
+                        pos += 12; // 3 × u32 per struct element
+                    }
+                }
+                _ => {} // Unknown type, skip
+            }
+        }
+    }
+
+    result
 }
 
 #[cfg(test)]

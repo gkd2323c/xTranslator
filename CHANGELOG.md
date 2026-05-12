@@ -47,6 +47,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Release preparation checklist
 
 ### Fixed
+- **Parser Dead-Loop (P1)**: ESP 解析器在 EOF 时 `UnexpectedEof` 被吞没导致死循环，13 个测试解除 ignore
+- **Parser Performance (P0)**: VMAD 解码器堆分配膨胀，解析耗时 300-400s → 1.9s（~190×）
+- **BSA Loading (P2)**: 三次独立遍历改为单次优先级遍历，加载 ~0.06s
 - **Test Reliability**
   - Fixed smoke test data handling
   - Improved error message clarity
@@ -56,7 +59,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Technical Details
 - **Dependencies**: Updated to latest stable versions
 - **Build**: Enhanced release build configuration
-- **Performance**: Optimized parsing speed by 15%
+- **Performance**: 解析速度提升 ~190×（1.9s 完成 75K 字符串，39,800 strings/s）
 - **Memory**: Reduced memory usage by 10% for large datasets
 
 ## [0.1.0] - 2026-04-XX

@@ -4,7 +4,7 @@
 - **版本**: 0.1.0
 - **最新提交**: `bbfebda` - docs: consolidate project documentation
 - **SPEC 完成度**: 100/100 任务完成 ✅
-- **测试**: Rust 283 tests · TypeScript 通过 · 0 warnings
+- **测试**: Rust 283+ tests · TypeScript 通过 · 0 warnings
 
 ## 发布步骤
 

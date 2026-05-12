@@ -616,7 +616,7 @@ fn parse_top_level_debug<R: Read>(
 ) -> Result<()> {
     let header = match GenericHeader::read_from(reader) {
         Ok(h) => h,
-        Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => return Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => return Err(e),
         Err(e) => return Err(e),
     };
 
@@ -689,7 +689,7 @@ fn parse_top_level_debug<R: Read>(
     ) -> Result<()> {
         let header = match GenericHeader::read_from(reader) {
             Ok(h) => h,
-            Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => return Ok(()),
+            Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => return Err(e),
             Err(e) => return Err(e),
         };
 
@@ -941,7 +941,7 @@ fn parse_top_level_debug<R: Read>(
     ) -> Result<()> {
         let header = match GenericHeader::read_from(reader) {
             Ok(h) => h,
-            Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => return Ok(()),
+            Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => return Err(e),
             Err(e) => return Err(e),
         };
 
@@ -1180,15 +1180,13 @@ fn parse_top_level_debug<R: Read>(
     ) {
         use crate::types::esp_pointer::string_hash;
 
-        // VMAD 字段前 2 字节是版本号 (i16 LE)
-        let vmad_version = if data.len() >= 2 {
-            i16::from_le_bytes([data[0], data[1]])
-        } else {
-            return; // 数据太短，无法解析
-        };
+        if data.len() < 2 {
+            return;
+        }
+        let vmad_version = i16::from_le_bytes([data[0], data[1]]);
 
-        let decoder = VmadDecoder::new(data, vmad_version);
-        let vmad_strings = decoder.decode();
+        // 零分配快速路径：直接从 &[u8] 解码，避免 buffer.to_vec() 堆分配
+        let vmad_strings = crate::vmad::decode_vmad_fast(data, vmad_version);
 
         for vmad_str in vmad_strings {
             if vmad_str.value.is_empty() {

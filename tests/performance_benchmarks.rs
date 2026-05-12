@@ -47,7 +47,6 @@ fn measure_memory_usage() -> usize {
 /// Benchmark 1: ESP parsing performance
 #[test]
 #[cfg_attr(debug_assertions, ignore = "requires --release")]
-#[ignore = "parser hangs on this Skyrim.esm (infinite loop in parse loop)"]
 fn benchmark_esp_parsing() {
     if !skyrim_data_available() {
         println!("⚠️  Skipping ESP parsing benchmark - Skyrim.esm not found");
@@ -78,7 +77,6 @@ fn benchmark_esp_parsing() {
 /// Benchmark 2: Memory usage with large datasets
 #[test]
 #[cfg_attr(debug_assertions, ignore = "requires --release")]
-#[ignore = "parser hangs on this Skyrim.esm (infinite loop in parse loop)"]
 fn benchmark_memory_usage() {
     if !skyrim_data_available() {
         println!("⚠️  Skipping memory benchmark - Skyrim.esm not found");
@@ -107,7 +105,6 @@ fn benchmark_memory_usage() {
 /// Benchmark 3: Filtering performance
 #[test]
 #[cfg_attr(debug_assertions, ignore = "requires --release")]
-#[ignore = "parser hangs on this Skyrim.esm (infinite loop in parse loop)"]
 fn benchmark_filtering() {
     if !skyrim_data_available() {
         println!("⚠️  Skipping filtering benchmark - Skyrim.esm not found");
@@ -166,7 +163,6 @@ fn benchmark_filtering() {
 /// Benchmark 4: Sorting performance
 #[test]
 #[cfg_attr(debug_assertions, ignore = "requires --release")]
-#[ignore = "parser hangs on this Skyrim.esm (infinite loop in parse loop)"]
 fn benchmark_sorting() {
     if !skyrim_data_available() {
         println!("⚠️  Skipping sorting benchmark - Skyrim.esm not found");
@@ -212,7 +208,6 @@ fn benchmark_sorting() {
 /// Benchmark 5: File I/O performance
 #[test]
 #[cfg_attr(debug_assertions, ignore = "requires --release")]
-#[ignore = "parser hangs on this Skyrim.esm (infinite loop in parse loop)"]
 fn benchmark_file_io() {
     if !skyrim_data_available() {
         println!("⚠️  Skipping file I/O benchmark - Skyrim.esm not found");
@@ -281,7 +276,6 @@ fn benchmark_file_io() {
 /// Benchmark 6: Heuristic search performance
 #[test]
 #[cfg_attr(debug_assertions, ignore = "requires --release")]
-#[ignore = "parser hangs on this Skyrim.esm (infinite loop in parse loop)"]
 fn benchmark_heuristic_search() {
     if !skyrim_data_available() {
         println!("⚠️  Skipping heuristic search benchmark - Skyrim.esm not found");
@@ -367,7 +361,6 @@ fn benchmark_translation_api() {
 /// Benchmark 8: Concurrent operations
 #[test]
 #[cfg_attr(debug_assertions, ignore = "requires --release")]
-#[ignore = "parser hangs on this Skyrim.esm (infinite loop in parse loop)"]
 fn benchmark_concurrent_operations() {
     if !skyrim_data_available() {
         println!("⚠️  Skipping concurrent operations benchmark - Skyrim.esm not found");
@@ -428,7 +421,6 @@ fn benchmark_concurrent_operations() {
 /// Benchmark 9: Memory pressure test
 #[test]
 #[cfg_attr(debug_assertions, ignore = "requires --release")]
-#[ignore = "parser hangs on this Skyrim.esm (infinite loop in parse loop)"]
 fn benchmark_memory_pressure() {
     if !skyrim_data_available() {
         println!("⚠️  Skipping memory pressure test - Skyrim.esm not found");

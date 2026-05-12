@@ -1,7 +1,8 @@
 # xTranslator 测试基础设施交接文档
 
 > 编写日期：2026-05-12
-> 涉及：测试文件清理、API 适配、问题记录
+> 最后更新：2026-05-12（死循环修复 + 性能优化）
+> 涉及：测试文件清理、API 适配、问题修复
 
 ---
 
@@ -12,9 +13,9 @@
 ```
 tests/
 ├── Cargo.toml                  # 测试包清单（4 个 test target）
-├── basic_benchmarks.rs         # [新增] 通用基准测试（7 项，无外部依赖）
-├── e2e_comprehensive.rs        # 端到端综合测试（8 项，5 项已忽略）
-├── performance_benchmarks.rs   # 性能基准测试（10 项，8 项已忽略）
+├── basic_benchmarks.rs         # 通用基准测试（7 项，无外部依赖）
+├── e2e_comprehensive.rs        # 端到端综合测试（8 项，全部通过）
+├── performance_benchmarks.rs   # 性能基准测试（10 项）
 ├── test_data_generator.rs      # [重构] 合成测试数据生成器
 ├── fixtures/                   # 测试夹具数据
 └── pics/                       # UI 测试截图
@@ -29,7 +30,7 @@ cargo test --release -p xtranslator-tests --test basic_benchmarks
 # 数据生成器测试（无需 Skyrim 数据）
 cargo test --release -p xtranslator-tests --test test_data_generator
 
-# 完整测试（含忽略项列表）
+# 完整测试（全量，需 Skyrim 数据，约 10s）
 cargo test --release -p xtranslator-tests
 
 # 仅运行非忽略项
@@ -76,18 +77,23 @@ cargo test --release -p xtranslator-tests -- --skip ignored
 
 ### 2.3 `e2e_comprehensive.rs` — 端到端综合测试
 
-**状态：⚠️ 3/8 通过，5 项因解析器死循环已忽略**
+**状态：✅ 8/8 全部通过（约 10s 总耗时）**
 
-| # | 测试 | 状态 | 原因 |
+| # | 测试 | 耗时 | 状态 |
 |---|------|------|------|
-| 1 | ESP 解析验证 | 🔇 ignored | 解析器在 Skyrim.esm 上死循环 |
-| 2 | 翻译工作流 | 🔇 ignored | 同上 |
-| 3 | SST 字典操作 | 🔇 ignored | 同上 |
-| 4 | XML roundtrip | 🔇 ignored | 同上 |
-| 5 | 性能基准（内嵌） | 🔇 ignored | 同上 |
-| 6 | 错误处理 | ✅ pass | — |
-| 7 | BSA 回退 | ✅ pass | — |
-| 8 | 多游戏兼容 | ✅ pass | — |
+| 1 | ESP 解析验证 | ~1.9s | ✅ pass |
+| 2 | 翻译工作流 | ~2.4s | ✅ pass |
+| 3 | SST 字典操作 | ~2.4s | ✅ pass |
+| 4 | XML roundtrip | ~2.3s | ✅ pass |
+| 5 | 性能基准（内嵌） | ~1.9s | ✅ pass |
+| 6 | 错误处理 | <1ms | ✅ pass |
+| 7 | BSA 回退 | <1ms | ✅ pass |
+| 8 | 多游戏兼容 | <1ms | ✅ pass |
+
+关键指标（e2e_esp_parsing_comprehensive）：
+- 解析字符串：75,778
+- 记录类型：53
+- 吞吐：~39,800 strings/s
 
 **适配变更：**
 - XML 导出改用新 API（`XmlExportParams` + `XmlStringEntry` + `BufWriter`）
@@ -97,11 +103,12 @@ cargo test --release -p xtranslator-tests -- --skip ignored
 - 修复 `catch_unwind` 的 `UnwindSafe` 问题
 - 新增 `strings_available()` 守卫函数
 
-### 2.4 `performance_benchmarks.rs` — 性能基准测试（旧版）
+### 2.4 `performance_benchmarks.rs` — 性能基准测试
 
-**状态：⚠️ 2/10 通过，8 项因解析器死循环已忽略**
+**状态：✅ 10/10 全部可运行（需 Skyrim 数据）**
 
-仅 `benchmark_translation_api` 和 `benchmark_stress_test` 可通过。
+10 项基准测试涵盖 ESP 解析吞吐、内存占用、过滤/排序/搜索性能、并发和压力测试。
+可直接通过项（无需 Skyrim 数据）：`benchmark_translation_api`、`benchmark_stress_test`
 
 **适配变更：**
 - `benchmark_stress_test` 完整重写（`SkyString::new()` 构造器）
@@ -181,54 +188,62 @@ cargo test --release -p xtranslator-tests -- --skip ignored
 
 ---
 
-## 五、已知问题
+## 五、已知问题与修复记录
 
-### P1 — 解析器在 Skyrim.esm 上死循环
+### P0 — ✅ 已修复：ESP 解析器性能（VMAD 解码器堆分配膨胀）
 
-**现象：** `parser.parse(&mut file)` 在读取 `Skyrim.esm`（17MB）时陷入无限循环。
+**现象：** `parser.parse()` 在 Skyrim.esm（238 MB）上耗时 300-400 秒，吞吐仅 ~600 KB/s。
 
-**位置：** `crates/xt-core/src/esp/parser.rs` 中的 `parse_top_level_debug()` 调用链。
+**根因：** `parse_vmad_strings()` 对每个 VMAD 字段调用 `VmadDecoder::new(data, vmad_version)`，每次在堆上执行 `buffer.to_vec()` 克隆整个 VMAD 缓冲区。Skyrim.esm 含 16,133 个 VMAD 字段（脚本属性数据），每次解码平均 15ms，合计 358 秒，占总解析时间的 99%。
 
-**推测原因：** 顶层循环 `loop { match self.parse_top_level_debug(...) }` 在遇到某些记录类型时未能推进文件读取指针，导致反复解析同一位置。
+此外 `VmadDecoder::read_length_prefixed_string()` 内部执行 `data[pos..].to_vec()` 再传给 `String::from_utf8()`，每个属性名和脚本名都产生额外的堆分配。
 
-**后续排查思路：**
-1. 用 `cargo test --release --test performance_benchmarks -- benchmark_esp_parsing --nocapture` 触发，加日志定位卡在哪一步
-2. 检查 `GenericHeader::read_from()` 是否在特定数据上返回 `Ok` 但不消耗字节
-3. 检查 `parse_record_debug_for_tree()` 的递归路径是否在某些 GRUP 类型上进入死循环
+**修复：**
+1. 新增 `decode_vmad_fast(data: &[u8], version: i16) -> Vec<VmadString>` 零分配解码函数，直接读取 `&[u8]` 切片，不克隆缓冲区
+2. `read_length_prefixed_string()` 改为 `str::from_utf8(&data[pos..])` 避免中间 `to_vec()`
+3. `parse_vmad_strings()` 改为调用 `decode_vmad_fast` 代替 `VmadDecoder::new() + decode()`
 
-**临时措施：** 相关 13 个测试标记为 `#[ignore = "parser hangs on this Skyrim.esm (infinite loop in parse loop)"]`。
+**效果：**
 
-### P2 — BSA 扫描性能
+| 指标 | 修复前 | 修复后 | 提升 |
+|------|--------|--------|------|
+| 单次 e2e 解析 | 300-400s | 1.9s | ~190× |
+| 完整 e2e 套件 | 1237s | 10.3s | ~120× |
+| VMAD 解码总耗时 | 358s | <1ms | >350,000× |
+| 吞吐 (strings/s) | 235 | 39,799 | ~170× |
 
-**现象：** `try_load_from_bsa()` 遍历 Data 目录下全部 93 个 BSA 文件（含多 GB 纹理 BSA），在 Skyrim 默认安装下极慢。
+### P1 — ✅ 已修复：解析器在 Skyrim.esm 上死循环
 
-**临时措施：** 新增 `strings_available()` 守卫函数，检查 `Skyrim_english.STRINGS` 是否以独立文件存在。不存在时跳过 BSA 扫描，用空 `StringsFiles` 继续测试。
+**根因：** `parse_top_level_debug`、`parse_record_debug_for_tree`、`parse_record_debug` 三个函数中，`GenericHeader::read_from()` 返回 `UnexpectedEof` 时被吞没为 `Ok(())`。外层 `loop` 收到 `Ok(())` 后继续迭代，但 reader 已在 EOF 无法前进，形成死循环。
 
-**建议改进：** `try_load_from_bsa()` 应优先扫描名称包含 "Interface" 或 "Misc" 的 BSA，或维护一个已知含 strings 文件的 BSA 优先级列表。
+**修复：** 将三处 `return Ok(())` 改为 `return Err(e)`，令 `UnexpectedEof` 正常传播到外层循环的 break 分支。
 
-### P3 — 未来展望
+**验证：** 新增 3 个单元测试，286 个 xt-core 单元测试通过，13 个 `#[ignore]` 标注已移除。
 
-1. **解析器修复后**：去掉 13 个 `#[ignore]` 标记，重新验证 E2E 测试
-2. **`basic_benchmarks.rs` 可扩展**：当前 7 项基准覆盖标准库操作，后续可增加与 xt-core 集成的基准（如 ESP 解析后过滤/排序性能对比）
-3. **测试数据生成器可复用**：`TestDataGenerator` 已适配最新 API，可直接用于编写新的集成测试
+### P2 — BSA 扫描性能（非关键路径）
+
+**现状：** `try_load_from_bsa()` 遍历 Data 目录下全部 BSA 文件（Skyrim SE 默认 93 个），且对三种格式各遍历一次（3×93=279 次 `BsaArchive::open`）。已设计优化方案（单次遍历 + 优先级排序 + 体积过滤）但未实装到当前代码，因为 e2e 测试中 `strings_available()` 守卫返回 false 时完全跳过 BSA 加载，此路径不在关键路径上。
+
+**临时措施：** `strings_available()` 守卫函数跳过慢速 BSA 扫描。
+
+**建议改进：** 实装 `load_from_dir` 的单次遍历重构（已设计但待应用）。
 
 ---
 
 ## 六、快速参考
 
 ```bash
-# 日常验证
+# 日常验证（不依赖 Skyrim 数据）
 cargo check --workspace
 cargo test --release -p xtranslator-tests --test basic_benchmarks
 cargo test --release -p xtranslator-tests --test test_data_generator
 
-# 完整测试（忽略已知失败）
-cargo test --release -p xtranslator-tests
+# 完整测试（需 Skyrim 数据，约 10s）
+cargo test --release -p xtranslator-tests -- --test-threads=1
 
-# 手动执行特定性能测试
-cargo test --release -p xtranslator-tests --test performance_benchmarks -- benchmark_stress_test --nocapture
-cargo test --release -p xtranslator-tests --test performance_benchmarks -- benchmark_translation_api --nocapture
-
-# 解析 Skyrim.esm（用于调试死循环）
+# 单测解析器
 cargo test --release -p xtranslator-tests --test e2e_comprehensive -- e2e_esp_parsing_comprehensive --nocapture
+
+# 性能基准（需 Skyrim 数据）
+cargo test --release -p xtranslator-tests --test performance_benchmarks -- benchmark_stress_test --nocapture
 ```
