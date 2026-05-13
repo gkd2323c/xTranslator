@@ -266,6 +266,7 @@ pub async fn load_esp(
                     // 在阻塞线程内解析文件结构以构建记录树
                     let mut tree_parser = EspParser::new();
                     tree_parser.enable_esp_mode();
+                    tree_parser.set_build_search_index(false); // 不需要搜索索引，只要记录树
                     let esp_file = if let Ok(mut f) = std::fs::File::open(esp_path_ref) {
                         let _ = tree_parser.parse(&mut f);
                         tree_parser.build_esp_file()
