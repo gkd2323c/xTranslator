@@ -13,7 +13,7 @@
 |--------|------|-------------|------|
 | P0 - 影响使用体验 | 4 项 | ~1 周 | 缺失的翻译 API 提供商 — 全部完成 ✅ |
 | P1 - 核心功能补全 | ~~3~~ 0 项 | — | ~~Header Processor 规则模板系统~~ 全部完成 ✅ |
-| P2 - 实用工具增强 | ~~4~~ 0 项 | — | ~~拼写检查、工具箱、SST 合并~~ 全部完成 ✅ |
+| P2 - 实用工具增强 | 0 项 | ✅ 全部完成 | 拼写检查、工具箱、SST 合并 |
 | P3 - UI/UX 完善 | 3 项 | ~1 周 | RTL 预览、HTML 导出、协作系统 |
 | P4 - 质量保证 | 4 项 | ~3-4 周 | 跨游戏验证、Delphi 交叉验证 |
 | P5 - 低优先级 | 2 项 | ~1 周 | SST 旧版兼容、命令脚本编辑器 |
@@ -110,11 +110,19 @@ IPC 命令：`toolbox_transform`。支持按字符串 ID 或全量操作，可�
 | 7 | 修整字符串 | Trim 首尾空白 | ✅ |
 | - | 例外词列表 | 编辑 `lWordExceptionList` | 待实现 |
 
-### P2.3 SST 合并 — `MergeSst.pas`
+### P2.3 SST 合并 — `MergeSst.pas` ✅ 已完成
 
-| 功能 | 说明 | 预估 |
-|------|------|------|
-| SST 字典合并 | 将多个 SST 字典合并为一个，处理冲突（以较新/用户选择覆盖） | 2-3 天 |
+实施文件：`crates/xt-core/src/sst/v8.rs`（`SstDictionary::merge_from()`）
+IPC 命令：`sst_merge`
+
+| 功能 | 状态 |
+|------|------|
+| SST 字典合并 | ✅ |
+| 三元组匹配 (str_id, record_sig, field_sig) | ✅ |
+| 冲突处理（overwrite 参数） | ✅ |
+| Master list 合并（去重） | ✅ |
+| Colab labels 合并（去重） | ✅ |
+| 合并统计（added/updated/overwritten/skipped） | ✅ |
 
 ---
 
