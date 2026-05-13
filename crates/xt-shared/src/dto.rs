@@ -6,20 +6,24 @@ use std::collections::HashMap;
 /// 设计约束：
 /// - 字段尽量稳定，避免频繁破坏前后端兼容。
 /// - 新增字段优先使用 `#[serde(default)]`，降低旧版本调用方升级成本。
+/// - 所有 DTO 必须同时在 Rust 和 TypeScript 中定义（ui/src/api/strings.ts）。
 
 /// 视口分页查询请求
+///
+/// 用于前端虚拟滚动（react-window）的分页加载。
+/// 前端维护完整数据集 `allItems`，通过此请求获取当前视口的数据。
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct QueryRequest {
     /// 文件 ID（阶段 0 固定为 "test"）
     pub file_id: String,
-    /// 视口起始偏移
+    /// 视口起始偏移（0-based）
     pub offset: u32,
-    /// 视口大小（通常 50-100）
+    /// 视口大小（通常 50-100，取决于行高和窗口大小）
     pub limit: u32,
-    /// 搜索过滤词（在 source/translation 中搜索）
+    /// 搜索过滤词（在 source/translation 中搜索，支持模糊匹配）
     #[serde(default)]
     pub filter: Option<String>,
-    /// 排序字段
+    /// 排序字段（如 "source", "translation", "form_id"）
     #[serde(default)]
     pub sort_field: Option<String>,
     /// 排序方向："asc" 或 "desc"
@@ -31,78 +35,107 @@ pub struct QueryRequest {
 }
 
 /// 视口分页查询响应
+///
+/// 返回当前视口的数据片段及统计信息。
+/// 前端使用 `total` 和 `filtered` 来计算虚拟滚动的总行数。
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct QueryResponse {
-    /// 总记录数
+    /// 总记录数（未应用任何过滤）
     pub total: u32,
-    /// 筛选后总数
+    /// 筛选后总数（应用了 filter/status_filter 后的结果数）
     pub filtered: u32,
-    /// 当前视口数据
+    /// 当前视口数据（最多 limit 条）
     pub items: Vec<SkyStringDTO>,
-    /// 当前偏移
+    /// 当前偏移（回显请求中的 offset，用于验证）
     pub offset: u32,
     /// 响应耗时（毫秒），用于性能观测与回归对比
     pub elapsed_ms: u64,
 }
 
 /// 前端展示的 SkyString 简化 DTO
+///
+/// 这是 SkyString 的精简版本，用于 IPC 传输。
+/// 完整的 SkyString 包含更多内部字段（如 params、ld_found 等），
+/// 这里只保留前端需要的字段以减少 JSON 体积。
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SkyStringDTO {
     /// 内部稳定 ID（用于更新定位），不是 ESP 的 str_id
+    /// 前端使用此 ID 来定位要更新的字符串，避免因排序/过滤导致的索引错位
     pub id: u32,
+    /// 源文本（通常为英文）
     pub source: String,
+    /// 翻译文本（目标语言）
     pub translation: String,
+    /// 记录类型签名（如 "DIAL", "INFO", "BOOK"），用于分类和过滤
     pub record_sig: String,
+    /// 字段签名（如 "FULL", "DESC"），标识记录内的具体字段
     pub field_sig: String,
+    /// FormID（十六进制字符串，如 "0x00012345"），用于定位 ESP 中的对象
     pub form_id: String,
+    /// 翻译状态："translated" / "incomplete" / "locked"
     pub status: String,
     /// Strings 文件类型索引: 0=.STRINGS, 1=.DLSTRINGS, 2=.ILSTRINGS
+    /// 用于 SST/XML 导出时确定字符串的目标文件
     #[serde(default)]
     pub list_index: u8,
     /// Strings 文件中的字符串 ID（用于 SST/XML 精确匹配）
+    /// 这是 Bethesda 格式中的字符串索引，不同于内部 ID
     #[serde(default)]
     pub str_id: i32,
     /// 是否为 VMAD 脚本字符串（负 str_id 编码偏移量）
+    /// VMAD 是 Skyrim 脚本虚拟机的字符串存储方式
     #[serde(default)]
     pub is_vmad: bool,
     /// 启发式搜索匹配数量（0-255，对应 Delphi LD 列）
+    /// 表示与词汇库中的相似条目数，用于翻译建议
     #[serde(default)]
     pub ld: u8,
 }
 
 /// 加载 ESP 文件响应
+///
+/// 包含 ESP 解析的统计信息和缓存状态。
+/// 前端使用这些信息来更新侧边栏统计和加载状态指示。
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct LoadEspResponse {
-    /// 解析出的总字符串数
+    /// 解析出的总字符串数（包括所有记录类型）
     pub total: u32,
-    /// 压缩记录数（当前可能为占位统计）
+    /// 压缩记录数（使用 zlib 压缩的 ESP 记录数）
     pub compressed_records: u32,
     /// 成功加载的 Strings 文件数 (0-3)
+    /// 0 = 未加载任何 Strings 文件
+    /// 1-3 = 分别加载了 .STRINGS / .DLSTRINGS / .ILSTRINGS
     pub strings_loaded: u8,
     /// 解析耗时（毫秒）；缓存命中时为 0
     pub parse_time_ms: u64,
-    /// 各记录类型数量统计
+    /// 各记录类型数量统计（如 {"DIAL": 1000, "INFO": 5000, "BOOK": 200}）
     pub record_counts: HashMap<String, usize>,
     /// 是否从缓存加载（而非完整解析）
+    /// 缓存命中时为 true，此时 parse_time_ms 为 0
     #[serde(default)]
     pub cached: bool,
     /// ESP 文件 SHA-256 哈希（用于翻译缓存关联）
+    /// 用于内容寻址缓存，确保文件内容变化时缓存失效
     #[serde(default)]
     pub esp_hash: String,
 }
 
 /// ESP 文件加载进度事件
+///
+/// 通过 Tauri 事件系统实时发送给前端，用于显示加载进度条。
+/// 前端监听 "esp-load-progress" 事件并更新 UI。
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct EspLoadProgress {
     /// 加载阶段："reading_defs", "loading_strings", "parsing", "finalizing"
+    /// 用于前端显示当前处理阶段的描述
     pub stage: String,
-    /// 当前进度值
+    /// 当前进度值（字节数或条目数，取决于阶段）
     pub current: u64,
-    /// 总进度值
+    /// 总进度值（文件大小或总条目数）
     pub total: u64,
-    /// 百分比 (0-100)
+    /// 百分比 (0-100)，便于前端直接用于进度条
     pub percentage: u8,
-    /// 用户可读的消息
+    /// 用户可读的消息（如 "Parsing... 45.2%"）
     pub message: String,
 }
 

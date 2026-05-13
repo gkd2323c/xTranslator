@@ -13,26 +13,56 @@ use xt_shared::dto::{
 };
 
 /// 批处理运行状态
+///
+/// 状态机：Idle → Running → Done → Idle
+/// 
+/// - Idle: 无任务运行
+/// - Running: 正在处理文件列表
+/// - Done: 任务完成（成功或失败），等待查询结果
 enum BatchJobState {
+    /// 空闲状态
     Idle,
+    /// 运行状态
     #[allow(dead_code)]
     Running {
+        /// 任务 ID（唯一标识）
         job_id: String,
+        /// 任务类型："translate" 或 "export"
         job_type: String,
+        /// 任务开始时间
         started_at: std::time::Instant,
+        /// 要处理的文件列表
         entries: Vec<BatchEntry>,
+        /// 翻译提供方
         provider: ProviderType,
+        /// 目标语言
         target_lang: String,
+        /// 是否跳过已翻译的字符串
         skip_translated: bool,
     },
+    /// 完成状态
     Done {
+        /// 完成结果（包含统计信息）
         result: BatchComplete,
     },
 }
 
 /// 批处理器 — 后台顺序处理 ESP 文件，独立于 AppState
+///
+/// 职责：
+/// - 管理批处理任务的生命周期
+/// - 顺序加载和处理多个 ESP 文件
+/// - 发送进度事件给前端
+/// - 支持取消操作
+///
+/// 设计要点：
+/// - 独立于 AppState，避免长时间锁定全局状态
+/// - 使用原子标志支持取消操作
+/// - 通过 Tauri 事件系统实时发送进度
 pub struct BatchExecutor {
+    /// 批处理状态（Mutex 保护）
     state: Mutex<BatchJobState>,
+    /// 取消标志（原子操作，支持跨线程取消）
     pub cancel_flag: Arc<AtomicBool>,
 }
 

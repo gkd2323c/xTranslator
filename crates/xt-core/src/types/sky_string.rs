@@ -4,39 +4,51 @@ use crate::normalization;
 
 /// SkyString - 核心字符串数据结构
 ///
-// 对应 Delphi 的 `tSkyStr` 记录，存储单个可翻译字符串的完整信息
-// 字段命名和用途与 Delphi 原版保持一致，确保 SST 字典兼容性
+/// 对应 Delphi 的 `tSkyStr` 记录，存储单个可翻译字符串的完整信息。
+/// 字段命名和用途与 Delphi 原版保持一致，确保 SST 字典兼容性。
 ///
-// 使用约束：
-// - `id`：仅运行时稳定，不可作为跨会话持久化主键。
-// - 持久化匹配应优先依赖 `esp_ptr` 三元组（str_id/record_sig/field_sig）。
+/// 这是 xTranslator 的核心数据结构，每个可翻译字符串都对应一个 SkyString 实例。
+/// 包含源文本、翻译、元数据、状态标志等所有必要信息。
+///
+/// 使用约束：
+/// - `id`：仅运行时稳定，不可作为跨会话持久化主键。
+/// - 持久化匹配应优先依赖 `esp_ptr` 三元组（str_id/record_sig/field_sig）。
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct SkyString {
     /// 内部唯一 ID（运行时分配，不持久化到 SST）
+    /// 前端使用此 ID 来定位和更新字符串，避免因排序/过滤导致的索引错位
     pub id: u32,
 
     /// 源字符串（原文，对应 Delphi 的 gS 字段）
+    /// 通常为英文，从 ESP 文件中提取
     pub source: String,
     /// 翻译字符串（译文，对应 Delphi 的 gTrans 字段）
+    /// 目标语言的翻译，可能来自 SST 字典、XML 导入或用户输入
     pub translation: String,
 
-    /// 所属记录签名 (如 "INFO")
+    /// 所属记录签名 (如 "INFO", "DIAL", "BOOK")
+    /// 用于分类和过滤
     pub record_sig: [u8; 4],
-    /// 所属字段签名 (如 "DESC")
+    /// 所属字段签名 (如 "DESC", "FULL", "RNAM")
+    /// 标识记录内的具体字段
     pub field_sig: [u8; 4],
 
     /// 规范化后的源字符串（用于模糊匹配，对应 Delphi 的 gSNormalized）
+    /// 去除标点、转换大小写等，用于启发式搜索
     pub source_normalized: Option<String>,
     /// 规范化字符串的哈希值（对应 Delphi 的 fNormalizedHash）
+    /// 用于快速比对规范化后的字符串
     pub normalized_hash: Option<u32>,
 
     /// 源字符串的 FNV-1a 哈希值（用于快速比对）
+    /// 用于 T1 精确匹配（三元组匹配）
     pub hash: u32,
     /// 翻译字符串的 FNV-1a 哈希值（用于检测翻译变化）
+    /// 用于检测翻译是否被修改
     pub hash_trans: u32,
 
     /// 分词哈希列表 - 启发式搜索的核心数据（对应 Delphi 的 aWords 数组）
-    /// 存储源字符串分词后的各个单词哈希，用于相似度计算
+    /// 存储源字符串分词后的各个单词哈希，用于相似度计算（T4 匹配）
     pub word_hashes: Vec<u32>,
 
     /// REC:FIELD 引用列表（对应 Delphi 的 aRecRef 数组）
@@ -45,18 +57,22 @@ pub struct SkyString {
 
     /// ESP 指针 - 精确定位字符串在 ESP 文件中的位置
     /// 对应 Delphi 的 esp 字段，类型为 rEspPointerLite
+    /// 包含 FormID、str_id、record_sig、field_sig 等信息
     pub esp_ptr: EspPointer,
 
     /// 父记录 FormID（运行时从 GRUP 层级提取，不持久化到 SST）
     /// 例如：INFO 记录的 parent_form_id = 所属 DIAL 的 FormID
+    /// 用于构建对话树等层级结构
     pub parent_form_id: u32,
 
     /// 状态参数（持久化到 SST 字典，对应 Delphi 的 sparams 集合）
     /// 包含 translated/locked/incomplete 等标志位
+    /// 这些标志会被保存到 SST 文件中，跨会话保留
     pub params: SkyStringParams,
 
     /// 内部参数（仅运行时使用，不持久化，对应 Delphi 的 sInternalparams）
     /// 包含缓存标志、警告状态等临时信息
+    /// 应用关闭时丢失
     pub internal_params: SkyStringInternalParams,
 
     /// Strings 文件类型索引：0=.STRINGS, 1=.DLSTRINGS, 2=.ILSTRINGS

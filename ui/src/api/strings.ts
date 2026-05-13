@@ -1,102 +1,194 @@
 import { invoke } from "@tauri-apps/api/core";
 
+/// 虚拟滚动分页查询请求
 export interface QueryRequest {
+  /// 文件 ID（当前固定为 "test"）
   file_id: string;
+  /// 视口起始偏移（0-based）
   offset: number;
+  /// 视口大小（通常 50-100）
   limit: number;
+  /// 搜索过滤词（在 source/translation 中搜索）
   filter?: string;
+  /// 排序字段（如 "source", "translation", "form_id"）
   sort_field?: string;
+  /// 排序方向："asc" 或 "desc"
   sort_dir?: string;
+  /// 状态筛选："translated" / "incomplete" / "locked"
   status_filter?: string;
 }
 
+/// 前端展示的字符串 DTO
 export interface SkyStringDTO {
+  /// 内部稳定 ID（用于前端定位）
   id: number;
+  /// 源文本（原文）
   source: string;
+  /// 翻译文本（译文）
   translation: string;
+  /// 记录类型签名（如 "INFO", "DIAL"）
   record_sig: string;
+  /// 字段签名（如 "FULL", "DESC"）
   field_sig: string;
+  /// FormID（十六进制字符串，如 "0x00012345"）
   form_id: string;
+  /// 翻译状态："translated" / "incomplete" / "locked"
   status: string;
+  /// Strings 文件类型索引：0=.STRINGS, 1=.DLSTRINGS, 2=.ILSTRINGS
   list_index: number;
+  /// Strings 文件中的字符串 ID
   str_id: number;
+  /// 是否为 VMAD 脚本字符串
   is_vmad: boolean;
+  /// 启发式搜索匹配数量（0-255）
   ld: number;
 }
 
+/// 虚拟滚动分页查询响应
 export interface QueryResponse {
+  /// 总记录数（未过滤）
   total: number;
+  /// 过滤后的记录数
   filtered: number;
+  /// 当前视口数据
   items: SkyStringDTO[];
+  /// 当前偏移（回显请求中的 offset）
   offset: number;
+  /// 响应耗时（毫秒）
   elapsed_ms: number;
 }
 
+/// ESP 加载响应
 export interface LoadEspResponse {
+  /// 解析出的总字符串数
   total: number;
+  /// 压缩记录数
   compressed_records: number;
+  /// 成功加载的 Strings 文件数 (0-3)
   strings_loaded: number;
+  /// 解析耗时（毫秒）；缓存命中时为 0
   parse_time_ms: number;
+  /// 各记录类型数量统计
   record_counts: Record<string, number>;
+  /// 是否从缓存加载
   cached: boolean;
+  /// ESP 文件 SHA-256 哈希
   esp_hash: string;
 }
 
+/// SST 加载响应
 export interface LoadSstResponse {
+  /// 匹配成功的条目数
   matched: number;
+  /// 未匹配的 SST 条目数
   unmatched: number;
+  /// 被更新的字符串 ID 列表
   updated_ids: number[];
+  /// Tier 1 精确三元组匹配数
   tier_exact: number;
+  /// Tier 2 EDID 哈希匹配数
   tier_edid: number;
+  /// Tier 3 规范化文本匹配数
   tier_normalized: number;
+  /// Tier 4 词汇重叠匹配数
   tier_vocab: number;
+  /// 歧义但未自动应用的条目数
   ambiguous: number;
+  /// 因 pending 状态跳过的条目数
   pending_skipped: number;
+  /// 保留为 oldData 的条目数
   old_data_preserved: number;
+  /// 因 index/indexMax 可疑而标记 warning 的条目数
   warning: number;
+  /// 因 index/indexMax 不一致而标记 bigWarning 的条目数
   big_warning: number;
 }
 
+/// 启发式搜索请求
 export interface HeuristicSearchRequest {
+  /// 待搜索的源字符串
   source: string;
+  /// 最小相似度阈值（0.0 ~ 1.0）
   min_similarity?: number;
+  /// 最大返回结果数
   max_results?: number;
 }
 
+/// 启发式匹配结果
 export interface HeuristicMatchDTO {
+  /// 候选源字符串
   source: string;
+  /// 候选翻译
   translation: string;
+  /// 归一化相似度 0.0~1.0
   similarity: number;
+  /// 编辑距离
   levenshtein: number;
+  /// 最长公共子串长度
   lcs_len: number;
 }
 
+/// 翻译请求
 export interface TranslateRequest {
+  /// 待翻译文本
   text: string;
+  /// 源语言（默认 "english"）
   source_lang?: string;
+  /// 目标语言（默认 "chinese"）
   target_lang?: string;
+  /// 翻译提供方（"openai" 或 "deepl"）
   provider?: string;
 }
 
+/// 翻译提供方信息
 export interface TranslationProvidersResponse {
+  /// 当前选中的提供方
   current: string;
+  /// 可用的提供方列表
   available: string[];
+  /// OpenAI 是否已配置
   openaiConfigured: boolean;
+  /// DeepL 是否已配置
   deeplConfigured: boolean;
+  /// 百度翻译是否已配置
   baiduConfigured: boolean;
+  /// 有道翻译是否已配置
   youdaoConfigured: boolean;
+  /// Azure 是否已配置
   azureConfigured: boolean;
+  /// Google 是否已配置
   googleConfigured: boolean;
 }
 
+/// 虚拟滚动分页查询
+///
+/// 用于前端虚拟滚动的分页加载。
+/// 返回当前视口的数据片段及统计信息。
 export async function queryStrings(request: QueryRequest): Promise<QueryResponse> {
   return invoke("query_strings_command", { request });
 }
 
+/// 获取统计信息
 export async function getStats(): Promise<string> {
   return invoke("get_stats");
 }
 
+/// 加载 ESP/ESM 文件
+///
+/// 这是应用的核心命令，负责：
+/// 1. 解析 ESP/ESM 二进制文件
+/// 2. 加载关联的 Strings 文件
+/// 3. 构建 ESP 记录树（用于后续的回写操作）
+/// 4. 缓存解析结果以加速重复加载
+///
+/// 参数：
+/// - `espPath`: ESP/ESM 文件的完整路径
+/// - `stringsDir`: Strings 文件所在目录（可选，默认使用 ESP 所在目录）
+/// - `language`: 字符串文件的语言标识（可选，默认 "english"）
+/// - `game`: 游戏类型（可选，用于加载正确的 record_defs）
+///
+/// 返回：
+/// - `LoadEspResponse`: 包含解析统计和缓存状态
 export async function loadEsp(
   espPath: string,
   stringsDir?: string,
@@ -106,10 +198,18 @@ export async function loadEsp(
   return invoke("load_esp", { espPath, stringsDir, language, game });
 }
 
+/// 加载 SST 字典
+///
+/// 使用 T1-T4 分层匹配算法将 SST 中的翻译应用到当前加载的字符串。
+/// 返回匹配统计信息。
 export async function loadSst(sstPath: string): Promise<LoadSstResponse> {
   return invoke("load_sst", { sstPath });
 }
 
+/// 保存 SST 字典
+///
+/// 将当前加载的字符串保存为 SST 文件。
+/// 可选指定 master 文件列表（用于版本验证）。
 export async function saveSst(
   sstPath: string,
   masters?: string[],
@@ -117,6 +217,14 @@ export async function saveSst(
   return invoke("save_sst", { sstPath, masters });
 }
 
+/// 更新单个字符串的翻译
+///
+/// 参数：
+/// - `id`: 字符串的内部稳定 ID
+/// - `translation`: 新的翻译文本
+///
+/// 注意：此操作是本地的，不会立即保存到文件。
+/// 需要调用 saveSst() 或 saveStrings() 来持久化。
 export async function updateTranslation(
   id: number,
   translation: string,
@@ -124,29 +232,46 @@ export async function updateTranslation(
   return invoke("update_translation", { id, translation });
 }
 
+/// 批量更新字符串翻译
+///
+/// 参数：
+/// - `updates`: 更新列表，每项为 [id, translation]
+///
+/// 返回：
+/// - 成功更新的条目数
 export async function batchUpdateTranslations(
   updates: [number, string][],
 ): Promise<number> {
   return invoke("batch_update_translations", { updates });
 }
 
+/// 启发式搜索
+///
+/// 在词汇库中搜索与给定源字符串相似的条目。
+/// 用于翻译建议和相似度计算。
 export async function heuristicSearch(
   request: HeuristicSearchRequest,
 ): Promise<HeuristicMatchDTO[]> {
   return invoke("heuristic_search", { request });
 }
 
+/// 翻译单个字符串
+///
+/// 使用配置的翻译提供方（OpenAI / DeepL / 百度 / 有道 / Azure）
+/// 翻译给定的文本。
 export async function translateString(
   request: TranslateRequest,
 ): Promise<string> {
   return invoke("translate_string", { request });
 }
 
+/// 设置 OpenAI API Key
 export async function setOpenAiApiKey(apiKey: string): Promise<void> {
   await invoke("set_openai_api_key", { apiKey });
   saveConfig({ openai_api_key: apiKey || undefined }).catch(() => {});
 }
 
+/// 设置 DeepL API Key
 export async function setDeeplApiKey(apiKey: string): Promise<void> {
   await invoke("set_deepl_api_key", { apiKey });
   saveConfig({ deepl_api_key: apiKey || undefined }).catch(() => {});

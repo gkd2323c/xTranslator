@@ -14,6 +14,67 @@ import { SettingsDialog } from "./SettingsDialog";
 import { ToolboxDialog } from "./ToolboxDialog";
 import { SpellCheckSettingsDialog } from "./SpellCheckSettingsDialog";
 
+// ============================================================================
+// MenuBar 组件 - 应用菜单栏和工具栏
+// ============================================================================
+//
+// 职责：
+//   - 提供 5 个菜单类别（File, Translate, Options, Tools, Wizards）
+//   - 管理文件操作（加载 ESP/SST、保存、导入导出）
+//   - 提供工具栏快捷按钮
+//   - 处理拖放文件操作
+//   - 管理搜索和过滤功能
+//
+// 核心功能：
+//   1. 文件菜单：加载 ESP、加载/保存 SST、导入/导出 XML、重置工作区
+//   2. 翻译菜单：打开编辑器、完成翻译、简繁转换、源目标比较
+//   3. 选项菜单：设置、工具箱、拼写检查、ESP 模式、底部面板
+//   4. 工具菜单：8 个工具面板（批处理、BSA、PEX、FUZ、对话、MCM 等）
+//   5. 向导菜单：头部处理、头部向导、主页
+//
+// 工具栏功能：
+//   - 搜索框：支持正则表达式过滤
+//   - 状态过滤：已翻译、未翻译、已锁定、VMAD
+//   - 文件操作：加载 ESP、加载/保存 SST、保存字符串
+//   - 格式转换：导入/导出 XML
+//   - 完成翻译：打开完成对话框
+//   - 简繁转换：快速转换按钮
+//
+// 键盘快捷键：
+//   - Ctrl+O：加载 ESP
+//   - Ctrl+L：加载 SST
+//   - Ctrl+S：保存 SST
+//   - Enter：打开编辑器
+//   - 简/繁：快速转换按钮
+//
+// 拖放支持：
+//   - ESP/ESM：加载 ESP 文件
+//   - SST：加载 SST 字典
+//   - XML：导入 XML 文件
+//   - BSA/BA2：打开 BSA 浏览器
+//   - PEX：打开 PEX 编辑器
+//   - FUZ：打开 FUZ 播放器
+//
+// ============================================================================
+
+// ============================================================================
+// 类型定义
+// ============================================================================
+
+/**
+ * 应用统计信息类型
+ * 
+ * 用于显示 SST 加载或 XML 导入的匹配统计：
+ *   - tier_exact：T1 精确匹配数
+ *   - tier_edid：T2 EDID 匹配数
+ *   - tier_normalized：T3 规范化匹配数
+ *   - tier_vocab：T4 词汇匹配数
+ *   - ambiguous：歧义匹配数
+ *   - pending_skipped：待处理跳过数
+ *   - old_data_preserved：保留的旧数据数
+ *   - warning：警告数
+ *   - big_warning：严重警告数
+ */
 type ApplyStats = Pick<
   LoadSstResponse | XmlImportResponse,
   | "tier_exact"
@@ -27,16 +88,19 @@ type ApplyStats = Pick<
   | "big_warning"
 >;
 
+// 菜单 ID 类型：5 个菜单类别
 type MenuId = "file" | "translate" | "options" | "tools" | "wizards";
 
+// 菜单项类型：包含标签、点击处理、快捷键、禁用状态、分隔符
 type MenuItem = {
-  label: string;
-  onClick?: () => void;
-  shortcut?: string;
-  disabled?: boolean;
-  separator?: boolean;
+  label: string;                                    // 菜单项标签
+  onClick?: () => void;                             // 点击事件处理
+  shortcut?: string;                                // 快捷键显示文本
+  disabled?: boolean;                               // 是否禁用
+  separator?: boolean;                              // 是否为分隔符
 };
 
+// 目标语言代码映射：用于翻译 API
 const TARGET_LANGUAGE_CODES: Record<string, string> = {
   chinese: "zh",
   japanese: "ja",
@@ -53,6 +117,7 @@ const TARGET_LANGUAGE_CODES: Record<string, string> = {
   hungarian: "hu",
 };
 
+// 目标语言显示名称（备用）：当 Intl.DisplayNames 不可用时使用
 const TARGET_LANGUAGE_FALLBACKS: Record<string, string> = {
   chinese: "Chinese",
   japanese: "Japanese",
@@ -69,12 +134,46 @@ const TARGET_LANGUAGE_FALLBACKS: Record<string, string> = {
   hungarian: "Hungarian",
 };
 
+// ============================================================================
+// 工具函数
+// ============================================================================
+
+/**
+ * 获取文件扩展名
+ * 
+ * 功能：
+ *   - 从文件路径提取扩展名
+ *   - 处理 Windows 和 Unix 路径分隔符
+ *   - 返回小写扩展名
+ * 
+ * @param path - 文件路径
+ * @returns 小写扩展名（不含点号）
+ * 
+ * 示例：
+ *   getPathExt("C:\\Games\\Skyrim.esm") // 返回 "esm"
+ *   getPathExt("/home/user/file.sst") // 返回 "sst"
+ */
 function getPathExt(path: string): string {
   const fileName = path.replace(/\\/g, "/").split("/").pop() ?? "";
   const dotIndex = fileName.lastIndexOf(".");
   return dotIndex >= 0 ? fileName.slice(dotIndex + 1).toLowerCase() : "";
 }
 
+/**
+ * 格式化应用统计信息
+ * 
+ * 功能：
+ *   - 将统计数据转换为可读的字符串
+ *   - 显示 T1-T4 匹配统计
+ *   - 显示语义验证统计
+ * 
+ * @param stats - 应用统计对象
+ * @returns 格式化的统计字符串
+ * 
+ * 示例：
+ *   formatApplyStats(stats)
+ *   // 返回: " (exact: 100, EDID: 50, norm: 30, vocab: 20, ambiguous: 5)"
+ */
 function formatApplyStats(stats: ApplyStats): string {
   const tierTotal =
     stats.tier_exact +
@@ -100,14 +199,50 @@ function formatApplyStats(stats: ApplyStats): string {
   return `${tierStats}${semanticStats}`;
 }
 
+// ============================================================================
+// MenuBar 主组件
+// ============================================================================
+//
+// 职责：
+//   - 管理菜单栏的打开/关闭状态
+//   - 处理所有文件操作（ESP、SST、XML）
+//   - 提供工具栏快捷按钮
+//   - 处理拖放文件操作
+//   - 管理搜索和过滤功能
+//   - 监听批处理进度事件
+//
+// 状态管理：
+//   - openMenu：当前打开的菜单（互斥）
+//   - showSettings/showToolbox/showSpellCheck：对话框显示状态
+//   - batchProgress：批处理进度
+//
+// 关键事件：
+//   - esp-load-progress：ESP 加载进度
+//   - xml-progress：XML 导入导出进度
+//   - batch-progress：批处理进度
+//   - 拖放事件：文件拖放处理
+//
 export function MenuBar() {
+  // ========== 国际化和 Ref ==========
   const { t, i18n } = useTranslation();
-  const menuStripRef = useRef<HTMLDivElement | null>(null);
-  const [openMenu, setOpenMenu] = useState<MenuId | null>(null);
-  const [showSettings, setShowSettings] = useState(false);
-  const [showToolbox, setShowToolbox] = useState(false);
-  const [showSpellCheck, setShowSpellCheck] = useState(false);
+  const menuStripRef = useRef<HTMLDivElement | null>(null);  // 菜单栏 DOM 引用
+  
+  // ========== 菜单状态 ==========
+  const [openMenu, setOpenMenu] = useState<MenuId | null>(null);  // 当前打开的菜单（互斥）
+  const [showSettings, setShowSettings] = useState(false);        // 设置对话框
+  const [showToolbox, setShowToolbox] = useState(false);          // 工具箱对话框
+  const [showSpellCheck, setShowSpellCheck] = useState(false);    // 拼写检查对话框
   const [spellCheckCfg, setSpellCheckCfg] = useState<import("../api/strings").SpellCheckConfigDto | null>(null);
+  
+  // ========== 目标语言标签 ==========
+  /**
+   * 计算目标语言的显示名称
+   * 
+   * 功能：
+   *   - 使用 Intl.DisplayNames 获取本地化语言名称
+   *   - 如果不可用，使用备用名称
+   *   - 依赖于当前 UI 语言
+   */
   const targetLanguageLabels = useMemo(() => {
     let displayNames: Intl.DisplayNames | null = null;
     try {
@@ -123,13 +258,24 @@ export function MenuBar() {
       ])
     ) as Record<string, string>;
   }, [i18n.language]);
-  const isParsing = useAppStore((s) => s.isParsing);
-  const isLoading = useAppStore((s) => s.isLoading);
-  const espPath = useAppStore((s) => s.espPath);
-  const language = useAppStore((s) => s.language);
-  const isDirty = useAppStore((s) => s.isDirty);
-  const targetLang = useAppStore((s) => s.targetLang);
-  const selectedId = useAppStore((s) => s.selectedId);
+  
+  // ========== 从 Store 订阅状态 ==========
+  const isParsing = useAppStore((s) => s.isParsing);           // ESP 加载中
+  const isLoading = useAppStore((s) => s.isLoading);           // 通用加载中
+  const espPath = useAppStore((s) => s.espPath);               // 当前 ESP 文件路径
+  const language = useAppStore((s) => s.language);             // 源语言
+  const isDirty = useAppStore((s) => s.isDirty);               // 是否有未保存的改动
+  const targetLang = useAppStore((s) => s.targetLang);         // 目标语言
+  const selectedId = useAppStore((s) => s.selectedId);         // 当前选中的字符串 ID
+  const activePanel = useAppStore((s) => s.activePanel);       // 当前活跃的工具面板
+  const espMode = useAppStore((s) => s.espMode);               // 是否为 ESP 模式
+  const batchEntries = useAppStore((s) => s.batchEntries);     // 批处理条目列表
+  const filter = useAppStore((s) => s.filter);                 // 搜索过滤文本
+  const useRegex = useAppStore((s) => s.useRegex);             // 是否使用正则表达式
+  const statusFilter = useAppStore((s) => s.statusFilter);     // 状态过滤
+  const vmadFilter = useAppStore((s) => s.vmadFilter);         // VMAD 过滤
+  
+  // ========== 从 Store 订阅操作函数 ==========
   const setParsing = useAppStore((s) => s.setParsing);
   const setLoading = useAppStore((s) => s.setLoading);
   const setError = useAppStore((s) => s.setError);
@@ -142,22 +288,25 @@ export function MenuBar() {
   const reset = useAppStore((s) => s.reset);
   const theme = useAppStore((s) => s.theme);
   const setTheme = useAppStore((s) => s.setTheme);
-  const activePanel = useAppStore((s) => s.activePanel);
   const setActivePanel = useAppStore((s) => s.setActivePanel);
   const toggleBottomPanel = useAppStore((s) => s.toggleBottomPanel);
   const setDataConfigs = useAppStore((s) => s.setDataConfigs);
-  const espMode = useAppStore((s) => s.espMode);
-  const batchEntries = useAppStore((s) => s.batchEntries);
-  const filter = useAppStore((s) => s.filter);
-  const useRegex = useAppStore((s) => s.useRegex);
-  const statusFilter = useAppStore((s) => s.statusFilter);
-  const vmadFilter = useAppStore((s) => s.vmadFilter);
   const setFilter = useAppStore((s) => s.setFilter);
   const setUseRegex = useAppStore((s) => s.setUseRegex);
   const setStatusFilter = useAppStore((s) => s.setStatusFilter);
   const setVmadFilter = useAppStore((s) => s.setVmadFilter);
-  const [batchProgress, setBatchProgress] = useState<BatchProgress | null>(null);
+  
+  // ========== 本地状态 ==========
+  const [batchProgress, setBatchProgress] = useState<BatchProgress | null>(null);  // 批处理进度
 
+  // ========== Hook：菜单关闭事件 ==========
+  /**
+   * 监听菜单关闭事件
+   * 
+   * 功能：
+   *   - 点击菜单外部时关闭菜单
+   *   - 按 Escape 键关闭菜单
+   */
   useEffect(() => {
     const closeMenu = (event: MouseEvent) => {
       if (menuStripRef.current && !menuStripRef.current.contains(event.target as Node)) {
@@ -175,6 +324,18 @@ export function MenuBar() {
     };
   }, []);
 
+  // ========== 核心功能函数 ==========
+
+  /**
+   * 检查文件是否在批处理列表中，如果是则显示警告
+   * 
+   * 功能：
+   *   - 规范化路径进行比较
+   *   - 检查是否在批处理条目中
+   *   - 如果在批处理中但未打开批处理面板，显示警告
+   * 
+   * @param path - 要检查的文件路径
+   */
   const warnIfBatchFile = useCallback((path: string) => {
     const normalizedPath = path.replace(/\\/g, "/").toLowerCase();
     const isBatchFile = batchEntries.some(
@@ -185,36 +346,59 @@ export function MenuBar() {
     }
   }, [batchEntries, activePanel, t]);
 
+  /**
+   * 从指定路径加载 ESP 文件
+   * 
+   * 功能：
+   *   1. 检查是否有未保存的改动，如果有则提示确认
+   *   2. 检查文件是否在批处理列表中
+   *   3. 自动查找 Strings 目录
+   *   4. 监听 ESP 加载进度事件
+   *   5. 加载 ESP 文件并获取统计信息
+   *   6. 自动加载词汇表（用于启发式搜索）
+   *   7. 自动加载数据配置（字段大小、CTDA 函数等）
+   *   8. 检查崩溃恢复缓存
+   * 
+   * 错误处理：
+   *   - 加载失败时显示错误提示
+   *   - 词汇表和数据配置加载失败时静默处理
+   * 
+   * @param path - ESP 文件的完整路径
+   */
   const loadEspFromPath = useCallback(async (path: string) => {
+    // 检查是否有未保存的改动
     if (isDirty && !confirm(t("app.resetConfirm"))) return;
     warnIfBatchFile(path);
 
+    // 自动查找 Strings 目录
     const espDir = path.replace(/\\/g, "/").split("/").slice(0, -1).join("/");
     const stringsDir = `${espDir}/Strings`;
 
+    // 设置加载状态
     setParsing(true);
     setError(null);
     setLoadProgress(null);
 
     try {
-      // 监听进度事件
+      // 监听 ESP 加载进度事件
       const unlisten = await listen<any>("esp-load-progress", (event) => {
         setLoadProgress(event.payload);
       });
 
       try {
+        // 加载 ESP 文件
         const stats = await loadEsp(path, stringsDir, language);
         setEspLoaded(path, stats, stringsDir);
         await loadAllStrings();
         setIsDirty(false);
         toast.success(t("toast.espLoaded", { count: stats.total.toLocaleString() }));
 
-        // Check for unapplied translation cache (crash recovery)
+        // 检查崩溃恢复缓存
         if (stats.esp_hash) {
           useAppStore.getState().checkAndPromptRecovery(stats.esp_hash);
         }
 
-        // Auto-load vocabulary for heuristic search enrichment
+        // 自动加载词汇表（用于启发式搜索）
         loadVocabulary(stringsDir, language, useAppStore.getState().targetLang, useAppStore.getState().language === "english" ? "SkyrimSE" : undefined)
           .then((info) => {
             if (info.pair_count > 0) {
@@ -223,7 +407,7 @@ export function MenuBar() {
           })
           .catch(() => {});
 
-        // Auto-load Data Configs for reference data
+        // 自动加载数据配置（字段大小、CTDA 函数等）
         loadDataConfigs(useAppStore.getState().language === "english" ? "SkyrimSE" : "SkyrimSE")
           .then((cfg) => {
             setDataConfigs(cfg);
@@ -403,6 +587,24 @@ export function MenuBar() {
     await importXmlFromPath(path);
   }, [importXmlFromPath]);
 
+  /**
+   * 路由拖放的文件
+   * 
+   * 功能：
+   *   - 根据文件扩展名判断文件类型
+   *   - 调用相应的处理函数
+   *   - 显示相应的提示信息
+   * 
+   * 支持的文件类型：
+   *   - ESP/ESM：加载 ESP 文件
+   *   - SST：加载 SST 字典
+   *   - XML：导入 XML 文件
+   *   - BSA/BA2：打开 BSA 浏览器
+   *   - PEX：打开 PEX 编辑器
+   *   - FUZ：打开 FUZ 播放器
+   * 
+   * @param path - 拖放的文件路径
+   */
   const routeDroppedPath = useCallback((path: string) => {
     const ext = getPathExt(path);
     if (ext === "esp" || ext === "esm") {
@@ -436,6 +638,16 @@ export function MenuBar() {
     toast.error(t("menu.dragDropUnsupported"));
   }, [importXmlFromPath, loadEspFromPath, loadSstFromPath, setActivePanel, t]);
 
+  // ========== Hook：拖放事件处理 ==========
+  /**
+   * 监听拖放事件
+   * 
+   * 功能：
+   *   - 注册 Tauri webview 拖放事件监听
+   *   - 优先处理支持的文件类型（ESP、SST、XML）
+   *   - 如果没有支持的文件，处理第一个文件
+   *   - 处理浏览器预览中不可用的情况
+   */
   useEffect(() => {
     let disposed = false;
     let unlistenDragDrop: (() => void) | null = null;
@@ -461,10 +673,10 @@ export function MenuBar() {
           }
         })
         .catch(() => {
-          /* Drag/drop is unavailable in plain browser previews. */
+          /* 拖放在浏览器预览中不可用 */
         });
     } catch {
-      /* Tauri webview metadata is unavailable in plain browser previews. */
+      /* Tauri webview 元数据在浏览器预览中不可用 */
     }
 
     return () => {
@@ -473,7 +685,15 @@ export function MenuBar() {
     };
   }, [routeDroppedPath]);
 
-  // Listen to batch progress events
+  // ========== Hook：批处理进度监听 ==========
+  /**
+   * 监听批处理进度事件
+   * 
+   * 功能：
+   *   - 订阅后端的批处理进度事件
+   *   - 更新本地状态以显示进度
+   *   - 组件卸载时清理监听
+   */
   useEffect(() => {
     let disposed = false;
     let unlisten: (() => void) | null = null;
@@ -582,6 +802,17 @@ export function MenuBar() {
     }
   };
 
+  // ========== 菜单定义 ==========
+  /**
+   * 菜单定义数组
+   * 
+   * 包含 5 个菜单类别：
+   *   1. File - 文件操作（加载、保存、导入导出）
+   *   2. Translate - 翻译操作（编辑、完成、转换、比较）
+   *   3. Options - 选项（设置、工具箱、拼写检查）
+   *   4. Tools - 工具面板（8 个工具）
+   *   5. Wizards - 向导（头部处理、头部向导）
+   */
   const menuDefinitions: Array<{ id: MenuId; label: string; items: MenuItem[] }> = [
     {
       id: "file",
@@ -651,6 +882,19 @@ export function MenuBar() {
     },
   ];
 
+  // ========== 菜单渲染函数 ==========
+  /**
+   * 渲染单个菜单
+   * 
+   * 功能：
+   *   - 创建菜单触发按钮
+   *   - 管理菜单打开/关闭状态
+   *   - 渲染菜单项和分隔符
+   *   - 支持快捷键显示
+   * 
+   * @param menu - 菜单定义对象
+   * @returns 菜单 JSX 元素
+   */
   const renderMenu = (menu: { id: MenuId; label: string; items: MenuItem[] }) => (
     <div className={`menubar-menu ${openMenu === menu.id ? "open" : ""}`} key={menu.id}>
       <button

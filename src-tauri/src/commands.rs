@@ -34,18 +34,40 @@ use xt_shared::dto::{
 use crate::batch::BatchExecutor;
 
 /// 已加载的 ESP 文件信息
+///
+/// 用于追踪当前打开的 ESP 文件及其关联的 Strings 目录。
+/// 当用户加载新的 ESP 文件时，此结构会被更新。
 pub struct EspFileInfo {
+    /// ESP/ESM 文件的完整路径
     pub esp_path: String,
+    /// Strings 文件所在目录（可能与 ESP 不同）
+    /// 如果为 None，则使用 ESP 所在目录
     pub strings_dir: Option<String>,
+    /// 字符串文件的语言标识（如 "english", "chinese"）
     pub language: String,
 }
 
 /// 应用状态：持有所有加载的文件数据
+///
+/// AppState 是 Tauri 应用的全局状态容器，通过 Mutex 保护所有可变字段。
+/// 所有 Tauri 命令都通过 `tauri::State<'_, Arc<AppState>>` 获取此状态。
+///
+/// 设计要点：
+/// - 使用 Mutex 而非 RwLock，因为大多数操作是快速的（不需要并发读）
+/// - API Key 存储在内存中，应用关闭时丢失（不持久化到磁盘）
+/// - `strings` 是主要的工作集，所有翻译操作都基于此
+/// - `esp_file` 用于 ESP 回写功能（T42-T45）
 pub struct AppState {
+    /// 已加载的字符串列表（主要工作集）
+    /// 包含 ESP 中提取的所有可翻译字符串
     pub strings: Mutex<Vec<SkyString>>,
+    /// SST 字典中的旧数据条目（用于保留向后兼容性）
+    /// 当 SST 加载时，未匹配的条目保存在此，导出时一并写出
     pub sst_old_data: Mutex<Vec<SkyString>>,
+    /// 当前打开的 ESP 文件信息
     pub file_info: Mutex<Option<EspFileInfo>>,
     /// OpenAI 兼容 API Key（内存存储，不持久化）
+    /// 支持 OpenAI 官方 API 和兼容的第三方服务（如 Azure OpenAI）
     pub openai_api_key: Mutex<Option<String>>,
     /// DeepL API Key（内存存储，不持久化）
     pub deepl_api_key: Mutex<Option<String>>,
@@ -59,25 +81,33 @@ pub struct AppState {
     pub youdao_secret_key: Mutex<Option<String>>,
     /// Azure 翻译 subscription key（内存存储，不持久化）
     pub azure_key: Mutex<Option<String>>,
-    /// 当前选中的翻译提供方
+    /// 当前选中的翻译提供方（OpenAI / DeepL / Baidu / Youdao / Azure）
     pub current_provider: Mutex<ProviderType>,
     /// 是否有未保存的翻译修改
+    /// 前端使用此标志来提示用户保存
     pub is_dirty: Mutex<bool>,
-    /// ApiTranslator.txt 配置
+    /// ApiTranslator.txt 配置（从文件加载，包含 API 端点等）
     pub api_config: ApiTranslatorConfig,
     /// Vocabulary: source→translation pairs from game Strings files
+    /// 用于启发式搜索和翻译建议
     pub vocabulary: Mutex<Vec<(String, String)>>,
     /// 字符串级批量翻译队列 (非文件级)
+    /// 用于后台翻译任务的状态管理
     pub batch_queue: Mutex<Option<Arc<BatchQueue>>>,
     /// ESP 文件树（用于回写）
+    /// 在 ESP 模式下构建，用于 save_esp / finalize_esp 等操作
     pub esp_file: Mutex<Option<xt_core::esp::record_tree::EspFile>>,
     /// Codepage 表（用于正确的字符串文件编码加载/写入）
+    /// 不同游戏使用不同的代码页（如 UTF-8, Windows-1252 等）
     pub codepage_table: Mutex<Option<CodepageTable>>,
     /// 拼写检查器
+    /// 用于检测翻译中的拼写错误
     pub spell_checker: Mutex<xt_core::spell::SpellChecker>,
     /// Header Processor rule set
+    /// 用于自动处理 ESP 记录头部的规则
     pub header_rules: Mutex<xt_core::header_processor::HeaderRuleSet>,
     /// Header Processor pre-processing options
+    /// 用于配置头部处理的预处理选项
     pub pre_processing_opts: Mutex<xt_core::header_processor::PreProcessingOpts>,
 }
 
@@ -163,6 +193,14 @@ pub fn config_dir() -> std::path::PathBuf {
     }
 }
 
+/// 将 SkyString 状态转为前端字符串
+///
+/// 约定：
+/// - translated：已翻译
+/// - incomplete：未完成翻译
+/// - locked：不可编辑/锁定
+///
+/// 兜底策略：未知状态统一映射为 `locked`，避免前端出现未定义分支。
 fn status_string(sk: &SkyString) -> String {
     if sk.params.is_translated() {
         "translated"
@@ -181,6 +219,7 @@ fn status_string(sk: &SkyString) -> String {
 /// 说明：
 /// - `form_id` 以十六进制字符串返回，便于前端直接展示。
 /// - `list_index` 来自 ESP 解析或 SST 加载，标识 STRINGS/DLSTRINGS/ILSTRINGS 归属。
+/// - `ld` 是启发式搜索的匹配数量，用于翻译建议排序。
 fn sky_string_to_dto(sk: &SkyString) -> SkyStringDTO {
     SkyStringDTO {
         id: sk.id,
@@ -198,6 +237,10 @@ fn sky_string_to_dto(sk: &SkyString) -> SkyStringDTO {
     }
 }
 
+/// 将 SST 旧数据条目追加到字符串列表
+///
+/// SST 加载时，未匹配的条目被保存为 "oldData"。
+/// 导出时需要将这些条目一并写出，以保持向后兼容性。
 fn append_old_data_entries(entries: &mut Vec<SkyString>, old_data: &[SkyString]) {
     for old in old_data {
         let mut sk = old.clone();
@@ -208,11 +251,32 @@ fn append_old_data_entries(entries: &mut Vec<SkyString>, old_data: &[SkyString])
 
 /// 加载 ESP/ESM 文件并构建内存中的字符串列表。
 ///
+/// 这是应用的核心命令，负责：
+/// 1. 解析 ESP/ESM 二进制文件
+/// 2. 加载关联的 Strings 文件（.STRINGS / .DLSTRINGS / .ILSTRINGS）
+/// 3. 构建 ESP 记录树（用于后续的回写操作）
+/// 4. 缓存解析结果以加速重复加载
+///
 /// 行为要点：
 /// - 解析会覆盖当前 `AppState.strings`（相当于重新打开文件）。
 /// - 若提供 `strings_dir`，会尝试加载对应语言的 STRINGS 文件。
 /// - 返回值中的统计信息用于前端侧边栏和加载反馈。
 /// - 先检查本地缓存（基于 ESP 文件 SHA-256 哈希），命中则直接返回。
+/// - 通过 Tauri 事件系统实时发送进度更新。
+///
+/// 参数：
+/// - `esp_path`: ESP/ESM 文件的完整路径
+/// - `strings_dir`: Strings 文件所在目录（可选，默认使用 ESP 所在目录）
+/// - `language`: 字符串文件的语言标识（可选，默认 "english"）
+/// - `game`: 游戏类型（可选，用于加载正确的 record_defs）
+///
+/// 返回：
+/// - `LoadEspResponse`: 包含解析统计和缓存状态
+///
+/// 错误处理：
+/// - 文件不存在或无读权限 → 返回错误
+/// - 文件格式无效 → 返回错误
+/// - Strings 文件加载失败 → 继续（不中断主流程）
 #[tauri::command]
 pub async fn load_esp(
     window: tauri::Window,

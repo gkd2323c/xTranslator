@@ -1,15 +1,20 @@
-//! Shared dictionary apply matcher.
+//! 共享字典应用匹配器
 //!
-//! XML imports and SST loads share the same tiered matching order:
+//! XML 导入和 SST 加载共享相同的分层匹配顺序：
 //!
-//! | Tier | Strategy | Key | Confidence |
-//! |------|----------|-----|------------|
-//! | T1 | Exact triple | (str_id, record_sig, field_sig) | very high |
-//! | T2 | EDID hash | (edid_hash, record_sig, field_sig) | high |
-//! | T3 | Normalized source | (normalized_hash, record_sig, field_sig) | high |
-//! | T4 | Vocabulary overlap | word_hashes Jaccard >= 0.5 | medium |
+//! | 层级 | 策略 | 关键字 | 置信度 |
+//! |------|------|--------|--------|
+//! | T1 | 精确三元组 | (str_id, record_sig, field_sig) | 非常高 |
+//! | T2 | EDID 哈希 | (edid_hash, record_sig, field_sig) | 高 |
+//! | T3 | 规范化源文本 | (normalized_hash, record_sig, field_sig) | 高 |
+//! | T4 | 词汇重叠 | word_hashes Jaccard >= 0.5 | 中等 |
 //!
-//! Ambiguous matches are not auto-applied.
+//! 歧义匹配（多个候选项在同一层级）不会自动应用。
+//!
+//! 这是 xTranslator 的核心匹配算法，用于：
+//! - SST 字典加载时的翻译匹配
+//! - XML 导入时的翻译应用
+//! - 启发式搜索的相似度计算
 
 use std::collections::{HashMap, HashSet};
 
@@ -21,33 +26,56 @@ use crate::xml::XmlStringEntry;
 
 /// 词汇重叠匹配的最小 Jaccard 阈值
 ///
-/// 阈值过低 → 误匹配风险增加
-/// 阈值过高 → 同义改写无法匹配
+/// Jaccard 相似度 = |A ∩ B| / |A ∪ B|
+///
+/// 阈值过低 → 误匹配风险增加（无关字符串可能被匹配）
+/// 阈值过高 → 同义改写无法匹配（合法的改写被拒绝）
 /// 0.5 意味着至少一半的规范化词汇需要重叠
+///
+/// 例如：
+/// - "The Elder Scrolls" vs "Elder Scrolls" → Jaccard = 2/3 ≈ 0.67 ✓ 匹配
+/// - "Hello World" vs "Goodbye World" → Jaccard = 1/3 ≈ 0.33 ✗ 不匹配
 const MIN_JACCARD: f64 = 0.5;
 
-/// Source format for dictionary entries.
+/// 字典条目的源格式
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DictionarySourceFormat {
+    /// 来自 XML 导入
     Xml,
+    /// 来自 SST 字典
     Sst,
 }
 
-/// Neutral dictionary entry consumed by the shared matcher.
+/// 中立的字典条目（被共享匹配器消费）
+///
+/// 这是 XML 和 SST 条目的统一表示，允许共享匹配逻辑。
 #[derive(Debug, Clone)]
 pub struct DictionaryApplyEntry {
+    /// 条目来源（XML 或 SST）
     pub source_format: DictionarySourceFormat,
+    /// Strings 文件类型索引：0=.STRINGS, 1=.DLSTRINGS, 2=.ILSTRINGS
     pub list_index: u8,
+    /// Strings 文件中的字符串 ID（T1 匹配的关键）
     pub str_id: i32,
+    /// 记录类型签名（如 "INFO", "DIAL"）
     pub record_sig: HeaderSig,
+    /// 字段签名（如 "FULL", "DESC"）
     pub field_sig: HeaderSig,
+    /// 字符串在 Strings 文件中的索引（用于 XXXX 处理）
     pub index: u16,
+    /// 最大索引值（用于验证索引有效性）
     pub index_max: u16,
+    /// 源文本（原文）
     pub source: String,
+    /// 翻译文本（译文）
     pub translation: String,
+    /// EDID（编辑器 ID，用于 T2 匹配）
     pub edid: Option<String>,
+    /// EDID 的 FNV-1a 哈希值（T2 匹配的关键）
     pub edid_hash: Option<u32>,
+    /// 状态参数（来自 SST 时有值）
     pub params: Option<SkyStringParams>,
+    /// 协作 ID（用于多人协作）
     pub colab_id: u8,
 }
 

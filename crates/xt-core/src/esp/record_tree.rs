@@ -2,26 +2,41 @@ use super::header::{FieldHeader, GenericHeader, GrupHeader, RecordHeaderData};
 use byteorder::{LittleEndian, WriteBytesExt};
 use std::io::Write;
 
-/// ESP field — a single subrecord within a record.
+/// ESP field — 记录内的单个子记录
 ///
-/// Holds the raw header and data buffer. For translatable fields, the buffer
-/// contains the string data (either inline text for delocalized ESPs or a
-/// 4-byte string ID for localized ESPs).
+/// 存储原始头部和数据缓冲区。对于可翻译字段，缓冲区包含字符串数据：
+/// - 非本地化 ESP：内联文本
+/// - 本地化 ESP：4 字节字符串 ID
+///
+/// 这是 ESP 记录树的最小单位，用于：
+/// - 读取字符串数据
+/// - 更新翻译（回写）
+/// - 序列化回 ESP 文件
 #[derive(Clone, Debug)]
 pub struct EspField {
+    /// 字段头部（签名 + 大小）
     pub header: FieldHeader,
+    /// 字段数据缓冲区
     pub buffer: Vec<u8>,
-    /// Whether this field is a XXXX size-prefix field (name == b"XXXX").
+    /// 是否为 XXXX 大小前缀字段（name == b"XXXX"）
+    /// XXXX 字段用于指定下一个字段的实际大小（处理 65535 字节限制）
     pub is_size_xxxx: bool,
 }
 
 impl EspField {
-    /// Parse fields from a byte slice, returning them in order.
-    /// Handles XXXX size-prefix fields by reading the 4-byte value and
-    /// applying it to the next field's effective size.
+    /// 从字节切片解析字段，按顺序返回
+    ///
+    /// 处理 XXXX 大小前缀字段：
+    /// - 读取 4 字节值
+    /// - 应用到下一个字段的有效大小
+    ///
+    /// XXXX 处理说明：
+    /// - Bethesda 格式中，字段大小限制为 65535 字节
+    /// - 超过此限制时，使用 XXXX 字段存储实际大小
+    /// - XXXX 字段本身的大小为 4 字节
     pub fn parse_fields(data: &[u8]) -> std::io::Result<Vec<Self>> {
         let mut pos = 0usize;
-        // Pre-allocate based on average field size (~50 bytes)
+        // 根据平均字段大小预分配（~50 字节）
         let estimated_count = (data.len() / 50).max(4);
         let mut fields = Vec::with_capacity(estimated_count);
         let mut next_explicit_size: Option<u32> = None;
@@ -35,18 +50,18 @@ impl EspField {
             let dsize = u16::from_le_bytes([data[pos + 4], data[pos + 5]]) as usize;
             pos += 6;
 
-            // Determine the actual data size for this field
+            // 确定此字段的实际数据大小
             let effective_size = if sig == *b"XXXX" {
-                // XXXX field: data is 4 bytes (the size of the NEXT field)
+                // XXXX 字段：数据是 4 字节（下一个字段的大小）
                 dsize
             } else if let Some(size) = next_explicit_size.take() {
-                // This field was preceded by a XXXX; use the explicit size
+                // 此字段前面有 XXXX；使用显式大小
                 size as usize
             } else {
                 dsize
             };
 
-            // Check for truncated data
+            // 检查数据是否被截断
             let remaining = data.len() - pos;
             let read_size = effective_size.min(remaining);
 
@@ -55,7 +70,7 @@ impl EspField {
 
             let is_size_xxxx = sig == *b"XXXX";
 
-            // If this is a XXXX field, extract the next field size
+            // 如果这是 XXXX 字段，提取下一个字段的大小
             if is_size_xxxx && buffer.len() >= 4 {
                 next_explicit_size =
                     Some(u32::from_le_bytes([buffer[0], buffer[1], buffer[2], buffer[3]]));
@@ -71,22 +86,26 @@ impl EspField {
         Ok(fields)
     }
 
-    /// Update this field's buffer with new text encoded in the target codepage.
+    /// 使用目标代码页更新此字段的缓冲区
     ///
-    /// For delocalized ESPs: replaces the entire buffer with the encoded translation.
-    /// Updates `header.dsize` to match the new buffer length.
+    /// 对于非本地化 ESP：用编码后的翻译替换整个缓冲区
+    /// 更新 `header.dsize` 以匹配新缓冲区长度
+    ///
+    /// 参数：
+    /// - `text`: 新的文本内容
+    /// - `codepage`: 目标代码页（用于编码）
     pub fn update_buffer(&mut self, text: &str, codepage: &crate::strings::CodepageConfig) {
         let encoded = codepage.encode(text);
         self.header.dsize = encoded.len() as u16;
         self.buffer = encoded;
     }
 
-    /// Convert field buffer to string using the given codepage.
+    /// 使用给定的代码页将字段缓冲区转换为字符串
     pub fn buffer_to_string(&self, codepage: &crate::strings::CodepageConfig) -> String {
         codepage.decode(&self.buffer)
     }
 
-    /// Write this field to a writer (header + buffer).
+    /// 将此字段写入写入器（头部 + 缓冲区）
     pub fn write_to<W: Write>(&self, writer: &mut W) -> std::io::Result<()> {
         writer.write_all(&self.header.name)?;
         writer.write_u16::<LittleEndian>(self.header.dsize)?;
@@ -94,7 +113,7 @@ impl EspField {
         Ok(())
     }
 
-    /// Total serialized size: 6 (header) + buffer length.
+    /// 序列化后的总大小：6（头部）+ 缓冲区长度
     pub fn serialized_size(&self) -> usize {
         6 + self.buffer.len()
     }

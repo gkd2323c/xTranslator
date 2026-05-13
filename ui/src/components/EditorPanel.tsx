@@ -6,12 +6,71 @@ import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import { Button, Textarea, Badge, Modal, Input, ProgressBar } from "./ui";
 
+// ============================================================================
+// EditorDialog 组件 - 字符串翻译编辑器
+// ============================================================================
+//
+// 职责：
+//   - 提供单个字符串的编辑界面
+//   - 支持多种翻译辅助功能（相似翻译、机器翻译、拼写检查）
+//   - 处理字符串的保存和验证
+//   - 支持文本转换（简繁转换、RTL、阿拉伯文形状）
+//
+// 核心功能：
+//   1. 本地编辑：编辑翻译文本，支持 Ctrl+Enter 保存
+//   2. 相似翻译搜索：基于启发式算法找到相似的已翻译字符串
+//   3. 机器翻译：调用翻译 API 自动翻译
+//   4. 拼写检查：实时检查拼写错误并提供建议
+//   5. 别名检查：验证翻译中的别名是否与源文本匹配
+//   6. 字段大小验证：检查翻译是否超过字段大小限制
+//   7. 文本转换：简繁转换、RTL 反向、阿拉伯文形状处理
+//
+// 键盘快捷键：
+//   - Ctrl+Enter：保存翻译
+//   - Ctrl+↑：跳转到上一个未翻译项
+//   - Ctrl+↓：跳转到下一个未翻译项
+//   - Ctrl+H：启动相似翻译搜索
+//   - Ctrl+T：启动机器翻译
+//
+// 状态管理：
+//   - localTrans：本地编辑的翻译文本
+//   - matches：相似翻译搜索结果
+//   - spellResult：拼写检查结果
+//   - aliasResult：别名检查结果
+//   - fieldSizeWarning：字段大小警告
+//
+// ============================================================================
+
+// 正则表达式：匹配 HTML 标签（用于高亮显示）
 const TAG_REGEX = /(<\/?[A-Za-z][^>]*>)/g;
 
+// ============================================================================
+// 工具函数：HTML 转义和标签高亮
+// ============================================================================
+
+/**
+ * 转义 HTML 特殊字符，防止 XSS 攻击
+ * 
+ * @param s - 原始字符串
+ * @returns 转义后的 HTML 安全字符串
+ */
 function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+/**
+ * 高亮显示 HTML 标签
+ * 
+ * 功能：
+ *   - 分离 HTML 标签和普通文本
+ *   - 对标签应用特殊样式（<span class="tag-highlight">）
+ *   - 转义所有文本内容防止 XSS
+ * 
+ * 用途：在编辑器中显示源文本时，用不同颜色标记 HTML 标签
+ * 
+ * @param text - 包含 HTML 标签的文本
+ * @returns HTML 字符串，标签被 <span class="tag-highlight"> 包装
+ */
 function highlightTags(text: string): string {
   return text
     .split(TAG_REGEX)
@@ -25,35 +84,56 @@ function highlightTags(text: string): string {
     .join("");
 }
 
+// ============================================================================
+// EditorDialog 组件 Props 接口
+// ============================================================================
+
 export interface EditorDialogProps {
-  open: boolean;
-  onClose: () => void;
+  open: boolean;           // 对话框是否打开
+  onClose: () => void;     // 关闭对话框的回调
 }
 
 export function EditorDialog({ open, onClose }: EditorDialogProps) {
+  // ========== 国际化和 Store 订阅 ==========
   const { t } = useTranslation();
+  
+  // 当前选中的字符串项
   const selectedItem = useAppStore((s) => s.selectedItem);
   const selectedId = useAppStore((s) => s.selectedId);
+  
+  // 语言设置
   const language = useAppStore((s) => s.language);
   const targetLang = useAppStore((s) => s.targetLang);
+  
+  // Store 操作函数
   const updateItemTranslation = useAppStore((s) => s.updateItemTranslation);
   const setSelectedById = useAppStore((s) => s.setSelectedById);
+  
+  // 数据集
   const allItems = useAppStore((s) => s.allItems);
   const items = useAppStore((s) => s.items);
   const dataConfigs = useAppStore((s) => s.dataConfigs);
 
+  // 计算翻译进度（已翻译/总数）
   const translationProgress = useMemo(() => computeTranslationProgress(allItems), [allItems]);
 
-  const [localTrans, setLocalTrans] = useState("");
-  const [isSaving, setIsSaving] = useState(false);
+  // ========== 本地编辑状态 ==========
+  const [localTrans, setLocalTrans] = useState("");  // 本地编辑的翻译文本
+  const [isSaving, setIsSaving] = useState(false);   // 保存中标志
+  
+  // ========== 相似翻译搜索状态 ==========
   const [isSearching, setIsSearching] = useState(false);
-  const [isTranslating, setIsTranslating] = useState(false);
-  const [aliasResult, setAliasResult] = useState<AliasCheckResult | null>(null);
   const [matches, setMatches] = useState<HeuristicMatchDTO[]>([]);
+  
+  // ========== 机器翻译状态 ==========
+  const [isTranslating, setIsTranslating] = useState(false);
   const [showApiKeyDialog, setShowApiKeyDialog] = useState(false);
   const [apiKeyInput, setApiKeyInput] = useState("");
 
-  // ── Spell Check State ──
+  // ========== 别名检查状态 ==========
+  const [aliasResult, setAliasResult] = useState<AliasCheckResult | null>(null);
+
+  // ========== 拼写检查状态 ==========
   const [spellResult, setSpellResult] = useState<SpellCheckResultDto | null>(null);
   const [selectedFaultIdx, setSelectedFaultIdx] = useState<number | null>(null);
   const [suggestions, setSuggestions] = useState<string[]>([]);
@@ -61,6 +141,20 @@ export function EditorDialog({ open, onClose }: EditorDialogProps) {
   const spellTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const ignorePathRef = useRef<string>("");
 
+  // ========== 字段大小验证 ==========
+  /**
+   * 计算字段大小警告
+   * 
+   * 功能：
+   *   - 检查翻译文本的字节长度
+   *   - 与字段大小限制比较
+   *   - 如果超过限制，返回警告信息
+   * 
+   * 依赖：
+   *   - selectedItem：当前选中的字符串
+   *   - dataConfigs：字段大小配置
+   *   - localTrans：本地翻译文本
+   */
   const fieldSizeWarning = useMemo(() => {
     if (!selectedItem || !dataConfigs?.field_size_ref || !localTrans) return null;
     const key = `${selectedItem.record_sig}:${selectedItem.field_sig}`.toUpperCase();
@@ -73,6 +167,19 @@ export function EditorDialog({ open, onClose }: EditorDialogProps) {
     return null;
   }, [selectedItem, dataConfigs, localTrans]);
 
+  // ========== 核心功能函数 ==========
+
+  /**
+   * 跳转到下一个/上一个未翻译的字符串
+   * 
+   * 功能：
+   *   - 从当前选中的字符串开始搜索
+   *   - 按指定方向（next/prev）查找未翻译的项
+   *   - 如果找到，选中该项
+   *   - 如果没有找到，显示提示信息
+   * 
+   * @param direction - 搜索方向："next" 或 "prev"
+   */
   const jumpToUntranslated = useCallback((direction: "next" | "prev") => {
     if (!selectedId || items.length === 0) return;
     const currentIdx = items.findIndex((i) => i.id === selectedId);
@@ -87,6 +194,17 @@ export function EditorDialog({ open, onClose }: EditorDialogProps) {
     toast(t("editor.noMoreUntranslated"), { icon: "ℹ️" });
   }, [selectedId, items, setSelectedById]);
 
+  /**
+   * Hook：初始化编辑器状态
+   * 
+   * 功能：
+   *   - 当选中的字符串改变时，重置编辑器状态
+   *   - 加载本地翻译文本
+   *   - 清空搜索结果和拼写检查结果
+   *   - 检查别名是否匹配
+   * 
+   * 依赖：selectedId
+   */
   useEffect(() => {
     setLocalTrans(selectedItem?.translation || "");
     setMatches([]);
@@ -99,7 +217,18 @@ export function EditorDialog({ open, onClose }: EditorDialogProps) {
     }
   }, [selectedId]);
 
-  // ── Spell Check: debounced check on text change ──
+  // ========== 拼写检查功能 ==========
+
+  /**
+   * 执行拼写检查
+   * 
+   * 功能：
+   *   - 调用后端拼写检查 API
+   *   - 如果有错误，保存结果
+   *   - 如果没有错误但拼写检查启用，显示"无错误"状态
+   * 
+   * @param text - 要检查的文本
+   */
   const doSpellCheck = useCallback(async (text: string) => {
     if (!text) {
       setSpellResult(null);
@@ -110,16 +239,26 @@ export function EditorDialog({ open, onClose }: EditorDialogProps) {
       if (result.active && result.faults.length > 0) {
         setSpellResult(result);
       } else if (result.active && result.faults.length === 0) {
-        // Show clean status
+        // 显示"无错误"状态
         setSpellResult(result);
       } else {
         setSpellResult(null);
       }
     } catch {
-      // silently fail
+      // 静默失败
     }
   }, []);
 
+  /**
+   * Hook：防抖拼写检查
+   * 
+   * 功能：
+   *   - 当本地翻译文本改变时，延迟 500ms 后执行拼写检查
+   *   - 避免频繁调用 API
+   *   - 组件卸载时清理定时器
+   * 
+   * 依赖：localTrans, doSpellCheck
+   */
   useEffect(() => {
     if (spellTimerRef.current) {
       clearTimeout(spellTimerRef.current);
@@ -132,7 +271,16 @@ export function EditorDialog({ open, onClose }: EditorDialogProps) {
     };
   }, [localTrans, doSpellCheck]);
 
-  // ── Spell Check: fetch suggestions for selected fault ──
+  /**
+   * 选中拼写错误并获取建议
+   * 
+   * 功能：
+   *   - 标记选中的错误
+   *   - 调用 API 获取拼写建议
+   *   - 显示建议列表
+   * 
+   * @param index - 错误在 faults 数组中的索引
+   */
   const handleSelectFault = useCallback(async (index: number) => {
     if (!spellResult) return;
     setSelectedFaultIdx(index);
@@ -147,7 +295,16 @@ export function EditorDialog({ open, onClose }: EditorDialogProps) {
     }
   }, [spellResult]);
 
-  // ── Spell Check: apply suggestion ──
+  /**
+   * 应用拼写建议
+   * 
+   * 功能：
+   *   - 将选中的建议替换到翻译文本中
+   *   - 替换范围由错误的 start_byte 和 end_byte 确定
+   *   - 清空建议列表
+   * 
+   * @param suggestion - 要应用的建议文本
+   */
   const handleApplySuggestion = useCallback((suggestion: string) => {
     if (selectedFaultIdx === null || !spellResult) return;
     const fault = spellResult.faults[selectedFaultIdx];
@@ -159,11 +316,20 @@ export function EditorDialog({ open, onClose }: EditorDialogProps) {
     setSuggestions([]);
   }, [selectedFaultIdx, spellResult, localTrans]);
 
-  // ── Spell Check: ignore word ──
+  /**
+   * 忽略拼写错误
+   * 
+   * 功能：
+   *   - 将错误的单词添加到忽略列表
+   *   - 从当前拼写检查结果中移除该错误
+   *   - 显示成功提示
+   * 
+   * @param word - 要忽略的单词
+   */
   const handleIgnoreWord = useCallback(async (word: string) => {
     try {
       await spellCheckIgnore(word, ignorePathRef.current || "SpellCheck/ignore.txt");
-      // Remove from fault list
+      // 从错误列表中移除
       setSpellResult((prev) => {
         if (!prev) return null;
         return {
@@ -179,6 +345,16 @@ export function EditorDialog({ open, onClose }: EditorDialogProps) {
     }
   }, []);
 
+  // ========== 翻译保存和搜索功能 ==========
+
+  /**
+   * 保存翻译
+   * 
+   * 功能：
+   *   - 调用后端 API 保存翻译
+   *   - 更新本地 store 中的翻译
+   *   - 显示成功或失败提示
+   */
   const handleSave = useCallback(async () => {
     if (selectedId === null || !selectedItem) return;
     setIsSaving(true);
@@ -193,6 +369,16 @@ export function EditorDialog({ open, onClose }: EditorDialogProps) {
     }
   }, [selectedId, selectedItem, localTrans, updateItemTranslation]);
 
+  /**
+   * 启发式搜索相似翻译
+   * 
+   * 功能：
+   *   - 基于源文本的相似度搜索已翻译的字符串
+   *   - 返回最相似的 5 个翻译
+   *   - 相似度阈值为 0.4（40%）
+   * 
+   * 用途：帮助翻译者找到相似的已翻译字符串作为参考
+   */
   const handleHeuristicSearch = useCallback(async () => {
     if (!selectedItem || selectedItem.status === "translated") return;
     setIsSearching(true);
@@ -211,6 +397,14 @@ export function EditorDialog({ open, onClose }: EditorDialogProps) {
     }
   }, [selectedItem]);
 
+  /**
+   * 机器翻译
+   * 
+   * 功能：
+   *   - 调用翻译 API 自动翻译源文本
+   *   - 将结果填充到翻译文本框
+   *   - 如果需要 API 密钥，显示设置对话框
+   */
   const handleTranslate = useCallback(async () => {
     if (!selectedItem) return;
     setIsTranslating(true);
@@ -233,6 +427,14 @@ export function EditorDialog({ open, onClose }: EditorDialogProps) {
     }
   }, [selectedItem]);
 
+  /**
+   * 设置翻译 API 密钥
+   * 
+   * 功能：
+   *   - 验证 API 密钥不为空
+   *   - 调用后端 API 保存密钥
+   *   - 关闭设置对话框
+   */
   const handleSetApiKey = useCallback(async () => {
     if (!apiKeyInput.trim()) {
       toast.error(t("editor.apiKeyEmpty"));
@@ -248,11 +450,33 @@ export function EditorDialog({ open, onClose }: EditorDialogProps) {
     }
   }, [apiKeyInput]);
 
+  /**
+   * 应用相似翻译
+   * 
+   * 功能：
+   *   - 将选中的相似翻译复制到编辑框
+   *   - 显示成功提示
+   * 
+   * @param translation - 要应用的翻译文本
+   */
   const applyMatch = (translation: string) => {
     setLocalTrans(translation);
     toast.success(t("editor.translationCopied"));
   };
 
+  // ========== 键盘事件处理 ==========
+
+  /**
+   * Hook：全局键盘快捷键
+   * 
+   * 支持的快捷键：
+   *   - Ctrl+↓：跳转到下一个未翻译项
+   *   - Ctrl+↑：跳转到上一个未翻译项
+   *   - Ctrl+H：启动相似翻译搜索
+   *   - Ctrl+T：启动机器翻译
+   * 
+   * 依赖：open, selectedItem, jumpToUntranslated, handleHeuristicSearch, handleTranslate
+   */
   useEffect(() => {
     if (!open) return;
     const handler = (e: KeyboardEvent) => {
@@ -277,10 +501,19 @@ export function EditorDialog({ open, onClose }: EditorDialogProps) {
     return () => window.removeEventListener("keydown", handler);
   }, [open, selectedItem, jumpToUntranslated, handleHeuristicSearch, handleTranslate]);
 
+  /**
+   * 本地键盘事件处理（在编辑框内）
+   * 
+   * 支持的快捷键：
+   *   - Ctrl+Enter：保存翻译
+   */
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.ctrlKey && e.key === "Enter") handleSave();
   };
 
+  // ========== 渲染 ==========
+
+  // 对话框标题：显示字符串 ID 和 EDID
   const title = selectedItem
     ? `#${selectedItem.id}  ${selectedItem.record_sig}:${selectedItem.field_sig}`
     : t("editor.selectToEdit");

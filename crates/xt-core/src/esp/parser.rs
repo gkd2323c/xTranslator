@@ -15,6 +15,9 @@ use std::path::Path;
 /// - 前4字节：小端序的解压后大小(u32)
 /// - 剩余数据：zlib 压缩数据
 ///
+/// 这是 Bethesda 游戏引擎的标准压缩方式，用于减小 ESP/ESM 文件大小。
+/// 当 ESP 记录头的 `flags` 包含压缩标记时，记录数据使用此格式。
+///
 /// 参考 Delphi 实现：DecompressToUserBuf(@b[4], header.dsize - sizeOf(cardinal), ...)
 ///
 /// # 参数
@@ -42,6 +45,7 @@ pub(crate) fn decompress_bethesda_record(data: &[u8]) -> Result<Vec<u8>> {
     }
 
     // 合理性检查：防止异常声明大小导致内存膨胀(常见于损坏文件)。
+    // 100MB 是合理的上限，超过此值的声明通常表示文件损坏。
     if decompressed_size > 100_000_000 {
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
@@ -75,18 +79,30 @@ pub(crate) fn decompress_bethesda_record(data: &[u8]) -> Result<Vec<u8>> {
 
 /// 可翻译字段定义
 ///
-/// 从 _recorddefs.txt 解析而来，描述哪些字段包含可翻译的字符串
+/// 从 _recorddefs.txt 解析而来，描述哪些字段包含可翻译的字符串。
+/// 这是 xTranslator 的核心配置，决定了哪些 ESP 字段会被提取为可翻译字符串。
+///
+/// 例如：
+/// - DIAL/FULL → 对话主题名称
+/// - INFO/RNAM → 对话回复文本
+/// - BOOK/FULL → 书籍标题
+/// - BOOK/DESC → 书籍描述
 #[derive(Clone, Debug)]
 pub struct TranslatableField {
     /// 记录类型签名(4字节 ASCII，如 "INFO", "QUST")
+    /// 这是 Bethesda 格式中的记录类型标识
     pub record_sig: [u8; 4],
     /// 字段签名(4字节 ASCII，如 "NAM1", "FULL")
+    /// 这是记录内的具体字段标识
     pub field_sig: [u8; 4],
     /// Strings 文件类型索引：0=.STRINGS, 1=.DLSTRINGS, 2=.ILSTRINGS
+    /// 用于确定字符串应该导出到哪个 Strings 文件
     pub list_index: u8,
     /// Not-null 标记(*)：字符串不能为空
+    /// 如果标记为 true，空字符串会被标记为警告
     pub not_null: bool,
     /// Ignored 标记(?)：此定义应被忽略
+    /// 用于排除某些字段不进行翻译
     pub ignored: bool,
 }
 

@@ -9,22 +9,27 @@ use crate::types::sky_string::SkyString;
 
 /// Delphi xTranslator 的 XML 导出格式解析器
 ///
+/// XML 是 xTranslator 的通用交换格式，用于：
+/// - 导出翻译供其他工具使用
+/// - 导入来自其他工具的翻译
+/// - 与翻译人员共享翻译工作
+///
 /// 格式示例：
 /// ```xml
 /// <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 /// <SSTXMLRessources>
 ///   <Params>
-///     <Addon>...</Addon>
-///     <Source>...</Source>
-///     <Dest>...</Dest>
-///     <Version>...</Version>
+///     <Addon>Skyrim</Addon>
+///     <Source>english</Source>
+///     <Dest>chinese</Dest>
+///     <Version>2</Version>
 ///   </Params>
 ///   <Content>
 ///     <String List="0" sID="000001">
-///       <EDID>...</EDID>
-///       <REC>RECORD:FIELD</REC>
-///       <Source>...</Source>
-///       <Dest>...</Dest>
+///       <EDID>DialogueGenericHello</EDID>
+///       <REC id="0" idMax="0">INFO:RNAM</REC>
+///       <Source>Hello there</Source>
+///       <Dest>你好</Dest>
 ///     </String>
 ///   </Content>
 /// </SSTXMLRessources>
@@ -32,27 +37,43 @@ use crate::types::sky_string::SkyString;
 
 #[derive(Debug, Clone)]
 pub struct XmlExportParams {
+    /// 插件名（如 "Skyrim", "Dawnguard"）
     pub addon: String,
+    /// 源语言（如 "english"）
     pub source_lang: String,
+    /// 目标语言（如 "chinese"）
     pub dest_lang: String,
+    /// 格式版本（通常为 2）
     pub version: u32,
 }
 
 #[derive(Debug, Clone)]
 pub struct XmlStringEntry {
-    pub list_index: u8, // 0=strings，1=dlstrings，2=ilstrings
+    /// Strings 文件类型索引：0=.STRINGS, 1=.DLSTRINGS, 2=.ILSTRINGS
+    pub list_index: u8,
+    /// Strings 文件中的字符串 ID（T1 匹配的关键）
     pub str_id: i32,
+    /// Editor ID（编辑器 ID，用于 T2 匹配）
     pub edid: Option<String>,
+    /// 记录类型签名（如 "INFO", "DIAL"）
     pub record_sig: HeaderSig,
+    /// 字段签名（如 "RNAM", "FULL"）
     pub field_sig: HeaderSig,
-    pub index: u16,     // 来自 REC 的 id 属性
-    pub index_max: u16, // 来自 REC 的 idMax 属性
+    /// 字符串在 Strings 文件中的索引（来自 REC 的 id 属性）
+    pub index: u16,
+    /// 最大索引值（来自 REC 的 idMax 属性，用于验证）
+    pub index_max: u16,
+    /// 源文本（原文）
     pub source: String,
+    /// 翻译文本（译文）
     pub translation: String,
 }
 
 impl XmlStringEntry {
     /// 转换为 SkyString（仅填充最小必要的 EspPointer 信息）
+    ///
+    /// 注意：XML 导入时，form_id 和 edid_hash 无法从 XML 中获取，
+    /// 这些信息需要在 T1-T4 匹配时从 ESP 中补充。
     pub fn to_sky_string(&self, id: u32) -> SkyString {
         let mut sk = SkyString::new(
             id,
@@ -63,12 +84,12 @@ impl XmlStringEntry {
         );
         sk.esp_ptr = EspPointer {
             str_id: self.str_id,
-            form_id: 0,
+            form_id: 0, // XML 中无法获取，需要后续补充
             record_sig: self.record_sig,
             field_sig: self.field_sig,
             index: self.index,
             index_max: self.index_max,
-            edid_hash: 0,
+            edid_hash: 0, // XML 中无法获取，需要后续补充
         };
         sk.list_index = self.list_index;
         sk
@@ -97,6 +118,16 @@ impl XmlStringEntry {
 ///   </Content>
 /// </SSTXMLRessources>
 /// ```
+///
+/// 字段说明：
+/// - `List`: Strings 文件类型（0=.STRINGS, 1=.DLSTRINGS, 2=.ILSTRINGS）
+/// - `sID`: 字符串 ID（十六进制，6 位）
+/// - `EDID`: Editor ID（可选，用于 T2 匹配）
+/// - `REC`: 记录类型和字段（格式：RECORD:FIELD）
+/// - `id`: 字符串在 Strings 文件中的索引
+/// - `idMax`: 最大索引值（用于验证）
+/// - `Source`: 源文本
+/// - `Dest`: 翻译文本
 ///
 /// 注意：XML 实体（如 &lt; &amp; &gt;）会被正确解码
 pub fn parse_xml_export<R: BufRead>(reader: R) -> Result<(XmlExportParams, Vec<XmlStringEntry>)> {

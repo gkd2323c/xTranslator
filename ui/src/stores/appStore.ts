@@ -5,39 +5,46 @@ import { saveConfig } from "../api/strings";
 import toast from "react-hot-toast";
 import i18n from "../i18n";
 
+/// 主题类型
 export type Theme = "obsidian" | "dark" | "light" | "slate" | "auto";
 
-// Panel system: unified panel/tab management (replaces 9 boolean flags)
+/// 工具面板类型（单选，互斥）
+/// 用于管理 9 个工具对话框的显示状态
 export type ActivePanel =
-  | "batch"
-  | "bsa"
-  | "pex"
-  | "fuz"
-  | "dialog"
-  | "mcm"
-  | "espCompare"
-  | "finalize"
-  | "dataConfigs"
-  | null;
+  | "batch"      // 批处理面板
+  | "bsa"        // BSA 浏览器
+  | "pex"        // PEX 脚本编辑器
+  | "fuz"        // FUZ 音频扫描
+  | "dialog"     // 对话树
+  | "mcm"        // MCM 配置
+  | "espCompare" // ESP 对比
+  | "finalize"   // 最终化工作流
+  | "dataConfigs"// 数据配置
+  | null;        // 无面板打开
 
+/// 底部标签页类型
 export type BottomTabId =
-  | "home"
-  | "vocabulary"
-  | "heuristic"
-  | "espTree"
-  | "pex"
-  | "quests"
-  | "dialogs"
-  | "log"
-  | "headerProc"
-  | "headerWizard";
+  | "home"         // 主页（统计信息）
+  | "vocabulary"   // 词汇库
+  | "heuristic"    // 启发式搜索
+  | "espTree"      // ESP 记录树
+  | "pex"          // PEX 脚本
+  | "quests"       // 任务
+  | "dialogs"      // 对话
+  | "log"          // 日志
+  | "headerProc"   // 头部处理器
+  | "headerWizard";// 头部向导
 
 const THEME_STORAGE_KEY = "xtranslator-theme";
 
+/// 检测系统是否偏好深色主题
 function getSystemPrefersDark(): boolean {
   return window.matchMedia("(prefers-color-scheme: dark)").matches;
 }
 
+/// 将主题设置解析为实际的 CSS 类名
+/// - "auto" → 根据系统偏好返回 "obsidian" 或 "light"
+/// - "dark" → 映射为 "obsidian"（Delphi 兼容）
 function resolveTheme(theme: Theme): string {
   if (theme === "auto") {
     return getSystemPrefersDark() ? "obsidian" : "light";
@@ -46,107 +53,174 @@ function resolveTheme(theme: Theme): string {
   return theme;
 }
 
+/// 加载进度信息
 interface LoadProgress {
+  /// 加载阶段："reading_defs", "loading_strings", "parsing", "finalizing"
   stage: string;
+  /// 当前进度值
   current: number;
+  /// 总进度值
   total: number;
+  /// 百分比 (0-100)
   percentage: number;
+  /// 用户可读的消息
   message: string;
 }
 
+/// 撤销栈条目
 interface UndoEntry {
+  /// 字符串 ID
   id: number;
+  /// 修改前的翻译
   oldTranslation: string;
+  /// 修改前的状态
   oldStatus: string;
 }
 
 const MAX_UNDO_STACK = 100;
 
+/// 应用全局状态
+///
+/// 设计原则：
+/// - `allItems` 是完整数据集（从后端加载）
+/// - `items` 是过滤/排序后的显示集（用于虚拟滚动）
+/// - 侧边栏统计基于 `allItems`，不受过滤影响
+/// - 选择操作使用 `selectedId`（稳定 ID），而非数组索引
 interface AppState {
-  // Full dataset (all strings from backend)
+  // ── 数据集 ──
+  /// 完整的字符串列表（从后端加载，不受过滤影响）
   allItems: SkyStringDTO[];
-  // Filtered + sorted view for display
+  /// 过滤+排序后的显示集（用于虚拟滚动）
   items: SkyStringDTO[];
+  /// 总记录数（未过滤）
   total: number;
+  /// 过滤后的记录数
   filtered: number;
 
-  // Loading state
+  // ── 加载状态 ──
+  /// 是否正在加载数据
   isLoading: boolean;
+  /// 是否正在解析 ESP 文件
   isParsing: boolean;
+  /// 错误消息（为 null 表示无错误）
   error: string | null;
+  /// 加载进度信息（用于显示进度条）
   loadProgress: LoadProgress | null;
 
-  // File info
+  // ── 文件信息 ──
+  /// 当前打开的 ESP 文件路径
   espPath: string | null;
+  /// 当前打开的 SST 字典路径
   sstPath: string | null;
+  /// Strings 文件所在目录
   stringsDir: string | null;
+  /// 源语言（通常 "english"）
   language: string;
+  /// 目标语言（如 "chinese"）
   targetLang: string;
 
-  // Load stats
+  // ── 加载统计 ──
+  /// ESP 加载响应（包含解析统计）
   espStats: LoadEspResponse | null;
+  /// SST 加载响应（包含匹配统计）
   sstStats: LoadSstResponse | null;
 
-  // Data configs (CTDA, field sizes, etc.)
+  // ── 数据配置 ──
+  /// 游戏数据配置（CTDA 函数、字段大小等）
   dataConfigs: DataConfigsDto | null;
 
-  // ESP mode (direct write-back vs external .STRINGS)
+  // ── ESP 模式 ──
+  /// 是否启用 ESP 直接回写模式（vs 外部 .STRINGS 文件）
   espMode: boolean;
 
-  // Filter / sort
+  // ── 过滤和排序 ──
+  /// 搜索过滤词
   filter: string;
+  /// 是否使用正则表达式过滤
   useRegex: boolean;
+  /// 替换文本（用于批量替换）
   replaceText: string;
+  /// 状态过滤："translated" / "incomplete" / "locked" / null
   statusFilter: string | null;
+  /// 记录类型过滤（如 "DIAL", "INFO"）
   recordFilter: string | null;
+  /// 是否仅显示 VMAD 脚本字符串
   vmadFilter: boolean;
-  listIndex: number | null; // null = all, 0=STRINGS, 1=DLSTRINGS, 2=ILSTRINGS
+  /// Strings 文件类型过滤：null=全部, 0=.STRINGS, 1=.DLSTRINGS, 2=.ILSTRINGS
+  listIndex: number | null;
+  /// 排序字段（如 "source", "translation", "form_id"）
   sortField: string;
+  /// 排序方向
   sortDir: "asc" | "desc";
 
-  // Selection (by item id, not array index)
+  // ── 选择 ──
+  /// 当前选中的字符串 ID（稳定 ID，不是数组索引）
   selectedId: number | null;
+  /// 当前选中的字符串对象（缓存，避免重复查找）
   selectedItem: SkyStringDTO | null;
 
-  // Theme
+  // ── 主题 ──
+  /// 主题设置
   theme: Theme;
+  /// 主题标签（用于 CSS 类名）
   themeLabel: string;
 
-  // Dirty state (unsaved translation changes)
+  // ── 脏标志 ──
+  /// 是否有未保存的翻译修改
   isDirty: boolean;
 
-  // ESP hash for translation cache
+  // ── 缓存 ──
+  /// ESP 文件的 SHA-256 哈希（用于翻译缓存关联）
   espHash: string | null;
 
-  // Recovery prompt
+  // ── 恢复提示 ──
+  /// 是否显示恢复模态框
   showRecoveryModal: boolean;
+  /// 恢复信息（待应用的缓存翻译）
   recoveryInfo: RecoveryInfo | null;
 
-  // Undo/Redo
+  // ── 撤销/重做 ──
+  /// 撤销栈（最多 100 条）
   undoStack: UndoEntry[];
+  /// 重做栈
   redoStack: UndoEntry[];
 
-  // Panel system (unified, replaces 9 boolean flags)
+  // ── 面板系统 ──
+  /// 当前打开的工具面板（单选，互斥）
   activePanel: ActivePanel;
+  /// 当前活跃的底部标签页
   activeBottomTab: BottomTabId;
+  /// 是否显示底部面板
   showBottomPanel: boolean;
+  /// 编辑对话框是否打开
   editorOpen: boolean;
 
-  // Batch processor
+  // ── 批处理 ──
+  /// 批处理文件列表
   batchEntries: BatchEntry[];
+  /// 批处理状态
   batchStatus: BatchStatus | null;
 
-  // String-level batch translation
+  // ── 字符串级批量翻译 ──
+  /// 选中的字符串 ID 集合
   selectedIds: Set<number>;
+  /// 批量翻译状态："idle" | "running" | "cancelling" | "completed" | "cancelled"
   batchState: "idle" | "running" | "cancelling" | "completed" | "cancelled";
+  /// 批量翻译进度
   batchProgress: { completed: number; total: number };
+  /// 批量翻译错误列表
   batchErrors: { strId: number; error: string }[];
+  /// 批量翻译并发数
   batchConcurrency: number;
 
-  // Actions
+  // ── 操作方法 ──
+  /// 设置完整数据集
   setAllItems: (items: SkyStringDTO[]) => void;
+  /// 设置加载状态
   setLoading: (loading: boolean) => void;
+  /// 设置解析状态
   setParsing: (parsing: boolean) => void;
+  /// 设置错误消息
   setError: (error: string | null) => void;
   setLoadProgress: (progress: LoadProgress | null) => void;
   setEspLoaded: (path: string, stats: LoadEspResponse, stringsDir?: string) => void;
