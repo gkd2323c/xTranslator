@@ -233,7 +233,13 @@ cargo test --release -p xtranslator-tests -- --skip ignored
 ## 六、快速参考
 
 ```bash
-# 日常验证（不依赖 Skyrim 数据）
+# 快速测试（不依赖 Skyrim 数据）
+./test.ps1
+
+# Release 构建
+./build.bat
+
+# 日常验证
 cargo check --workspace
 cargo test --release -p xtranslator-tests --test basic_benchmarks
 cargo test --release -p xtranslator-tests --test test_data_generator
