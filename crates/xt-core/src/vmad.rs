@@ -562,7 +562,7 @@ impl VmadDecoder {
 /// 零分配 VMAD 解码：直接从 &[u8] 提取字符串，不构建 VmadDecoder
 ///
 /// 用于解析时的快速路径，避免 buffer.to_vec() 堆分配。
-pub(crate) fn decode_vmad_fast(data: &[u8], version: i16) -> Vec<VmadString> {
+pub(crate) fn decode_vmad_fast(data: &[u8], _version: i16) -> Vec<VmadString> {
     let mut result = Vec::new();
     let mut pos = 0usize;
 
