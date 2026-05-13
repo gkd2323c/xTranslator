@@ -14,7 +14,7 @@
 | P0 - 影响使用体验 | 4 项 | ~1 周 | 缺失的翻译 API 提供商 — 全部完成 ✅ |
 | P1 - 核心功能补全 | ~~3~~ 0 项 | — | ~~Header Processor 规则模板系统~~ 全部完成 ✅ |
 | P2 - 实用工具增强 | 0 项 | ✅ 全部完成 | 拼写检查、工具箱、SST 合并 |
-| P3 - UI/UX 完善 | 3 项 | ~1 周 | RTL 预览、HTML 导出、协作系统 |
+| P3 - UI/UX 完善 | ~~3~~ 2 项 | ~1 周 | RTL 预览、协作系统（对话 HTML 导出完成 ✅） |
 | P4 - 质量保证 | 4 项 | ~3-4 周 | 跨游戏验证、Delphi 交叉验证 |
 | P5 - 低优先级 | 2 项 | ~1 周 | SST 旧版兼容、命令脚本编辑器 |
 
@@ -139,11 +139,16 @@ IPC 命令：`sst_merge`
 | BiDi 切换 | 左右 memo 独立 RTL/LTR 模式切换 | 0.5 天 |
 | 阿拉伯整形 | 复选框控制是否调用 shaping | 0.5 天 |
 
-### P3.2 对话 HTML 导出 — `DialHTML.pas`
+### P3.2 对话 HTML 导出 — `DialHTML.pas` ✅ 已完成
 
-| 功能 | 说明 | 预估 |
-|------|------|------|
-| HTML 渲染 | 对话树数据导出为 HTML 用于审核/打印 | 1 天 |
+实施文件：`crates/xt-core/src/dial_html.rs`
+IPC 命令：`export_dial_html`
+
+| 功能 | 状态 |
+|------|------|
+| 对话树构建（DIAL → INFO 按 parent_form_id 分组） | ✅ |
+| HTML 渲染（暗色主题，中英对照） | ✅ |
+| 统计信息（主题数、回复数） | ✅ |
 
 ### P3.3 协作翻译系统 — `Colab.pas` + `ColabFilter.pas`
 
