@@ -119,74 +119,72 @@ impl EspField {
     }
 }
 
-/// ESP record — a single record (e.g., INFO, NPC_, CELL) containing fields.
+/// ESP 记录 — 包含字段的单条记录（如 INFO、NPC_、CELL）
 #[derive(Clone, Debug)]
 pub struct EspRecord {
     pub header: GenericHeader,
     pub record_header_data: RecordHeaderData,
     pub fields: Vec<EspField>,
-    /// Whether this record was compressed in the original file.
+    /// 原始文件中此记录是否被压缩
     pub compressed: bool,
-    /// Whether this record was never decompressed (raw pass-through).
+    /// 此记录是否从未解压（原始直通模式）
     pub raw: bool,
-    /// The record's FormID.
+    /// 记录的 FormID
     pub form_id: u32,
-    /// The record's Editor ID (EDID), if present.
+    /// 记录的编辑器 ID（EDID），如果存在
     pub editor_id: Option<String>,
-    /// Original compressed data blob (for raw records) or rebuilt compressed data.
+    /// 原始压缩数据块（用于 raw 记录直通）或重建后的压缩数据
     pub original_raw_data: Vec<u8>,
 }
 
 impl EspRecord {
-    /// Rebuild this record's data from its field list.
+    /// 重建此记录的数据（从字段列表重新构建）
     ///
-    /// Walks fields, manages XXXX size prefix fields (backward iteration
-    /// per Delphi algorithm), recalculates all dsize values, and optionally
-    /// recompresses with zlib.
+    /// 遍历字段，管理 XXXX 大小前缀字段（按 Delphi 算法反向迭代），
+    /// 重新计算所有 dsize 值，并可选择用 zlib 重新压缩。
     pub fn rebuild_data(&mut self) -> std::io::Result<()> {
         if self.raw {
-            return Ok(()); // raw records pass through unchanged
+            return Ok(()); // raw 记录直接透传，不做修改
         }
 
-        // First pass: handle XXXX fields via backward iteration
+        // 第一遍：通过反向迭代处理 XXXX 字段
         self.manage_xxxx_fields();
 
-        // Second pass: rebuild the contiguous data buffer
+        // 第二遍：重建连续数据缓冲区
         let estimated_size: usize = self.fields.iter().map(|f| 6 + f.buffer.len()).sum();
         let mut data = Vec::with_capacity(estimated_size);
         for field in &self.fields {
-            // Write field header (6 bytes) + field buffer
+            // 写入字段头部（6 字节）+ 字段缓冲区
             data.extend_from_slice(&field.header.name);
             data.extend_from_slice(&field.header.dsize.to_le_bytes());
             data.extend_from_slice(&field.buffer);
         }
 
         if self.compressed {
-            // Compress with zlib (RFC 1950)
+            // 使用 zlib 压缩（RFC 1950）
             let decompressed_size = data.len() as u32;
             let compressed = compress_zlib(&data)?;
-            // Format: [4-byte decompressed size LE] + [zlib data]
+            // 格式：[4 字节解压大小 LE] + [zlib 数据]
             let mut output = Vec::with_capacity(4 + compressed.len());
             output.extend_from_slice(&decompressed_size.to_le_bytes());
             output.extend_from_slice(&compressed);
             self.header.dsize = output.len() as u32;
-            // Store the rebuilt compressed blob in original_raw_data
+            // 将重建后的压缩数据存储到 original_raw_data
             self.original_raw_data = output;
         } else {
             self.header.dsize = data.len() as u32;
-            // For uncompressed records, we don't need to store extra data;
-            // the fields vector is the source of truth.
+            // 对于未压缩的记录，不需要存储额外数据；
+            // fields 向量就是数据源。
         }
 
         Ok(())
     }
 
-    /// Manage XXXX size prefix fields.
+    /// 管理 XXXX 大小前缀字段
     ///
-    /// Per Delphi algorithm: walk backward through fields. If a field has
-    /// `is_size_xxxx` and its buffer > 65535 bytes, ensure a preceding XXXX
-    /// field exists with the correct size. If the field shrinks below 65536,
-    /// remove the preceding XXXX field.
+    /// 按 Delphi 算法：反向遍历字段。如果字段的 buffer > 65535 字节，
+    /// 确保其前面存在 XXXX 字段并包含正确的大小值。如果字段缩小到 65536 以下，
+    /// 移除前面的 XXXX 字段。
     fn manage_xxxx_fields(&mut self) {
         let mut i = self.fields.len();
         while i > 0 {
@@ -197,17 +195,17 @@ impl EspRecord {
 
             let needs_xxxx = self.fields[i].buffer.len() > 65535;
 
-            // Check if there's a preceding XXXX field
+            // 检查前面是否有 XXXX 字段
             let has_xxxx = i > 0 && self.fields[i - 1].is_size_xxxx;
 
             if needs_xxxx {
                 let size = self.fields[i].buffer.len() as u32;
                 if has_xxxx {
-                    // Update existing XXXX field
+                    // 更新已有的 XXXX 字段
                     self.fields[i - 1].buffer = size.to_le_bytes().to_vec();
                     self.fields[i - 1].header.dsize = 4;
                 } else {
-                    // Insert new XXXX field before this field
+                    // 在此字段前插入新的 XXXX 字段
                     let xxxx_field = EspField {
                         header: FieldHeader {
                             name: *b"XXXX",
@@ -217,22 +215,22 @@ impl EspRecord {
                         is_size_xxxx: true,
                     };
                     self.fields.insert(i, xxxx_field);
-                    i += 1; // adjust index since we inserted
+                    i += 1; // 插入后调整索引
                 }
             } else if has_xxxx {
-                // Field no longer needs XXXX — remove it
+                // 字段不再需要 XXXX —— 移除它
                 self.fields.remove(i - 1);
-                // Don't decrement i; the field at i-1 was removed, so the
-                // current field is now at i-1
+                // 不需要递减 i；位置 i-1 的字段被移除后，
+                // 当前字段现在位于 i-1
                 i -= 1;
             }
         }
     }
 
-    /// Get the rebuilt data for serialization.
+    /// 获取重建后的序列化数据
     ///
-    /// For compressed records, returns the compressed blob.
-    /// For uncompressed, rebuilds from fields.
+    /// 对于压缩记录，返回压缩数据块。
+    /// 对于未压缩记录，从字段重新构建。
     pub fn get_serialized_data(&self) -> Vec<u8> {
         if self.raw {
             return self.original_raw_data.clone();
@@ -242,7 +240,7 @@ impl EspRecord {
             return self.original_raw_data.clone();
         }
 
-        // Uncompressed: build from fields
+        // 未压缩：从字段构建
         let estimated_size: usize = self.fields.iter().map(|f| 6 + f.buffer.len()).sum();
         let mut data = Vec::with_capacity(estimated_size);
         for field in &self.fields {
@@ -253,22 +251,22 @@ impl EspRecord {
         data
     }
 
-    /// Serialize this record to a writer.
+    /// 序列化此记录到写入器
     ///
-    /// Writes: GenericHeader + RecordHeaderData + (compressed blob or fields sequentially).
+    /// 写入：GenericHeader + RecordHeaderData +（压缩数据块或逐字段序列化）。
     pub fn serialize<W: Write>(&self, writer: &mut W) -> std::io::Result<()> {
-        // Write GenericHeader (type + dsize)
+        // 写入 GenericHeader（类型 + dsize）
         writer.write_all(&self.header.name)?;
         writer.write_u32::<LittleEndian>(self.header.dsize)?;
 
-        // Write RecordHeaderData (16 bytes)
+        // 写入 RecordHeaderData（16 字节）
         writer.write_u32::<LittleEndian>(self.record_header_data.flags)?;
         writer.write_u32::<LittleEndian>(self.record_header_data.form_id)?;
         writer.write_u32::<LittleEndian>(self.record_header_data.version)?;
         writer.write_u16::<LittleEndian>(self.record_header_data.f_version)?;
         writer.write_u16::<LittleEndian>(self.record_header_data.v_info)?;
 
-        // Write data
+        // 写入数据
         if self.raw || self.compressed {
             writer.write_all(&self.original_raw_data)?;
         } else {
@@ -280,13 +278,13 @@ impl EspRecord {
         Ok(())
     }
 
-    /// Total serialized size of this record (header + data).
+    /// 序列化后的总大小（头部 + 数据）
     pub fn serialized_size(&self) -> usize {
         8 + 16 + self.header.dsize as usize
     }
 }
 
-/// ESP GRUP — a group record containing records and/or nested GRUPs.
+/// ESP GRUP — 包含记录和/或嵌套 GRUP 的分组记录
 #[derive(Clone, Debug)]
 pub struct EspGrup {
     pub header: GenericHeader,
@@ -296,11 +294,11 @@ pub struct EspGrup {
 }
 
 impl EspGrup {
-    /// Recalculate this GRUP's dsize from its children.
+    /// 重新计算此 GRUP 的 dsize（基于子元素）
     ///
-    /// GRUP dsize includes its own 24-byte header (GenericHeader 8B + GrupHeader 16B).
+    /// GRUP dsize 包含其自身的 24 字节头部（GenericHeader 8B + GrupHeader 16B）。
     fn recalculate_size(&mut self) {
-        let mut total: u32 = 24; // own header
+        let mut total: u32 = 24; // 自身头部
 
         for record in &self.records {
             total += record.serialized_size() as u32;
@@ -314,7 +312,7 @@ impl EspGrup {
         self.header.dsize = total;
     }
 
-    /// Total serialized size of this GRUP (including its own 24-byte header).
+    /// 序列化后的总大小（包含自身的 24 字节头部）
     fn serialized_size(&self) -> u32 {
         let mut total: u32 = 24;
         for record in &self.records {
@@ -326,14 +324,14 @@ impl EspGrup {
         total
     }
 
-    /// Serialize this GRUP to a writer (recursive).
+    /// 序列化此 GRUP 到写入器（递归）
     pub fn serialize<W: Write>(&self, writer: &mut W) -> std::io::Result<()> {
-        // Write GenericHeader with correct dsize (computed, not stored)
+        // 写入 GenericHeader（使用计算的 dsize，而非存储的值）
         let dsize = self.serialized_size();
         writer.write_all(&self.header.name)?;
         writer.write_u32::<LittleEndian>(dsize)?;
 
-        // Write GrupHeader (16 bytes)
+        // 写入 GrupHeader（16 字节）
         writer.write_all(&self.grup_header.s_ident)?;
         writer.write_u32::<LittleEndian>(self.grup_header.s_type)?;
         writer.write_u16::<LittleEndian>(self.grup_header.s_tstamp)?;
@@ -341,12 +339,12 @@ impl EspGrup {
         writer.write_u16::<LittleEndian>(self.grup_header.param2)?;
         writer.write_u16::<LittleEndian>(self.grup_header.param3)?;
 
-        // Serialize records
+        // 序列化记录
         for record in &self.records {
             record.serialize(writer)?;
         }
 
-        // Serialize child GRUPs
+        // 序列化子 GRUP
         for child in &self.children {
             child.serialize(writer)?;
         }
@@ -355,51 +353,51 @@ impl EspGrup {
     }
 }
 
-/// Compress data using zlib (RFC 1950).
+/// 使用 zlib（RFC 1950）压缩数据
 fn compress_zlib(data: &[u8]) -> std::io::Result<Vec<u8>> {
     use flate2::write::ZlibEncoder;
     use flate2::Compression;
 
-    // Use fast compression for better performance (game doesn't care about minor size differences)
+    // 使用快速压缩以提升性能（游戏不关心微小的体积差异）
     let mut encoder = ZlibEncoder::new(Vec::new(), Compression::fast());
     encoder.write_all(data)?;
     encoder.finish().map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
 }
 
-/// TES4 header record (the plugin's main header at the start of the file).
+/// TES4 头部记录（文件开头的插件主头部）
 #[derive(Clone, Debug)]
 pub struct Tes4Header {
     pub generic: GenericHeader,
     pub record_header_data: RecordHeaderData,
-    /// Raw field data of the TES4 record (passed through unchanged).
+    /// 原始字段数据（直通，不做修改）
     pub field_data: Vec<u8>,
 }
 
-/// Parsed TES4 header fields (HEDR, CNAM, SNAM, MAST/DATA pairs).
+/// 解析后的 TES4 头部字段（HEDR、CNAM、SNAM、MAST/DATA 对）
 #[derive(Clone, Debug, Default)]
 pub struct Tes4HeaderInfo {
-    /// HEDR: version (f32)
+    /// HEDR: 版本号（f32）
     pub version: f32,
-    /// HEDR: number of records
+    /// HEDR: 记录数量
     pub num_records: u32,
-    /// HEDR: next available FormID
+    /// HEDR: 下一个可用 FormID
     pub next_object_id: u32,
-    /// CNAM: author name
+    /// CNAM: 作者名称
     pub author: String,
-    /// SNAM: file description
+    /// SNAM: 文件描述
     pub description: String,
-    /// MAST/DATA pairs: list of master file names
+    /// MAST/DATA 对：主文件名列表
     pub masters: Vec<String>,
-    /// ONAM: overridden FormIDs (raw bytes)
+    /// ONAM: 被覆盖的 FormID（原始字节）
     pub overridden_forms: Vec<u32>,
-    /// Whether the file is a master (ESM flag in record header)
+    /// 是否为主文件（记录头中的 ESM 标志）
     pub is_master: bool,
-    /// Whether the file is localized (localization flag)
+    /// 是否已本地化（本地化标志）
     pub is_localized: bool,
 }
 
 impl Tes4Header {
-    /// Parse raw field_data into structured header info.
+    /// 解析原始 field_data 为结构化的头部信息
     pub fn parse_fields(&self) -> Tes4HeaderInfo {
         let mut info = Tes4HeaderInfo {
             is_master: (self.record_header_data.flags & 0x00000001) != 0,
@@ -459,15 +457,15 @@ impl Tes4Header {
     }
 }
 
-/// Read a null-terminated UTF-8 string from bytes.
+/// 从字节中读取 null 终止的 UTF-8 字符串
 fn read_cstring(data: &[u8]) -> String {
     let end = data.iter().position(|&b| b == 0).unwrap_or(data.len());
     String::from_utf8_lossy(&data[..end]).into_owned()
 }
 
-/// In-memory ESP file representation for write-back.
+/// 内存中的 ESP 文件表示（用于回写）
 ///
-/// Holds the TES4 header and the full record tree (top-level GRUPs).
+/// 包含 TES4 头部和完整的记录树（顶层 GRUP）。
 #[derive(Clone, Debug)]
 pub struct EspFile {
     pub tes4: Tes4Header,
@@ -475,7 +473,7 @@ pub struct EspFile {
 }
 
 impl EspFile {
-    /// Rebuild all records in the tree (recalculate sizes, recompress).
+    /// 重建树中所有记录（重新计算大小、重新压缩）
     pub fn rebuild_all(&mut self) -> std::io::Result<()> {
         for grup in &mut self.top_level_grups {
             Self::rebuild_grup(grup)?;
@@ -494,29 +492,29 @@ impl EspFile {
         Ok(())
     }
 
-    /// Serialize the entire ESP file to a writer.
+    /// 序列化整个 ESP 文件到写入器
     ///
-    /// Writes: TES4 header record + all top-level GRUPs.
-    /// Note: TES4 dsize = field_data only (does NOT include RecordHeaderData).
+    /// 写入：TES4 头部记录 + 所有顶层 GRUP。
+    /// 注意：TES4 dsize = 仅 field_data（不包含 RecordHeaderData）。
     pub fn serialize<W: Write>(&self, writer: &mut W) -> std::io::Result<()> {
-        // TES4 dsize = field_data length only (not including RecordHeaderData)
+        // TES4 dsize = 仅 field_data 长度（不包含 RecordHeaderData）
         let tes4_dsize = self.tes4.field_data.len() as u32;
 
-        // Write TES4 GenericHeader
+        // 写入 TES4 GenericHeader
         writer.write_all(&self.tes4.generic.name)?;
         writer.write_u32::<LittleEndian>(tes4_dsize)?;
 
-        // Write TES4 RecordHeaderData (16 bytes)
+        // 写入 TES4 RecordHeaderData（16 字节）
         writer.write_u32::<LittleEndian>(self.tes4.record_header_data.flags)?;
         writer.write_u32::<LittleEndian>(self.tes4.record_header_data.form_id)?;
         writer.write_u32::<LittleEndian>(self.tes4.record_header_data.version)?;
         writer.write_u16::<LittleEndian>(self.tes4.record_header_data.f_version)?;
         writer.write_u16::<LittleEndian>(self.tes4.record_header_data.v_info)?;
 
-        // Write TES4 field data
+        // 写入 TES4 字段数据
         writer.write_all(&self.tes4.field_data)?;
 
-        // Write all top-level GRUPs
+        // 写入所有顶层 GRUP
         for grup in &self.top_level_grups {
             grup.serialize(writer)?;
         }
@@ -524,10 +522,10 @@ impl EspFile {
         Ok(())
     }
 
-    /// Save the ESP file to disk with automatic backup.
+    /// 将 ESP 文件保存到磁盘（自动备份）
     ///
-    /// Creates a backup of the original file at `<path>.backup.<timestamp>`
-    /// before writing, unless `create_backup` is false.
+    /// 写入前在 `<path>.backup.<timestamp>` 创建原始文件备份，
+    /// 除非 `create_backup` 为 false。
     pub fn save_to_file<P: AsRef<std::path::Path>>(
         &self,
         path: P,
@@ -535,7 +533,7 @@ impl EspFile {
     ) -> std::io::Result<()> {
         let path = path.as_ref();
 
-        // Create backup if requested
+        // 如果需要，创建备份
         if create_backup && path.exists() {
             let timestamp = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -546,11 +544,11 @@ impl EspFile {
             std::fs::copy(path, &backup_path)?;
         }
 
-        // Rebuild all records first
+        // 先重建所有记录
         let mut file = self.clone();
         file.rebuild_all()?;
 
-        // Serialize to file
+        // 序列化到文件
         let mut writer = std::io::BufWriter::new(std::fs::File::create(path)?);
         file.serialize(&mut writer)?;
         writer.flush()?;

@@ -97,8 +97,8 @@ pub struct SkyString {
     /// 用于标记和分类字符串
     pub tag_hash: u32,
 
-    /// Back-reference to the field index within the owning EspRecord's fields vector.
-    /// Only populated when ESP mode (record tree) is active. Used for write-back.
+    /// 反向引用：所属 EspRecord 的 fields 向量中的字段索引。
+    /// 仅在 ESP 模式（记录树）激活时填充。用于回写。
     pub field_ref: Option<usize>,
 }
 

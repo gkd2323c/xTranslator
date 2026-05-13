@@ -38,12 +38,12 @@ fn parse_positional(data: &str) -> Vec<(char, char)> {
     if lines.len() < 4 {
         return Vec::new();
     }
-    // Line 0: `#SC:` header, Line 1: SC chars
-    // Line 2: `#TC:` header, Line 3: TC chars
+    // 第 0 行：`#SC:` 头部，第 1 行：简体字符
+    // 第 2 行：`#TC:` 头部，第 3 行：繁体字符
     let sc: Vec<char> = lines[1].chars().collect();
     let tc: Vec<char> = lines[3].chars().collect();
     let len = sc.len().min(tc.len());
-    // Return (Traditional, Simplified) pairs
+    // 返回（繁体，简体）对
     tc[..len]
         .iter()
         .copied()
@@ -53,13 +53,13 @@ fn parse_positional(data: &str) -> Vec<(char, char)> {
 
 /// 加载字符对：优先 OpenCC，回退 Delphi 原版
 fn load_pairs() -> Vec<(char, char)> {
-    // Primary: OpenCC merged dictionary (3960 pairs, bidirectional-verified)
+    // 优先：OpenCC 合并词典（3960 对，双向验证）
     let opencc = include_str!("../../../Misc/opencc_dict.txt");
     let pairs = parse_positional(opencc);
     if !pairs.is_empty() {
         return pairs;
     }
-    // Fallback: Delphi original Charset_SCTC.txt (2552 pairs)
+    // 回退：Delphi 原版 Charset_SCTC.txt（2552 对）
     let delphi = include_str!("../../../Misc/Charset_SCTC.txt");
     parse_positional(delphi)
 }

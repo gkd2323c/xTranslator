@@ -188,13 +188,13 @@ pub fn words_match_score(
     let cand_words = tokenize_words(candidate);
     let proxy = alias_proxy_penalty(source, candidate);
 
-    // Case 1: exact string match (hash-based)
+    // 情况 1：精确字符串匹配（基于哈希）
     if string_hash(source) == string_hash(candidate) {
         let score = 0.01 + proxy;
         return (score, score <= result_threshold);
     }
 
-    // Case 2: same length, case-insensitive match
+    // 情况 2：相同长度，不区分大小写匹配
     if source.len() == candidate.len() {
         let src_lower = source.to_lowercase();
         let cand_lower = candidate.to_lowercase();
@@ -204,18 +204,18 @@ pub fn words_match_score(
         }
     }
 
-    // Case 3: word-level hash Levenshtein
+    // 情况 3：词级哈希 Levenshtein
     let src_hashes = word_hashes(&src_words);
     let cand_hashes = word_hashes(&cand_words);
     let mut ld = word_hash_levenshtein(&src_hashes, &cand_hashes) as f32;
 
-    // Count both word lists (Delphi uses max word count for threshold)
+    // 统计两个词列表（Delphi 使用最大词数作为阈值）
     let word_count = src_words.len().max(cand_words.len());
 
-    // Adjust LD
+    // 调整 LD
     ld = adjust_heuristic_result(word_count, ld);
 
-    // If LD is 0 after adjustment, push to 0.5
+    // 如果 LD 在调整后为 0，推到 0.5
     if ld == 0.0 {
         ld = 0.5;
     }
@@ -258,30 +258,30 @@ pub fn prefix_match_score(source: &str, candidate: &str) -> f32 {
     let lcp_ratio = lcp_len as f32 / max_len;
     let proxy = alias_proxy_penalty(source, candidate);
 
-    // Scale: 1 - lcp_ratio + proxy
+    // 缩放：1 - lcp_ratio + proxy
     (1.0 - lcp_ratio) * 2.0 + proxy
 }
 
 // ── Composite scoring ──────────────────────────────────────────────────
 
-/// Delphi-style composite heuristic score.
+/// Delphi 风格组合启发式评分
 ///
-/// Returns the best (lowest) score across all matching strategies.
-/// The score represents "dissimilarity": 0.0 = identical, higher = worse.
+/// 返回所有匹配策略中的最佳（最低）分数。
+/// 分数代表"不相似度"：0.0 = 完全相同，越高越差。
 pub fn delphi_heuristic_score(source: &str, candidate: &str, threshold: f32) -> f32 {
-    // Try word-level match first (most reliable)
+    // 首先尝试词级匹配（最可靠）
     let (word_score, word_accepted) = words_match_score(source, candidate, threshold);
     if word_accepted && word_score <= 0.3 {
         return word_score;
     }
 
-    // Try substring match
+    // 尝试子串匹配
     let sub_score = substring_match_score(source, candidate);
 
-    // Try prefix match
+    // 尝试前缀匹配
     let prefix_score = prefix_match_score(source, candidate);
 
-    // Return the best (lowest) score
+    // 返回最佳（最低）分数
     let best = word_score.min(sub_score).min(prefix_score);
     best
 }
@@ -336,7 +336,7 @@ pub fn delphi_find_similar(
         })
         .collect();
 
-    // Sort by score ascending (lower = better)
+    // 按分数升序排列（越低越好）
     matches.sort_by(|a, b| {
         a.score
             .partial_cmp(&b.score)

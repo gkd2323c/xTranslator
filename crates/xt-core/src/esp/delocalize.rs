@@ -42,22 +42,22 @@ pub fn delocalize_esp(
     language: &str,
     codepage: &CodepageConfig,
 ) -> std::io::Result<DelocalizeResult> {
-    // Pass 1: strict triple match
+    // 第一遍：严格三元组匹配
     let string_map = build_string_map(strings);
 
-    // Pass 2: normalized text index for fallback matching
+    // 第二遍：规范化文本索引用于回退匹配
     let normalized_index = build_normalized_index(strings);
 
-    // Delocalize all records in the tree
+    // 去本地化树中的所有记录
     let mut total_strings = 0;
     for grup in &mut esp.top_level_grups {
         total_strings += delocalize_grup(grup, &string_map, &normalized_index, codepage);
     }
 
-    // Reassign sequential string IDs
+    // 重新分配顺序字符串 ID
     let reassigned = reassign_string_ids(esp);
 
-    // Export .STRINGS files
+    // 导出 .STRINGS 文件
     let strings_files = export_strings(&reassigned, output_dir, base_name, language, codepage)?;
 
     Ok(DelocalizeResult {
@@ -66,7 +66,7 @@ pub fn delocalize_esp(
     })
 }
 
-/// Build a lookup map from (form_id, field_sig, occurrence_index) to SkyString.
+/// 构建从 (form_id, field_sig, occurrence_index) 到 SkyString 的查找映射。
 fn build_string_map(strings: &[SkyString]) -> HashMap<(u32, [u8; 4], u16), &SkyString> {
     let mut map = HashMap::with_capacity(strings.len());
     let mut occurrence_counts: HashMap<(u32, [u8; 4]), u16> = HashMap::with_capacity(strings.len());
@@ -83,8 +83,8 @@ fn build_string_map(strings: &[SkyString]) -> HashMap<(u32, [u8; 4], u16), &SkyS
     map
 }
 
-/// Build a secondary lookup from (normalized_hash, field_sig) to SkyString.
-/// Used for relaxed matching when strict triple match fails.
+/// 构建从 (normalized_hash, field_sig) 到 SkyString 的二级查找。
+/// 用于严格三元组匹配失败时的宽松匹配。
 fn build_normalized_index(strings: &[SkyString]) -> HashMap<(u32, [u8; 4]), Vec<&SkyString>> {
     let mut index: HashMap<(u32, [u8; 4]), Vec<&SkyString>> = HashMap::with_capacity(strings.len());
 
@@ -100,7 +100,7 @@ fn build_normalized_index(strings: &[SkyString]) -> HashMap<(u32, [u8; 4]), Vec<
     index
 }
 
-/// Delocalize all records in a GRUP (recursive).
+/// 去本地化 GRUP 中的所有记录（递归）。
 fn delocalize_grup(
     grup: &mut EspGrup,
     string_map: &HashMap<(u32, [u8; 4], u16), &SkyString>,
@@ -143,12 +143,12 @@ fn delocalize_record(
             continue;
         }
 
-        // Track occurrence index for this field signature
+        // 跟踪此字段签名的出现索引
         let occurrence = field_sig_counts.entry(field.header.name).or_insert(0);
         let index = *occurrence;
         *occurrence += 1;
 
-        // Pass 1: strict triple match
+        // 第一遍：严格三元组匹配
         let key = (record.form_id, field.header.name, index);
         if let Some(sk) = string_map.get(&key) {
             let text = if !sk.translation.is_empty() {
@@ -164,8 +164,8 @@ fn delocalize_record(
             continue;
         }
 
-        // Pass 2: relaxed match by normalized source text + field_sig
-        // Only for fields that look like they contain inline text (not 4-byte string IDs)
+        // 第二遍：通过规范化源文本 + field_sig 宽松匹配
+        // 仅适用于看起来包含内联文本的字段（非 4 字节字符串 ID）
         if field.buffer.len() > 4 {
             if let Ok(raw_text) = std::str::from_utf8(&field.buffer) {
                 let text = raw_text.trim_end_matches('\0');
@@ -175,7 +175,7 @@ fn delocalize_record(
                         let norm_hash = crate::types::esp_pointer::string_hash(&norm);
                         let norm_key = (norm_hash, field.header.name);
                         if let Some(candidates) = normalized_index.get(&norm_key) {
-                            // Verify the normalized text actually matches (hash collision check)
+                            // 验证规范化文本实际匹配（哈希碰撞检查）
                             if let Some(sk) = candidates.iter().find(|sk| {
                                 sk.source_normalized.as_deref() == Some(norm.as_str())
                             }) {
@@ -237,13 +237,13 @@ fn reassign_record(
             continue;
         }
 
-        // For delocalized records, the field buffer contains inline text.
-        // We need to assign a new sequential ID and record the text.
-        // The text is already in the field buffer (encoded).
-        // We'll decode it back to a string for the .STRINGS export.
+        // 对于去本地化的记录，字段缓冲区包含内联文本。
+        // 需要分配新的顺序 ID 并记录文本。
+        // 文本已在字段缓冲区中（已编码）。
+        // 需要将其解码回字符串以便 .STRINGS 导出。
         if field.buffer.len() > 4 {
-            // This might be a translatable field with inline text
-            // Try to decode as UTF-8 (most common case)
+            // 这可能是包含内联文本的可翻译字段
+            // 尝试作为 UTF-8 解码（最常见情况）
             if let Ok(text) = std::str::from_utf8(&field.buffer) {
                 let text = text.trim_end_matches('\0');
                 if !text.is_empty() {
@@ -265,7 +265,7 @@ fn export_strings(
 ) -> std::io::Result<Vec<std::path::PathBuf>> {
     let mut paths = Vec::new();
 
-    // Group entries by list_index
+    // 按 list_index 分组
     let mut by_type: HashMap<u8, Vec<(u32, String)>> = HashMap::new();
     for (id, text, list_index) in entries {
         by_type
@@ -274,7 +274,7 @@ fn export_strings(
             .push((*id, text.clone()));
     }
 
-    // Write each type
+    // 写入每种类型
     for (list_index, ext, format) in &[
         (0u8, "STRINGS", StringsFormat::NullTerminated),
         (1u8, "DLSTRINGS", StringsFormat::LengthPrefixed),

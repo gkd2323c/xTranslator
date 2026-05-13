@@ -300,8 +300,8 @@ impl CompareExtractor {
             };
 
             if header.is_grup() {
-                // Delphi ESPCompare reads only the GRUP header and then keeps
-                // streaming; child records follow immediately in file order.
+                // Delphi ESPCompare 仅读取 GRUP 头部然后继续流式读取；
+                // 子记录按文件顺序紧随其后。
                 let _ = GrupHeader::read_from(reader)?;
                 continue;
             }
@@ -696,7 +696,7 @@ pub fn compare_esp_files(
 ) -> Result<EspComparison, String> {
     let data_path = Path::new(data_dir.unwrap_or("Data"));
 
-    // Short-circuit: self-compare only needs one parse
+    // 短路：自比较只需解析一次
     let same_file = paths_same(old_esp_path, new_esp_path);
     let old_entries = parse_esp_with_entries(old_esp_path, data_path, game)
         .map_err(|e| format!("Failed to parse old ESP: {}", e))?;
@@ -742,15 +742,15 @@ fn build_comparison_from_entries(
     old_entries: Vec<CompareEntry>,
     new_entries: Vec<CompareEntry>,
 ) -> EspComparison {
-    // Build a key -> old index map. Keeping indexes avoids cloning every
-    // CompareEntry into lookup maps, which matters for full master files.
+    // 构建键→旧索引映射。保留索引避免克隆每个 CompareEntry 到查找映射中，
+    // 这对完整主文件很重要。
     let mut old_by_key: HashMap<StringKey, usize> = HashMap::with_capacity(old_entries.len());
     for (index, e) in old_entries.iter().enumerate() {
         let key = StringKey::from_compare_entry(e);
         old_by_key.insert(key, index);
     }
 
-    // Use HashSet for O(1) lookups in is_added/is_removed/is_modified
+    // 使用 HashSet 进行 O(1) 的 is_added/is_removed/is_modified 查找
     let mut matched_pairs = HashMap::with_capacity(new_entries.len().min(old_entries.len()));
     let mut added = HashSet::with_capacity(new_entries.len());
     let mut removed = HashSet::with_capacity(old_entries.len());
@@ -759,8 +759,8 @@ fn build_comparison_from_entries(
     let mut matched_old_indexes = vec![false; old_entries.len()];
     let mut seen_new_keys = HashSet::with_capacity(new_entries.len());
 
-    // Iterate in reverse to preserve the previous HashMap "last key wins" behavior
-    // for duplicate string keys, without building a second key -> new index map.
+    // 反向迭代以保留之前 HashMap "后键覆盖" 的行为，
+    // 避免为重复字符串键构建第二个键→新索引映射。
     for new_e in new_entries.iter().rev() {
         let key = StringKey::from_compare_entry(new_e);
         if !seen_new_keys.insert(key) {
@@ -771,10 +771,10 @@ fn build_comparison_from_entries(
             matched_old_indexes[old_index] = true;
             let old_e = &old_entries[old_index];
             if old_e.source_hash == new_e.source_hash && old_e.source == new_e.source {
-                // Exact match
+                // 精确匹配
                 matched_pairs.insert(new_e.id, old_e.id);
             } else {
-                // Modified (same key, different text)
+                // 已修改（相同键，不同文本）
                 modified.insert(new_e.id);
                 modified_pairs.insert(new_e.id, old_e.id);
             }
@@ -783,7 +783,7 @@ fn build_comparison_from_entries(
         }
     }
 
-    // Removed entries: old keys not found in new
+    // 已删除条目：旧键在新数据中未找到
     for &old_index in old_by_key.values() {
         if !matched_old_indexes[old_index] {
             removed.insert(old_entries[old_index].id);

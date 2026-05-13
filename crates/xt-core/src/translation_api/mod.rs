@@ -68,7 +68,7 @@ pub fn restore_crlf_with_style(text: &str, style: CrlfStyle) -> String {
     text.replace(CRLF_TAG, style.as_str())
 }
 
-/// Build an optional reqwest::Proxy from AppConfig proxy settings
+/// 从 AppConfig 代理设置构建可选的 reqwest::Proxy
 pub fn build_proxy(config: &crate::config::AppConfig) -> Option<reqwest::Proxy> {
     let server = config.proxy_server.as_ref()?;
     let port = config.proxy_port.unwrap_or(8080);
@@ -84,7 +84,7 @@ pub fn build_proxy(config: &crate::config::AppConfig) -> Option<reqwest::Proxy> 
     Some(proxy)
 }
 
-/// Build a reqwest::Client with optional proxy
+/// 构建带可选代理的 reqwest::Client
 pub fn build_client(config: &crate::config::AppConfig) -> reqwest::Client {
     let mut builder = reqwest::Client::builder();
     if let Some(proxy) = build_proxy(config) {
@@ -132,14 +132,14 @@ mod tests {
 
     #[test]
     fn test_roundtrip_style_preservation() {
-        // Unix-style line endings should survive roundtrip
+        // Unix 风格换行符应在往返后保持不变
         let orig = "Hello\nWorld\nTest";
         let (protected, style) = protect_crlf(orig);
         assert_eq!(style, CrlfStyle::Lf);
         let restored = restore_crlf_with_style(&protected, style);
         assert_eq!(restored, orig);
 
-        // Windows-style line endings should survive roundtrip
+        // Windows 风格换行符应在往返后保持不变
         let orig = "Hello\r\nWorld\r\nTest";
         let (protected, style) = protect_crlf(orig);
         assert_eq!(style, CrlfStyle::CrLf);
@@ -199,7 +199,7 @@ mod tests {
             ..Default::default()
         };
         let _client = build_client(&config);
-        // Just verify it builds without panicking
+        // 仅验证构建不会崩溃
         assert!(true);
     }
 }

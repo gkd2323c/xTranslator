@@ -88,7 +88,7 @@ pub struct AppState {
     pub is_dirty: Mutex<bool>,
     /// ApiTranslator.txt 配置（从文件加载，包含 API 端点等）
     pub api_config: ApiTranslatorConfig,
-    /// Vocabulary: source→translation pairs from game Strings files
+    /// Vocabulary: source→translation 词汇对（来自游戏 Strings 文件）
     /// 用于启发式搜索和翻译建议
     pub vocabulary: Mutex<Vec<(String, String)>>,
     /// 字符串级批量翻译队列 (非文件级)
@@ -103,10 +103,10 @@ pub struct AppState {
     /// 拼写检查器
     /// 用于检测翻译中的拼写错误
     pub spell_checker: Mutex<xt_core::spell::SpellChecker>,
-    /// Header Processor rule set
+    /// Header Processor 规则集
     /// 用于自动处理 ESP 记录头部的规则
     pub header_rules: Mutex<xt_core::header_processor::HeaderRuleSet>,
-    /// Header Processor pre-processing options
+    /// Header Processor 预处理选项
     /// 用于配置头部处理的预处理选项
     pub pre_processing_opts: Mutex<xt_core::header_processor::PreProcessingOpts>,
 }
@@ -149,14 +149,10 @@ impl AppState {
     }
 }
 
-/// 将 SkyString 状态转为前端字符串
+/// 获取缓存目录路径
 ///
-/// 约定：
-/// - translated：已翻译
-/// - incomplete：未完成翻译
-/// - locked：不可编辑/锁定
-///
-/// 兜底策略：未知状态统一映射为 `locked`，避免前端出现未定义分支。
+/// Windows: `%LOCALAPPDATA%/xTranslator/cache/`
+/// Unix: `~/.cache/xTranslator/`
 fn cache_dir() -> std::path::PathBuf {
     if cfg!(windows) {
         std::env::var("LOCALAPPDATA")
@@ -304,7 +300,7 @@ pub async fn load_esp(
 
             let mut cache_index = CacheIndex::load(&c_dir);
 
-            // Fast path: mtime+size lookup avoids full-file SHA-256 read
+            // 快速路径：通过 mtime+size 查找避免完整文件的 SHA-256 读取
             let file_hash = cache_index
                 .lookup(esp_path_ref)
                 .or_else(|| xt_core::cache::hash_file(esp_path_ref).ok());
@@ -387,7 +383,7 @@ pub async fn load_esp(
             let mut parser =
                 EspParser::with_game(data_dir, game_id).unwrap_or_else(|_| EspParser::new());
             
-            // Enable ESP mode to build record tree for write-back support
+            // 启用 ESP 模式以构建记录树（用于回写支持）
             parser.enable_esp_mode();
 
             let _ = window.emit(
@@ -535,7 +531,7 @@ pub async fn load_esp(
 
             let compressed_records = parser.compressed_records;
 
-            // Build ESP file tree for write-back support
+            // 构建 ESP 文件树（用于回写支持）
             let esp_file = parser.build_esp_file();
 
             // 存储解析结果到 SQLite 缓存（静默失败，不影响主流程）
@@ -596,7 +592,7 @@ pub async fn load_esp(
         language: language.unwrap_or_else(|| "english".to_string()),
     });
 
-    // Reuse the ESP tree built during parsing (avoids double parse)
+    // 复用解析时构建的 ESP 树（避免重复解析）
     {
         let mut esp_file_lock = state.esp_file.lock().map_err(|e| e.to_string())?;
         *esp_file_lock = result.2;
@@ -604,7 +600,7 @@ pub async fn load_esp(
 
     *state.is_dirty.lock().map_err(|e| e.to_string())? = false;
 
-    // Store codepage table for use in save_strings/finalize export
+    // 存储代码页表（用于 save_strings/finalize 导出）
     let codepage_table = {
         let game_id = game
             .as_deref()
@@ -945,7 +941,7 @@ pub async fn heuristic_search(
         .map(|sk| (sk.source.clone(), sk.translation.clone()))
         .collect();
 
-    // Merge vocabulary pairs (additional source→translation corpus from game Strings files)
+    // 合并词汇对（来自游戏 Strings 文件的额外 source→translation 语料）
     candidates.extend(vocab.iter().cloned());
 
     if candidates.is_empty() {
@@ -1012,19 +1008,19 @@ pub async fn translate_string(
             })?
         }
         ProviderType::Baidu => {
-            // Baidu doesn't use a single API key; credentials checked below
+            // 百度不使用单一 API Key；凭证在下方检查
             String::new()
         }
         ProviderType::Youdao => {
-            // Youdao doesn't use a single API key; credentials checked below
+            // 有道不使用单一 API Key；凭证在下方检查
             String::new()
         }
         ProviderType::Azure => {
-            // Uses subscription key; checked below
+            // 使用订阅密钥；在下方检查
             String::new()
         }
         ProviderType::Google => {
-            // No API key needed
+            // 无需 API Key
             String::new()
         }
     };
@@ -1033,12 +1029,12 @@ pub async fn translate_string(
     let source_lang = request.source_lang.unwrap_or_else(|| "EN".to_string());
     let target_lang = request.target_lang.unwrap_or_else(|| "ZH".to_string());
 
-    // Resolve language codes via ApiTranslator.txt config
+    // 通过 ApiTranslator.txt 配置解析语言代码
     let provider_name = provider_type.to_string();
     let resolved_source = state.api_config.resolve_lang(&provider_name, &source_lang);
     let resolved_target = state.api_config.resolve_lang(&provider_name, &target_lang);
 
-    // Load proxy config from disk
+    // 从磁盘加载代理配置
     let proxy_config = xt_core::config::AppConfig::load(&config_dir()).ok();
 
     let text = request.text;
@@ -1617,7 +1613,7 @@ pub async fn auto_backup_sst(
         .file_stem()
         .and_then(|s| s.to_str())
         .unwrap_or("backup");
-    // Generate timestamp from UNIX epoch seconds
+    // 从 UNIX 纪元秒数生成时间戳
     let epoch = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
@@ -1625,7 +1621,7 @@ pub async fn auto_backup_sst(
     let backup_name = format!("{}_{}.sst", stem, epoch);
     let backup_path = backup_dir.join(&backup_name);
 
-    // Build SST from current strings
+    // 从当前字符串构建 SST
     let strings = state.strings.lock().map_err(|e| e.to_string())?;
     let old_data = state.sst_old_data.lock().map_err(|e| e.to_string())?;
     let mut entries = strings.clone();
@@ -1634,7 +1630,7 @@ pub async fn auto_backup_sst(
     sst.save_to_file(backup_path.to_str().ok_or("Invalid backup path")?)
         .map_err(|e| format!("Failed to save backup: {}", e))?;
 
-    // Rotate: keep max_backups newest files
+    // 轮转：保留最新的 max_backups 个备份
     let max_backups = request.max_backups.unwrap_or(10) as usize;
     let mut backup_files: Vec<std::path::PathBuf> = Vec::new();
     let mut read_dir =
@@ -1650,7 +1646,7 @@ pub async fn auto_backup_sst(
         }
     }
 
-    // Sort by modified time descending (newest first)
+    // 按修改时间降序排列（最新的在前）
     backup_files.sort_by(|a, b| {
         let ma = a.metadata().ok();
         let mb = b.metadata().ok();
@@ -1663,7 +1659,7 @@ pub async fn auto_backup_sst(
         tb.cmp(&ta)
     });
 
-    // Delete excess old backups
+    // 删除多余的旧备份
     for old in backup_files.iter().skip(max_backups) {
         let _ = std::fs::remove_file(old);
     }
@@ -1749,7 +1745,7 @@ pub async fn extract_bsa_file(
         .extract_file(&file_path)
         .map_err(|e| format!("Failed to extract '{}': {}", file_path, e))?;
 
-    // Determine output filename from the file path
+    // 从文件路径确定输出文件名
     let file_name = std::path::Path::new(&file_path)
         .file_name()
         .and_then(|s| s.to_str())
@@ -1890,14 +1886,14 @@ pub async fn parse_pex_strings(pex_path: String, game: Option<String>) -> Result
         .unwrap_or("unknown")
         .to_string();
 
-    // Load pexNoTransProc.txt filter for the game
+    // 加载游戏的 pexNoTransProc.txt 过滤器
     let no_trans_procs = load_no_trans_procs(game.as_deref());
 
     let translatable: Vec<PexTranslatableDto> = script
         .translatable
         .iter()
         .filter(|t| {
-            // Filter out strings from non-translatable procedures
+            // 过滤掉不可翻译的过程中的字符串
             if !t.function_name.is_empty() {
                 let fn_lower = t.function_name.to_lowercase();
                 if no_trans_procs.contains(&fn_lower) {
@@ -2012,12 +2008,12 @@ pub async fn compile_pex(
     use std::fs::File;
     use xt_core::pex::compile::compile_pex;
 
-    // Parse original PEX
+    // 解析原始 PEX
     let mut file = File::open(&pex_path).map_err(|e| format!("Failed to open PEX: {}", e))?;
     let script = xt_core::pex::parser::parse_pex(&mut file)
         .map_err(|e| format!("Failed to parse PEX: {}", e))?;
 
-    // Convert DTOs to PexTranslatableString
+    // 将 DTO 转换为 PexTranslatableString
     let pex_translations: Vec<PexTranslatableString> = translations
         .iter()
         .map(|t| PexTranslatableString {
@@ -2030,7 +2026,7 @@ pub async fn compile_pex(
         })
         .collect();
 
-    // Compile with actual translations
+    // 使用实际翻译编译
     let result = compile_pex(&script, &pex_translations, &output_path)
         .map_err(|e| format!("Failed to compile PEX: {}", e))?;
 
@@ -2179,8 +2175,8 @@ pub async fn load_mcm_file(mcm_path: String) -> Result<McmFileDto, String> {
 /// Save an MCM file with updated translations
 #[tauri::command]
 pub async fn save_mcm_file(request: McmSaveRequest) -> Result<(), String> {
-    // We need the original McmFile to preserve encoding and normalized_lines.
-    // Load it, apply translations from request, then save.
+    // 需要原始 McmFile 以保留编码和 normalized_lines。
+    // 加载它，从请求中应用翻译，然后保存。
     let mut file = mcm::parse_mcm_file(&request.path)
         .map_err(|e| format!("Failed to open MCM file for save: {}", e))?;
 
@@ -2201,11 +2197,11 @@ pub async fn save_mcm_file(request: McmSaveRequest) -> Result<(), String> {
 pub async fn mcm_compare(request: McmCompareRequest) -> Result<McmCompareResult, String> {
     use std::collections::HashMap;
 
-    // Parse the reference MCM file
+    // 解析参考 MCM 文件
     let reference_file = mcm::parse_mcm_file(&request.reference_path)
         .map_err(|e| format!("Failed to parse reference MCM file: {}", e))?;
 
-    // Build HashMap from reference entries by id for O(1) lookup
+    // 从参考条目构建 HashMap（按 id 索引，O(1) 查找）
     let reference_by_id: HashMap<&str, &xt_core::mcm::McmEntry> = reference_file
         .entries
         .iter()
@@ -2216,8 +2212,8 @@ pub async fn mcm_compare(request: McmCompareRequest) -> Result<McmCompareResult,
     let mut unmatched: u32 = 0;
     let mut updated_entries: Vec<McmEntryDto> = Vec::new();
 
-    // Heuristic: a translation is "partial" if it's non-empty, differs from source,
-    // and is significantly shorter (less than 30% of source length)
+    // 启发式规则：翻译为"部分翻译"的条件是非空、与源文本不同，
+    // 且明显短于源文本（不足源文本长度的 30%）
     fn is_partial(source: &str, translation: &str) -> bool {
         if translation.is_empty() {
             return false;
@@ -2249,7 +2245,7 @@ pub async fn mcm_compare(request: McmCompareRequest) -> Result<McmCompareResult,
             matched += 1;
 
             if should_update(&entry.translation, &request.policy, &entry.source) {
-                // Copy translation from reference
+                // 从参考条目复制翻译
                 updated_entries.push(McmEntryDto {
                     id: entry.id.clone(),
                     source: entry.source.clone(),
@@ -2295,7 +2291,7 @@ pub async fn load_data_configs(game: String) -> Result<DataConfigsDto, String> {
     let data_dir = std::path::Path::new("Data");
     let game_dir = data_dir.join(game_to_data_dir(&game));
 
-    // Parse ctdaFunc.txt
+    // 解析 ctdaFunc.txt
     let ctda_funcs: Vec<CtdaFuncDto> = {
         let path = game_dir.join("ctdaFunc.txt");
         if path.exists() {
@@ -2312,7 +2308,7 @@ pub async fn load_data_configs(game: String) -> Result<DataConfigsDto, String> {
         }
     };
 
-    // Parse fieldSizeRef.txt
+    // 解析 fieldSizeRef.txt
     let field_size_ref: HashMap<String, FieldSizeInfoDto> = {
         let path = game_dir.join("fieldSizeRef.txt");
         if path.exists() {
@@ -2333,7 +2329,7 @@ pub async fn load_data_configs(game: String) -> Result<DataConfigsDto, String> {
         }
     };
 
-    // Parse DialSubType.txt
+    // 解析 DialSubType.txt
     let dial_sub_type: HashMap<String, String> = {
         let path = game_dir.join("DialSubType.txt");
         if path.exists() {
@@ -2346,7 +2342,7 @@ pub async fn load_data_configs(game: String) -> Result<DataConfigsDto, String> {
         }
     };
 
-    // Parse EmoteDefinition.txt
+    // 解析 EmoteDefinition.txt
     let emote_definition: HashMap<String, String> = {
         let path = game_dir.join("EmoteDefinition.txt");
         if path.exists() {
@@ -2461,18 +2457,18 @@ pub async fn build_dialog_tree(
 ) -> Result<DialogTreeDto, String> {
     let strings = state.strings.lock().map_err(|e| e.to_string())?;
 
-    // Group INFO strings by their parent DIAL FormID
+    // 按父 DIAL FormID 分组 INFO 字符串
     let mut npc_groups: std::collections::HashMap<String, Vec<DialogInfoDto>> =
         std::collections::HashMap::new();
 
     for s in strings.iter() {
         let record_sig = String::from_utf8_lossy(&s.record_sig);
 
-        // Focus on INFO records (dialog responses) and NPC_ records (for name association)
+        // 聚焦 INFO 记录（对话回复）和 NPC_ 记录（用于名称关联）
         if record_sig == "INFO" && !s.source.is_empty() {
             let parent_form_id = s.parent_form_id;
 
-            // Build dialog entry
+            // 构建对话条目
             let entry = DialogInfoDto {
                 id: s.id,
                 form_id: parent_form_id,
@@ -2481,13 +2477,13 @@ pub async fn build_dialog_tree(
                 dialog_text: s.source.clone(),
             };
 
-            // Group by parent DIAL form_id as string key
+            // 按父 DIAL form_id 字符串键分组
             let key = format!("DIAL_{:08X}", parent_form_id);
             npc_groups.entry(key).or_default().push(entry);
         }
     }
 
-    // Also associate NPC_ record strings (names) with their dialogues
+    // 同时关联 NPC_ 记录字符串（名称）与对话
     let mut npc_names: std::collections::HashMap<u32, String> = std::collections::HashMap::new();
     for s in strings.iter() {
         let sig = String::from_utf8_lossy(&s.record_sig);
@@ -2496,7 +2492,7 @@ pub async fn build_dialog_tree(
         }
     }
 
-    // Build response
+    // 构建响应
     let npcs: Vec<NpcDialogDto> = npc_groups
         .into_iter()
         .map(|(key, dialogues)| {
@@ -2580,7 +2576,7 @@ pub async fn load_vocabulary(
         let pair_count = vocab.len();
         let pairs = vocab.pairs().to_vec();
 
-        // Store vocabulary in AppState for heuristic search enrichment
+        // 将词汇存储到 AppState 中，用于启发式搜索增强
         *state_clone.vocabulary.lock().map_err(|e| e.to_string())? = pairs;
 
         Ok(VocabularyInfo {
@@ -2655,7 +2651,7 @@ pub async fn tcsc_batch_convert(
     let mut updated = Vec::new();
 
     for sk in strings.iter_mut() {
-        // If specific IDs provided, only convert those; otherwise convert all non-empty translations
+        // 如果指定了 ID，仅转换指定的；否则转换所有非空翻译
         if let Some(ref filter_ids) = ids {
             if !filter_ids.contains(&sk.id) {
                 continue;
@@ -2702,7 +2698,7 @@ pub async fn compare_source_dest(
     let mut count = 0u32;
 
     for sk in strings.iter_mut() {
-        // Only process translated or validated strings (matching Delphi behavior)
+        // 仅处理已翻译或已验证的字符串（与 Delphi 行为一致）
         if !sk.params.is_translated() && !sk.params.is_validated() {
             continue;
         }
@@ -2967,7 +2963,7 @@ pub async fn header_rules_apply(
     let rules = state.header_rules.lock().map_err(|e| e.to_string())?;
     let mut strings = state.strings.lock().map_err(|e| e.to_string())?;
 
-    // Build EDID lookup from record tree (if available)
+    // 从记录树构建 EDID 查找表（如果可用）
     let edid_map = {
         let esp_file = state.esp_file.lock().map_err(|e| e.to_string())?;
         if let Some(ref ef) = *esp_file {
@@ -3070,7 +3066,7 @@ pub async fn header_batch_process(
 ) -> Result<HeaderBatchComplete, String> {
     let start = std::time::Instant::now();
 
-    // Collect ESP files
+    // 收集 ESP 文件
     let dir = std::path::Path::new(&config.source_dir);
     if !dir.is_dir() {
         return Err("Source directory does not exist".into());
@@ -3116,7 +3112,7 @@ pub async fn header_batch_process(
             message: String::new(),
         });
 
-        // Parse ESP
+        // 解析 ESP
         let esp_data = std::fs::read(path)
             .map_err(|e| format!("Failed to read {}: {}", fname, e))?;
 
@@ -3154,7 +3150,7 @@ pub async fn header_batch_process(
             message: String::new(),
         });
 
-        // Build EDID map from record tree
+        // 从记录树构建 EDID 映射
         let edid_map: std::collections::HashMap<u32, String> = {
             let mut map = std::collections::HashMap::new();
             fn collect_edids(grups: &[xt_core::esp::record_tree::EspGrup], map: &mut std::collections::HashMap<u32, String>) {
@@ -3171,7 +3167,7 @@ pub async fn header_batch_process(
             map
         };
 
-        // Apply rules
+        // 应用规则
         let mut file_matched = 0u32;
         for sk in &parser.strings {
             if sk.params.is_locked() || sk.params.is_translated() {
@@ -3444,13 +3440,13 @@ pub async fn check_aliases(
     let source_aliases = extract_aliases(&sk.source);
     let trans_aliases = extract_aliases(&sk.translation);
 
-    // Check: source aliases that are missing from translation
+    // 检查：源文本中存在但翻译中缺失的别名
     let missing_in_trans: Vec<String> = source_aliases.iter()
         .filter(|a| !trans_aliases.iter().any(|t| t.eq_ignore_ascii_case(a)))
         .cloned()
         .collect();
 
-    // Check: translation aliases that are not in source
+    // 检查：翻译中存在但源文本中没有的别名
     let extra_in_trans: Vec<String> = trans_aliases.iter()
         .filter(|a| !source_aliases.iter().any(|t| t.eq_ignore_ascii_case(a)))
         .cloned()
@@ -3588,7 +3584,7 @@ pub async fn save_esp(
     
     let strings = state.strings.lock().map_err(|e| e.to_string())?;
     
-    // Build index: (form_id, record_sig, field_sig) → &SkyString for O(1) lookup
+    // 构建索引：(form_id, record_sig, field_sig) → &SkyString，O(1) 查找
     let mut string_index: HashMap<(u32, [u8; 4], [u8; 4]), &SkyString> = HashMap::new();
     for sk in strings.iter() {
         if !sk.translation.is_empty() {
@@ -3599,10 +3595,10 @@ pub async fn save_esp(
         }
     }
     
-    // Create a mutable copy of the ESP file for rebuilding
+    // 创建 ESP 文件的可变副本以进行重建
     let mut esp_file_mut = esp_file.clone();
     
-    // Iterate through all records in the tree and update translatable fields
+    // 遍历树中的所有记录，更新可翻译字段
     let mut records_modified = 0u32;
     
     fn update_records_in_grup(
@@ -3643,7 +3639,7 @@ pub async fn save_esp(
         Ok(modified)
     }
     
-    // Get codepage config for the game
+    // 获取游戏的代码页配置
     let codepage_config = {
         let codepage_table = state.codepage_table.lock().map_err(|e| e.to_string());
         match codepage_table {
@@ -3658,10 +3654,10 @@ pub async fn save_esp(
         records_modified += update_records_in_grup(grup, &string_index, &codepage_config)?;
     }
     
-    // Rebuild all records to recalculate sizes
+    // 重建所有记录以重新计算大小
     esp_file_mut.rebuild_all().map_err(|e| format!("Failed to rebuild ESP: {}", e))?;
     
-    // Save to file
+    // 保存到文件
     esp_file_mut.save_to_file(&request.path, request.create_backup)
         .map_err(|e| format!("Failed to save ESP file: {}", e))?;
     
@@ -3687,7 +3683,7 @@ pub async fn finalize_esp(
     let strings = state.strings.lock().map_err(|e| e.to_string())?;
     let _sst_old_data = state.sst_old_data.lock().map_err(|e| e.to_string())?;
     
-    // Build index: (form_id, record_sig, field_sig) → &SkyString for O(1) lookup
+    // 构建索引：(form_id, record_sig, field_sig) → &SkyString，O(1) 查找
     let mut string_index: HashMap<(u32, [u8; 4], [u8; 4]), &SkyString> = HashMap::new();
     for sk in strings.iter() {
         string_index.insert(
@@ -3696,7 +3692,7 @@ pub async fn finalize_esp(
         );
     }
     
-    // Create a mutable copy of the ESP file for rebuilding
+    // 创建 ESP 文件的可变副本以进行重建
     let mut esp_file_mut = esp_file.clone();
     
     let mut records_modified = 0u32;
@@ -3745,7 +3741,7 @@ pub async fn finalize_esp(
         Ok(modified)
     }
     
-    // Get codepage config for the language
+    // 获取语言的代码页配置
     let codepage_config = {
         let codepage_table = state.codepage_table.lock().map_err(|e| e.to_string());
         match codepage_table {
@@ -3760,14 +3756,14 @@ pub async fn finalize_esp(
         records_modified += apply_translations_to_records(grup, &string_index, &codepage_config)?;
     }
     
-    // Rebuild all records
+    // 重建所有记录
     esp_file_mut.rebuild_all().map_err(|e| format!("Failed to rebuild ESP: {}", e))?;
     
-    // Save ESP file
+    // 保存 ESP 文件
     esp_file_mut.save_to_file(&request.esp_path, request.create_backup)
         .map_err(|e| format!("Failed to save ESP file: {}", e))?;
     
-    // Export strings files
+    // 导出 Strings 文件
     let strings_files = export_strings_files(
         &strings,
         &request.strings_dir,
@@ -3802,7 +3798,7 @@ fn export_strings_files(
     )
 }
 
-/// Export strings files for delocalized ESP (uses source as fallback).
+/// 导出非本地化 ESP 的 Strings 文件（使用源文本作为回退）。
 fn export_strings_files_for_delocalize(
     strings: &[xt_core::types::sky_string::SkyString],
     strings_dir: &str,
@@ -3840,7 +3836,7 @@ fn export_strings_files_inner(
     use std::fs;
     use std::path::Path;
 
-    // Group strings by list_index
+    // 按 list_index 分组字符串
     let mut grouped: HashMap<u8, Vec<(u32, String)>> = HashMap::new();
     for sk in strings {
         let (should_include, text) = pick_text(sk);
@@ -3859,7 +3855,7 @@ fn export_strings_files_inner(
         .map_err(|e| format!("Failed to create strings directory: {}", e))?;
 
     for (list_index, mut entries) in grouped {
-        // Sort by string ID for stable output
+        // 按字符串 ID 排序以确保输出稳定
         entries.sort_by_key(|(id, _)| *id);
 
         let ext = match list_index {
@@ -3898,7 +3894,7 @@ pub async fn delocalize_esp(
     
     let strings = state.strings.lock().map_err(|e| e.to_string())?;
     
-    // Build index: (form_id, record_sig, field_sig) → &SkyString for O(1) lookup
+    // 构建索引：(form_id, record_sig, field_sig) → &SkyString，O(1) 查找
     let mut string_index: HashMap<(u32, [u8; 4], [u8; 4]), &SkyString> = HashMap::new();
     for sk in strings.iter() {
         string_index.insert(
@@ -3907,7 +3903,7 @@ pub async fn delocalize_esp(
         );
     }
     
-    // Create a mutable copy of the ESP file
+    // 创建 ESP 文件的可变副本
     let mut esp_file_mut = esp_file.clone();
     
     let mut new_string_count = 0u32;
@@ -3956,7 +3952,7 @@ pub async fn delocalize_esp(
         Ok(new_strings)
     }
     
-    // Get codepage config for the language
+    // 获取语言的代码页配置
     let codepage_config = {
         let codepage_table = state.codepage_table.lock().map_err(|e| e.to_string());
         match codepage_table {
@@ -3971,14 +3967,14 @@ pub async fn delocalize_esp(
         new_string_count += delocalize_records_in_grup(grup, &string_index, &codepage_config)?;
     }
     
-    // Rebuild all records
+    // 重建所有记录
     esp_file_mut.rebuild_all().map_err(|e| format!("Failed to rebuild ESP: {}", e))?;
     
-    // Save ESP file
+    // 保存 ESP 文件
     esp_file_mut.save_to_file(&request.esp_path, request.create_backup)
         .map_err(|e| format!("Failed to save delocalized ESP file: {}", e))?;
     
-    // Export strings files
+    // 导出 Strings 文件
     let strings_files = export_strings_files_for_delocalize(
         &strings,
         &request.strings_dir,
@@ -4064,7 +4060,7 @@ pub async fn finalize(
     let (strings_clone, total_strings, translated_count, translated_map) = strings_data;
     let (source_lang, strings_dir, esp_path) = file_info_data;
 
-    // Get codepage table for proper encoding when loading source files
+    // 加载源文件时获取代码页表以正确编码
     let codepage_table = state.codepage_table.lock().map_err(|e| e.to_string())?;
     let codepage_table_ref: Option<&CodepageTable> = codepage_table.as_ref();
 

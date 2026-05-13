@@ -34,54 +34,54 @@ import { autoBackupSst, loadConfig, setOpenAiApiKey, setDeeplApiKey, setBaiduApi
 import "./App.css";
 import "./components/ui/ui.css";
 
-/// 自动备份间隔（5 分钟）
+// 自动备份间隔（5 分钟）
 const AUTO_BACKUP_INTERVAL_MS = 5 * 60 * 1000;
 
-/// 主应用组件 - xTranslator 的根组件
+// 主应用组件 - xTranslator 的根组件
 ///
-/// 职责：
-/// - 管理全局应用布局（菜单栏、主表格、底部面板、状态栏）
-/// - 协调所有工具面板的显示/隐藏
-/// - 处理全局快捷键（Escape、Ctrl+Z/Y）
-/// - 加载和应用用户配置（主题、语言、API Key）
-/// - 监听后端事件（ESP 加载、SST 加载、批处理进度）
-/// - 管理自动备份定时器
+// 职责：
+// - 管理全局应用布局（菜单栏、主表格、底部面板、状态栏）
+// - 协调所有工具面板的显示/隐藏
+// - 处理全局快捷键（Escape、Ctrl+Z/Y）
+// - 加载和应用用户配置（主题、语言、API Key）
+// - 监听后端事件（ESP 加载、SST 加载、批处理进度）
+// - 管理自动备份定时器
 ///
-/// 布局结构：
-/// ```
-/// App
-/// ├── Toaster (toast 通知)
-/// ├── RecoveryPromptModal (恢复提示)
-/// ├── EditorDialog (编辑对话框)
-/// ├── 9× Modal (工具面板)
-/// ├── MenuBar (菜单栏)
-/// ├── BatchTranslateBar (批处理进度条)
-/// ├── app-body
-/// │   └── app-main
-/// │       ├── app-table-area → StringTable (虚拟滚动表格)
-/// │       └── app-bottom-panel (底部标签页)
-/// │           ├── SidePanel (统计信息)
-/// │           ├── VocabularyPanel (词汇库)
-/// │           ├── HeuristicPanel (启发式搜索)
-/// │           ├── EspTreePanel (记录树)
-/// │           ├── PexPanel (PEX 脚本)
-/// │           ├── QuestsPanel (任务)
-/// │           ├── DialogView (对话)
-/// │           ├── LogPanel (日志)
-/// │           ├── HeaderProcessorPanel (头部处理)
-/// │           └── HeaderWizardPanel (头部向导)
-/// ├── StatusBar (状态栏)
-/// └── app-overlay (加载覆盖层)
-/// ```
+// 布局结构：
+// ```
+// App
+// ├── Toaster (toast 通知)
+// ├── RecoveryPromptModal (恢复提示)
+// ├── EditorDialog (编辑对话框)
+// ├── 9× Modal (工具面板)
+// ├── MenuBar (菜单栏)
+// ├── BatchTranslateBar (批处理进度条)
+// ├── app-body
+// │   └── app-main
+// │       ├── app-table-area → StringTable (虚拟滚动表格)
+// │       └── app-bottom-panel (底部标签页)
+// │           ├── SidePanel (统计信息)
+// │           ├── VocabularyPanel (词汇库)
+// │           ├── HeuristicPanel (启发式搜索)
+// │           ├── EspTreePanel (记录树)
+// │           ├── PexPanel (PEX 脚本)
+// │           ├── QuestsPanel (任务)
+// │           ├── DialogView (对话)
+// │           ├── LogPanel (日志)
+// │           ├── HeaderProcessorPanel (头部处理)
+// │           └── HeaderWizardPanel (头部向导)
+// ├── StatusBar (状态栏)
+// └── app-overlay (加载覆盖层)
+// ```
 ///
-/// 关键事件监听：
-/// - "batch-string-progress" - 字符串级批量翻译进度
-/// - "batch-string-complete" - 字符串级批量翻译完成
+// 关键事件监听：
+// - "batch-string-progress" - 字符串级批量翻译进度
+// - "batch-string-complete" - 字符串级批量翻译完成
 ///
-/// 快捷键：
-/// - Escape - 关闭编辑对话框 → 关闭工具面板 → 取消选择
-/// - Ctrl+Z / Cmd+Z - 撤销
-/// - Ctrl+Y / Cmd+Y / Ctrl+Shift+Z - 重做
+// 快捷键：
+// - Escape - 关闭编辑对话框 → 关闭工具面板 → 取消选择
+// - Ctrl+Z / Cmd+Z - 撤销
+// - Ctrl+Y / Cmd+Y / Ctrl+Shift+Z - 重做
 function App() {
   const { t } = useTranslation();
   
@@ -105,14 +105,14 @@ function App() {
   const reapplyTheme = useAppStore((s) => s.reapplyTheme);
   const backupIdRef = useRef<string | null>(null);
 
-  /// 全局快捷键处理
+  // 全局快捷键处理
   ///
-  /// 快捷键链：
-  /// 1. Escape - 关闭编辑对话框（如果打开）
-  /// 2. Escape - 关闭工具面板（如果打开）
-  /// 3. Escape - 取消行选择
-  /// 4. Ctrl+Z / Cmd+Z - 撤销翻译修改
-  /// 5. Ctrl+Y / Cmd+Y / Ctrl+Shift+Z - 重做翻译修改
+  // 快捷键链：
+  // 1. Escape - 关闭编辑对话框（如果打开）
+  // 2. Escape - 关闭工具面板（如果打开）
+  // 3. Escape - 取消行选择
+  // 4. Ctrl+Z / Cmd+Z - 撤销翻译修改
+  // 5. Ctrl+Y / Cmd+Y / Ctrl+Shift+Z - 重做翻译修改
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
@@ -138,14 +138,14 @@ function App() {
     return () => window.removeEventListener("keydown", handler);
   }, [setSelectedById, undo, redo, editorOpen, setEditorOpen, activePanel, setActivePanel]);
 
-  /// 应用启动时加载配置
+  // 应用启动时加载配置
   ///
-  /// 从后端加载保存的配置，包括：
-  /// - 主题设置（obsidian / dark / light / slate / auto）
-  /// - 语言设置
-  /// - API Key（OpenAI、DeepL、百度、有道、Azure）
-  /// - 当前翻译提供方
-  /// - ESP 模式开关
+  // 从后端加载保存的配置，包括：
+  // - 主题设置（obsidian / dark / light / slate / auto）
+  // - 语言设置
+  // - API Key（OpenAI、DeepL、百度、有道、Azure）
+  // - 当前翻译提供方
+  // - ESP 模式开关
   useEffect(() => {
     loadConfig().then((cfg) => {
       if (cfg.theme) useAppStore.getState().setTheme(cfg.theme as any);
@@ -160,22 +160,22 @@ function App() {
     }).catch(() => {});
   }, []);
 
-  /// 主题变化时重新应用 CSS 类
+  // 主题变化时重新应用 CSS 类
   ///
-  /// 当用户切换主题或系统主题变化时，更新 DOM 的主题类
+  // 当用户切换主题或系统主题变化时，更新 DOM 的主题类
   useEffect(() => {
     reapplyTheme();
   }, [theme, reapplyTheme]);
 
-  /// 监听后端事件：字符串级批量翻译进度
+  // 监听后端事件：字符串级批量翻译进度
   ///
-  /// 事件流：
-  /// 1. "batch-string-progress" - 单个字符串翻译完成
-  ///    - 更新该字符串的翻译
-  ///    - 更新进度计数器
-  /// 2. "batch-string-complete" - 整个批处理完成
-  ///    - 显示完成提示（成功/失败统计）
-  ///    - 更新批处理状态
+  // 事件流：
+  // 1. "batch-string-progress" - 单个字符串翻译完成
+  //    - 更新该字符串的翻译
+  //    - 更新进度计数器
+  // 2. "batch-string-complete" - 整个批处理完成
+  //    - 显示完成提示（成功/失败统计）
+  //    - 更新批处理状态
   useEffect(() => {
     const unlisten = listen<{ str_id: number; translated: string; error: string | null; completed: number; total: number }>(
       "batch-string-progress",
@@ -210,10 +210,10 @@ function App() {
     };
   }, []);
 
-  /// 监听系统主题变化
+  // 监听系统主题变化
   ///
-  /// 当系统主题从浅色切换到深色（或反之）时，
-  /// 如果应用设置为 "auto" 主题，则自动更新应用主题
+  // 当系统主题从浅色切换到深色（或反之）时，
+  // 如果应用设置为 "auto" 主题，则自动更新应用主题
   useEffect(() => {
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
     const handler = () => {
@@ -223,17 +223,17 @@ function App() {
     return () => mq.removeEventListener("change", handler);
   }, [theme, reapplyTheme]);
 
-  /// 自动备份定时器
+  // 自动备份定时器
   ///
-  /// 每 5 分钟检查一次：
-  /// - 如果有未保存的修改（isDirty）
-  /// - 且 SST 文件已加载
-  /// - 则自动备份 SST 文件
+  // 每 5 分钟检查一次：
+  // - 如果有未保存的修改（isDirty）
+  // - 且 SST 文件已加载
+  // - 则自动备份 SST 文件
   ///
-  /// 备份策略：
-  /// - 最多保留 10 个备份
-  /// - 超过限制时自动删除最旧的备份
-  /// - 备份文件名格式：{filename}.backup.{timestamp}
+  // 备份策略：
+  // - 最多保留 10 个备份
+  // - 超过限制时自动删除最旧的备份
+  // - 备份文件名格式：{filename}.backup.{timestamp}
   useEffect(() => {
     const interval = setInterval(async () => {
       if (!sstPath) return;
@@ -257,8 +257,8 @@ function App() {
     };
   }, [sstPath, isDirty, t]);
 
-  /// 计算应用是否被锁定（显示加载覆盖层）
-  /// 当 ESP 加载或解析中时，禁用用户交互
+  // 计算应用是否被锁定（显示加载覆盖层）
+  // 当 ESP 加载或解析中时，禁用用户交互
   const isLocked = isLoading || isParsing;
 
   return (
