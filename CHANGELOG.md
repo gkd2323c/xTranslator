@@ -41,6 +41,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Cross-platform compatibility testing
 
 - **Documentation**
+  - Delphi cross-validation report: 14 record types match within 1%, DIAL exact match (5,170)
+  - Updated development roadmap: P0/P1/P2 all complete
   - Complete testing guide with troubleshooting
   - Performance expectations and benchmarks
   - CI/CD integration instructions
@@ -49,6 +51,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Convenience Scripts**
   - `build.bat` — one-click release build (tests + cargo tauri build)
   - `test.ps1` — quick test suite without Skyrim dependency
+
+- **SST Dictionary Merge** (`sst_merge` command)
+  - Merge translations from another SST dictionary by (str_id, record_sig, field_sig) triple
+  - Conflict resolution with overwrite flag
+  - Merged statistics: added/updated/overwritten/conflicts_skipped
 
 ### Fixed
 - **Parser Dead-Loop (P1)**: `UnexpectedEof` swallowed as `Ok(())` in three parse functions, causing infinite loop at EOF. 13 `#[ignore]` tests restored.

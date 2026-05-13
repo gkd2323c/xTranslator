@@ -2,8 +2,8 @@
 
 ## 当前版本
 - **版本**: 0.2.0
-- **最新提交**: `c96fb0b` - docs: add perf warning to dev.ps1
-- **测试**: Rust 283+ tests · 8 e2e · 7 benchmarks · 0 warnings
+- **最新提交**: `969b10f` - docs: mark P2.1/P2.3 complete, P2 all done
+- **测试**: Rust 287 tests · 8 e2e · 7 benchmarks · 0 warnings
 - **构建**: `./build.bat` 一键 release
 
 ## 发布步骤
