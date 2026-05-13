@@ -902,6 +902,15 @@ pub struct SpellCheckConfigDto {
     pub loaded: bool,
 }
 
+/// SST merge statistics.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct MergeStatsDto {
+    pub added: usize,
+    pub updated: usize,
+    pub overwritten: usize,
+    pub conflicts_skipped: usize,
+}
+
 /// Response for applying translation cache recovery.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ApplyCacheResponse {

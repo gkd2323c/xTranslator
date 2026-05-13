@@ -712,6 +712,34 @@ pub async fn save_sst(
     Ok(())
 }
 
+/// 将另一个 SST 字典的翻译合并到当前字典
+///
+/// 按 (str_id, record_sig, field_sig) 三元组匹配。
+/// overwrite=true 时用来源译文覆盖已有译文，否则保留。
+#[tauri::command]
+pub async fn sst_merge(
+    state: tauri::State<'_, crate::AppState>,
+    source_path: String,
+    overwrite: bool,
+) -> Result<MergeStatsDto, String> {
+    let source = SstDictionary::load_from_file(&source_path)
+        .map_err(|e| format!("Failed to load source SST: {}", e))?;
+
+    let mut strings = state.strings.lock().map_err(|e| e.to_string())?;
+    let mut dict = SstDictionary::from_entries(strings.clone());
+
+    let stats = dict.merge_from(&source, overwrite);
+
+    *strings = dict.entries;
+
+    Ok(MergeStatsDto {
+        added: stats.added,
+        updated: stats.updated,
+        overwritten: stats.overwritten,
+        conflicts_skipped: stats.conflicts_skipped,
+    })
+}
+
 /// 按内部 `id` 更新单条翻译文本。
 ///
 /// 注意：这里使用内部行 ID，而不是 `str_id`（两者语义不同）。
@@ -2800,7 +2828,7 @@ pub async fn toolbox_transform(
 
 // ── Spell Check Commands ───────────────────────────────────────────
 
-use xt_shared::dto::{SpellCheckConfigDto, SpellCheckResultDto, SpellFaultDto};
+use xt_shared::dto::{SpellCheckConfigDto, SpellCheckResultDto, SpellFaultDto, MergeStatsDto};
 
 /// Load Hunspell DLL and dictionary for spell checking.
 #[tauri::command]

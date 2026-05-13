@@ -257,6 +257,93 @@ impl SstDictionary {
 
         Ok(())
     }
+
+    /// 将另一个 SST 字典的翻译合并到当前字典
+    ///
+    /// 匹配策略：按 `(str_id, record_sig, field_sig)` 三元组匹配条目。
+    ///
+    /// 冲突处理（当两边都有非空译文时）：
+    /// - `overwrite=false`：保留当前译文
+    /// - `overwrite=true`：用来源译文覆盖
+    ///
+    /// 返回合并统计。
+    pub fn merge_from(&mut self, other: &SstDictionary, overwrite: bool) -> MergeStats {
+        let mut stats = MergeStats::default();
+
+        // 构建当前条目的索引：(str_id, record_sig, field_sig) -> entry_index
+        let mut index: std::collections::HashMap<(i32, [u8; 4], [u8; 4]), usize> =
+            std::collections::HashMap::with_capacity(self.entries.len());
+        for (i, entry) in self.entries.iter().enumerate() {
+            index.insert(
+                (entry.esp_ptr.str_id, entry.esp_ptr.record_sig, entry.esp_ptr.field_sig),
+                i,
+            );
+        }
+
+        for other_entry in &other.entries {
+            let key = (
+                other_entry.esp_ptr.str_id,
+                other_entry.esp_ptr.record_sig,
+                other_entry.esp_ptr.field_sig,
+            );
+
+            if let Some(&idx) = index.get(&key) {
+                // 条目在两方都存在
+                let target = &mut self.entries[idx];
+                let source_has_trans = !other_entry.translation.is_empty();
+                let target_has_trans = !target.translation.is_empty();
+
+                if source_has_trans && !target_has_trans {
+                    // 来源有译文，当前无 → 复制
+                    target.translation = other_entry.translation.clone();
+                    target.params = other_entry.params;
+                    stats.updated += 1;
+                } else if source_has_trans && target_has_trans {
+                    if overwrite && target.translation != other_entry.translation {
+                        target.translation = other_entry.translation.clone();
+                        target.params = other_entry.params;
+                        stats.overwritten += 1;
+                    } else {
+                        stats.conflicts_skipped += 1;
+                    }
+                }
+                // source has no translation: skip
+            } else {
+                // 条目仅在来源中存在 → 添加
+                self.entries.push(other_entry.clone());
+                stats.added += 1;
+            }
+        }
+
+        // 合并 master list（去重）
+        for master in &other.master_list {
+            if !self.master_list.contains(master) {
+                self.master_list.push(master.clone());
+            }
+        }
+
+        // 合并 colab labels（去重，按 id）
+        for (id, label) in &other.colab_labels {
+            if !self.colab_labels.iter().any(|(cid, _)| cid == id) {
+                self.colab_labels.push((*id, label.clone()));
+            }
+        }
+
+        stats
+    }
+}
+
+/// SST 合并统计
+#[derive(Debug, Clone, Default)]
+pub struct MergeStats {
+    /// 新增条目数（仅在来源中存在）
+    pub added: usize,
+    /// 更新条目数（当前无译文，来源有译文）
+    pub updated: usize,
+    /// 覆盖条目数（双方都有译文，被来源覆盖）
+    pub overwritten: usize,
+    /// 跳过冲突数（双方都有译文但未覆盖）
+    pub conflicts_skipped: usize,
 }
 
 impl Default for SstDictionary {
@@ -349,5 +436,65 @@ mod tests {
         assert!(dict2.entries.is_empty());
         assert!(dict2.master_list.is_empty());
         assert!(dict2.colab_labels.is_empty());
+    }
+
+    #[test]
+    fn test_merge_new_entries() {
+        let mut target = SstDictionary::new();
+        target.entries.push(SkyString::new(0, "hello".into(), "".into(), *b"INFO", *b"FULL"));
+        target.entries[0].esp_ptr.str_id = 1;
+
+        let mut source = SstDictionary::new();
+        source.entries.push(SkyString::new(0, "world".into(), "世界".into(), *b"INFO", *b"FULL"));
+        source.entries[0].esp_ptr.str_id = 2;
+
+        let stats = target.merge_from(&source, false);
+        assert_eq!(stats.added, 1);
+        assert_eq!(target.entries.len(), 2);
+    }
+
+    #[test]
+    fn test_merge_update_existing() {
+        let mut target = SstDictionary::new();
+        target.entries.push(SkyString::new(0, "hello".into(), "".into(), *b"INFO", *b"FULL"));
+        target.entries[0].esp_ptr.str_id = 1;
+
+        let mut source = SstDictionary::new();
+        source.entries.push(SkyString::new(0, "hello".into(), "你好".into(), *b"INFO", *b"FULL"));
+        source.entries[0].esp_ptr.str_id = 1;
+
+        let stats = target.merge_from(&source, false);
+        assert_eq!(stats.updated, 1);
+        assert_eq!(target.entries[0].translation, "你好");
+    }
+
+    #[test]
+    fn test_merge_conflict_no_overwrite() {
+        let mut target = SstDictionary::new();
+        target.entries.push(SkyString::new(0, "hello".into(), "你好".into(), *b"INFO", *b"FULL"));
+        target.entries[0].esp_ptr.str_id = 1;
+
+        let mut source = SstDictionary::new();
+        source.entries.push(SkyString::new(0, "hello".into(), "您好".into(), *b"INFO", *b"FULL"));
+        source.entries[0].esp_ptr.str_id = 1;
+
+        let stats = target.merge_from(&source, false);
+        assert_eq!(stats.conflicts_skipped, 1);
+        assert_eq!(target.entries[0].translation, "你好");
+    }
+
+    #[test]
+    fn test_merge_conflict_with_overwrite() {
+        let mut target = SstDictionary::new();
+        target.entries.push(SkyString::new(0, "hello".into(), "你好".into(), *b"INFO", *b"FULL"));
+        target.entries[0].esp_ptr.str_id = 1;
+
+        let mut source = SstDictionary::new();
+        source.entries.push(SkyString::new(0, "hello".into(), "您好".into(), *b"INFO", *b"FULL"));
+        source.entries[0].esp_ptr.str_id = 1;
+
+        let stats = target.merge_from(&source, true);
+        assert_eq!(stats.overwritten, 1);
+        assert_eq!(target.entries[0].translation, "您好");
     }
 }
