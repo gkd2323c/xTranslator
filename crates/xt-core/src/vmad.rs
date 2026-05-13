@@ -570,8 +570,10 @@ pub(crate) fn decode_vmad_fast(data: &[u8], version: i16) -> Vec<VmadString> {
         return result;
     }
 
-    // Header: version (already known from RecordHeaderData), objType (i16), scriptCount (i16)
-    // Skip version bytes (already consumed)
+    // Header: version (i16, 2 bytes), objType (i16, 2 bytes), scriptCount (u16, 2 bytes)
+    // version 由调用方在 RecordHeaderData 已读取，此处跳过以对齐 objType
+    pos += 2; // skip version
+
     let _obj_type = if pos + 2 <= data.len() {
         i16::from_le_bytes([data[pos], data[pos + 1]])
     } else {
@@ -632,11 +634,13 @@ pub(crate) fn decode_vmad_fast(data: &[u8], version: i16) -> Vec<VmadString> {
                     let value = String::from_utf8_lossy(&data[pos..str_end]).to_string();
                     pos = str_end;
                     if !value.is_empty() {
+                        // 偏移量 = 当前 pos（字符串内容末尾）向后回退到长度前缀的起始位置
+                        let offset = pos.saturating_sub(4).saturating_sub(len);
                         result.push(VmadString {
                             script_name: script_name.clone(),
                             prop_name: prop_name.clone(),
                             value,
-                            offset: pos - 4 - len, // offset of the u32 length prefix
+                            offset,
                             length: len,
                         });
                     }
