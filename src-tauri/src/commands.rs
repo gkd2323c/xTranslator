@@ -740,6 +740,18 @@ pub async fn sst_merge(
     })
 }
 
+/// 导出当前对话树为 HTML
+#[tauri::command]
+pub async fn export_dial_html(
+    state: tauri::State<'_, crate::AppState>,
+    title: String,
+) -> Result<String, String> {
+    let strings = state.strings.lock().map_err(|e| e.to_string())?;
+    let tree = xt_core::dial_html::build_dial_tree(&strings);
+    let html = xt_core::dial_html::dial_tree_to_html(&tree, &title);
+    Ok(html)
+}
+
 /// 按内部 `id` 更新单条翻译文本。
 ///
 /// 注意：这里使用内部行 ID，而不是 `str_id`（两者语义不同）。

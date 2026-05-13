@@ -11,6 +11,7 @@ pub mod header_processor;
 pub mod heuristic;
 pub mod mcm;
 pub mod matching;
+pub mod dial_html;
 pub mod md5;
 pub mod normalization;
 pub mod pex;
