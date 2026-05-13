@@ -1,8 +1,8 @@
 # xTranslator 测试基础设施交接文档
 
 > 编写日期：2026-05-12
-> 最后更新：2026-05-12（死循环修复 + 性能优化）
-> 涉及：测试文件清理、API 适配、问题修复
+> 最后更新：2026-05-12（性能优化完成，release 构建验证）
+> 涉及：死循环修复、VMAD 性能、BSA 优化、release 构建
 
 ---
 
@@ -246,4 +246,7 @@ cargo test --release -p xtranslator-tests --test e2e_comprehensive -- e2e_esp_pa
 
 # 性能基准（需 Skyrim 数据）
 cargo test --release -p xtranslator-tests --test performance_benchmarks -- benchmark_stress_test --nocapture
+
+# Release 构建（应用端加载 ~3s，开发时用 debug 模式会慢 >100x）
+cargo tauri build
 ```

@@ -1399,25 +1399,4 @@ Def_:CNAM=DOOR=0-proc5
             println!("String ID 1 (list 0): {}", s);
         }
     }
-
-    /// 性能对比：ESP mode vs Non-ESP mode
-    #[test]
-    #[ignore = "requires Skyrim.esm and --release"]
-    fn bench_esp_mode_overhead() {
-        let skyrim_esm = r"D:\SteamLibrary\steamapps\common\Skyrim Special Edition\Data\Skyrim.esm";
-        if !std::path::Path::new(skyrim_esm).exists() { return; }
-        let file_data = std::fs::read(skyrim_esm).unwrap();
-
-        let t0 = std::time::Instant::now();
-        let n1 = { let mut p = EspParser::new(); p.set_build_search_index(false); let mut c = std::io::Cursor::new(&file_data); p.parse(&mut c).unwrap(); p.strings.len() };
-        let non_esp = t0.elapsed();
-
-        let t0 = std::time::Instant::now();
-        let n2 = { let mut p = EspParser::new(); p.set_build_search_index(false); p.enable_esp_mode(); let mut c = std::io::Cursor::new(&file_data); p.parse(&mut c).unwrap(); p.strings.len() };
-        let esp = t0.elapsed();
-
-        println!("Non-ESP: {:?} ({} strings)", non_esp, n1);
-        println!("ESP mode: {:?} ({} strings)", esp, n2);
-        println!("Overhead: {:.1}x", esp.as_secs_f64() / non_esp.as_secs_f64().max(0.001));
-    }
 }
