@@ -1,10 +1,10 @@
 # xTranslator 发布流程
 
 ## 当前版本
-- **版本**: 0.1.0
-- **最新提交**: `bbfebda` - docs: consolidate project documentation
-- **SPEC 完成度**: 100/100 任务完成 ✅
-- **测试**: Rust 283+ tests · TypeScript 通过 · 0 warnings
+- **版本**: 0.2.0
+- **最新提交**: `c96fb0b` - docs: add perf warning to dev.ps1
+- **测试**: Rust 283+ tests · 8 e2e · 7 benchmarks · 0 warnings
+- **构建**: `./build.bat` 一键 release
 
 ## 发布步骤
 
