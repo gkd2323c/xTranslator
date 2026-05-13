@@ -1,5 +1,7 @@
 #!/usr/bin/env pwsh
-# Launch xTranslator in dev mode (Vite + Tauri)
+# Launch xTranslator in dev mode (Vite hot-reload + debug build)
+# WARNING: debug build parses Skyrim.esm 100x+ slower than release.
+#          Use ./build.bat for release builds when testing ESP loading.
 # Usage: ./dev.ps1
 
 $ErrorActionPreference = "Stop"
