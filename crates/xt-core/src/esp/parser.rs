@@ -114,19 +114,9 @@ pub struct StringsFiles {
 
 impl StringsFiles {
     /// 从目录加载所有 strings 文件(使用默认 UTF-8 编码)
-    /// 如果磁盘文件不存在，会尝试从同目录下的 BSA 归档中提取
+    /// 如果磁盘文件不存在，会尝试从同目录下的 BSA/BA2 归档中提取
     pub fn load_from_dir<P: AsRef<Path>>(dir: P, base_name: &str) -> Self {
-        let dir = dir.as_ref();
-        let strings = Self::try_load(dir, base_name, "english", "STRINGS");
-        let dlstrings = Self::try_load(dir, base_name, "english", "DLSTRINGS");
-        let ilstrings = Self::try_load(dir, base_name, "english", "ILSTRINGS");
-
-        StringsFiles {
-            strings,
-            dlstrings,
-            ilstrings,
-            codepage_table: None,
-        }
+        Self::load_from_dir_with_config(dir, base_name, "english", None, None)
     }
 
     /// 从目录加载所有 strings 文件，使用 codepage 配置表
@@ -135,18 +125,7 @@ impl StringsFiles {
         base_name: &str,
         table: &CodepageTable,
     ) -> Self {
-        let dir = dir.as_ref();
-
-        let strings = Self::try_load_with_table(dir, base_name, "english", "STRINGS", table);
-        let dlstrings = Self::try_load_with_table(dir, base_name, "english", "DLSTRINGS", table);
-        let ilstrings = Self::try_load_with_table(dir, base_name, "english", "ILSTRINGS", table);
-
-        StringsFiles {
-            strings,
-            dlstrings,
-            ilstrings,
-            codepage_table: Some(table.clone()),
-        }
+        Self::load_from_dir_with_config(dir, base_name, "english", Some(table), None)
     }
 
     /// 从目录加载 strings 文件，使用指定的语言和 codepage 配置
@@ -156,122 +135,128 @@ impl StringsFiles {
         language: &str,
         table: &CodepageTable,
     ) -> Self {
-        let dir = dir.as_ref();
+        Self::load_from_dir_with_config(dir, base_name, language, Some(table), None)
+    }
 
-        let strings = Self::try_load_with_table(dir, base_name, language, "STRINGS", table);
-        let dlstrings = Self::try_load_with_table(dir, base_name, language, "DLSTRINGS", table);
-        let ilstrings = Self::try_load_with_table(dir, base_name, language, "ILSTRINGS", table);
+    /// 统一加载入口
+    fn load_from_dir_with_config<P: AsRef<Path>>(
+        dir: P,
+        base_name: &str,
+        language: &str,
+        table: Option<&CodepageTable>,
+        _codepage: Option<crate::strings::CodepageConfig>,
+    ) -> Self {
+        use std::ffi::OsStr;
+        let dir = dir.as_ref();
+        let formats = [("STRINGS", StringsFormat::NullTerminated), ("DLSTRINGS", StringsFormat::LengthPrefixed), ("ILSTRINGS", StringsFormat::LengthPrefixed)];
+
+        // 1. 快速路径：磁盘直接加载
+        let mut strings: Option<StringsFile> = None;
+        let mut dlstrings: Option<StringsFile> = None;
+        let mut ilstrings: Option<StringsFile> = None;
+        let mut missing = [false; 3];
+
+        for (i, (ext, fmt)) in formats.iter().enumerate() {
+            let filename = format!("{}_{}.{}", base_name, language, ext);
+            let path = dir.join(&filename);
+            let loaded = if let Some(t) = table {
+                StringsFile::load_with_codepage_table(&path, t).ok()
+            } else {
+                StringsFile::load_with_format(&path, *fmt).ok()
+            };
+            if let Some(sf) = loaded {
+                match i {
+                    0 => strings = Some(sf),
+                    1 => dlstrings = Some(sf),
+                    2 => ilstrings = Some(sf),
+                    _ => unreachable!(),
+                }
+            } else {
+                missing[i] = true;
+            }
+        }
+
+        // 2. BSA/BA2 回退：单次遍历，每个归档打开一次，同时提取所有缺失格式
+        if missing.iter().any(|&m| m) {
+            let mut archive_paths: Vec<(std::path::PathBuf, bool)> = Vec::new();
+            if let Ok(entries) = std::fs::read_dir(dir) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    let ext_lower = path.extension()
+                        .and_then(OsStr::to_str)
+                        .unwrap_or("")
+                        .to_lowercase();
+                    let is_ba2 = ext_lower == "ba2";
+                    if ext_lower != "bsa" && !is_ba2 {
+                        continue;
+                    }
+                    // 跳过过大的纹理包
+                    if let Ok(meta) = std::fs::metadata(&path) {
+                        if meta.len() > 512 * 1024 * 1024 {
+                            continue;
+                        }
+                    }
+                    archive_paths.push((path, is_ba2));
+                }
+            }
+
+            // 优先级排序：已知含 strings 的归档 → 小归档 → 纹理归档
+            archive_paths.sort_by(|(a, _), (b, _)| {
+                let rank = |p: &std::path::PathBuf| -> u8 {
+                    let name = p.file_name().and_then(OsStr::to_str).unwrap_or("");
+                    let lower = name.to_lowercase();
+                    if lower.contains("interface") || lower.contains("misc") { 0 }
+                    else if lower.contains("textures") { 2 }
+                    else { 1 }
+                };
+                rank(a).cmp(&rank(b))
+            });
+
+            for (archive_path, is_ba2) in &archive_paths {
+                for (i, (ext, _fmt)) in formats.iter().enumerate() {
+                    if !missing[i] { continue; }
+                    let bsa_path = format!("strings/{}_{}.{}", base_name.to_lowercase(), language, ext.to_lowercase());
+                    let data = if *is_ba2 {
+                        crate::ba2::Ba2Archive::open(archive_path).ok()
+                            .and_then(|a| a.extract_file(&bsa_path).ok())
+                    } else {
+                        crate::bsa::BsaArchive::open(archive_path).ok()
+                            .and_then(|a| a.extract_file(&bsa_path).ok())
+                    };
+
+                    if let Some(data) = data {
+                        let codepage = if let Some(t) = table {
+                            let filename = format!("{}_{}.{}", base_name, language, ext);
+                            t.get_for_filename(&filename)
+                        } else {
+                            crate::strings::CodepageConfig::utf8()
+                        };
+                        // detect format from extension
+                        let fmt = match *ext {
+                            "DLSTRINGS" | "ILSTRINGS" => StringsFormat::LengthPrefixed,
+                            _ => StringsFormat::NullTerminated,
+                        };
+                        if let Ok(sf) = StringsFile::load_from_bytes(&data, fmt, codepage) {
+                            match i {
+                                0 => strings = Some(sf),
+                                1 => dlstrings = Some(sf),
+                                2 => ilstrings = Some(sf),
+                                _ => unreachable!(),
+                            }
+                            missing[i] = false;
+                        }
+                    }
+                }
+                if !missing.iter().any(|&m| m) { break; }
+            }
+        }
 
         StringsFiles {
             strings,
             dlstrings,
             ilstrings,
-            codepage_table: Some(table.clone()),
+            codepage_table: table.cloned(),
         }
-    }
-
-    fn try_load(dir: &Path, base_name: &str, language: &str, ext: &str) -> Option<StringsFile> {
-        let filename = format!("{}_{}.{}", base_name, language, ext);
-        let path = dir.join(&filename);
-
-        // 1. 优先尝试从磁盘直接加载
-        let format = StringsFile::detect_format(path.as_path());
-        if let Ok(sf) = StringsFile::load_with_format(&path, format) {
-            return Some(sf);
-        }
-
-        // 2. 磁盘文件不存在，尝试从 BSA 归档中提取
-        Self::try_load_from_bsa(dir, &filename, format)
-    }
-
-    fn try_load_with_table(
-        dir: &Path,
-        base_name: &str,
-        language: &str,
-        ext: &str,
-        table: &CodepageTable,
-    ) -> Option<StringsFile> {
-        let filename = format!("{}_{}.{}", base_name, language, ext);
-        let path = dir.join(&filename);
-
-        // 1. 优先尝试从磁盘直接加载
-        let format = StringsFile::detect_format(path.as_path());
-        if let Ok(sf) = StringsFile::load_with_codepage_table(&path, table) {
-            return Some(sf);
-        }
-
-        // 2. 磁盘文件不存在，尝试从 BSA 归档中提取
-        let codepage = table.get_for_filename(&filename);
-        Self::try_load_from_bsa_with_codepage(dir, &filename, format, codepage)
-    }
-
-    fn try_load_from_bsa(dir: &Path, filename: &str, format: StringsFormat) -> Option<StringsFile> {
-        use std::ffi::OsStr;
-
-        let archive_path_in_bsa = format!("strings/{}", filename.to_lowercase());
-
-        if let Ok(entries) = std::fs::read_dir(dir) {
-            // 1. 先尝试 BSA 文件（Skyrim/Skyrim SE）
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if path.extension().and_then(OsStr::to_str) == Some("bsa") {
-                    if let Ok(bsa) = crate::bsa::BsaArchive::open(&path) {
-                        if let Ok(data) = bsa.extract_file(&archive_path_in_bsa) {
-                            return StringsFile::load_from_bytes(
-                                &data,
-                                format,
-                                crate::strings::CodepageConfig::utf8(),
-                            )
-                            .ok();
-                        }
-                    }
-                }
-            }
-
-            // 2. 再尝试 BA2 文件（Fallout 4/76/Starfield）
-            for entry in std::fs::read_dir(dir).ok()?.flatten() {
-                let path = entry.path();
-                if path.extension().and_then(OsStr::to_str) == Some("ba2") {
-                    if let Ok(ba2) = crate::ba2::Ba2Archive::open(&path) {
-                        if let Ok(data) = ba2.extract_file(&archive_path_in_bsa) {
-                            return StringsFile::load_from_bytes(
-                                &data,
-                                format,
-                                crate::strings::CodepageConfig::utf8(),
-                            )
-                            .ok();
-                        }
-                    }
-                }
-            }
-        }
-        None
-    }
-
-    fn try_load_from_bsa_with_codepage(
-        dir: &Path,
-        filename: &str,
-        format: StringsFormat,
-        codepage: crate::strings::CodepageConfig,
-    ) -> Option<StringsFile> {
-        use crate::bsa::BsaArchive;
-        use std::ffi::OsStr;
-
-        let bsa_path_in_archive = format!("strings/{}", filename.to_lowercase());
-
-        if let Ok(entries) = std::fs::read_dir(dir) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if path.extension().and_then(OsStr::to_str) == Some("bsa") {
-                    if let Ok(bsa) = BsaArchive::open(&path) {
-                        if let Ok(data) = bsa.extract_file(&bsa_path_in_archive) {
-                            return StringsFile::load_from_bytes(&data, format, codepage).ok();
-                        }
-                    }
-                }
-            }
-        }
-        None
     }
 
     /// 根据 list_index 查找字符串
