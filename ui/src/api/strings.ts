@@ -357,6 +357,20 @@ export async function rtlPreview(text: string, applyReverse: boolean, applyShape
   return invoke("rtl_preview", { text, applyReverse, applyShape, lineWidth });
 }
 
+// ── Collab Tags ───────────────────────────────────────────────────
+
+export async function colabGetLabels(): Promise<[number, string][]> {
+  return invoke("colab_get_labels");
+}
+
+export async function colabAssign(ids: number[], slotId: number): Promise<number> {
+  return invoke("colab_assign", { ids, slotId });
+}
+
+export async function colabFilter(slotId: number, mode: number): Promise<number[]> {
+  return invoke("colab_filter", { slotId, mode });
+}
+
 // ── Header Processor ──────────────────────────────────────────────
 
 export interface HeaderRuleDto {

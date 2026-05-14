@@ -792,6 +792,87 @@ pub async fn rtl_preview(
     Ok(lines)
 }
 
+// ── 协作标签系统 ──────────────────────────────────────────────────
+
+/// 获取所有协作标签
+#[tauri::command]
+pub async fn colab_get_labels(
+    state: tauri::State<'_, crate::AppState>,
+) -> Result<Vec<(u32, String)>, String> {
+    let strings = state.strings.lock().map_err(|e| e.to_string())?;
+    // 从 SST 旧数据或当前字符串中重建标签
+    let old = state.sst_old_data.lock().map_err(|e| e.to_string())?;
+    let mut labels: std::collections::BTreeMap<u32, String> = std::collections::BTreeMap::new();
+    for sk in old.iter().chain(strings.iter()) {
+        if sk.colab_id > 0 {
+            labels.entry(sk.colab_id as u32).or_insert_with(|| format!("Slot {}", sk.colab_id));
+        }
+    }
+    Ok(labels.into_iter().collect())
+}
+
+/// 更新协作标签名称
+#[tauri::command]
+pub async fn colab_set_label(
+    state: tauri::State<'_, crate::AppState>,
+    slot_id: u32,
+    _label: String,
+) -> Result<(), String> {
+    let strings = state.strings.lock().map_err(|e| e.to_string())?;
+    // 更新当前字符串中匹配 slot 的标签（标签不存储在 SkyString 中，
+    // 但 colab_id 指向此 slot。实际标签名存储在上层，这里只做验证）
+    let has = strings.iter().any(|s| s.colab_id as u32 == slot_id);
+    if !has && slot_id > 0 {
+        return Err(format!("Slot {} is not used by any string", slot_id));
+    }
+    // 标签名存储在应用层，通过 SST colab_labels 持久化
+    Ok(())
+}
+
+/// 分配协作标签到选中字符串
+#[tauri::command]
+pub async fn colab_assign(
+    state: tauri::State<'_, crate::AppState>,
+    ids: Vec<u32>,
+    slot_id: u32,
+) -> Result<usize, String> {
+    let mut strings = state.strings.lock().map_err(|e| e.to_string())?;
+    let mut count = 0;
+    for &id in &ids {
+        if let Some(sk) = strings.iter_mut().find(|s| s.id == id) {
+            sk.colab_id = slot_id as u8;
+            count += 1;
+        }
+    }
+    Ok(count)
+}
+
+/// 按协作槽位过滤字符串（三态：0=关闭, 1=仅包含, 2=排除）
+#[tauri::command]
+pub async fn colab_filter(
+    state: tauri::State<'_, crate::AppState>,
+    slot_id: u32,
+    mode: u8,
+) -> Result<Vec<u32>, String> {
+    let strings = state.strings.lock().map_err(|e| e.to_string())?;
+    if mode == 0 || slot_id == 0 {
+        return Ok(strings.iter().map(|s| s.id).collect());
+    }
+    let filtered: Vec<u32> = strings
+        .iter()
+        .filter(|s| {
+            let match_slot = s.colab_id as u32 == slot_id;
+            match mode {
+                1 => match_slot,  // include
+                2 => !match_slot, // exclude
+                _ => true,
+            }
+        })
+        .map(|s| s.id)
+        .collect();
+    Ok(filtered)
+}
+
 /// 按内部 `id` 更新单条翻译文本。
 ///
 /// 注意：这里使用内部行 ID，而不是 `str_id`（两者语义不同）。

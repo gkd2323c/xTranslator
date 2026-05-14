@@ -23,6 +23,7 @@ use commands::{
     spell_check_load, spell_check_unload, spell_check_toggle, spell_check_config,
     spell_check_text, spell_check_suggestions, spell_check_ignore,
     sst_merge, export_dial_html, rtl_preview,
+    colab_get_labels, colab_set_label, colab_assign, colab_filter,
     header_rules_load, header_rules_list, header_rules_toggle, header_rules_apply, header_rules_save,
     header_rules_delete, header_rules_move, header_rules_update, header_rules_add,
     header_templates_list, header_templates_save, header_templates_load, header_templates_delete,
@@ -130,6 +131,7 @@ fn main() {
             sst_merge,
             export_dial_html,
             rtl_preview,
+            colab_get_labels, colab_set_label, colab_assign, colab_filter,
             // Header Processor
             header_rules_load,
             header_rules_list,
