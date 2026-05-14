@@ -351,6 +351,12 @@ export async function spellCheckIgnore(word: string, ignorePath: string): Promis
   return invoke("spell_check_ignore", { word, ignorePath });
 }
 
+// ── RTL Preview ───────────────────────────────────────────────────
+
+export async function rtlPreview(text: string, applyReverse: boolean, applyShape: boolean, lineWidth: number): Promise<string[]> {
+  return invoke("rtl_preview", { text, applyReverse, applyShape, lineWidth });
+}
+
 // ── Header Processor ──────────────────────────────────────────────
 
 export interface HeaderRuleDto {

@@ -752,6 +752,46 @@ pub async fn export_dial_html(
     Ok(html)
 }
 
+/// RTL 实时预览：对文本应用 RTL 处理并返回结果
+#[tauri::command]
+pub async fn rtl_preview(
+    text: String,
+    apply_reverse: bool,
+    apply_shape: bool,
+    line_width: u32,
+) -> Result<Vec<String>, String> {
+    use xt_core::rtl;
+
+    if text.is_empty() {
+        return Ok(vec![]);
+    }
+
+    let mut processed = text;
+
+    if apply_shape {
+        processed = rtl::shape_arabic(&processed);
+    }
+    if apply_reverse {
+        if let Some(reversed) = rtl::reverse_rtl(&processed) {
+            processed = reversed;
+        }
+    }
+
+    // 按指定宽度换行
+    let lines: Vec<String> = if line_width > 0 && line_width < processed.len() as u32 {
+        processed
+            .chars()
+            .collect::<Vec<_>>()
+            .chunks(line_width as usize)
+            .map(|c| c.iter().collect())
+            .collect()
+    } else {
+        vec![processed]
+    };
+
+    Ok(lines)
+}
+
 /// 按内部 `id` 更新单条翻译文本。
 ///
 /// 注意：这里使用内部行 ID，而不是 `str_id`（两者语义不同）。
