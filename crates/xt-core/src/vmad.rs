@@ -562,6 +562,14 @@ impl VmadDecoder {
 /// 零分配 VMAD 解码：直接从 &[u8] 提取字符串，不构建 VmadDecoder
 ///
 /// 用于解析时的快速路径，避免 buffer.to_vec() 堆分配。
+/// 对 VMAD 缓冲区执行写回：在指定偏移处替换字符串，返回修改后的缓冲区
+pub fn write_vmad_string(data: &[u8], offset: usize, new_value: &str) -> Result<Vec<u8>, VmadError> {
+    // version 参数仅用于 VmadDecoder 构造，内部 write_back 从 buffer 读取实际版本
+    let mut decoder = VmadDecoder::new(data, 5);
+    decoder.write_back(offset, new_value)?;
+    Ok(decoder.buffer().to_vec())
+}
+
 pub(crate) fn decode_vmad_fast(data: &[u8], _version: i16) -> Vec<VmadString> {
     let mut result = Vec::new();
     let mut pos = 0usize;

@@ -3745,14 +3745,23 @@ pub async fn save_esp(
     
     let strings = state.strings.lock().map_err(|e| e.to_string())?;
     
-    // 构建索引：(form_id, record_sig, field_sig) → &SkyString，O(1) 查找
+    // 构建索引：非 VMAD 字段用单值，(form_id, record_sig, field_sig) → &SkyString
+    // VMAD 字段用 Vec 容纳多个字符串
     let mut string_index: HashMap<(u32, [u8; 4], [u8; 4]), &SkyString> = HashMap::new();
+    let mut vmad_index: HashMap<(u32, [u8; 4]), Vec<&SkyString>> = HashMap::new();
     for sk in strings.iter() {
-        if !sk.translation.is_empty() {
-            string_index.insert(
-                (sk.esp_ptr.form_id, sk.esp_ptr.record_sig, sk.esp_ptr.field_sig),
-                sk,
-            );
+        if !sk.translation.is_empty() && sk.translation != sk.source {
+            if sk.esp_ptr.field_sig == *b"VMAD" && sk.esp_ptr.str_id < 0 {
+                vmad_index
+                    .entry((sk.esp_ptr.form_id, sk.esp_ptr.record_sig))
+                    .or_default()
+                    .push(sk);
+            } else {
+                string_index.insert(
+                    (sk.esp_ptr.form_id, sk.esp_ptr.record_sig, sk.esp_ptr.field_sig),
+                    sk,
+                );
+            }
         }
     }
     
@@ -3765,6 +3774,7 @@ pub async fn save_esp(
     fn update_records_in_grup(
         grup: &mut xt_core::esp::record_tree::EspGrup,
         string_index: &HashMap<(u32, [u8; 4], [u8; 4]), &SkyString>,
+        vmad_index: &HashMap<(u32, [u8; 4]), Vec<&SkyString>>,
         codepage: &xt_core::strings::CodepageConfig,
     ) -> Result<u32, String> {
         let mut modified = 0u32;
@@ -3778,13 +3788,30 @@ pub async fn save_esp(
                 if field.is_size_xxxx {
                     continue;
                 }
-                
+
+                // 处理 VMAD 字段：逐个替换每个 VMAD 字符串
+                if field.header.name == *b"VMAD" {
+                    let vmad_key = (record.form_id, record.header.name);
+                    if let Some(vmad_strings) = vmad_index.get(&vmad_key) {
+                        for sk in vmad_strings.iter() {
+                            let offset = (-sk.esp_ptr.str_id) as usize;
+                            if let Ok(new_buf) = xt_core::vmad::write_vmad_string(
+                                &field.buffer, offset, &sk.translation
+                            ) {
+                                field.buffer = new_buf;
+                                field.header.dsize = field.buffer.len() as u16;
+                                modified += 1;
+                            }
+                        }
+                    }
+                    continue;
+                }
+
+                // 处理普通可翻译字段
                 let key = (record.form_id, record.header.name, field.header.name);
                 if let Some(sk) = string_index.get(&key) {
-                    if sk.translation != sk.source {
-                        field.update_buffer(&sk.translation, codepage);
-                        modified += 1;
-                    }
+                    field.update_buffer(&sk.translation, codepage);
+                    modified += 1;
                 }
             }
             
@@ -3794,7 +3821,7 @@ pub async fn save_esp(
         }
         
         for child in &mut grup.children {
-            modified += update_records_in_grup(child, string_index, codepage)?;
+            modified += update_records_in_grup(child, string_index, vmad_index, codepage)?;
         }
         
         Ok(modified)
@@ -3812,7 +3839,7 @@ pub async fn save_esp(
     };
     
     for grup in &mut esp_file_mut.top_level_grups {
-        records_modified += update_records_in_grup(grup, &string_index, &codepage_config)?;
+        records_modified += update_records_in_grup(grup, &string_index, &vmad_index, &codepage_config)?;
     }
     
     // 重建所有记录以重新计算大小
