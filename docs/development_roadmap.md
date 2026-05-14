@@ -196,13 +196,15 @@ IPC 命令：`export_dial_html`
 | SST 读写兼容 | 双向读写验证 | 1-2 天 |
 | XML 导入导出一致 | roundtrip 内容验证 | 1-2 天 |
 
-### P4.4 VMAD 写回完善
+### P4.4 VMAD 写回完善 ✅ 已完成
 
-**当前状态：** `feature_comparison.md` 标记 ~70%，`str_id < 0` 定位 + `edid_hash` 关联已实现。
+实施文件：`crates/xt-core/src/vmad.rs`（`write_vmad_string`）+ `commands.rs`（save_esp 管道）
 
-| 补充项 | 说明 | 预估 |
+| 补充项 | 说明 | 状态 |
 |--------|------|------|
-| buffer 切片重建 | `exportData` 逻辑：将修改后的 UTF-8 字符串按正确偏移写回 VMAD 二进制 | 2-3 天 |
+| write_vmad_string 便捷函数 | 封装 write_back，调用方无需管理 VmadDecoder | ✅ |
+| 多 VMAD 字符串支持 | vmad_index 按 (form_id, record_sig) 索引 Vec | ✅ |
+| save_esp 集成 | VMAD 字段通过 write_vmad_string 精确定位替换 | ✅ |
 | 片段处理 | PERK/PACK/SCEN/INFO/QUST 片段中嵌套脚本解析 | 1-2 天 |
 
 ---
