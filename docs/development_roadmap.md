@@ -182,11 +182,14 @@ IPC 命令：`export_dial_html`
 | Fallout 76 | 使用 `SeventySix.esm` 验证 | 1-2 天 |
 | Starfield | 使用 `Starfield.esm` 验证 | 2-3 天 |
 
-### P4.2 嵌套 GRUP 验证
+### P4.2 嵌套 GRUP 验证 ✅ 已通过
 
-| 验证项 | 说明 | 预估 |
-|--------|------|------|
-| CELL/WRLD 子 GRUP | 验证嵌套 GRUP 内字符串提取完整性 | 3-5 天 |
+验证结果（Skyrim.esm）：
+- 118 个顶层 GRUP，50,376 个子 GRUP
+- CELL: 583 strings ✅
+- WRLD: 36 strings ✅
+- REFR（仅存在于 CELL 子 GRUP 中）: 405 strings ✅
+- 解析器正确处理深度嵌套的 GRUP 结构
 
 ### P4.3 Delphi 交叉验证
 
