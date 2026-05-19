@@ -93,41 +93,41 @@ export function SidePanel() {
           )}
         </Section>
       )}
-
       <Section icon={<Database size={16} />} title={t("sidebar.statistics")}>
-        <KeyValueRow label={t("sidebar.totalStrings")} value={espStats.total.toLocaleString()} />
-        <KeyValueRow
-          label={t("sidebar.translatedCount")}
-          value={translated.toLocaleString()}
-          labelClassName="ui-status-translated"
-        />
-        <KeyValueRow
-          label={t("sidebar.incompleteCount")}
-          value={incomplete.toLocaleString()}
-          labelClassName="ui-status-incomplete"
-        />
-        <KeyValueRow
-          label={t("sidebar.lockedCount")}
-          value={locked.toLocaleString()}
-          labelClassName="ui-status-locked"
-        />
-        <KeyValueRow
-          label={t("sidebar.vmad")}
-          value={vmadCount.toLocaleString()}
-          labelClassName="ui-status-script"
-        />
-        <div style={{ marginTop: "var(--space-sm)" }}>
-          <ProgressBar
-            value={progressPercent}
-            max={100}
-            variant="gradient"
-            size="sm"
-            showLabel
-            label={t("sidebar.progress")}
-          />
+        {/* 状态概览卡片 */}
+        <div className="stats-cards">
+          <div className="stats-card">
+            <span className="stats-card-value">{espStats.total.toLocaleString()}</span>
+            <span className="stats-card-label">{t("sidebar.totalStrings")}</span>
+          </div>
+          <div className="stats-card stats-card-translated">
+            <span className="stats-card-value">{translated.toLocaleString()}</span>
+            <span className="stats-card-label">{t("sidebar.translatedCount")}</span>
+          </div>
+          <div className="stats-card stats-card-incomplete">
+            <span className="stats-card-value">{incomplete.toLocaleString()}</span>
+            <span className="stats-card-label">{t("sidebar.incompleteCount")}</span>
+          </div>
+          <div className="stats-card stats-card-locked">
+            <span className="stats-card-value">{locked.toLocaleString()}</span>
+            <span className="stats-card-label">{t("sidebar.lockedCount")}</span>
+          </div>
         </div>
-      </Section>
 
+        {/* 大号进度条 */}
+        {/* 大号进度条 */}
+        <div className="stats-progress-block">
+          <div className="stats-progress-header">
+            <span className="stats-progress-pct">{progressPercent.toFixed(1)}%</span>
+            <span className="stats-progress-detail">{translated.toLocaleString()} / {totalTranslatable.toLocaleString()} {t("sidebar.translatable", { defaultValue: "translatable" })}</span>
+          </div>
+          <div className="stats-progress-bg">
+            <div className="stats-progress-fill" style={{ width: `${progressPercent}%` }} />
+          </div>
+        </div>
+
+        <KeyValueRow label={t("sidebar.vmad")} value={vmadCount.toLocaleString()} labelClassName="ui-status-script" />
+      </Section>
       {sstStats && (
         <Section icon={<Languages size={16} />} title={t("sidebar.sst")}>
           <KeyValueRow label={t("sidebar.matched")} value={sstStats.matched} valueClassName="ui-status-translated" />

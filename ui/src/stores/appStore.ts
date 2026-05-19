@@ -35,6 +35,19 @@ export type BottomTabId =
   | "headerProc"   // 头部处理器
   | "headerWizard";// 头部向导
 
+
+// 日志级别
+export type LogLevel = "info" | "warn" | "error";
+
+// 日志条目
+export interface LogEntry {
+  id: number;
+  timestamp: Date;
+  level: LogLevel;
+  message: string;
+  source?: string;
+}
+
 const THEME_STORAGE_KEY = "xtranslator-theme";
 
 // 检测系统是否偏好深色主题
@@ -179,6 +192,11 @@ interface AppState {
   // 恢复信息（待应用的缓存翻译）
   recoveryInfo: RecoveryInfo | null;
 
+  // ── 日志系统 ──
+  // 应用日志消息列表（最多 500 条）
+  logs: LogEntry[];
+
+
   // ── 撤销/重做 ──
   // 撤销栈（最多 100 条）
   undoStack: UndoEntry[];
@@ -259,6 +277,10 @@ interface AppState {
   loadAllStrings: () => Promise<void>;
   setActivePanel: (panel: ActivePanel) => void;
   setActiveBottomTab: (tab: BottomTabId) => void;
+  // ── 日志 ──
+  addLog: (level: LogLevel, message: string, source?: string) => void;
+  clearLogs: () => void;
+
   toggleBottomPanel: () => void;
   setEditorOpen: (open: boolean) => void;
   openEditorForItem: (id: number) => void;
@@ -413,6 +435,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   undoStack: [],
   redoStack: [],
   activePanel: null,
+  logs: [],
+
   activeBottomTab: "home",
   showBottomPanel: true,
   editorOpen: false,
@@ -858,6 +882,22 @@ export const useAppStore = create<AppState>((set, get) => ({
   setActiveBottomTab: (tab) => set({ activeBottomTab: tab, showBottomPanel: true }),
   toggleBottomPanel: () => set((s) => ({ showBottomPanel: !s.showBottomPanel })),
   setDataConfigs: (dataConfigs) => set({ dataConfigs }),
+
+  // ── 日志 ──
+  addLog: (level, message, source) =>
+    set((s) => {
+      const entry: LogEntry = {
+        id: Date.now() + (s.logs.length > 0 ? s.logs[0].id + 1 - Date.now() : 0),
+        timestamp: new Date(),
+        level,
+        message,
+        source,
+      };
+      const logs = [entry, ...s.logs].slice(0, 500);
+      return { logs };
+    }),
+  clearLogs: () => set({ logs: [] }),
+
 
   setEspMode: (espMode) => {
     set({ espMode });

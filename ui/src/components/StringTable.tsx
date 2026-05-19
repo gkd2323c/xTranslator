@@ -305,9 +305,13 @@ export function StringTable() {
    */
   const handleContextMenu = useCallback((e: React.MouseEvent, item: SkyStringDTO) => {
     e.preventDefault();
-    setSelectedById(item.id);
+    // 如果右键点击的项已在多选范围内，不改变选择
+    if (!selectedIds.has(item.id)) {
+      clearSelection();
+      setSelectedById(item.id);
+    }
     setCtxMenu({ x: e.clientX, y: e.clientY, item });
-  }, [setSelectedById]);
+  }, [setSelectedById, selectedIds, clearSelection]);
 
   /**
    * 行选中处理函数（支持多选）
@@ -627,44 +631,86 @@ export function StringTable() {
         />
       </div>
       
-      {/* 右键菜单 */}
+      {/* 右键菜单 — 多选感知 */}
       {ctxMenu && (
         <ContextMenu
           x={ctxMenu.x}
           y={ctxMenu.y}
           onClose={() => setCtxMenu(null)}
-          items={[
-            // 编辑选项
-            {
-              label: t("table.ctxEdit", { defaultValue: "Edit" }),
-              icon: <Edit3 size={14} />,
-              shortcut: "Enter",
-              onClick: () => setSelectedById(ctxMenu.item.id),
-            },
-            { separator: true, label: "" },
-            // 复制源文本
-            {
-              label: t("table.ctxCopySource", { defaultValue: "Copy Source" }),
-              icon: <Copy size={14} />,
-              shortcut: "Ctrl+C",
-              onClick: () => navigator.clipboard.writeText(ctxMenu.item.source),
-            },
-            // 复制翻译文本
-            {
-              label: t("table.ctxCopyTranslation", { defaultValue: "Copy Translation" }),
-              icon: <Copy size={14} />,
-              onClick: () => navigator.clipboard.writeText(ctxMenu.item.translation || ""),
-              disabled: !ctxMenu.item.translation,
-            },
-            { separator: true, label: "" },
-            // 按 FormID 过滤
-            {
-              label: t("table.ctxFilterFormId", { defaultValue: "Filter by FormID" }),
-              icon: <Filter size={14} />,
-              shortcut: "F12",
-              onClick: () => setFilter(ctxMenu.item.form_id),
-            },
-          ]}
+          items={
+            // 多选模式：右键项在多选集合内 → 批量操作菜单
+            selectedIds.has(ctxMenu.item.id) && selectedIds.size > 1
+              ? [
+                  {
+                    label: t("table.ctxBatchCopySource", { defaultValue: `Copy Sources (${selectedIds.size})` }),
+                    icon: <Copy size={14} />,
+                    onClick: () => {
+                      const texts: string[] = [];
+                      selectedIds.forEach((id) => {
+                        const item = items.find((i) => i.id === id);
+                        if (item) texts.push(item.source);
+                      });
+                      navigator.clipboard.writeText(texts.join("\n---\n"));
+                    },
+                  },
+                  {
+                    label: t("table.ctxBatchCopyTranslation", { defaultValue: `Copy Translations (${selectedIds.size})` }),
+                    icon: <Copy size={14} />,
+                    disabled: !Array.from(selectedIds).some((id) => items.find((i) => i.id === id)?.translation),
+                    onClick: () => {
+                      const texts: string[] = [];
+                      selectedIds.forEach((id) => {
+                        const item = items.find((i) => i.id === id);
+                        if (item?.translation) texts.push(item.translation);
+                      });
+                      navigator.clipboard.writeText(texts.join("\n---\n"));
+                    },
+                  },
+                  { separator: true, label: "" },
+                  {
+                    label: t("table.ctxBatchTranslate", { defaultValue: `Translate (${selectedIds.size})` }),
+                    icon: <Languages size={14} />,
+                    onClick: () => {
+                      const firstId = Array.from(selectedIds)[0];
+                      openEditorForItem(firstId);
+                    },
+                  },
+                  { separator: true, label: "" },
+                  {
+                    label: t("common.clear", { defaultValue: "Clear Selection" }),
+                    onClick: () => clearSelection(),
+                  },
+                ]
+              : // 单选模式：标准右键菜单
+              [
+                {
+                  label: t("table.ctxEdit", { defaultValue: "Edit" }),
+                  icon: <Edit3 size={14} />,
+                  shortcut: "Enter",
+                  onClick: () => setSelectedById(ctxMenu.item.id),
+                },
+                { separator: true, label: "" },
+                {
+                  label: t("table.ctxCopySource", { defaultValue: "Copy Source" }),
+                  icon: <Copy size={14} />,
+                  shortcut: "Ctrl+C",
+                  onClick: () => navigator.clipboard.writeText(ctxMenu.item.source),
+                },
+                {
+                  label: t("table.ctxCopyTranslation", { defaultValue: "Copy Translation" }),
+                  icon: <Copy size={14} />,
+                  onClick: () => navigator.clipboard.writeText(ctxMenu.item.translation || ""),
+                  disabled: !ctxMenu.item.translation,
+                },
+                { separator: true, label: "" },
+                {
+                  label: t("table.ctxFilterFormId", { defaultValue: "Filter by FormID" }),
+                  icon: <Filter size={14} />,
+                  shortcut: "F12",
+                  onClick: () => setFilter(ctxMenu.item.form_id),
+                },
+              ]
+          }
         />
       )}
     </div>
