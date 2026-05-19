@@ -41,8 +41,8 @@ import { Button, Textarea, Badge, Modal, Input, ProgressBar } from "./ui";
 //
 // ============================================================================
 
-// 正则表达式：匹配 HTML 标签（用于高亮显示）
-const TAG_REGEX = /(<\/?[A-Za-z][^>]*>)/g;
+// 正则表达式：匹配 HTML 标签、$变量 和 {占位符}（用于语法高亮）
+const HIGHLIGHT_REGEX = /(<\/?[A-Za-z][^>]*>)|(\$\w+(?:\.\w+)*)|(\{[^}]+\})/g;
 
 // ============================================================================
 // 工具函数：HTML 转义和标签高亮
@@ -59,29 +59,51 @@ function escapeHtml(s: string): string {
 }
 
 /**
- * 高亮显示 HTML 标签
+ * 语法高亮：区分标签类型颜色
  * 
  * 功能：
- *   - 分离 HTML 标签和普通文本
- *   - 对标签应用特殊样式（<span class="tag-highlight">）
+ *   - `<` 开头的 XML/HTML 标签 → 青色（.tag-highlight）
+ *   - `$变量` → 紫色（.tag-variable）
+ *   - `{占位符}` → 橙色（.tag-placeholder）
+ *   - 普通文本 → 默认色
  *   - 转义所有文本内容防止 XSS
  * 
- * 用途：在编辑器中显示源文本时，用不同颜色标记 HTML 标签
+ * 用途：在编辑器中显示源文本时，用不同颜色标记各类占位符
  * 
- * @param text - 包含 HTML 标签的文本
- * @returns HTML 字符串，标签被 <span class="tag-highlight"> 包装
+ * @param text - 包含 HTML 标签或占位符的文本
+ * @returns HTML 字符串，各类标签被对应颜色的 <span> 包装
  */
 function highlightTags(text: string): string {
-  return text
-    .split(TAG_REGEX)
-    .map((part) => {
-      if (TAG_REGEX.test(part)) {
-        TAG_REGEX.lastIndex = 0;
-        return `<span class="tag-highlight">${escapeHtml(part)}</span>`;
-      }
-      return escapeHtml(part);
-    })
-    .join("");
+  let lastIndex = 0;
+  const parts: string[] = [];
+  let match: RegExpExecArray | null;
+
+  while ((match = HIGHLIGHT_REGEX.exec(text)) !== null) {
+    // 添加匹配前的普通文本
+    if (match.index > lastIndex) {
+      parts.push(escapeHtml(text.slice(lastIndex, match.index)));
+    }
+
+    if (match[1]) {
+      // Group 1: XML/HTML 标签 → 青色
+      parts.push(`<span class="tag-highlight">${escapeHtml(match[1])}</span>`);
+    } else if (match[2]) {
+      // Group 2: $变量 → 紫色
+      parts.push(`<span class="tag-variable">${escapeHtml(match[2])}</span>`);
+    } else if (match[3]) {
+      // Group 3: {占位符} → 橙色
+      parts.push(`<span class="tag-placeholder">${escapeHtml(match[3])}</span>`);
+    }
+
+    lastIndex = match.index + match[0].length;
+  }
+
+  // 添加剩余文本
+  if (lastIndex < text.length) {
+    parts.push(escapeHtml(text.slice(lastIndex)));
+  }
+
+  return parts.join("");
 }
 
 // ============================================================================
@@ -507,8 +529,23 @@ export function EditorDialog({ open, onClose }: EditorDialogProps) {
    * 支持的快捷键：
    *   - Ctrl+Enter：保存翻译
    */
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.ctrlKey && e.key === "Enter") handleSave();
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.ctrlKey && e.key === "Enter") {
+      handleSave();
+      return;
+    }
+    if (e.key === "Tab") {
+      e.preventDefault();
+      const textarea = e.currentTarget;
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const newValue = localTrans.substring(0, start) + "  " + localTrans.substring(end);
+      setLocalTrans(newValue);
+      // Restore cursor position after state update
+      requestAnimationFrame(() => {
+        textarea.selectionStart = textarea.selectionEnd = start + 2;
+      });
+    }
   };
 
   // ========== 渲染 ==========
@@ -525,22 +562,62 @@ export function EditorDialog({ open, onClose }: EditorDialogProps) {
       ) : (
         <div className="editor-dialog-body">
           <div className="editor-dialog-header">
-            <span className="editor-formid mono">{selectedItem.form_id}</span>
-            <Badge variant={selectedItem.status === "translated" ? "translated" : selectedItem.status === "incomplete" ? "incomplete" : "locked"}>
-              {selectedItem.status}
-            </Badge>
-            {selectedItem.is_vmad && <Badge variant="script" size="sm">VMAD</Badge>}
-            {aliasResult && aliasResult.has_mismatch && (
-              <span className="editor-alias-warning" title={aliasResult.missing_in_trans.join(", ")}>
-                <AlertTriangle size={12} /> {t("editor.aliasMismatch")}
+            <div className="editor-meta-row">
+              <span className="editor-meta-tag">
+                <span className="editor-meta-label">FormID:</span>
+                <span className="editor-meta-value mono">{selectedItem.form_id}</span>
               </span>
-            )}
+              <span className="editor-meta-tag">
+                <span className="editor-meta-label">Rec:</span>
+                <span className="editor-meta-value">{selectedItem.record_sig}</span>
+              </span>
+              <span className="editor-meta-tag">
+                <span className="editor-meta-label">Field:</span>
+                <span className="editor-meta-value">{selectedItem.field_sig}</span>
+              </span>
+              <span className="editor-meta-tag">
+                <span className="editor-meta-label">Type:</span>
+                <span className="editor-meta-value">{["STRINGS", "DLSTRINGS", "ILSTRINGS"][selectedItem.list_index] || "STRINGS"}</span>
+              </span>
+              {fieldSizeWarning && (
+                <span className="editor-meta-tag editor-meta-size">
+                  <span className="editor-meta-label">Size:</span>
+                  <span className="editor-size-bar-bg">
+                    <span
+                      className={`editor-size-bar-fill ${fieldSizeWarning.current > fieldSizeWarning.max ? "editor-size-bar-over" : ""}`}
+                      style={{ width: `${Math.min(100, (fieldSizeWarning.current / fieldSizeWarning.max) * 100)}%` }}
+                    />
+                  </span>
+                  <span className="editor-meta-value mono">{fieldSizeWarning.current}/{fieldSizeWarning.max}</span>
+                </span>
+              )}
+            </div>
+            <div className="editor-meta-status">
+              <Badge variant={selectedItem.status === "translated" ? "translated" : selectedItem.status === "incomplete" ? "incomplete" : "locked"}>
+                {selectedItem.status}
+              </Badge>
+              {selectedItem.is_vmad && <Badge variant="script" size="sm">VMAD</Badge>}
+              {aliasResult?.has_mismatch && (
+                <span className="editor-alias-warning" title={aliasResult.missing_in_trans.join(", ")}>
+                  <AlertTriangle size={12} /> {t("editor.aliasMismatch")}
+                </span>
+              )}
+            </div>
           </div>
 
           <div className="editor-dialog-main">
             <div className="editor-dialog-left">
               <div className="editor-source">
-                <label>{t("common.source")}</label>
+                <label>
+                  {t("common.source")}
+                  <button
+                    className="editor-source-copy-btn"
+                    onClick={() => navigator.clipboard.writeText(selectedItem.source)}
+                    title={t("editor.copySourceTooltip", { defaultValue: "Copy source text" })}
+                  >
+                    <Copy size={12} />
+                  </button>
+                </label>
                 <div className="editor-source-text" dangerouslySetInnerHTML={{ __html: highlightTags(selectedItem.source) }} />
               </div>
 
@@ -755,20 +832,7 @@ export function EditorDialog({ open, onClose }: EditorDialogProps) {
               </div>
               <span className="editor-char-count">
                 {t("editor.sourceChars")}: {selectedItem.source.length} | {t("editor.transChars")}: {localTrans.length}
-                {fieldSizeWarning && (
-                  <span className="editor-field-warning" title={t("editor.fieldSizeExceeded")}>
-                    <AlertTriangle size={12} /> {fieldSizeWarning.current}/{fieldSizeWarning.max}
-                  </span>
-                )}
               </span>
-              {fieldSizeWarning && (
-                <div className="editor-field-bar">
-                  <div
-                    className={`editor-field-bar-fill ${fieldSizeWarning.current > fieldSizeWarning.max ? "editor-field-bar-over" : ""}`}
-                    style={{ width: `${Math.min(100, (fieldSizeWarning.current / fieldSizeWarning.max) * 100)}%` }}
-                  />
-                </div>
-              )}
             </div>
             <div className="editor-dialog-footer-right">
               <ProgressBar

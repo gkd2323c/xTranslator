@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback, ReactElement } from "react";
+import { useState, useEffect, useCallback, useRef, ReactElement } from "react";
 import { List } from "react-window";
 import { useAppStore } from "../stores/appStore";
-import { ArrowUpDown, Replace, Edit3, Copy, Filter } from "lucide-react";
+import { ArrowUpDown, Replace, Edit3, Copy, Filter, CheckSquare, Languages } from "lucide-react";
 import type { SkyStringDTO } from "../api/strings";
 import { useTranslation } from "react-i18next";
 import { Input, Button, Spinner } from "./ui";
@@ -46,9 +46,10 @@ const ROW_HEIGHT = 32;
 // 包含表格数据和事件回调，通过 react-window 的 rowProps 传递给每一行
 interface RowData {
   items: SkyStringDTO[];           // 当前显示的字符串列表（已过滤）
-  selectedId: number | null;       // 当前选中的字符串 ID
+  selectedId: number | null;       // 当前选中的字符串 ID（主选中）
+  selectedIds: Set<number>;        // 多选选中的字符串 ID 集合
   filter: string;                  // 搜索过滤文本
-  onSelect: (id: number) => void;  // 行点击事件
+  onSelect: (id: number, e: React.MouseEvent) => void;  // 行点击事件（支持多选）
   onDoubleClick: (id: number) => void;  // 行双击事件（打开编辑器）
   onContextMenu: (e: React.MouseEvent, item: SkyStringDTO) => void;  // 右键菜单事件
 }
@@ -137,7 +138,6 @@ function highlightText(text: string, filter: string): string {
 //   - 只渲染可见行，不渲染整个列表
 //   - 使用 dangerouslySetInnerHTML 避免重复转义
 //   - 使用 classList 操作 CSS 类，避免重新渲染
-//
 function VirtualRow(props: {
   ariaAttributes: {
     "aria-posinset": number;
@@ -148,52 +148,63 @@ function VirtualRow(props: {
   style: React.CSSProperties;
   items: SkyStringDTO[];
   selectedId: number | null;
+  selectedIds: Set<number>;
   filter: string;
-  onSelect: (id: number) => void;
+  onSelect: (id: number, e: React.MouseEvent) => void;
   onDoubleClick: (id: number) => void;
   onContextMenu: (e: React.MouseEvent, item: SkyStringDTO) => void;
 }): ReactElement | null {
   // 解构 props，获取行数据和事件处理函数
-  const { index, style, items, selectedId, filter, onSelect, onDoubleClick, onContextMenu } = props;
+  const { index, style, items, selectedId, selectedIds, filter, onSelect, onDoubleClick, onContextMenu } = props;
   const item = items[index];
   
   // 如果行数据不存在，返回 null（虚拟滚动边界情况）
   if (!item) return null;
 
-  // 判断当前行是否被选中
+  // 判断当前行是否被选中（主选中或多选）
   const isSelected = selectedId === item.id;
+  const isMultiSelected = selectedIds.has(item.id);
+  
+  // 构建行 CSS 类
+  const rowClasses = [
+    "virtual-row",
+    `status-${item.status}`,
+    isSelected ? "virtual-row-selected" : "",
+    isMultiSelected ? "row-selected-multi" : "",
+  ].filter(Boolean).join(" ");
   
   return (
     <div
       // react-window 计算的行位置和大小
       style={style}
       // CSS 类：status-{status} 用于样式，virtual-row-selected 用于选中状态
-      className={`virtual-row status-${item.status} ${isSelected ? "virtual-row-selected" : ""}`}
-      // 点击事件：选中该行
-      onClick={() => onSelect(item.id)}
+      className={rowClasses}
+      // 点击事件：选中该行（支持 Ctrl/Shift 多选）
+      onClick={(e) => onSelect(item.id, e)}
       // 双击事件：打开编辑器
       onDoubleClick={() => onDoubleClick(item.id)}
       // 右键菜单事件
       onContextMenu={(e) => onContextMenu(e, item)}
       // 鼠标进入：添加悬停效果（仅当未选中时）
       onMouseEnter={(e) => {
-        if (!isSelected) {
+        if (!isSelected && !isMultiSelected) {
           e.currentTarget.classList.add("virtual-row-hover");
         }
       }}
       // 鼠标离开：移除悬停效果
       onMouseLeave={(e) => {
-        if (!isSelected) {
-          e.currentTarget.classList.remove("virtual-row-hover");
-        }
+        e.currentTarget.classList.remove("virtual-row-hover");
       }}
     >
-      {/* 状态指示符列 */}
+      {/* 多选指示符列：显示复选框图标 */}
       <div className="row-cell row-cell-status-icon" title={`${item.record_sig}:${item.field_sig} #${item.form_id}`}>
-        <span className={`status-dot status-${item.status}${item.is_vmad ? " status-vmad" : ""}`}>
-          {/* 根据翻译状态显示不同的符号 */}
-          {item.status === "translated" ? "●" : item.status === "locked" ? "◆" : "○"}
-        </span>
+        {isMultiSelected ? (
+          <CheckSquare size={12} className="multi-select-icon" />
+        ) : (
+          <span className={`status-dot status-${item.status}${item.is_vmad ? " status-vmad" : ""}`}>
+            {item.status === "translated" ? "●" : item.status === "locked" ? "◆" : "○"}
+          </span>
+        )}
       </div>
       
       {/* EDID 列：记录类型和字段名 */}
@@ -221,6 +232,7 @@ function VirtualRow(props: {
     </div>
   );
 }
+
 
 // ============================================================================
 // StringTable 主组件
@@ -260,6 +272,7 @@ export function StringTable() {
   
   // 选中和统计
   const selectedId = useAppStore((s) => s.selectedId);  // 当前选中的字符串 ID
+  const selectedIds = useAppStore((s) => s.selectedIds); // 多选集合
   const total = useAppStore((s) => s.total);            // 总条目数
   const filtered = useAppStore((s) => s.filtered);      // 过滤后的条目数
   
@@ -270,13 +283,17 @@ export function StringTable() {
   const setSort = useAppStore((s) => s.setSort);
   const setListIndex = useAppStore((s) => s.setListIndex);
   const setSelectedById = useAppStore((s) => s.setSelectedById);
-  const selectNextRow = useAppStore((s) => s.selectNextRow);
-  const selectPrevRow = useAppStore((s) => s.selectPrevRow);
+  
   const replaceAll = useAppStore((s) => s.replaceAll);
   const openEditorForItem = useAppStore((s) => s.openEditorForItem);
+  const toggleSelectId = useAppStore((s) => s.toggleSelectId);
+  const clearSelection = useAppStore((s) => s.clearSelection);
 
   // 右键菜单状态
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; item: SkyStringDTO } | null>(null);
+  
+  // Shift+Click 范围选择：记录上次点击的行索引
+  const lastClickedRef = useRef<number | null>(null);
 
   /**
    * 右键菜单事件处理
@@ -293,27 +310,108 @@ export function StringTable() {
   }, [setSelectedById]);
 
   /**
+   * 行选中处理函数（支持多选）
+   * 
+   * Ctrl+Click：切换单个项的选择状态
+   * Shift+Click：范围选择（从上次点击到当前点击）
+   * 普通点击：单选，清空多选
+   */
+  const handleSelect = useCallback((id: number, e: React.MouseEvent) => {
+    const currentIndex = items.findIndex((i) => i.id === id);
+    if (currentIndex === -1) return;
+
+    if (e.ctrlKey || e.metaKey) {
+      // Ctrl+Click：切换单个项的选择状态，并更新主选中
+      toggleSelectId(id);
+      setSelectedById(id);
+      lastClickedRef.current = currentIndex;
+    } else if (e.shiftKey && lastClickedRef.current !== null) {
+      // Shift+Click：范围选择
+      const start = Math.min(lastClickedRef.current, currentIndex);
+      const end = Math.max(lastClickedRef.current, currentIndex);
+      // 收集范围内所有 ID
+      for (let i = start; i <= end; i++) {
+        const item = items[i];
+        if (item && !selectedIds.has(item.id)) {
+          toggleSelectId(item.id);
+        }
+      }
+      // 确保首尾项也被选中
+      setSelectedById(id);
+      // 更新 lastClicked 为范围终点
+      lastClickedRef.current = currentIndex;
+    } else {
+      // 普通点击：单选，清空多选
+      if (selectedIds.size > 0) {
+        clearSelection();
+      }
+      setSelectedById(id);
+      lastClickedRef.current = currentIndex;
+    }
+  }, [items, selectedIds, toggleSelectId, setSelectedById, clearSelection]);
+
+  /**
    * 键盘事件处理
    * 
    * 支持的快捷键：
-   *   - ↑：选中上一行
-   *   - ↓：选中下一行
+   *   - ↑：选中上一行 / Shift+↑：扩展选择上一行
+   *   - ↓：选中下一行 / Shift+↓：扩展选择下一行
+   *   - PageUp：向上翻页（20 行）
+   *   - PageDown：向下翻页（20 行）
+   *   - Home：跳转到第一行
+   *   - End：跳转到最后一行
    *   - Enter：打开编辑器编辑当前行
    */
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
+      const currentIdx = selectedId !== null ? items.findIndex((i) => i.id === selectedId) : -1;
+      const PAGE_SIZE = 20;
+
+      const moveToIndex = (targetIdx: number) => {
+        const clampedIdx = Math.max(0, Math.min(targetIdx, items.length - 1));
+        if (clampedIdx < 0 || clampedIdx >= items.length) return;
+        const item = items[clampedIdx];
+        if (!item) return;
+        if (e.shiftKey) {
+          // Shift+方向：扩展选择
+          if (!selectedIds.has(item.id)) {
+            toggleSelectId(item.id);
+          }
+          if (selectedId !== item.id) {
+            setSelectedById(item.id);
+          }
+        } else {
+          // 非 Shift：单选
+          if (selectedIds.size > 0) clearSelection();
+          setSelectedById(item.id);
+        }
+        lastClickedRef.current = clampedIdx;
+      };
+
       if (e.key === "ArrowDown") {
         e.preventDefault();
-        selectNextRow();
+        if (currentIdx < items.length - 1) moveToIndex(currentIdx + 1);
       } else if (e.key === "ArrowUp") {
         e.preventDefault();
-        selectPrevRow();
+        if (currentIdx > 0) moveToIndex(currentIdx - 1);
+      } else if (e.key === "PageDown") {
+        e.preventDefault();
+        moveToIndex(currentIdx + PAGE_SIZE);
+      } else if (e.key === "PageUp") {
+        e.preventDefault();
+        moveToIndex(currentIdx - PAGE_SIZE);
+      } else if (e.key === "Home") {
+        e.preventDefault();
+        moveToIndex(0);
+      } else if (e.key === "End") {
+        e.preventDefault();
+        moveToIndex(items.length - 1);
       } else if (e.key === "Enter" && selectedId !== null) {
         e.preventDefault();
         openEditorForItem(selectedId);
       }
     },
-    [selectNextRow, selectPrevRow, selectedId, openEditorForItem]
+    [items, selectedId, selectedIds, toggleSelectId, setSelectedById, clearSelection, openEditorForItem]
   );
 
   /**
@@ -350,13 +448,39 @@ export function StringTable() {
   // 排序处理函数
   const handleSort = (field: string) => setSort(field);
   
-  // 行选中处理函数
-  const handleSelect = (id: number) => setSelectedById(id);
+  // 批量操作：复制所有选中项的源文本
+  const handleBatchCopySource = useCallback(() => {
+    const texts: string[] = [];
+    if (selectedIds.size > 0) {
+      selectedIds.forEach((id) => {
+        const item = items.find((i) => i.id === id);
+        if (item) texts.push(item.source);
+      });
+    } else if (selectedId !== null) {
+      const item = items.find((i) => i.id === selectedId);
+      if (item) texts.push(item.source);
+    }
+    navigator.clipboard.writeText(texts.join("\n---\n"));
+  }, [selectedIds, selectedId, items]);
+
+  // 批量翻译：打开编辑器处理第一个选中项
+  const handleBatchTranslate = useCallback(() => {
+    if (selectedIds.size > 0) {
+      const firstId = Array.from(selectedIds)[0];
+      openEditorForItem(firstId);
+    }
+  }, [selectedIds, openEditorForItem]);
+
+  // 清除多选
+  const handleClearSelection = useCallback(() => {
+    clearSelection();
+  }, [clearSelection]);
 
   // 构建虚拟行的数据对象，传递给 react-window
   const rowData: RowData = {
     items,
     selectedId,
+    selectedIds,
     filter,
     onSelect: handleSelect,
     onDoubleClick: (id) => openEditorForItem(id),
@@ -431,6 +555,42 @@ export function StringTable() {
             >
               Replace All
             </Button>
+          </div>
+        )}
+        
+        {/* 多选工具栏：选中项数量和批量操作 */}
+        {selectedIds.size > 0 && (
+          <div className="table-toolbar-row table-toolbar-selection">
+            <span className="table-selection-count">
+              {selectedIds.size} selected
+            </span>
+            <div className="table-selection-actions">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleBatchTranslate}
+                title={t("table.batchTranslate", { defaultValue: "Batch translate selected" })}
+              >
+                <Languages size={14} />
+                <span>{t("table.translate", { defaultValue: "Translate" })}</span>
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleBatchCopySource}
+                title={t("table.batchCopySource", { defaultValue: "Copy source of selected" })}
+              >
+                <Copy size={14} />
+                <span>{t("table.copySource", { defaultValue: "Copy Source" })}</span>
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleClearSelection}
+              >
+                {t("common.clear", { defaultValue: "Clear" })}
+              </Button>
+            </div>
           </div>
         )}
       </div>
