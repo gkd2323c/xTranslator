@@ -5,6 +5,37 @@ All notable changes to xTranslator will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+
+## [1.0.0] - 2026-05-19
+
+### Added
+- **首个正式稳定版发布** 🎉
+- SPEC 全部 100 项任务 (T1-T100) 完成
+- P0-P4 全部里程碑达成
+
+### Improved
+- **跨游戏验证**: VMAD 写回完成，嵌套 GRUP 验证通过
+- **协作翻译系统**: 8 槽位协作标签分配、颜色编码、三态过滤
+- **RTL 实时预览**: 阿拉伯语/希伯来语文本实时预览工具
+- **对话 HTML 导出**: 按 QUST→DIAL→INFO 分组导出为可读 HTML
+- **SST 字典合并**: 三元组匹配 + 冲突处理 + 合并统计
+- **代码注释规范化**: 全部后端和前端代码注释统一为中文
+- **Playwright E2E**: 前端端到端测试接入
+- **CI/CD 流水线**: GitHub Actions 多平台自动构建测试
+
+### Fixed
+- 全部 10 个已知 Bug (B1-B10) 已修复
+- TS 编译零错误，Rust 编译零警告
+
+### Technical Details
+- **测试**: 290 单元测试 + 8 e2e + 7 基准测试，全部通过
+- **性能**: 解析 75K+ 字符串仅需 1.9s (39,800 strings/s)
+- **覆盖**: 287 Rust 单测 + 14 前端单测 + 8 smoke 测试
+- **后端**: ~16,500 行 Rust，零 unsafe 代码
+- **前端**: ~5,300 行 TypeScript，React 18 + Vite 5
+- **桌面**: Tauri 2.x，支持 Windows/macOS/Linux
+- **兼容性**: SST v8 双向兼容 Delphi 原版，14 种记录类型精确匹配
+
 ## [0.2.0] - 2026-05-12
 
 ### Added

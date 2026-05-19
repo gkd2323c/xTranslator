@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { colabGetLabels, colabAssign } from "../api/strings";
 import { Button } from "./ui/Button";
-import { X, Tag, Plus } from "lucide-react";
+import { X, Tag } from "lucide-react";
 
 const COLORS = [
   "#f38ba8", "#a6e3a1", "#89b4fa", "#f9e2af", "#cba6f7",
