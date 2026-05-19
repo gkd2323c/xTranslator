@@ -80,6 +80,7 @@ Completed implementation plans and historical documents live in [`archive/`](arc
 | `docs/feature_comparison.md` | Delphi vs Rust 差距分析 | 开发者、AI | 功能覆盖度变化 |
 | `docs/development_roadmap.md` | 开发路线图 | 开发者 | 任务完成/新增 |
 | `docs/release_qa.md` | 发布 QA 清单 | QA | 每次发布前 |
+| `docs/ui-handover.md` | UI 打磨交接文档 | 前端开发者、AI | UI Phase 完成时 |
 | `docs/archive/` | 历史计划归档 | 历史参考 | 计划完成后移入 |
 
 ### 每次功能变更后的必做检查
