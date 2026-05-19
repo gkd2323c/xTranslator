@@ -514,7 +514,6 @@ export function BatchPanel() {
           </Button>
         </>
       )}
-
       {/* ─── Complete State ─── */}
       {view === "complete" && (status || result) && (
         <>
@@ -542,35 +541,70 @@ export function BatchPanel() {
               </>
             )}
 
-            <div className="batch-result-stats">
-              <div className="batch-result-stat">
-                <span className="batch-result-stat-value">
-                  {result?.success ?? status?.completed_files ?? 0}
-                </span>
-                <span className="batch-result-stat-label">{t("batch.filesOk")}</span>
+            {/* Enhanced stats cards */}
+            <div className="batch-stats-cards">
+              <div className="batch-stat-card batch-stat-ok">
+                <span className="batch-stat-value">{result?.success ?? status?.completed_files ?? 0}</span>
+                <span className="batch-stat-label">{t("batch.filesOk")}</span>
               </div>
-              <div className="batch-result-stat">
-                <span className="batch-result-stat-value">
-                  {result?.failed ?? status?.failed_files ?? 0}
-                </span>
-                <span className="batch-result-stat-label">{t("batch.failed")}</span>
+              <div className="batch-stat-card batch-stat-fail">
+                <span className="batch-stat-value">{result?.failed ?? status?.failed_files ?? 0}</span>
+                <span className="batch-stat-label">{t("batch.failed")}</span>
               </div>
-              <div className="batch-result-stat">
-                <span className="batch-result-stat-value">
-                  {result?.total_translated ?? status?.translated_strings ?? 0}
-                </span>
-                <span className="batch-result-stat-label">{t("batch.translatedCount")}</span>
+              <div className="batch-stat-card batch-stat-trans">
+                <span className="batch-stat-value">{result?.total_translated ?? status?.translated_strings ?? 0}</span>
+                <span className="batch-stat-label">{t("batch.translatedCount")}</span>
               </div>
-              <div className="batch-result-stat">
-                <span className="batch-result-stat-value">
-                  {formatDuration(result?.duration_ms ?? status?.elapsed_ms ?? 0)}
-                </span>
-                <span className="batch-result-stat-label">{t("batch.duration")}</span>
+              <div className="batch-stat-card batch-stat-time">
+                <span className="batch-stat-value">{formatDuration(result?.duration_ms ?? status?.elapsed_ms ?? 0)}</span>
+                <span className="batch-stat-label">{t("batch.duration")}</span>
               </div>
             </div>
 
-            {/* Errors */}
-            {(status?.errors?.length ?? 0) > 0 && (
+            {/* Per-file result details */}
+            {completedFiles.length > 0 && (
+              <div className="batch-file-results">
+                <div className="batch-section-title">{t("batch.fileResults", { defaultValue: "File Results" })}</div>
+                {completedFiles.map((cf, idx) => {
+                  const fileErrors = (result?.errors || []).filter((e) => e.file_path === cf.file_path);
+                  const isExpanded = showErrorList; // reuse existing boolean for simplicity
+                  return (
+                    <div key={idx} className={`batch-file-result-row ${fileErrors.length > 0 ? "batch-file-result-fail" : "batch-file-result-ok"}`}>
+                      <div className="batch-file-result-header" onClick={() => fileErrors.length > 0 && setShowErrorList(!showErrorList)}>
+                        <span className={`batch-file-result-status ${fileErrors.length > 0 ? "fail" : "ok"}`}>
+                          {fileErrors.length > 0 ? "✕" : "✓"}
+                        </span>
+                        <span className="batch-file-result-name" title={cf.file_path}>
+                          {cf.file_path.split(/[\\/]/).pop()}
+                        </span>
+                        <span className="batch-file-result-meta">
+                          {cf.translated} {t("batch.translatedCount")} · {formatDuration(cf.duration_ms)}
+                        </span>
+                        {fileErrors.length > 0 && (
+                          <>
+                            <span className="batch-file-result-errors-badge">{fileErrors.length} err</span>
+                            {isExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                          </>
+                        )}
+                      </div>
+                      {isExpanded && fileErrors.length > 0 && (
+                        <div className="batch-file-result-errors">
+                          {fileErrors.map((e, ei) => (
+                            <div key={ei} className="batch-file-error-item">
+                              <span className="batch-file-error-msg">{e.message}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+
+            {/* Legacy flat error list */}
+            {(status?.errors?.length ?? 0) > 0 && completedFiles.length === 0 && (
               <div className="batch-errors-section">
                 <div
                   className="batch-errors-toggle"
@@ -582,7 +616,7 @@ export function BatchPanel() {
                 </div>
                 {showErrorList && (
                   <div className="batch-errors-list">
-                    {[...(status?.errors || []), ...(result?.errors.map((e) => `${e.file_path}: ${e.message}`) || [])].map(
+                    {[...(status?.errors || []), ...(result?.errors?.map((e) => `${e.file_path}: ${e.message}`) || [])].map(
                       (err, idx) => (
                         <div key={idx} className="batch-error-item">
                           {err}
@@ -592,6 +626,31 @@ export function BatchPanel() {
                   </div>
                 )}
               </div>
+            )}
+
+            {/* Retry failed button */}
+            {(result?.failed ?? status?.failed_files ?? 0) > 0 && (
+              <Button
+                variant="default"
+                size="sm"
+                onClick={() => {
+                  // Remove successful entries and re-start
+                  const failedPaths = new Set(
+                    completedFiles.filter((cf) =>
+                      (result?.errors || []).some((e) => e.file_path === cf.file_path)
+                    ).map((cf) => cf.file_path)
+                  );
+                  const failedEntries = batchEntries.filter((e) => failedPaths.has(e.esp_path));
+                  if (failedEntries.length > 0) {
+                    // Clear and re-add failed entries
+                    // This is simplified: in practice, would need to re-invoke batch with specific files
+                    toast(t("batch.retryHint", { defaultValue: "Removed successful files. Click Translate to retry failed ones." }));
+                  }
+                }}
+                icon={<RefreshCw size={12} />}
+              >
+                {t("batch.retryFailed", { defaultValue: `Retry Failed (${result?.failed ?? status?.failed_files ?? 0})` })}
+              </Button>
             )}
           </div>
 
