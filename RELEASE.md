@@ -1,9 +1,9 @@
 # xTranslator 发布流程
 
 ## 当前版本
-- **版本**: 0.2.0
-- **最新提交**: `969b10f` - docs: mark P2.1/P2.3 complete, P2 all done
-- **测试**: Rust 287 tests · 8 e2e · 7 benchmarks · 0 warnings
+- **版本**: 1.0.0 (正式版)
+- **测试**: Rust 290 tests · 8 e2e · 7 benchmarks · 0 warnings
+- **构建**: `./build.bat` 一键 release
 - **构建**: `./build.bat` 一键 release
 
 ## 发布步骤
@@ -65,6 +65,5 @@ cargo tauri build
 - 上传构建产物
 
 ## 版本规范
-- **0.x.x**: 开发版，API 可能变动
-- **1.0.0**: 首个稳定版
+- **1.x.x**: 稳定版，API 稳定
 - **语义化版本**: MAJOR.MINOR.PATCH

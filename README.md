@@ -1,6 +1,8 @@
 # xTranslator - Rust Rewrite
 
+[![Version: 1.0.0](https://img.shields.io/badge/Version-1.0.0-blue.svg)](RELEASE.md)
 [![License: MPL-2.0](https://img.shields.io/badge/License-MPL--2.0-brightgreen.svg)](LICENSE)
+[![Tests](https://img.shields.io/badge/Tests-290_passing-brightgreen.svg)](CHANGELOG.md)
 
 [中文版](README_zh-CN.md)
 
@@ -67,7 +69,9 @@ xTranslator/
 
 ## Project Status
 
-The rewrite is feature-complete for the main desktop translation workflow. `SPEC.md` tracks **100 completed tasks** covering parsing, editing, ESP write-back, compare tools, archive support, translation APIs, config persistence, and language tooling.
+**v1.0.0 stable release is out!** 🎉
+
+The rewrite is fully feature-complete with Delphi parity. `SPEC.md` tracks **100 completed tasks** covering parsing, editing, ESP write-back, compare tools, archive support, translation APIs, config persistence, and language tooling.
 
 All core functionality is implemented and tested:
 - ✅ ESP parsing with record tree + write-back (T42-T45)
