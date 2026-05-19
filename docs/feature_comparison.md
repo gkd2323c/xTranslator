@@ -1,8 +1,8 @@
 # xTranslator 功能对比：Delphi 原版 vs Rust 重写
 
-> **更新日期**：2026-05-07
+> **更新日期**：2026-05-19
 > **原版版本**：xTranslator 1.6.0（Delphi 12.1 CE，~6.7 万行代码，10+ 年迭代）
-> **重写版本**：v0.1.0 — 后端 ~85%（290 单元测试，92 IPC 命令），前端 ~60%（43 组件，三阶段布局复刻完成）
+> **重写版本**：v0.1.0 — 后端 ~85%（290 单元测试，92 IPC 命令），前端 ~72%（43 组件，Phase 1-2 UI 打磨完成）
 >
 > 界面复刻的独立推进方案见 [`ui_reproduction_plan.md`](ui_reproduction_plan.md)。
 
@@ -17,7 +17,7 @@
 | 数据格式解析 | 全格式 | 核心格式 | ~95% |
 | 编码系统 | 完整 | 完整 | ~90% |
 | 翻译工作流 | 完整 | 核心就绪 | ~90% |
-| UI 交互 | 完整 VCL | Tauri 基础 | ~65% | 三阶段布局复刻完成，主窗口结构对齐原版 |
+| UI 交互 | 完整 VCL | Tauri 基础 | ~72% | Phase 1-2 打磨完成：元数据行/语法高亮/多选/StatusBar/底部面板/DialogView |
 | 辅助工具 | 完整 | 基本完成 | ~55% |
 
 ---
@@ -64,7 +64,7 @@
 | **字典应用 (apply)** | ✅ ID+EDID+词汇匹配+状态语义 | ✅ 共享 matcher + Delphi 状态语义 | ~90% | exact/EDID/normalized/vocab 已实现；pending、oldData、warning、tagOnly、stringID 语义有回归测试覆盖；仍需 Delphi 实机对照确认 |
 | **启发式搜索** | ✅ Levenshtein/LCS | ✅ | ~80% | xt-core heuristic 模块，Levenshtein+LCS+LCP，IPC+UI 已集成 |
 | **翻译 API** | ✅ DeepL/MS/Google/OpenAI/Youdao/Baidu | ✅ OpenAI + DeepL + Baidu + Youdao + API config | ~75% | OpenAIProvider + DeepLProvider + BaiduProvider + YoudaoProvider 已就绪（内联 MD5 签名）；待补齐 MS Azure / Google |
-| **字符串编辑** | ✅ 行内+窗口编辑 | ⚠️ 弹窗编辑（Modal xl） | ~60% | EditorDialog：双击/Enter 打开，左右分栏（原文+译文｜操作+匹配），Ctrl+Enter 保存；缺语法高亮 |
+| **字符串编辑** | ✅ 行内+窗口编辑 | ⚠️ 弹窗编辑（Modal xl） | ~78% | EditorDialog：双击/Enter 打开，元数据行 + 语法高亮（XML/变量/占位符），Tab 插空格，Ctrl+Enter 保存 |
 | **正则搜索/替换** | ✅ PCRE+批量 | ✅ Regex filter toggle + Replace All | ~80% | Regex toggle + Replace All with confirmation + capture groups ($1/$2) |
 | **直接搜索** | ✅ | ✅ 实时筛选 | ~80% | 客户端 filter+sort：文本/Regex/状态/Record 类型/排序，零延迟，76K+ 条 |
 | **撤销/重做** | ✅ | ✅ Stack-based (max 100) | ~80% | Ctrl+Z/Y + Ctrl+Shift+Z, IPC-synced, session-only |
@@ -108,11 +108,11 @@
 
 | 功能 | 原版 | Rust 重写 | 覆盖度 | 说明 |
 |------|------|----------|--------|------|
-| **主窗口布局** | ✅ 菜单栏+文件树+编辑区 | ⚠️ 基础布局 | ~60% | MenuBar + SidePanel + StringTable + EditorPanel + BatchPanel + BsaBrowser + PexPanel + FuzPanel + DialogView |
-| **虚拟字符串表格** | ✅ VirtualTreeView | ✅ react-window | ~70% | 76K+ 条虚拟滚动，客户端筛选/排序零延迟，ResizeObserver 自适应 |
-| **字符串编辑器** | ✅ SynEdit 高亮+行内编辑 | ⚠️ 基础编辑 | ~55% | textarea 编辑、Ctrl+Enter 保存、状态显示、启发式搜索、翻译 API |
-| **对话列表视图** | ✅ DIAL/INFO/QUST | ✅ DialogView 组件 | ~60% | QUST→DIAL→INFO 分组 + NPC_ 关联，parent_form_id 跟踪 |
-| **翻译进度条** | ✅ | ✅ ProgressBar 组件 + EditorPanel 进度条 | ~60% | `ProgressBar.tsx` 显示已翻译/总数百分比；BatchPanel 有独立的文件级+字符串级进度条 |
+| **主窗口布局** | ✅ 菜单栏+文件树+编辑区 | ✅ 三阶段布局复刻 | ~75% | MenuBar + SidePanel + StringTable + StatusBar + 底部面板 + EditorDialog；工具弹窗面板 9 个 |
+| **虚拟字符串表格** | ✅ VirtualTreeView | ✅ react-window | ~80% | 76K+ 条虚拟滚动，多选(Ctrl/Shift+Click) + 键盘导航(PageUp/Down/Home/End) + 右键批量操作 |
+| **字符串编辑器** | ✅ SynEdit 高亮+行内编辑 | ✅ 弹窗编辑（Modal xl） | ~78% | 元数据行 + 语法高亮（XML/变量/占位符）+ Tab 插空格 + 原文复制 + Ctrl+Enter 保存 + 启发式搜索 + 翻译 API |
+| **对话列表视图** | ✅ DIAL/INFO/QUST | ✅ DialogView 组件 | ~78% | NPC→DIAL→INFO 分组 + 展开/折叠全部 + 搜索过滤高亮 + 翻译状态色标 |
+| **翻译进度条** | ✅ | ✅ 状态栏可视化 | ~80% | 状态栏进度条（bar+百分比）+ 选中位置 N/M + 多选计数 + 过滤提示 |
 | **筛选/搜索栏** | ✅ 多维度筛选 | ✅ 实时筛选 + 正则 | ~80% | 文本搜索 + Regex toggle + 状态筛选 + Record 类型筛选 + 排序，客户端零延迟，虚拟滚动 |
 | **主题支持** | ✅ 默认/亮/灰/暗 | ✅ Dark/Light/Gray/Auto | ~90% | CSS variables + Zustand + localStorage, system follow via matchMedia |
 | **UI 多语言** | ✅ 10+ 语言 | ✅ react-i18next 10 语言 | ~80% | zh-CN/en/de/es/fr/ja/ko/pl/pt/ru locales，MenuBar 切换 + localStorage 持久化 |

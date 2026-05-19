@@ -156,9 +156,12 @@ App
 │   └── app-main
 │       ├── app-table-area  → StringTable (react-window v2)
 │       └── app-bottom-panel (flex:1, 10 tabs)
-│           ├── home → SidePanel (stats)
-│           ├── vocabulary/heuristic/espTree/quests/log
+│           ├── home → SidePanel (stats cards + progress)
+│           ├── vocabulary → VocabularyPanel (searchable pairs)
+│           ├── log → LogPanel (color-coded, searchable, auto-scroll)
+│           ├── heuristic/espTree/quests
 │           ├── pex/dialogs (PexPanel/DialogView, also available as dialogs)
+│           └── headerProc/headerWizard
 │           └── headerProc/headerWizard
 ├── StatusBar
 └── (SettingsDialog, ToolboxDialog — opened via MenuBar buttons)
@@ -169,6 +172,9 @@ App
 - **editorOpen** — EditorDialog visibility
 - **selectedId/selectedItem** — current editing target
 - **allItems/items** — full dataset vs filtered display set
+- **selectedIds** — multi-select set (ctrl+click, shift+click range, context-menu batch)
+- **logs** — LogEntry[] (max 500), addLog/clearLogs actions
+
 - **Theme** — `"obsidian" | "dark" | "light" | "slate" | "auto"` (dark → obsidian alias)
 
 ### Key Interaction Patterns

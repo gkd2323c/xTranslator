@@ -23,10 +23,10 @@ cd ui && npm run test               # 前端 Vitest
 ### 文件定位
 | 需求 | 文件 |
 |------|------|
-| 添加 IPC 命令 | `xt-shared/src/dto.rs` → `src-tauri/src/commands.rs` → `ui/src/api/strings.ts` |
 | 修改字符串表格 | `ui/src/components/StringTable.tsx` |
 | 修改编辑器 | `ui/src/components/EditorPanel.tsx` (导出 `EditorDialog`) |
 | 添加工具弹窗 | `ui/src/App.tsx` (Modal 包裹) + `ui/src/stores/appStore.ts` (activePanel) |
+| 添加日志功能 | `ui/src/stores/appStore.ts` (LogEntry / addLog / clearLogs) + `ui/src/components/bottom/LogPanel.tsx` |
 | 后端核心逻辑 | `crates/xt-core/src/` 对应模块 |
 
 ### 版本要求
