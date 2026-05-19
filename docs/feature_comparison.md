@@ -2,7 +2,7 @@
 
 > **更新日期**：2026-05-19
 > **原版版本**：xTranslator 1.6.0（Delphi 12.1 CE，~6.7 万行代码，10+ 年迭代）
-> **重写版本**：v0.1.0 — 后端 ~85%（290 单元测试，92 IPC 命令），前端 ~72%（43 组件，Phase 1-2 UI 打磨完成）
+> **重写版本**：v0.1.0 — 后端 ~85%（290 单元测试，92 IPC 命令），前端 ~75%（43 组件，Phase 1-3 UI 打磨完成）
 >
 > 界面复刻的独立推进方案见 [`ui_reproduction_plan.md`](ui_reproduction_plan.md)。
 
@@ -17,8 +17,8 @@
 | 数据格式解析 | 全格式 | 核心格式 | ~95% |
 | 编码系统 | 完整 | 完整 | ~90% |
 | 翻译工作流 | 完整 | 核心就绪 | ~90% |
-| UI 交互 | 完整 VCL | Tauri 基础 | ~72% | Phase 1-2 打磨完成：元数据行/语法高亮/多选/StatusBar/底部面板/DialogView |
-| 辅助工具 | 完整 | 基本完成 | ~55% |
+| UI 交互 | 完整 VCL | Tauri 基础 | ~75% | Phase 1-3 打磨完成：元数据行/语法高亮/多选/StatusBar/底部面板/DialogView/BSA/PEX/Batch |
+| 辅助工具 | 完整 | 基本完成 | ~60% | BSA 预览+搜索 / PEX 搜索+表格化 |
 
 ---
 
@@ -51,8 +51,8 @@
 | **XXXX 超大字段** | ✅ 4字节扩展大小 | ✅ | 100% | 已处理 next_field_size 逻辑 |
 | **XML 导入** | ✅ | ✅ 解析+匹配+更新 | ~95% | 共享 matcher：exact / EDID / normalized / vocab，歧义不自动应用 |
 | **XML 导出** | ✅ | ✅ 写入+实体转义 | ~95% | `write_xml_export` Delphi 兼容格式，只导出有翻译的条目 |
-| **BSA/BA2 归档** | ✅ 提取+浏览 | ✅ BSA + BA2 GNRL 全支持 | ~80% | `BsaArchive` v0x68/v0x69，`Ba2Archive` v0x01/0x02/0x08 GNRL，`list_all_files` + `extract_file` + `BsaBrowser` 组件，ESP strings 回退到 BA2 搜索 |
-| **PEX 脚本解析** | ✅ 反编译+编辑 | ✅ 字符串提取+写回 | ~90% | PEX parser 完成（Header+StringTable+ObjectInfo），可翻译字符串提取 + PexPanel；写回 PEX 已完成（字符串表原地更新，原始 opcode/调试信息全部保留，索引不变，roundtrip 测试通过） |
+| **BSA/BA2 归档** | ✅ 提取+浏览 | ✅ BSA + BA2 GNRL 全支持 + 预览 | ~85% | `BsaArchive` v0x68/v0x69，`Ba2Archive` v0x01/0x02/0x08 GNRL，`BsaBrowser` 组件新增文件预览(元数据) + 文件名搜索(高亮) |
+| **PEX 脚本解析** | ✅ 反编译+编辑 | ✅ 字符串提取+写回+搜索 | ~90% | PEX parser 完成（Header+StringTable+ObjectInfo），可翻译字符串提取 + PexPanel 新增字符串搜索+表格化布局+伪代码视图(行号/复制)；写回 PEX 已完成（字符串表原地更新，原始 opcode/调试信息全部保留，索引不变，roundtrip 测试通过） |
 | **FUZ 音频映射** | ✅ 映射+播放 | ✅ FuzFile parse + WAV 播放 | ~50% | FuzHeader 解析 + Sound/Voice/ 扫描 + RESP/INFO 关联 + FuzPanel；LIP 唇形数据未处理 |
 
 ---
@@ -70,7 +70,7 @@
 | **撤销/重做** | ✅ | ✅ Stack-based (max 100) | ~80% | Ctrl+Z/Y + Ctrl+Shift+Z, IPC-synced, session-only |
 | **ESP 写入（Strings 回写）** | ✅ | ✅ 直接 ESP 写入 + Strings 导出 | ~100% | ESP 记录树+重建+序列化+备份+Strings 导出完整实现（T42-T45） |
 | **最终化 (finalize)** | ✅ 导出翻译结果 | ✅ ESP finalize + Strings 导出 | ~90% | `finalize_esp` 命令：应用 SST 翻译→重建记录→序列化→导出 .STRINGS/.DLSTRINGS/.ILSTRINGS |
-| **批量处理器** | ✅ 命令式批处理 | ✅ BatchExecutor + BatchPanel | ~70% | Multi-file translate/export, progress events, cancel, error recovery |
+| **批量处理器** | ✅ 命令式批处理 | ✅ BatchExecutor + BatchPanel | ~80% | Multi-file translate/export, progress events, cancel, error review per-file, stats cards, retry failed |
 | **RTL 支持 (阿拉伯语)** | ✅ RTL 标签+字符串反向 | ✅ rtl.rs + EditorPanel RTL 按钮 | ~80% | `rtl.rs`：阿拉伯字符检测 + 块反转 + 符号镜像 + 阿拉伯整形（Shape/deshape）均已从 Delphi 移植，roundtrip 测试通过；EditorPanel RTL 按钮 |
 | **中文繁简转换** | ✅ SC↔TC 字符映射 | ✅ IPC + MenuBar + EditorPanel 按钮 | ~90% | `tcsc.rs`：OpenCC 主字典(3960对)+Delphi 字典回退(2552对)，编译时嵌入；IPC 命令+MenuBar 按钮+EditorPanel 内转换按钮均已集成；批量转换待实现 |
 
