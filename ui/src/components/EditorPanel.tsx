@@ -5,6 +5,7 @@ import { Save, Search, Languages, Key, AlertTriangle, ArrowRight, Copy, ArrowUp,
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import { Button, Textarea, Badge, Modal, Input, ProgressBar } from "./ui";
+import { replaceUtf8ByteRange } from "../utils/utf8";
 
 // ============================================================================
 // EditorDialog 组件 - 字符串翻译编辑器
@@ -161,7 +162,6 @@ export function EditorDialog({ open, onClose }: EditorDialogProps) {
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
   const spellTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const ignorePathRef = useRef<string>("");
 
   // ========== 字段大小验证 ==========
   /**
@@ -330,9 +330,12 @@ export function EditorDialog({ open, onClose }: EditorDialogProps) {
   const handleApplySuggestion = useCallback((suggestion: string) => {
     if (selectedFaultIdx === null || !spellResult) return;
     const fault = spellResult.faults[selectedFaultIdx];
-    const before = localTrans.slice(0, fault.start_byte);
-    const after = localTrans.slice(fault.end_byte);
-    const newText = before + suggestion + after;
+    const newText = replaceUtf8ByteRange(
+      localTrans,
+      fault.start_byte,
+      fault.end_byte,
+      suggestion,
+    );
     setLocalTrans(newText);
     setSelectedFaultIdx(null);
     setSuggestions([]);
@@ -350,7 +353,7 @@ export function EditorDialog({ open, onClose }: EditorDialogProps) {
    */
   const handleIgnoreWord = useCallback(async (word: string) => {
     try {
-      await spellCheckIgnore(word, ignorePathRef.current || "SpellCheck/ignore.txt");
+      await spellCheckIgnore(word);
       // 从错误列表中移除
       setSpellResult((prev) => {
         if (!prev) return null;

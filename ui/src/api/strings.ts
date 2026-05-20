@@ -347,7 +347,7 @@ export async function spellCheckSuggestions(word: string): Promise<string[]> {
   return invoke("spell_check_suggestions", { word });
 }
 
-export async function spellCheckIgnore(word: string, ignorePath: string): Promise<void> {
+export async function spellCheckIgnore(word: string, ignorePath = ""): Promise<void> {
   return invoke("spell_check_ignore", { word, ignorePath });
 }
 

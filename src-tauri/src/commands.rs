@@ -3062,8 +3062,11 @@ pub async fn spell_check_ignore(
     ignore_path: String,
 ) -> Result<(), String> {
     let mut checker = state.spell_checker.lock().map_err(|e| e.to_string())?;
+    let resolved_ignore_path = checker.resolved_ignore_path(&ignore_path);
     checker.add_ignore(&word);
-    checker.save_ignore_list(&ignore_path).map_err(|e| e.to_string())
+    checker
+        .save_ignore_list(&resolved_ignore_path.to_string_lossy())
+        .map_err(|e| e.to_string())
 }
 
 // ── Header Processor Commands ──────────────────────────────────────

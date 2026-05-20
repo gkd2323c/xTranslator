@@ -9,7 +9,7 @@
 //! - Suggestions via Hunspell Suggest()
 
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 /// Parse options for word extraction
 #[derive(Debug, Clone, Copy, Default)]
@@ -179,6 +179,7 @@ pub struct SpellChecker {
     correct_cache: HashMap<u64, ()>,
     fault_cache: HashMap<u64, ()>,
     ignore_list: Vec<String>,
+    ignore_path: Option<PathBuf>,
     pub config: SpellCheckConfig,
     pub parse_options: SpellParseOptions,
     pub fault_ratio_locked: bool,
@@ -191,6 +192,7 @@ impl SpellChecker {
             correct_cache: HashMap::new(),
             fault_cache: HashMap::new(),
             ignore_list: Vec::new(),
+            ignore_path: None,
             config: SpellCheckConfig {
                 available_dictionaries: Vec::new(),
                 current_dictionary: None,
@@ -225,9 +227,11 @@ impl SpellChecker {
         self.hunspell = Some(handle);
         self.config.current_dictionary = Some(dict_name.to_string());
         self.config.loaded = true;
-
-        // Rebuild caches from ignore list
-        self.rebuild_cache();
+        self.ignore_path = Some(Self::default_ignore_path_for_dict_dir(dic_dir));
+        if let Some(ignore_path) = &self.ignore_path {
+            let ignore_path = ignore_path.to_string_lossy().to_string();
+            self.load_ignore_list(&ignore_path);
+        }
 
         Ok(())
     }
@@ -239,6 +243,7 @@ impl SpellChecker {
         self.correct_cache.clear();
         self.fault_cache.clear();
         self.fault_ratio_locked = false;
+        self.ignore_path = None;
     }
 
     /// Scan a directory for available dictionaries.
@@ -276,11 +281,34 @@ impl SpellChecker {
         self.correct_cache.insert(hash, ());
     }
 
+    fn default_ignore_path_for_dict_dir(dict_dir: &str) -> PathBuf {
+        let dict_path = Path::new(dict_dir);
+        let base_dir = dict_path.parent().unwrap_or(dict_path);
+        base_dir.join("ignore.txt")
+    }
+
+    pub fn resolved_ignore_path(&self, requested_path: &str) -> PathBuf {
+        if !requested_path.trim().is_empty() {
+            return PathBuf::from(requested_path);
+        }
+
+        self.ignore_path
+            .clone()
+            .unwrap_or_else(|| PathBuf::from("SpellCheck/ignore.txt"))
+    }
+
     /// Load ignore list from file.
     pub fn load_ignore_list(&mut self, path: &str) {
+        self.ignore_list.clear();
         if let Ok(content) = std::fs::read_to_string(path) {
-            self.ignore_list = content.lines().map(|s| s.to_string()).collect();
+            self.ignore_list = content
+                .lines()
+                .map(str::trim)
+                .filter(|line| !line.is_empty())
+                .map(|line| line.to_string())
+                .collect();
         }
+        self.rebuild_cache();
     }
 
     /// Save ignore list to file.
@@ -608,5 +636,55 @@ mod tests {
         let checker = SpellChecker::new();
         assert!(!checker.is_active());
         assert!(!checker.config.loaded);
+    }
+
+    #[test]
+    fn test_default_ignore_path_uses_spellcheck_parent_dir() {
+        let ignore_path = SpellChecker::default_ignore_path_for_dict_dir("SpellCheck/dictionaries");
+        assert_eq!(ignore_path.file_name().and_then(|name| name.to_str()), Some("ignore.txt"));
+        assert_eq!(
+            ignore_path
+                .parent()
+                .and_then(|parent| parent.file_name())
+                .and_then(|name| name.to_str()),
+            Some("SpellCheck")
+        );
+    }
+
+    #[test]
+    fn test_load_ignore_list_roundtrip() {
+        let temp_root = std::env::temp_dir().join(format!(
+            "xt-spell-ignore-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&temp_root).unwrap();
+        let ignore_path = temp_root.join("ignore.txt");
+        let ignore_path_str = ignore_path.to_string_lossy().to_string();
+
+        let mut checker = SpellChecker::new();
+        checker.add_ignore("Foobar");
+        checker.save_ignore_list(&ignore_path_str).unwrap();
+
+        let mut reloaded = SpellChecker::new();
+        reloaded.load_ignore_list(&ignore_path_str);
+
+        assert_eq!(reloaded.ignore_list, vec!["Foobar"]);
+        assert!(reloaded.correct_cache.contains_key(&hash_word("Foobar")));
+
+        std::fs::remove_dir_all(temp_root).ok();
+    }
+
+    #[test]
+    fn test_load_ignore_list_clears_missing_file_state() {
+        let mut checker = SpellChecker::new();
+        checker.add_ignore("Foobar");
+
+        checker.load_ignore_list("C:/nonexistent/xtranslator-ignore.txt");
+
+        assert!(checker.ignore_list.is_empty());
+        assert!(checker.correct_cache.is_empty());
     }
 }
