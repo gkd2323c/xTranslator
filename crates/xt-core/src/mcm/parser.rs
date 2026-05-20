@@ -88,8 +88,8 @@ pub fn encode_to_bytes(text: &str, encoding: &McmEncoding) -> Vec<u8> {
         }
         McmEncoding::Utf8 => text.as_bytes().to_vec(),
         McmEncoding::Ansi(cp) => {
-            eprintln!(
-                "Warning: MCM file saved with ANSI codepage {} -- falling back to UTF-8. \
+            log::warn!(
+                "MCM file saved with ANSI codepage {} -- falling back to UTF-8. \
                  Some characters may be garbled.",
                 cp
             );
@@ -219,8 +219,8 @@ fn parse_mcm_line(line: &str) -> Option<(String, String)> {
 /// 保留原文件的编码和换行符风格。
 pub fn save_mcm_file(path: &str, file: &McmFile) -> io::Result<()> {
     if let McmEncoding::Ansi(cp) = &file.encoding {
-        eprintln!(
-            "Warning: saving MCM file originally in ANSI codepage {} as UTF-8. \
+        log::warn!(
+            "saving MCM file originally in ANSI codepage {} as UTF-8. \
              Re-encoding may cause character loss for non-ASCII text.",
             cp
         );

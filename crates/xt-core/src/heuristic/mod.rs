@@ -179,6 +179,43 @@ pub fn find_similar_translations(
     matches
 }
 
+/// 使用 Delphi 风格评分进行启发式搜索（推荐）
+///
+/// 相比 `find_similar_translations`（字符级 Levenshtein），此函数使用
+/// 词级哈希匹配、公共子串、公共前缀、代理惩罚等多维度评分，
+/// 对齐 Delphi `TESVT_HeuristicSearch.pas` 的行为。
+///
+/// 返回结果按分数升序排列（分数越低越相似）。
+/// 同时填充 `similarity` / `levenshtein` / `lcs_len` 字段
+/// 以保持与 `HeuristicMatchDTO` 的兼容性。
+pub fn find_similar_delphi(
+    source: &str,
+    candidates: &[(String, String)],
+    max_results: usize,
+) -> Vec<HeuristicMatch> {
+    let delphi_results = delphi_scoring::delphi_find_similar(source, candidates, max_results);
+    delphi_results
+        .into_iter()
+        .map(|dm| {
+            let lev = levenshtein_distance(source, &dm.source);
+            let lcs = longest_common_substring_len(source, &dm.source);
+            // 将 Delphi 分数（越低越好）映射到 similarity（越高越好）
+            let sim = if dm.score < 0.01 {
+                1.0
+            } else {
+                (1.0 - (dm.score / 100.0).min(1.0)).max(0.0)
+            };
+            HeuristicMatch {
+                source: dm.source,
+                translation: dm.translation,
+                similarity: sim,
+                levenshtein: lev,
+                lcs_len: lcs,
+            }
+        })
+        .collect()
+}
+
 /// 批量搜索：为所有未翻译字符串找到最佳候选翻译
 ///
 /// - `untranslated`: 未翻译字符串列表

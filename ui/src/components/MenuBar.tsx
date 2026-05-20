@@ -701,10 +701,10 @@ export function MenuBar() {
           }
         })
         .catch(() => {
-          /* 拖放在浏览器预览中不可用 */
+          /* 拖放在浏览器/非 Tauri 环境中不可用 */
         });
     } catch {
-      /* Tauri webview 元数据在浏览器预览中不可用 */
+      /* getCurrentWebview 在非 Tauri 环境中不可用 */
     }
 
     return () => {

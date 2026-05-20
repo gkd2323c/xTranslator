@@ -1,7 +1,7 @@
 # xTranslator 开发路线图
 
 > 基于 Delphi 1.6.0 原版（~67,000 行）与 Rust 重写版（~20,600 行）的逐文件对比分析
-> 更新日期：2026-05-20
+> 更新日期：2026-05（第 5 版：VMAD 片段处理 + 启发式搜索增强）
 
 ---
 
@@ -248,7 +248,9 @@ Phase D (Week 10-11): P3 UI 完善 ✅ 已完成
     └─ P3.1 RTL 预览 ✅ → P3.2 HTML 导出 ✅ → P3.3 协作系统 ✅
 
 Phase E (Week 12-15): P4 验证与质量保证
-    └─ 跨游戏 ESP 验证 → 嵌套 GRUP → Delphi 交叉验证 → VMAD 完善
+    └─ 跨游戏 ESP 验证 → 嵌套 GRUP ✅ → Delphi 交叉验证 → VMAD 完善 ✅
+    └─ P4.2 嵌套 GRUP ✅（118 顶层 GRUP, 50,376 子 GRUP）
+    └─ P4.4 VMAD 片段处理 ✅（PERK/PACK/SCEN/INFO/QUST 片段跳过 + 写回保留）
 
 Phase F (按需): P5 低优先级
     └─ SST 旧版兼容 → 命令脚本编辑器
@@ -262,10 +264,10 @@ Phase F (按需): P5 低优先级
 |------------|------|------|----------|
 | `TESVT_TranslatorApi.pas` | 1,280 | 8 个翻译 API 提供商 | 6/8 (OpenAI, DeepL, Baidu, Youdao, Azure, Google) |
 | `TESVT_FormData.pas` | 1,774 | Header Processor 规则编辑器 | ✅ 已完成 (header_processor.rs + HeaderProcessorPanel) |
-| `TESVT_FastSearch.pas` | 708 | 30+ 比较器 + 二分搜索 | 部分 (matching.rs 覆盖核心) |
+| `TESVT_FastSearch.pas` | 708 | 30+ 比较器 + 二分搜索 | ✅ Delphi 评分集成 (词级哈希/LCS/LCP/代理惩罚→`delphi_scoring.rs`) |
 | `TESVT_SpellCheck.pas` | 499 | Hunspell/MS Word 拼写检查 | ✅ 运行时UI已接通，配置自动恢复 |
 | `TESVT_HeaderWizard.pas` | 493 | 多文件批处理向导 | ✅ 已完成 (header_batch_process + HeaderWizardPanel) |
-| `TESVT_VMAD.pas` | 404 | VMAD 脚本属性提取和写回 | ~70% |
+| `TESVT_VMAD.pas` | 404 | VMAD 脚本属性提取和写回 | ✅ 已完成（含 PERK/PACK/SCEN/INFO/QUST 片段处理） |
 | `TESVT_Templates.pas` | 288 | 规则模板管理器 | ✅ 已完成 (TemplateManager) |
 | `TESVT_Colab.pas` + `ColabFilter.pas` | 252 | 团队协作翻译 | ✅ 已完成 (colab_* + ColabPanel) |
 | `TESVT_ToolBox.pas` | 59 | 7 种文本转换工具 | ✅ 已完成 (toolbox.rs) |

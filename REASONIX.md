@@ -25,15 +25,16 @@
 ## Commands
 
 ```bash
-cargo test -p xt-core --lib          # core unit tests (no deps)
+cargo test -p xt-core --lib          # core unit tests (no deps, 293 tests)
 cargo test --workspace               # all tests
+cargo test --release -p xtranslator-tests --test basic_benchmarks  # benchmarks
 cargo build -p xtranslator-tauri     # debug build
 cargo tauri build                    # release build (via build.bat)
 cargo clippy -p xt-core -p xt-shared -- -D warnings
 
 cd ui && npm run dev                 # Vite dev server (:5173)
 cd ui && npm run build               # production build
-cd ui && npm test                    # vitest
+cd ui && npm test                    # vitest (19 tests)
 cd ui && npx tsc --noEmit            # typecheck
 cd ui && npm run test:e2e            # Playwright E2E
 
@@ -58,3 +59,6 @@ cd ui && npm run test:e2e            # Playwright E2E
 - **`Data/`** directory is needed at runtime per game — missing record defs cause fallback to generic ESP parsing.
 - **ESLint / Prettier** not configured — rely on `cargo clippy` and `tsc --noEmit` for quality.
 - **Debug builds** parse Skyrim.esm 100x+ slower than release; use `.\build.bat` for release.
+- **VMAD 片段** — PERK/PACK/SCEN/INFO/QUST 记录在 VMAD Header 和 Scripts 之间有 Fragment 数据。`vmad.rs` 的 `has_fragments()` + `skip_fragment_data()` 处理跳过和写回保留；修改该逻辑需同步更新三处（`decode_vmad_fast`、`VmadDecoder::decode`、`write_back_rebuild`）。
+- **启发式搜索** — 默认使用 Delphi 风格评分（`heuristic::find_similar_delphi`），旧版字符 Levenshtein `find_similar_translations` 仍保留备用。前端 `HeuristicMatchDTO` 字段兼容两者。
+- **Cargo 离线模式** — 依赖已缓存场景下可用 `cargo check --offline` 避免网络代理问题。

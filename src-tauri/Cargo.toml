@@ -17,6 +17,8 @@ xt-core = { path = "../crates/xt-core" }
 xt-shared = { path = "../crates/xt-shared" }
 reqwest = { workspace = true }
 regex = "1"
+log = { workspace = true }
+env_logger = "0.11"
 
 [features]
 custom-protocol = ["tauri/custom-protocol"]

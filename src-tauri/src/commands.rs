@@ -207,7 +207,7 @@ fn status_string(sk: &SkyString) -> String {
     } else if sk.params.is_locked() {
         "locked"
     } else {
-        eprintln!("[xTranslator] WARN: status_string: unrecognized flag combination, falling back to \"untranslated\"");
+        log::warn!("status_string: unrecognized flag combination, falling back to 'untranslated'");
         "untranslated"
     }
     .to_string()
@@ -1112,13 +1112,11 @@ pub async fn heuristic_search(
         return Ok(Vec::new());
     }
 
-    let min_sim = request.min_similarity.unwrap_or(0.5);
     let max_res = request.max_results.unwrap_or(5);
 
-    let matches = xt_core::heuristic::find_similar_translations(
+    let matches = xt_core::heuristic::find_similar_delphi(
         &request.source,
         &candidates,
-        min_sim,
         max_res,
     );
 
@@ -1950,13 +1948,13 @@ pub async fn extract_bsa_folder(
                         let _ = std::fs::create_dir_all(parent);
                     }
                     if let Err(e) = std::fs::write(&output_path, &data) {
-                        eprintln!("Failed to write {}: {}", entry.path, e);
+                        log::warn!("Failed to write {}: {}", entry.path, e);
                     } else {
                         extracted.push(output_path.to_str().unwrap_or("").to_string());
                     }
                 }
                 Err(e) => {
-                    eprintln!("Failed to extract {}: {}", entry.path, e);
+                    log::warn!("Failed to extract {}: {}", entry.path, e);
                 }
             }
         }
@@ -2024,7 +2022,7 @@ pub async fn extract_ba2_folder(
                     }
                 }
                 Err(e) => {
-                    eprintln!("Failed to extract {}: {}", entry.path, e);
+                    log::warn!("Failed to extract {}: {}", entry.path, e);
                 }
             }
         }

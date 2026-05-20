@@ -34,6 +34,9 @@ use commands::{
 use std::sync::Arc;
 
 fn main() {
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn"))
+        .init();
+
     let api_config = xt_core::translation_api::config::ApiTranslatorConfig::load_from_file(
         std::path::Path::new("Misc/ApiTranslator.txt")
     ).unwrap_or_default();

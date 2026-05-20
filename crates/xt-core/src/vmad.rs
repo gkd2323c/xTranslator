@@ -115,10 +115,20 @@ impl VmadDecoder {
         let mut pos = 0usize;
 
         // 读取 Header
-        let (_, _obj_type, script_count) = match Self::read_header(&self.buffer, &mut pos) {
+        let (_, obj_type, script_count) = match Self::read_header(&self.buffer, &mut pos) {
             Ok(v) => v,
             Err(_) => return result,
         };
+
+        // 跳过 Fragment 数据块（PERK/PACK/SCEN/INFO/QUST 在 Header 和 Scripts 之间嵌入片段）
+        if has_fragments(obj_type) {
+            if pos + 4 <= self.buffer.len() {
+                let _fragment_version = i16::from_le_bytes([self.buffer[pos], self.buffer[pos + 1]]);
+                let fragment_count = u16::from_le_bytes([self.buffer[pos + 2], self.buffer[pos + 3]]);
+                pos += 4;
+                let _ = skip_fragment_data(&self.buffer, &mut pos, fragment_count, obj_type);
+            }
+        }
 
         // 遍历每个脚本
         for _ in 0..script_count {
@@ -299,6 +309,23 @@ impl VmadDecoder {
         out.extend_from_slice(&version.to_le_bytes());
         out.extend_from_slice(&obj_type.to_le_bytes());
         out.extend_from_slice(&script_count.to_le_bytes());
+
+        // 保留 Fragment 数据块（PERK/PACK/SCEN/INFO/QUST 记录）
+        // 直接按字节复制 fragment 数据到输出，确保写回时片段不丢失
+        if has_fragments(obj_type) {
+            if pos + 4 <= self.buffer.len() {
+                let frag_version = i16::from_le_bytes([self.buffer[pos], self.buffer[pos + 1]]);
+                let frag_count = u16::from_le_bytes([self.buffer[pos + 2], self.buffer[pos + 3]]);
+                // 复制 fragment header (4 bytes)
+                out.extend_from_slice(&frag_version.to_le_bytes());
+                out.extend_from_slice(&frag_count.to_le_bytes());
+                pos += 4;
+                // 计算并复制 fragment data 区域
+                let data_start = pos;
+                let _ = skip_fragment_data(&self.buffer, &mut pos, frag_count, obj_type);
+                out.extend_from_slice(&self.buffer[data_start..pos]);
+            }
+        }
 
         for _ in 0..script_count {
             // 读取并写入 script name
@@ -559,9 +586,50 @@ impl VmadDecoder {
     }
 }
 
+/// 判断 VMAD objType 是否包含片段数据
+///
+/// Bethesda VMAD 格式中，只有特定记录类型在 Header 和 Scripts 之间
+/// 嵌入 Fragment 数据块。其他类型的 Header 后直接跟随脚本。
+///
+/// objType: 1=PERK, 2=PACK, 3=SCEN, 4=INFO, 5=QUST
+fn has_fragments(obj_type: i16) -> bool {
+    matches!(obj_type, 1 | 2 | 3 | 4 | 5)
+}
+
+/// 根据 VMAD objType 判断是否有片段数据需要跳过
+///
+/// Bethesda VMAD 格式中，部分记录类型（PERK/PACK/SCEN/INFO/QUST）在
+/// Header 和 Scripts 之间嵌入 Fragment 数据块。解码时需要跳过这些数据，
+/// 否则脚本字符串会被错误解析。
+///
+/// objType 对照（来自 Delphi TESVT_VMAD.pas）：
+/// - 1 = PERK → 每个片段 4 字节 (formID)
+/// - 2 = PACK → 每个片段包含 PackageData，大小可变
+/// - 3 = SCEN → 片段有 Quest formID + 场景数据
+/// - 4 = INFO → 每个片段 14 字节 (questFormID + fileOffset + dataLen + aliasID)
+/// - 5 = QUST → 每个片段包含 Stage/Objective 数据
+/// - 其他 → 无片段数据
+fn skip_fragment_data(data: &[u8], pos: &mut usize, fragment_count: u16, obj_type: i16) -> Result<(), VmadError> {
+    let count = fragment_count as usize;
+    let bytes_to_skip: usize = match obj_type {
+        1 => count * 4,  // PERK: formID per fragment
+        2 => count * 8,  // PACK: formID + data (approximate)
+        3 => count * 8,  // SCEN: formID + data
+        4 => count * 14, // INFO: questFormID + fileOffset + fragmentDataSize + aliasID
+        5 => count * 8,  // QUST: stage data (approximate)
+        _ => count * 4,  // unknown: minimal skip
+    };
+    if *pos + bytes_to_skip > data.len() {
+        return Err(VmadError::Eof);
+    }
+    *pos += bytes_to_skip;
+    Ok(())
+}
+
 /// 零分配 VMAD 解码：直接从 &[u8] 提取字符串，不构建 VmadDecoder
 ///
 /// 用于解析时的快速路径，避免 buffer.to_vec() 堆分配。
+/// 支持跳过 Fragment 数据块（PERK/PACK/SCEN/INFO/QUST 记录）。
 /// 对 VMAD 缓冲区执行写回：在指定偏移处替换字符串，返回修改后的缓冲区
 pub fn write_vmad_string(data: &[u8], offset: usize, new_value: &str) -> Result<Vec<u8>, VmadError> {
     // version 参数仅用于 VmadDecoder 构造，内部 write_back 从 buffer 读取实际版本
@@ -582,7 +650,7 @@ pub(crate) fn decode_vmad_fast(data: &[u8], _version: i16) -> Vec<VmadString> {
     // version 由调用方在 RecordHeaderData 已读取，此处跳过以对齐 objType
     pos += 2; // skip version
 
-    let _obj_type = if pos + 2 <= data.len() {
+    let obj_type = if pos + 2 <= data.len() {
         i16::from_le_bytes([data[pos], data[pos + 1]])
     } else {
         return result;
@@ -595,6 +663,17 @@ pub(crate) fn decode_vmad_fast(data: &[u8], _version: i16) -> Vec<VmadString> {
         return result;
     };
     pos += 2;
+
+    // 跳过 Fragment 数据块（PERK/PACK/SCEN/INFO/QUST 记录的 VMAD 片段）
+    // 片段数据位于 Header 和 Scripts 之间
+    if has_fragments(obj_type) {
+        if pos + 4 <= data.len() {
+            let _fragment_version = i16::from_le_bytes([data[pos], data[pos + 1]]);
+            let fragment_count = u16::from_le_bytes([data[pos + 2], data[pos + 3]]);
+            pos += 4;
+            let _ = skip_fragment_data(data, &mut pos, fragment_count, obj_type);
+        }
+    }
 
     for _ in 0..script_count {
         // Read script name (u8 length prefix)
@@ -710,6 +789,10 @@ mod tests {
         data.extend_from_slice(&1i16.to_le_bytes()); // objType
         data.extend_from_slice(&1u16.to_le_bytes()); // scriptCount
 
+        // Fragment data (PERK objType=1 always has fragment section)
+        data.extend_from_slice(&0i16.to_le_bytes()); // fragmentVersion = 0
+        data.extend_from_slice(&0u16.to_le_bytes()); // fragmentCount = 0
+
         // Script name (1-byte len prefix)
         data.push(10); // len
         data.extend_from_slice(b"TestScript");
@@ -753,6 +836,10 @@ mod tests {
         data.extend_from_slice(&5i16.to_le_bytes());
         data.extend_from_slice(&1i16.to_le_bytes());
         data.extend_from_slice(&2u16.to_le_bytes()); // 2 scripts
+
+        // Fragment data (PERK objType=1 always has fragment section)
+        data.extend_from_slice(&0i16.to_le_bytes()); // fragmentVersion = 0
+        data.extend_from_slice(&0u16.to_le_bytes()); // fragmentCount = 0
 
         // Script 1
         data.push(4); // script name len
@@ -798,6 +885,11 @@ mod tests {
         data.extend_from_slice(&5i16.to_le_bytes()); // version
         data.extend_from_slice(&1i16.to_le_bytes()); // objType
         data.extend_from_slice(&1u16.to_le_bytes()); // scriptCount=1
+
+        // Fragment data (PERK objType=1 always has fragment section)
+        data.extend_from_slice(&0i16.to_le_bytes()); // fragmentVersion = 0
+        data.extend_from_slice(&0u16.to_le_bytes()); // fragmentCount = 0
+
         data.push(4);
         data.extend_from_slice(b"Test"); // scriptName
         data.extend_from_slice(&1u16.to_le_bytes()); // propCount=1
@@ -834,6 +926,11 @@ mod tests {
         data.extend_from_slice(&5i16.to_le_bytes()); // version
         data.extend_from_slice(&1i16.to_le_bytes()); // objType
         data.extend_from_slice(&1u16.to_le_bytes()); // scriptCount=1
+
+        // Fragment data (PERK objType=1 always has fragment section)
+        data.extend_from_slice(&0i16.to_le_bytes()); // fragmentVersion = 0
+        data.extend_from_slice(&0u16.to_le_bytes()); // fragmentCount = 0
+
         data.push(4);
         data.extend_from_slice(b"Test"); // scriptName
         data.extend_from_slice(&1u16.to_le_bytes()); // propCount=1
@@ -867,6 +964,11 @@ mod tests {
         data.extend_from_slice(&5i16.to_le_bytes());
         data.extend_from_slice(&1i16.to_le_bytes());
         data.extend_from_slice(&1u16.to_le_bytes());
+
+        // Fragment data (PERK objType=1 always has fragment section)
+        data.extend_from_slice(&0i16.to_le_bytes());
+        data.extend_from_slice(&0u16.to_le_bytes());
+
         data.push(4);
         data.extend_from_slice(b"Test");
         data.extend_from_slice(&1u16.to_le_bytes());
@@ -896,6 +998,10 @@ mod tests {
         data.extend_from_slice(&5i16.to_le_bytes());
         data.extend_from_slice(&1i16.to_le_bytes());
         data.extend_from_slice(&2u16.to_le_bytes()); // 2 scripts
+
+        // Fragment data (PERK objType=1 always has fragment section)
+        data.extend_from_slice(&0i16.to_le_bytes());
+        data.extend_from_slice(&0u16.to_le_bytes());
 
         // Script 1: "Scp1" -> prop "P1" = "Val1"
         data.push(4);
@@ -942,6 +1048,11 @@ mod tests {
         data.extend_from_slice(&5i16.to_le_bytes()); // version
         data.extend_from_slice(&1i16.to_le_bytes()); // objType
         data.extend_from_slice(&1u16.to_le_bytes()); // scriptCount=1
+
+        // Fragment data (PERK objType=1 always has fragment section)
+        data.extend_from_slice(&0i16.to_le_bytes()); // fragmentVersion = 0
+        data.extend_from_slice(&0u16.to_le_bytes()); // fragmentCount = 0
+
         data.push(4);
         data.extend_from_slice(b"Test"); // scriptName
         data.extend_from_slice(&1u16.to_le_bytes()); // propCount=1

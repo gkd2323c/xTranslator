@@ -67,8 +67,8 @@ pub(crate) fn decompress_bethesda_record(data: &[u8]) -> Result<Vec<u8>> {
         Ok(_) => {
             // 解压长度和头部声明可能不一致（损坏的 ESP/ZIP 文件）
             if decompressed.len() != decompressed_size {
-                eprintln!(
-                    "[xTranslator] WARN: decompressed size mismatch: expected {}, got {}",
+                log::warn!(
+                    "decompressed size mismatch: expected {}, got {}",
                     decompressed_size,
                     decompressed.len()
                 );
@@ -772,8 +772,8 @@ fn parse_top_level_debug<R: Read>(
                         self.parse_record_fields_direct(&header.name, form_id, &decompressed)?;
                     }
                     Err(e) => {
-                        eprintln!(
-                            "Warning: failed to decompress record {:?}: {}",
+                        log::warn!(
+                            "failed to decompress record {:?}: {}",
                             header.name, e
                         );
                     }
@@ -792,8 +792,8 @@ fn parse_top_level_debug<R: Read>(
                     (fields, decompressed, false)
                 }
                 Err(e) => {
-                    eprintln!(
-                        "Warning: failed to decompress record {:?}: {}",
+                    log::warn!(
+                        "failed to decompress record {:?}: {}",
                         header.name, e
                     );
                     // Treat as raw — move record_data directly, no clone
@@ -1004,8 +1004,8 @@ fn parse_top_level_debug<R: Read>(
                     )?;
                 }
                 Err(e) => {
-                    eprintln!(
-                        "Warning: failed to decompress record {:?}: {}",
+                    log::warn!(
+                        "failed to decompress record {:?}: {}",
                         header.name, e
                     );
                 }

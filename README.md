@@ -48,6 +48,8 @@ A modern Rust-based translator for Bethesda game mods (Skyrim, Skyrim SE, Fallou
 - **BSA/BA2 Archive Browser**: Browse, preview, and extract files from BSA v0x68/v0x69 and BA2 General archives
 - **PEX Script Translation**: Parse Papyrus scripts, extract translatable strings, and write updated string tables while preserving binary structure
 - **FUZ Audio Mapping**: Map dialog strings to WAV audio with playback
+- **VMAD Fragment Handling**: Extract and write back VMAD script strings for PERK/PACK/SCEN/INFO/QUST records with fragment preservation
+- **Heuristic Search (Delphi Scoring)**: Word-level hash matching, LCS, LCP, alias proxy penalty — aligned with original Delphi scoring algorithm
 - **NPC/Dialog View**: Dialog tree grouped by QUST→DIAL→INFO with NPC association
 - **Multi-Language UI**: 10 languages (zh-CN, en, de, es, fr, ja, ko, pl, pt, ru)
 - **Toolbox**: 7 text transformation tools (case conversion, alias fixing, header adding, trimming)

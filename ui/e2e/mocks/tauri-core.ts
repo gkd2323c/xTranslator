@@ -121,8 +121,56 @@ export async function invoke<T = unknown>(cmd: string, args?: Record<string, unk
     case "start_batch_translate":
       return { batch_id: "mock-batch-001" } as T;
 
+    case "start_string_batch_translate":
+      return { batch_id: "mock-batch-strings-001" } as T;
+
+    case "cancel_string_batch_translate":
     case "cancel_batch_translate":
     case "clear_cache":
+      return undefined as T;
+
+    case "get_batch_status":
+      return {
+        status: "running",
+        entries: [
+          { path: "mock1.esp", status: "pending" as const },
+          { path: "mock2.esp", status: "running" as const },
+          { path: "mock3.esp", status: "done" as const, translated: 10, total: 15 },
+        ],
+        total: 3,
+        done: 1,
+        failed: 0,
+        total_translated: 10,
+        total_strings: 50,
+      } as T;
+
+    case "spell_check_load":
+      return { available_dictionaries: ["en_US"], current_dictionary: "en_US", active: true, loaded: true } as T;
+
+    case "spell_check_unload":
+      return undefined as T;
+
+    case "spell_check_toggle":
+      return false as T;
+
+    case "spell_check_config":
+      return { available_dictionaries: ["en_US", "en_GB"], current_dictionary: "en_US", active: true, loaded: true } as T;
+
+    case "spell_check_text":
+      return {
+        has_faults: true,
+        total_words: 5,
+        fault_count: 1,
+        faults: [
+          { word: "adventurer", start_byte: 10, end_byte: 20, suggestions: ["adventurer", "adventures"] },
+        ],
+        fault_ratio_locked: false,
+      } as T;
+
+    case "spell_check_suggestions":
+      return ["adventurer", "adventures", "adventure"] as T;
+
+    case "spell_check_ignore":
       return undefined as T;
 
     case "config_get":
