@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAppStore } from "../stores/appStore";
 import { Button, Input } from "./ui";
-import { loadEsp, loadSst, saveSst, exportXml, importXml, saveStrings, saveEsp, tcscConvert, tcscBatchConvert, updateTranslation, loadVocabulary, compareSourceDest, loadDataConfigs, delocalizeEsp, type BatchProgress } from "../api/strings";
+import { loadEsp, loadSst, saveSst, exportXml, importXml, saveStrings, saveEsp, tcscConvert, tcscBatchConvert, updateTranslation, loadVocabulary, compareSourceDest, loadDataConfigs, delocalizeEsp, loadConfig, spellCheckLoad, spellCheckToggle, spellCheckConfig, type BatchProgress } from "../api/strings";
 import type { LoadSstResponse, XmlImportResponse } from "../api/strings";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { listen } from "@tauri-apps/api/event";
@@ -13,6 +13,7 @@ import { setI18nLanguage, SUPPORTED_LANGS } from "../i18n";
 import { SettingsDialog } from "./SettingsDialog";
 import { ToolboxDialog } from "./ToolboxDialog";
 import { SpellCheckSettingsDialog } from "./SpellCheckSettingsDialog";
+import { MergeSstDialog } from "./MergeSstDialog";
 
 // ============================================================================
 // MenuBar 组件 - 应用菜单栏和工具栏
@@ -232,7 +233,34 @@ export function MenuBar() {
   const [showSettings, setShowSettings] = useState(false);        // 设置对话框
   const [showToolbox, setShowToolbox] = useState(false);          // 工具箱对话框
   const [showSpellCheck, setShowSpellCheck] = useState(false);    // 拼写检查对话框
+  const [showMergeSst, setShowMergeSst] = useState(false);        // SST 合并对话框
   const [spellCheckCfg, setSpellCheckCfg] = useState<import("../api/strings").SpellCheckConfigDto | null>(null);
+
+  // ========== 自动恢复拼写检查 ==========
+  // 三种持久状态的恢复策略：
+  //   spellcheck_loaded=true, active=true  → 自动加载并激活
+  //   spellcheck_loaded=true, active=false → 自动加载但置为非活跃
+  //   spellcheck_loaded=false              → 不加载（用户之前执行了 Unload）
+  useEffect(() => {
+    loadConfig().then((cfg) => {
+      if (!cfg.spellcheck_loaded || !cfg.spellcheck_dictionary) return;
+      spellCheckLoad("Bin/x64/libhunspell.dll", "SpellCheck/dictionaries", cfg.spellcheck_dictionary)
+        .then((result) => {
+          if (cfg.spellcheck_active === false) {
+            return spellCheckToggle().then(() =>
+              spellCheckConfig("SpellCheck/dictionaries")
+            );
+          }
+          return result;
+        })
+        .then((result) => {
+          if (result) setSpellCheckCfg(result);
+        })
+        .catch(() => {
+          // 静默失败：字典文件可能已被删除或路径已变更
+        });
+    });
+  }, []);
   
   // ========== 目标语言标签 ==========
   /**
@@ -823,6 +851,8 @@ export function MenuBar() {
         { label: t("common.saveSst"), onClick: () => void handleSaveSst(), shortcut: "Ctrl+S" },
         { label: t("common.saveStrings"), onClick: () => void handleSaveStrings() },
         { separator: true, label: "" },
+        { label: t("menu.mergeSst", { defaultValue: "Merge SST..." }), onClick: () => setShowMergeSst(true) },
+        { separator: true, label: "" },
         { label: t("common.exportXml"), onClick: () => void handleExportXml() },
         { label: t("common.importXml"), onClick: () => void handleImportXml() },
         { separator: true, label: "" },
@@ -1315,6 +1345,12 @@ export function MenuBar() {
         </div>
       </div>
       <SettingsDialog open={showSettings} onClose={() => setShowSettings(false)} />
+      <MergeSstDialog
+        open={showMergeSst}
+        onClose={() => setShowMergeSst(false)}
+        onMergeComplete={loadAllStrings}
+        espPath={espPath}
+      />
       <SpellCheckSettingsDialog
         open={showSpellCheck}
         onClose={() => setShowSpellCheck(false)}

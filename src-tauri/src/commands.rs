@@ -195,8 +195,10 @@ pub fn config_dir() -> std::path::PathBuf {
 /// - translated：已翻译
 /// - incomplete：未完成翻译
 /// - locked：不可编辑/锁定
+/// - untranslated：未翻译（兜底，避免未知标志位组合被误判为 locked）
 ///
-/// 兜底策略：未知状态统一映射为 `locked`，避免前端出现未定义分支。
+/// 兜底策略：未知标志位组合统一映射为 `untranslated`，
+/// 比 `locked` 更不易迷惑用户（前者暗示"需要处理"，后者"不可编辑"）。
 fn status_string(sk: &SkyString) -> String {
     if sk.params.is_translated() {
         "translated"
@@ -205,7 +207,8 @@ fn status_string(sk: &SkyString) -> String {
     } else if sk.params.is_locked() {
         "locked"
     } else {
-        "locked"
+        eprintln!("[xTranslator] WARN: status_string: unrecognized flag combination, falling back to \"untranslated\"");
+        "untranslated"
     }
     .to_string()
 }
@@ -2571,11 +2574,12 @@ pub async fn scan_fuz_directory(
         }
 
         if let Ok(resp_id) = u32::from_str_radix(parts[0], 16) {
-            let dur = xt_core::fuz::FuzFile::parse(
+            let parsed = xt_core::fuz::FuzFile::parse(
                 &mut std::fs::File::open(fuz_path).map_err(|e| format!("Failed: {}", e))?,
-            )
-            .map(|f| f.duration_secs)
-            .unwrap_or(0.0);
+            );
+            let parse_ok = parsed.is_ok();
+            let dur = parsed.as_ref().map(|f| f.duration_secs).unwrap_or(0.0);
+            let has_lip = parsed.as_ref().map(|f| f.lip_data.is_some()).unwrap_or(false);
 
             let dialog_text = strings
                 .iter()
@@ -2589,6 +2593,8 @@ pub async fn scan_fuz_directory(
                     dialog_text,
                     fuz_file: fuz_path.to_str().unwrap_or("").to_string(),
                     duration_secs: dur,
+                    has_lip,
+                    parse_ok,
                 });
             }
         }
@@ -3668,6 +3674,9 @@ fn config_to_dto(cfg: &xt_core::config::AppConfig) -> AppConfigDto {
         proxy_username: cfg.proxy_username.clone(),
         proxy_password: cfg.proxy_password.clone(),
         esp_mode: cfg.esp_mode,
+        spellcheck_dictionary: cfg.spellcheck_dictionary.clone(),
+        spellcheck_active: cfg.spellcheck_active,
+        spellcheck_loaded: cfg.spellcheck_loaded,
     }
 }
 
@@ -3688,6 +3697,9 @@ fn dto_to_config(dto: &AppConfigDto) -> xt_core::config::AppConfig {
         proxy_username: dto.proxy_username.clone(),
         proxy_password: dto.proxy_password.clone(),
         esp_mode: dto.esp_mode,
+        spellcheck_dictionary: dto.spellcheck_dictionary.clone(),
+        spellcheck_active: dto.spellcheck_active,
+        spellcheck_loaded: dto.spellcheck_loaded,
     }
 }
 

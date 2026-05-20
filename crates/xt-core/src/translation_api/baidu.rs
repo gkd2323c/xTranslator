@@ -7,6 +7,7 @@
 //! Response JSON field: dst
 
 use anyhow::Result;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Clone)]
 pub struct BaiduProvider {
@@ -36,8 +37,13 @@ impl super::TranslationProvider for BaiduProvider {
     ) -> Result<String> {
         let (protected, crlf_style) = super::protect_crlf(text);
 
-        let salt = "1435660288";
-        let sign = self.compute_sign(&protected, salt);
+        // 每次请求生成随机 salt（时间戳纳秒级确保唯一性）
+        let salt = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos()
+            .to_string();
+        let sign = self.compute_sign(&protected, &salt);
 
         let client = match proxy {
             Some(cfg) => super::build_client(cfg),

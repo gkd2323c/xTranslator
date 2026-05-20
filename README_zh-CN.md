@@ -22,9 +22,12 @@
 - **CRLF 保护**：`<L_F>` 标签保护/恢复周期，用于翻译 API 调用
 
 ### 翻译 API
-- **DeepL**：支持免费和专业 API（根据 API 密钥自动检测）
 - **OpenAI 兼容**：OpenAI、DeepSeek 和其他聊天补全 API 提供商（支持提示模板）
-- 其他来自 Delphi 原始版本的翻译提供商尚未在此实现。
+- **DeepL**：支持免费和专业 API（根据 API 密钥自动检测）
+- **Baidu**：百度翻译 API（AppId + Key）
+- **Youdao**：有道翻译 API（AppKey + SecretKey）
+- **Azure**：Microsoft Translator API（Key 鉴权）
+- **Google**：Google Cloud Translation API（Key 鉴权）
 
 ### 高级功能
 - **GMST:DATA 过滤**：自动检测可翻译 vs 数字 GMST 记录
@@ -35,7 +38,7 @@
 - **分块加载**：批量数据加载（每批 25K 项目，concurrency 3，~2MB JSON）
 - **正则搜索/替换**：完整正则表达式，支持捕获组（$1/$2），跨过滤项目全部替换
 - **拼写检查**：基于 Hunspell 的拼写检查，支持标签感知断词、建议和忽略列表
-- **主题系统**：深色/浅色/灰色/自动主题，使用 CSS 变量 + localStorage 持久化
+- **主题系统**：Obsidian / Slate / Light / Auto 主题，使用 CSS 变量 + localStorage 持久化
 - **撤销/重做**：基于栈（最大 100），Ctrl+Z/Y，IPC 同步
 - **自动备份**：5 分钟 SST 快照，轮换最后 10 个
 - **批量处理器**：多文件顺序 ESP 翻译/导出，具有进度事件和取消功能
@@ -64,7 +67,7 @@ xTranslator/
 
 **v1.0.0 正式版已发布！** 🎉
 
-重写版本已完成全部桌面翻译工作流，与 Delphi 原版功能对等。`SPEC.md` 跟踪 **100 个已完成任务**，涵盖解析、编辑、ESP 写入、比较工具、归档支持、翻译 API、配置持久化和语言工具。
+重写版本已覆盖主要桌面翻译工作流。`SPEC.md` 跟踪 **100 个已完成任务**，涵盖解析、编辑、ESP 写入、比较工具、归档支持、翻译 API、配置持久化和语言工具。
 
 所有核心功能已实现并通过测试：
 - ✅ ESP 解析 + 记录树 + 写入（T42-T45）
@@ -85,9 +88,9 @@ xTranslator/
 - ✅ 撤销/重做（基于栈，最大 100）
 - ✅ 虚拟滚动（react-window v2，76K+ 条）
 - ✅ 10 语言 i18n UI
-- ✅ 主题系统（深色/浅色/灰色/自动）
+- ✅ 主题系统（Obsidian / Slate / Light / Auto）
 
-v1.0.0 已实现与 Delphi 原版的完全功能对等。后续版本将聚焦于：更多游戏支持验证、UI 体验持续打磨、以及社区反馈驱动的改进。
+当前版本已覆盖核心桌面翻译能力。后续工作将聚焦于：跨游戏真实数据验证、Delphi 实机交叉验证、以及 UI 体验持续打磨。
 
 ## 文档
 

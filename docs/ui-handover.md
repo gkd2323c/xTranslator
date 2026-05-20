@@ -1,7 +1,7 @@
 # xTranslator UI 打磨交接文档
 
-> 编写日期：2026-05-19
-> 涉及：Phase 1~3 UI 打磨，前端从 ~55% 提升至 ~75%
+> 编写日期：2026-05-20
+> 涉及：Phase 1~3 UI 打磨及后续补强，前端从 ~55% 提升至 ~78%
 > 核心文件：EditorPanel, StringTable, StatusBar, ContextMenu, DialogView, BsaBrowser, BatchPanel, PexPanel, SidePanel, LogPanel, VocabularyPanel
 
 ---
@@ -51,9 +51,9 @@
 
 | 组件 | 文件 | 完成度 | 备注 |
 |------|------|--------|------|
-| FUZ 面板 | `ui/src/components/FuzPanel.tsx` | ~50% | LIP 唇形数据未处理 |
-| MCM 面板 | `ui/src/components/McmPanel.tsx` | ~50% | 已有内联编辑+保存+对比，功能可用 |
-| 主窗口布局 | `ui/src/App.tsx` + `App.css` | ~65% | 三阶段布局复刻完成，列宽调整/拖放排序待做 |
+| FUZ 面板 | `ui/src/components/FuzPanel.tsx` | ~70% | 已支持筛选、With/Without LIP/Parse failed 摘要和三态状态；仍缺 LIP 预览 |
+| MCM 面板 | `ui/src/components/McmPanel.tsx` | ~80% | 已支持对照编辑、copy source、char ratio、Clear filtered、compare |
+| 主窗口布局 | `ui/src/App.tsx` + `App.css` | ~80% | 三阶段布局复刻完成，EDID/ID/LD 列宽可调；仍缺列拖放排序 |
 
 ---
 
@@ -202,9 +202,8 @@ cargo test -p xt-core --lib
 
 | 功能 | 当前状态 | 预估行数 | 说明 |
 |------|----------|----------|------|
-| FUZ 面板 LIP 处理 | 未实现 | ~100 | 唇形数据解析+预览 |
-| MCM 面板增强 | 基础功能 | ~100 | 更好的条目表格、批量操作 |
-| 主窗口列宽可调 | 未实现 | ~150 | react-window 需配合 `ResizeObserver` |
+| FUZ 面板 LIP 预览 | 状态可见，暂无预览 | ~100 | 唇形数据预览、时间轴或波形展示 |
+| MCM 面板进一步增强 | 对照编辑已完成 | ~80 | 批量校验、快捷键、差异视图等深层交互 |
 | 键盘快捷键统一管理 | 散落在组件中 | ~80 | 考虑用 `react-hotkeys-hook` 集中管理 |
 | 底部 Tab 拖拽排序 | 未实现 | ~60 | 每个 Tab 可拖拽重排 |
 

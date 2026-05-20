@@ -2,7 +2,7 @@
 
 [![Version: 1.0.0](https://img.shields.io/badge/Version-1.0.0-blue.svg)](RELEASE.md)
 [![License: MPL-2.0](https://img.shields.io/badge/License-MPL--2.0-brightgreen.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/Tests-290_passing-brightgreen.svg)](CHANGELOG.md)
+[![Tests](https://img.shields.io/badge/Tests-293_passing-brightgreen.svg)](CHANGELOG.md)
 
 [中文版](README_zh-CN.md)
 
@@ -71,7 +71,7 @@ xTranslator/
 
 **v1.0.0 stable release is out!** 🎉
 
-The rewrite is fully feature-complete with Delphi parity. `SPEC.md` tracks **100 completed tasks** covering parsing, editing, ESP write-back, compare tools, archive support, translation APIs, config persistence, and language tooling.
+The rewrite now covers the primary desktop translation workflows and `SPEC.md` tracks **100 completed tasks** covering parsing, editing, ESP write-back, compare tools, archive support, translation APIs, config persistence, and language tooling.
 
 All core functionality is implemented and tested:
 - ✅ ESP parsing with record tree + write-back (T42-T45)
@@ -92,9 +92,9 @@ All core functionality is implemented and tested:
 - ✅ Undo/Redo (stack-based, max 100)
 - ✅ Virtual scrolling (react-window v2, 76K+ items)
 - ✅ 10-language i18n UI
-- ✅ Theme system (Dark/Light/Gray/Auto)
+- ✅ Theme system (Obsidian/Slate/Light/Auto)
 
-Remaining work focuses on parity polish and deeper validation against the Delphi original: nested GRUP verification, Delphi cross-check with real data, and UI polish.
+Remaining work focuses on deeper validation against the Delphi original and parity polish for secondary surfaces: broader cross-game verification, Delphi real-data cross-checking, and continued UI refinement.
 
 ## Documentation
 

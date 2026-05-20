@@ -106,8 +106,8 @@ function escapeHtml(s: string): string {
  */
 function highlightText(text: string, filter: string): string {
   if (!filter) return escapeHtml(text);
-  // 转义正则特殊字符，使用占位符避免冲突
-  const escaped = filter.replace(/[.*+?^${}()|[\]\\]/g, '\\PLACEHOLDER');
+  // 转义正则特殊字符，确保元字符被正确匹配
+  const escaped = filter.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const regex = new RegExp(`(${escaped})`, 'gi');
   return escapeHtml(text).replace(regex, '<mark class="search-highlight">$1</mark>');
 }
@@ -294,6 +294,41 @@ export function StringTable() {
   
   // Shift+Click 范围选择：记录上次点击的行索引
   const lastClickedRef = useRef<number | null>(null);
+  
+  // 列宽调整（通过 CSS 自定义属性实现，不触发 React 重渲染）
+  const tableRef = useRef<HTMLDivElement>(null);
+  const defaultColWidths = { edid: 100, id: 60, ld: 40 };
+  const activeResize = useRef<{ col: string; startX: number; startWidth: number } | null>(null);
+  
+  const handleColResizeStart = useCallback((col: string, e: React.PointerEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const el = tableRef.current;
+    if (!el) return;
+    const currentWidth = parseInt(getComputedStyle(el).getPropertyValue(`--col-${col}-width`)) || defaultColWidths[col as keyof typeof defaultColWidths];
+    activeResize.current = { col, startX: e.clientX, startWidth: currentWidth };
+    
+    // 在 window 级监听 move/up，避免 capture target 与事件挂载点不在同一分支
+    const onMove = (ev: PointerEvent) => {
+      if (!activeResize.current) return;
+      const { col: c, startX: sx, startWidth: sw } = activeResize.current;
+      const diff = ev.clientX - sx;
+      const newWidth = Math.max(30, sw + diff);
+      const tableEl = tableRef.current;
+      if (tableEl) {
+        tableEl.style.setProperty(`--col-${c}-width`, `${newWidth}px`);
+      }
+    };
+    
+    const onUp = () => {
+      activeResize.current = null;
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+    };
+    
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  }, []);
 
   /**
    * 右键菜单事件处理
@@ -506,7 +541,7 @@ export function StringTable() {
 
   // ========== 主渲染 ==========
   return (
-    <div className="string-table-wrapper">
+    <div className="string-table-wrapper" ref={tableRef}>
       {/* 列表类型过滤标签：All / STRINGS / DLSTRINGS / ILSTRINGS */}
       <div className="list-index-tabs">
         {[
@@ -599,18 +634,34 @@ export function StringTable() {
         )}
       </div>
 
-      {/* 表格头部：列标题 */}
+      {/* 表格头部：列标题（支持拖拽调整 EDID / ID / LD 列宽） */}
       <div className="virtual-table-header">
         <div className="header-cell" style={{ width: 28 }} />
-        <div className="header-cell" style={{ width: 100 }} onClick={() => handleSort("record_sig")}>
+        <div
+          className="header-cell header-cell-resizable"
+          style={{ width: `var(--col-edid-width, 100px)` }}
+          onClick={() => handleSort("record_sig")}
+        >
           EDID <ArrowUpDown size={10} />
+          <div className="col-resize-handle" onPointerDown={(ev) => handleColResizeStart("edid", ev)} onClick={(e) => e.stopPropagation()} />
         </div>
-        <div className="header-cell" style={{ width: 60 }} onClick={() => handleSort("id")}>
+        <div
+          className="header-cell header-cell-resizable"
+          style={{ width: `var(--col-id-width, 60px)` }}
+          onClick={() => handleSort("id")}
+        >
           ID <ArrowUpDown size={10} />
+          <div className="col-resize-handle" onPointerDown={(ev) => handleColResizeStart("id", ev)} onClick={(e) => e.stopPropagation()} />
         </div>
         <div className="header-cell" style={{ flex: 1 }}>{t("table.source")}</div>
         <div className="header-cell" style={{ flex: 1 }}>{t("table.translation")}</div>
-        <div className="header-cell" style={{ width: 40 }}>LD</div>
+        <div
+          className="header-cell header-cell-resizable"
+          style={{ width: `var(--col-ld-width, 40px)` }}
+        >
+          LD
+          <div className="col-resize-handle" onPointerDown={(ev) => handleColResizeStart("ld", ev)} onClick={(e) => e.stopPropagation()} />
+        </div>
       </div>
 
       {/* 虚拟滚动列表容器 */}

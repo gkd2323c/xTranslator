@@ -31,7 +31,9 @@ const FILE_EXT: &str = "cache";
 
 /// 缓存文件载荷
 ///
-/// 包含 ESP 解析的完整结果，可直接反序列化使用。
+/// ⚠️ 已废弃：SQLite 缓存 (`SqliteCache`) 已完全替代此 bincode 缓存方案。
+/// `EsmCache` 及相关结构体保留仅用于兼容引用，新代码请使用 `sqlite_cache::SqliteCache`。
+#[deprecated(note = "SQLite 缓存已完全替代 bincode 缓存，请使用 sqlite_cache::SqliteCache")]
 #[derive(Serialize, Deserialize)]
 pub struct CachePayload {
     /// 缓存版本（用于版本管理）
@@ -43,14 +45,11 @@ pub struct CachePayload {
     /// 成功加载的 Strings 文件数 (0-3)
     pub strings_loaded: u8,
 }
-
 /// ESP 解析结果缓存管理器
 ///
-/// 职责：
-/// - 管理缓存目录
-/// - 计算文件哈希
-/// - 序列化/反序列化缓存
-/// - 缓存失效和清理
+/// ⚠️ 已废弃：SQLite 缓存 (`SqliteCache`) 已完全替代此 bincode 缓存方案。
+/// `hash_file()` 和 `HashingReader` 仍保持可用。
+#[deprecated(note = "SQLite 缓存已完全替代 bincode 缓存，请使用 sqlite_cache::SqliteCache")]
 pub struct EsmCache {
     /// 缓存目录路径
     cache_dir: PathBuf,
@@ -58,6 +57,7 @@ pub struct EsmCache {
     max_entries: usize,
 }
 
+#[allow(deprecated)]
 impl EsmCache {
     /// 创建新的缓存管理器
     ///

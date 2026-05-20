@@ -38,6 +38,17 @@ pub struct AppConfig {
     /// ESP mode: when true, save operations write back to the ESP file directly.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub esp_mode: Option<bool>,
+    /// Last used spell check dictionary name (without .dic/.aff extension).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spellcheck_dictionary: Option<String>,
+    /// Whether spell check was active when last saved.
+    /// false = loaded but inactive (toggled off), or unloaded (see spellcheck_loaded).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spellcheck_active: Option<bool>,
+    /// Whether Hunspell dictionary was loaded when last saved.
+    /// true = auto-restore on startup; false = don't load until user manually Loads.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spellcheck_loaded: Option<bool>,
 }
 
 impl AppConfig {
@@ -78,6 +89,9 @@ impl AppConfig {
         if other.proxy_username.is_some() { self.proxy_username = other.proxy_username.clone(); }
         if other.proxy_password.is_some() { self.proxy_password = other.proxy_password.clone(); }
         if other.esp_mode.is_some() { self.esp_mode = other.esp_mode; }
+        if other.spellcheck_dictionary.is_some() { self.spellcheck_dictionary = other.spellcheck_dictionary.clone(); }
+        if other.spellcheck_active.is_some() { self.spellcheck_active = other.spellcheck_active; }
+        if other.spellcheck_loaded.is_some() { self.spellcheck_loaded = other.spellcheck_loaded; }
     }
 }
 

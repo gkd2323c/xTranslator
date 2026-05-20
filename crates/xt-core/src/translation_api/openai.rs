@@ -42,20 +42,24 @@ impl OpenAIProvider {
         self
     }
 
+    /// 从环境变量创建 Provider（需要 XT_TRANSLATE_API_KEY）
     pub fn from_env() -> Result<Self> {
         let api_key = std::env::var("XT_TRANSLATE_API_KEY")
             .map_err(|_| anyhow!("XT_TRANSLATE_API_KEY environment variable not set"))?;
-        let mut provider = Self::new(api_key);
-        if let Ok(url) = std::env::var("XT_TRANSLATE_API_BASE") {
-            provider = provider.with_base_url(url);
-        }
-        if let Ok(model) = std::env::var("XT_TRANSLATE_API_MODEL") {
-            provider = provider.with_model(model);
-        }
-        Ok(provider)
+        Ok(Self::from_key_with_env_override(api_key))
     }
 
+    /// 从指定 API Key 创建 Provider，并应用环境变量覆盖
+    ///
+    /// 环境变量支持：
+    /// - `XT_TRANSLATE_API_BASE` — 覆盖 base_url
+    /// - `XT_TRANSLATE_API_MODEL` — 覆盖 model
     pub fn from_key(api_key: String) -> Self {
+        Self::from_key_with_env_override(api_key)
+    }
+
+    /// 内部：从 API Key 创建 Provider + 应用环境变量覆盖
+    fn from_key_with_env_override(api_key: String) -> Self {
         let mut provider = Self::new(api_key);
         if let Ok(url) = std::env::var("XT_TRANSLATE_API_BASE") {
             provider = provider.with_base_url(url);

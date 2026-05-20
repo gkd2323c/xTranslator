@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, Suspense, lazy } from "react";
 import { Toaster } from "react-hot-toast";
 import toast from "react-hot-toast";
 import { Loader } from "lucide-react";
@@ -8,15 +8,6 @@ import { setI18nLanguage } from "./i18n";
 import { useAppStore } from "./stores/appStore";
 import { MenuBar } from "./components/MenuBar";
 import { SidePanel } from "./components/SidePanel";
-import { BatchPanel } from "./components/BatchPanel";
-import { BsaBrowser } from "./components/BsaBrowser";
-import { PexPanel } from "./components/PexPanel";
-import { FuzPanel } from "./components/FuzPanel";
-import { DialogView } from "./components/DialogView";
-import { McmPanel } from "./components/McmPanel";
-import { EspComparePanel } from "./components/EspComparePanel";
-import { FinalizePanel } from "./components/FinalizePanel";
-import { DataConfigsPanel } from "./components/DataConfigsPanel";
 import { VocabularyPanel } from "./components/bottom/VocabularyPanel";
 import { HeuristicPanel } from "./components/bottom/HeuristicPanel";
 import { EspTreePanel } from "./components/bottom/EspTreePanel";
@@ -30,6 +21,17 @@ import { BatchTranslateBar } from "./components/BatchTranslateBar";
 import { RecoveryPromptModal } from "./components/RecoveryPromptModal";
 import { StatusBar } from "./components/StatusBar";
 import { Modal } from "./components/ui";
+
+// 工具面板懒加载（首次打开时按需加载，减小首屏包体积）
+const BatchPanel = lazy(() => import("./components/BatchPanel").then(m => ({ default: m.BatchPanel })));
+const BsaBrowser = lazy(() => import("./components/BsaBrowser").then(m => ({ default: m.BsaBrowser })));
+const PexPanel = lazy(() => import("./components/PexPanel").then(m => ({ default: m.PexPanel })));
+const FuzPanel = lazy(() => import("./components/FuzPanel").then(m => ({ default: m.FuzPanel })));
+const DialogView = lazy(() => import("./components/DialogView").then(m => ({ default: m.DialogView })));
+const McmPanel = lazy(() => import("./components/McmPanel").then(m => ({ default: m.McmPanel })));
+const EspComparePanel = lazy(() => import("./components/EspComparePanel").then(m => ({ default: m.EspComparePanel })));
+const FinalizePanel = lazy(() => import("./components/FinalizePanel").then(m => ({ default: m.FinalizePanel })));
+const DataConfigsPanel = lazy(() => import("./components/DataConfigsPanel").then(m => ({ default: m.DataConfigsPanel })));
 import { autoBackupSst, loadConfig, setOpenAiApiKey, setDeeplApiKey, setBaiduApiKey, setYoudaoApiKey, setAzureApiKey, setTranslationProvider } from "./api/strings";
 import "./App.css";
 import "./components/ui/ui.css";
@@ -271,17 +273,52 @@ function App() {
       
       {/* 编辑对话框（单字符串编辑） */}
       <EditorDialog open={editorOpen} onClose={() => setEditorOpen(false)} />
-      
-      {/* 工具面板（9 个模态框，单选互斥） */}
-      <Modal open={activePanel === "batch"} onClose={() => setActivePanel(null)} title={t("batch.title")} size="lg"><BatchPanel /></Modal>
-      <Modal open={activePanel === "bsa"} onClose={() => setActivePanel(null)} title={t("bsa.title")} size="lg"><BsaBrowser /></Modal>
-      <Modal open={activePanel === "pex"} onClose={() => setActivePanel(null)} title={t("pex.title")} size="lg"><PexPanel /></Modal>
-      <Modal open={activePanel === "fuz"} onClose={() => setActivePanel(null)} title={t("fuz.title")} size="lg"><FuzPanel /></Modal>
-      <Modal open={activePanel === "dialog"} onClose={() => setActivePanel(null)} title={t("dialog.title")} size="lg"><DialogView /></Modal>
-      <Modal open={activePanel === "mcm"} onClose={() => setActivePanel(null)} title={t("mcm.title")} size="lg"><McmPanel /></Modal>
-      <Modal open={activePanel === "espCompare"} onClose={() => setActivePanel(null)} title={t("espCompare.title")} size="lg"><EspComparePanel /></Modal>
-      <Modal open={activePanel === "finalize"} onClose={() => setActivePanel(null)} title={t("finalize.title")} size="lg"><FinalizePanel /></Modal>
-      <Modal open={activePanel === "dataConfigs"} onClose={() => setActivePanel(null)} title={t("dataConfigs.title")} size="lg"><DataConfigsPanel /></Modal>
+      {/* 工具面板（9 个模态框，条件渲染：仅激活时挂载到 DOM） */}
+      {activePanel === "batch" && (
+        <Modal open onClose={() => setActivePanel(null)} title={t("batch.title")} size="lg">
+          <Suspense fallback={<div className="modal-loading"><Loader size={24} /></div>}><BatchPanel /></Suspense>
+        </Modal>
+      )}
+      {activePanel === "bsa" && (
+        <Modal open onClose={() => setActivePanel(null)} title={t("bsa.title")} size="lg">
+          <Suspense fallback={<div className="modal-loading"><Loader size={24} /></div>}><BsaBrowser /></Suspense>
+        </Modal>
+      )}
+      {activePanel === "pex" && (
+        <Modal open onClose={() => setActivePanel(null)} title={t("pex.title")} size="lg">
+          <Suspense fallback={<div className="modal-loading"><Loader size={24} /></div>}><PexPanel /></Suspense>
+        </Modal>
+      )}
+      {activePanel === "fuz" && (
+        <Modal open onClose={() => setActivePanel(null)} title={t("fuz.title")} size="lg">
+          <Suspense fallback={<div className="modal-loading"><Loader size={24} /></div>}><FuzPanel /></Suspense>
+        </Modal>
+      )}
+      {activePanel === "dialog" && (
+        <Modal open onClose={() => setActivePanel(null)} title={t("dialog.title")} size="lg">
+          <Suspense fallback={<div className="modal-loading"><Loader size={24} /></div>}><DialogView /></Suspense>
+        </Modal>
+      )}
+      {activePanel === "mcm" && (
+        <Modal open onClose={() => setActivePanel(null)} title={t("mcm.title")} size="lg">
+          <Suspense fallback={<div className="modal-loading"><Loader size={24} /></div>}><McmPanel /></Suspense>
+        </Modal>
+      )}
+      {activePanel === "espCompare" && (
+        <Modal open onClose={() => setActivePanel(null)} title={t("espCompare.title")} size="lg">
+          <Suspense fallback={<div className="modal-loading"><Loader size={24} /></div>}><EspComparePanel /></Suspense>
+        </Modal>
+      )}
+      {activePanel === "finalize" && (
+        <Modal open onClose={() => setActivePanel(null)} title={t("finalize.title")} size="lg">
+          <Suspense fallback={<div className="modal-loading"><Loader size={24} /></div>}><FinalizePanel /></Suspense>
+        </Modal>
+      )}
+      {activePanel === "dataConfigs" && (
+        <Modal open onClose={() => setActivePanel(null)} title={t("dataConfigs.title")} size="lg">
+          <Suspense fallback={<div className="modal-loading"><Loader size={24} /></div>}><DataConfigsPanel /></Suspense>
+        </Modal>
+      )}
       
       {/* 菜单栏（文件、翻译、选项、工具、向导） */}
       <MenuBar />

@@ -47,7 +47,7 @@ cd ui && npm run test                      # vitest
 
 ### IPC / DTO Sync
 - **Source of truth:** `crates/xt-shared/src/dto.rs` (Rust) ↔ `ui/src/api/strings.ts` (TypeScript). **Keep both in sync** when adding fields.
-- **Data flow:** ESP loads → frontend chunks via `get_strings_chunk` (10K/batch, ~2MB JSON, 76K items ≈ 8 batches) → client-side filter/sort/scroll. `query_strings_command` is the fallback.
+- **Data flow:** ESP loads → frontend chunks via `get_strings_chunk` (25K/batch, concurrency 3, ~2MB JSON) → client-side filter/sort/scroll. `query_strings_command` is the fallback.
 - **Update by ID, not index:** `update_translation(id, text)` uses `u32 id`. Frontend uses `selectedId` — indices break after filtering/sorting. Store methods: `setSelectedById()`, `updateItemTranslation(id, text)`.
 - **Data refresh:** SST load / XML import mutates `AppState.strings` on backend → frontend re-calls `loadAllStrings()`. Single translation update → frontend local `updateItemTranslation` (zero IPC).
 - **Large payloads (>1MB)** may hit WebView2 IPC limits. Consider chunking or compression.
@@ -73,11 +73,11 @@ Uses `rowComponent`/`rowCount`/`rowHeight`/`rowProps` (NOT v1's `children`/`item
 ## ESP Cache
 
 - **Location:** `%LOCALAPPDATA%/xTranslator/cache/` (Windows) / `~/.cache/xTranslator/` (Unix).
-- **Key:** SHA-256 of ESP content (content-addressable). Auto-misses on content change.
-- **Format:** `{sha256}.cache` with bincode-serialized `CachePayload`.
-- **Integration:** `load_esp` checks cache before parsing. `LoadEspResponse.cached` (bool) exposed to frontend.
+- **Key:** SHA-256 of ESP content (content-addressable). `CacheIndex` uses mtime+size as a fast-path before full hashing.
+- **Format:** `{sha256}.sqlite` with `sqlite_cache::CachePayload` metadata and row-level string storage.
+- **Integration:** `load_esp` checks `SqliteCache` before parsing. `LoadEspResponse.cached` (bool) exposed to frontend.
 - **Pruning:** Max 50 entries; oldest removed on `store()`. Manual clear = delete cache dir.
-- **Module:** `crates/xt-core/src/cache.rs`
+- **Module:** `crates/xt-core/src/sqlite_cache.rs`
 
 ## T1-T4 Dictionary Matching
 
@@ -120,7 +120,7 @@ Shared by XML import and SST load (`crates/xt-core/src/matching.rs`):
 | `crates/xt-core/src/esp/record_tree.rs` | ESP record tree for write-back |
 | `crates/xt-core/src/esp/parser.rs` | ESP/ESM binary parser |
 | `crates/xt-core/src/matching.rs` | T1-T4 dictionary matcher |
-| `crates/xt-core/src/cache.rs` | ESP content-addressed cache |
+| `crates/xt-core/src/sqlite_cache.rs` | ESP content-addressed SQLite cache |
 | `crates/xt-core/src/sst/v8.rs` | SST v8 format |
 | `crates/xt-core/src/xml/mod.rs` | XML import/export |
 | `crates/xt-core/src/heuristic/mod.rs` | Similarity search |

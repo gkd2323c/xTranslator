@@ -53,7 +53,14 @@ struct HunspellHandle {
     handle: *mut std::ffi::c_void,
 }
 
+// SAFETY:
+// - `HunspellHandle` 始终被 `AppState` 中的 `Mutex<HashMap<...>>` 保护，
+//   任何时刻最多只有一个线程能访问内部指针。
+// - `handle` 指向的 Hunspell 实例在 `lib` (Library) 卸载前保持有效，
+//   而 `lib` 与 `handle` 在同一个 `HunspellHandle` 中，两者生命周期绑定。
+// - Hunspell 库本身是线程安全的（单线程使用）。
 unsafe impl Send for HunspellHandle {}
+// SAFETY: 同上，内部指针始终受 Mutex 保护，不会出现数据竞争。
 unsafe impl Sync for HunspellHandle {}
 
 impl HunspellHandle {
@@ -240,6 +247,7 @@ impl SpellChecker {
     pub fn unload(&mut self) {
         self.hunspell = None;
         self.config.loaded = false;
+        self.config.active = false;
         self.correct_cache.clear();
         self.fault_cache.clear();
         self.fault_ratio_locked = false;

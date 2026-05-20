@@ -105,13 +105,16 @@ Rust 额外提取 VMAD（脚本属性）中的字符串（通过 `decode_vmad_fa
 
 ## 7. 下一步
 
-| 优先级 | 任务 | 预估 |
+| 优先级 | 任务 | 状态 |
 |:---|:---|:---|
-| P2 | 生成 Delphi 全量导出，完成逐字符串 diff | 1 天 |
-| P2 | 验证 SST 双向读写兼容性 | 1 天 |
-| P3 | Content-level 对比（源文本一致性） | 待全量导出后 |
+| P2 | 生成 Delphi 全量导出，完成逐字符串 diff | ⏸ 阻塞 — 需 Delphi 1.6.0 运行环境。详见 `docs/validation_procedure.md` §3.1 |
+| P2 | 验证 SST 双向读写兼容性 | ⏸ Rust roundtrip 已验证（含 merge）；Delphi golden SST 已入库，实际交叉读写需 Delphi 环境 |
+| P3 | Content-level 对比（源文本一致性） | ⏸ 依赖全量导出 |
+| P0 | **锁定当前 parser 行为为 golden file** | ✅ `docs/validation_procedure.md` §3.2 Path A 已定义快照流程 |
 
 ---
+
+> **注意**：本报告中 P2 任务的 "1 天" / "1-2 天" 估算来自较早评估（2026-05-12），实际涉及真实数据验证多次迭代，不应作为工期参考。当前验证策略已升级为三级框架（L1 单元测试 / L2 固定样本 / L3 全量交叉验证），详见 `docs/validation_procedure.md`。
 
 ## 8. 总体评估
 

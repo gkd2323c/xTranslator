@@ -65,8 +65,13 @@ pub(crate) fn decompress_bethesda_record(data: &[u8]) -> Result<Vec<u8>> {
     let mut decompressed = Vec::with_capacity(decompressed_size);
     match decoder.read_to_end(&mut decompressed) {
         Ok(_) => {
-            // 解压长度和头部声明可能不一致。
+            // 解压长度和头部声明可能不一致（损坏的 ESP/ZIP 文件）
             if decompressed.len() != decompressed_size {
+                eprintln!(
+                    "[xTranslator] WARN: decompressed size mismatch: expected {}, got {}",
+                    decompressed_size,
+                    decompressed.len()
+                );
             }
             Ok(decompressed)
         }

@@ -1,7 +1,7 @@
 # xTranslator 开发路线图
 
 > 基于 Delphi 1.6.0 原版（~67,000 行）与 Rust 重写版（~20,600 行）的逐文件对比分析
-> 更新日期：2026-05-19
+> 更新日期：2026-05-20
 
 ---
 
@@ -15,7 +15,7 @@
 | P1 - 核心功能补全 | ~~3~~ 0 项 | — | ~~Header Processor 规则模板系统~~ 全部完成 ✅ |
 | P2 - 实用工具增强 | 0 项 | ✅ 全部完成 | 拼写检查、工具箱、SST 合并 |
 | P3 - UI/UX 完善 | 0 项 | ✅ 全部完成 | RTL 预览、对话 HTML 导出、协作标签 |
-| P4 - 质量保证 | 4 项 | ~3-4 周 | 跨游戏验证、Delphi 交叉验证 |
+| P4 - 质量保证 | 2 项待完成 | ~3-4 周 | 跨游戏验证、Delphi 交叉验证（嵌套 GRUP / VMAD 写回已完成） |
 | P5 - 低优先级 | 2 项 | ~1 周 | SST 旧版兼容、命令脚本编辑器 |
 
 ---
@@ -92,6 +92,7 @@ IPC 命令：`spell_check_load/unload/toggle/config/text/suggestions/ignore`
 | 持久化忽略列表（load/save） | ✅ |
 | Suggest() 建议系统 | ✅ |
 | UI 集成（拼写错误 chip 列表 + 右键建议） | ✅ |
+| 配置持久化（字典选择/active状态自动恢复） | ✅ |
 
 ### P2.2 工具箱 — `ToolBox.pas` (7 种工具) ✅ 已完成
 
@@ -112,7 +113,7 @@ IPC 命令：`toolbox_transform`。支持按字符串 ID 或全量操作，可�
 
 ### P2.3 SST 合并 — `MergeSst.pas` ✅ 已完成
 
-实施文件：`crates/xt-core/src/sst/v8.rs`（`SstDictionary::merge_from()`）
+实施文件：`crates/xt-core/src/sst/v8.rs`（`SstDictionary::merge_from()`）+ `ui/src/components/MergeSstDialog.tsx` + `ui/src/components/MenuBar.tsx`
 IPC 命令：`sst_merge`
 
 | 功能 | 状态 |
@@ -193,11 +194,12 @@ IPC 命令：`export_dial_html`
 
 ### P4.3 Delphi 交叉验证
 
-| 验证项 | 说明 | 预估 |
+| 验证项 | 说明 | 状态 |
 |--------|------|------|
-| 字符串提取一致性 | 同 ESP 文件提取字符串数量 diff | 2-3 天 |
-| SST 读写兼容 | 双向读写验证 | 1-2 天 |
-| XML 导入导出一致 | roundtrip 内容验证 | 1-2 天 |
+| 字符串提取一致性 | 同 ESP 文件提取字符串数量 diff | ⏸ 阻塞 — 需 Delphi 1.6.0 运行环境 |
+| SST 读写兼容 | 双向读写验证 | ⏸ Rust roundtrip 已验证（含 merge）；Delphi golden SST 已入库，实际交叉读写需 Delphi 环境 |
+| XML 导入导出一致 | roundtrip 内容验证 | ✅ Rust XML roundtrip 测试覆盖 |
+| **验证流程框架** | L1/L2/L3 三级验证标准化 | ✅ `docs/validation_procedure.md` |
 
 ### P4.4 VMAD 写回完善 ✅ 已完成
 
@@ -238,11 +240,12 @@ Phase A (Week 1-2): P0 翻译 API + P2.2 工具箱 ✅ 已完成
 Phase B (Week 3-7): P1 Header Processor ✅ 已完成
     └─ P1.1 规则编辑器 ✅ → P1.2 模板管理 ✅ → P1.3 批量向导 ✅ → P1.4 预处理 ✅
 
-Phase C (Week 8-9): P2.1 拼写检查 UI + P2.3 SST 合并 (下一步)
-    └─ Hunspell 集成 → 缓存/建议 → UI 高亮
+Phase C (Week 8-9): P2.1 拼写检查 UI + P2.3 SST 合并 ✅ 已完成
+    └─ ✅ 拼写检查运行时UI已接通，配置持久化已完成（dictionary/loaded/active 自动恢复）
+    └─ ✅ SST 合并前后端链路已接通（文件选择、overwrite 策略、统计结果、自动刷新）
 
-Phase D (Week 10-11): P3 UI 完善
-    └─ P3.1 RTL 预览 → P3.2 HTML 导出 → P3.3 协作系统
+Phase D (Week 10-11): P3 UI 完善 ✅ 已完成
+    └─ P3.1 RTL 预览 ✅ → P3.2 HTML 导出 ✅ → P3.3 协作系统 ✅
 
 Phase E (Week 12-15): P4 验证与质量保证
     └─ 跨游戏 ESP 验证 → 嵌套 GRUP → Delphi 交叉验证 → VMAD 完善
@@ -260,15 +263,15 @@ Phase F (按需): P5 低优先级
 | `TESVT_TranslatorApi.pas` | 1,280 | 8 个翻译 API 提供商 | 6/8 (OpenAI, DeepL, Baidu, Youdao, Azure, Google) |
 | `TESVT_FormData.pas` | 1,774 | Header Processor 规则编辑器 | ✅ 已完成 (header_processor.rs + HeaderProcessorPanel) |
 | `TESVT_FastSearch.pas` | 708 | 30+ 比较器 + 二分搜索 | 部分 (matching.rs 覆盖核心) |
-| `TESVT_SpellCheck.pas` | 499 | Hunspell/MS Word 拼写检查 | 后端已完成，缺 UI |
+| `TESVT_SpellCheck.pas` | 499 | Hunspell/MS Word 拼写检查 | ✅ 运行时UI已接通，配置自动恢复 |
 | `TESVT_HeaderWizard.pas` | 493 | 多文件批处理向导 | ✅ 已完成 (header_batch_process + HeaderWizardPanel) |
 | `TESVT_VMAD.pas` | 404 | VMAD 脚本属性提取和写回 | ~70% |
 | `TESVT_Templates.pas` | 288 | 规则模板管理器 | ✅ 已完成 (TemplateManager) |
-| `TESVT_Colab.pas` + `ColabFilter.pas` | 252 | 团队协作翻译 | 未实现 |
+| `TESVT_Colab.pas` + `ColabFilter.pas` | 252 | 团队协作翻译 | ✅ 已完成 (colab_* + ColabPanel) |
 | `TESVT_ToolBox.pas` | 59 | 7 种文本转换工具 | ✅ 已完成 (toolbox.rs) |
 | `TESVT_commandProcessor.pas` | 110 | 命令脚本编辑器 | 未实现 |
 | `TESVT_preProcessingOpts.pas` | 108 | 批次预处理选项 | ✅ 已完成 (PreProcessingOpts) |
-| `TESVT_MergeSst.pas` | 96 | SST 字典合并 | 未实现 |
-| `TESVT_DialHTML.pas` | 73 | 对话树 HTML 导出 | 未实现 |
-| `TESVT_RtlPreview.pas` | 63 | RTL 实时预览工具 | 部分 (核心完成) |
+| `TESVT_MergeSst.pas` | 96 | SST 字典合并 | ✅ 已完成 (sst_merge + MergeSstDialog) |
+| `TESVT_DialHTML.pas` | 73 | 对话树 HTML 导出 | ✅ 已完成 (export_dial_html) |
+| `TESVT_RtlPreview.pas` | 63 | RTL 实时预览工具 | ✅ 已完成 (rtl_preview + RTLPreview) |
 | `TESVT_EspStruct.pas` | 55 | ESP 结构 hex dump | 部分 |

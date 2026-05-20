@@ -62,14 +62,14 @@ User selects ESP → MenuBar.tsx
   → invoke("load_esp", { espPath, stringsDir, language, game })
   → src-tauri/src/commands.rs::load_esp()
     → spawn_blocking: CPU-intensive ESP parsing
-      → Check EsmCache (SHA-256 of ESP → {hash}.cache in %LOCALAPPDATA%/xTranslator/cache/)
-      → Cache hit: deserialize bincode blob → return instantly (cached=true, parse_time_ms=0)
+      → Check CacheIndex + SqliteCache (SHA-256 of ESP → {hash}.sqlite in %LOCALAPPDATA%/xTranslator/cache/)
+      → Cache hit: read SQLite payload → return strings instantly (cached=true, parse_time_ms=0)
       → Cache miss: full parse
         → xt-core::EspParser::with_game() → parse() → decompress records → extract strings
         → xt-core::StringsFiles::load_from_dir_with_language()
           → First: try standalone .STRINGS/.DLSTRINGS/.ILSTRINGS files
           → Fallback: scan .bsa archives in ESP directory, extract strings/ folder via BSAhash64
-        → Store result in cache (bincode serialized, max 50 entries, prune oldest)
+        → Store result in SQLite cache (content-addressed, max 50 entries, prune oldest)
     → Store Vec<SkyString> in AppState.strings
   → Emit "esp-load-progress" events (stage: parsing / finalizing / cached for cache hits)
   → Return LoadEspResponse { total, compressed_records, strings_loaded, parse_time_ms, record_counts, cached }
@@ -122,7 +122,7 @@ User clicks Import XML → invoke("import_xml", { xml_path })
 
 ### 1. Full-Load + Client-Side Virtual Scroll
 
-ESP 加载后前端通过 `get_strings_chunk` 分块拉取全量数据（每批 10K 条 ~2MB JSON，76K 条约 8 批），之后筛选、排序、滚动全部在客户端完成（零延迟，<10ms）。`query_strings_command` 保留作为降级方案。
+ESP 加载后前端通过 `get_strings_chunk` 分块拉取全量数据（每批 25K 条，concurrency 3，约 ~2MB JSON），之后筛选、排序、滚动全部在客户端完成（零延迟，<10ms）。`query_strings_command` 保留作为降级方案。
 
 **Rationale**: 分块避免一次性传输 15-20MB JSON 超出 WebView2 `postMessage` 限制。客户端 filter+sort 远快于 46ms IPC 往返。消除翻页中断体验，对标 Delphi 原版 VirtualTreeView。
 
@@ -152,9 +152,9 @@ Production builds use `beforeBuildCommand: "cd ui && npm run build"` which works
 
 ### 7. ESP Parse Result Caching
 
-ESP 解析结果通过基于文件 SHA-256 的内容寻址缓存到本地磁盘（`%LOCALAPPDATA%/xTranslator/cache/`）。同一文件的后续加载直接反序列化 bincode blob，跳过 STRINGS 加载和 ESP 解析，实现秒开。缓存文件以 `{sha256}.cache` 命名，自动清理超出 50 条上限的最旧条目。
+ESP 解析结果通过基于文件 SHA-256 的内容寻址 SQLite 缓存到本地磁盘（`%LOCALAPPDATA%/xTranslator/cache/`）。加载时先走 `CacheIndex` 的 mtime+size 快速路径，未命中再回退到完整 SHA-256。命中后可直接读取缓存字符串和 record 统计，避免重新解析大型 ESM；缓存文件以 `{sha256}.sqlite` 命名，自动清理超出 50 条上限的最旧条目。
 
-Format: `CachePayload { version: u32, strings: Vec<SkyString>, compressed_records: u32, strings_loaded: u8 }` — versioned for forward compatibility.
+Format: `sqlite_cache::CachePayload { version: u32, strings: Vec<SkyString>, compressed_records: u32, strings_loaded: u8 }` — versioned for forward compatibility and row-level updates.
 
 ---
 
@@ -173,14 +173,14 @@ Format: `CachePayload { version: u32, strings: Vec<SkyString>, compressed_record
 | `mcm` | MCM (Mod Configuration Menu) translation file parser: UTF-16LE/UTF-8/ANSI encoding detection, BOM handling, key-value extraction, save with original encoding+line endings |
 | `fuz` | FUZ audio container parser: FuzHeader + WAV extraction, Sound/Voice/ directory scanning, RESP/INFO association |
 | `tcsc` | Traditional/Simplified Chinese conversion: OpenCC dictionary (primary, 3960 pairs) + Delphi Charset_SCTC.txt (fallback, 2552 pairs), compile-time embedded, `to_simplified()` / `to_traditional()` |
-| `config` | App configuration persistence: `AppConfig` (theme, language, API keys, proxy), JSON load/save, merge-only updates |
+| `config` | App configuration persistence: `AppConfig` (theme, language, API keys, proxy, spell check state), JSON load/save, merge-only updates |
 | `sst::v8` | SST v8 dictionary format: read/write with Delphi-compatible UTF-16LE encoding, FNV-1a hashing, bidirectional roundtrip |
 | `xml` | Delphi xTranslator XML export/import: `parse_xml_export`, `write_xml_export`, `import_xml_to_sky_strings` |
 | `heuristic` | Similarity search for translation suggestions: Levenshtein distance, longest common substring (LCS), longest common prefix (LCP) |
 | `normalization` | String normalization (case-folding, punctuation stripping, whitespace compression) for heuristic search and dictionary matching |
-| `cache` | ESP parse result cache (SHA-256 keyed, bincode blob, auto-prune oldest) |
-| `translation_api` | Translation provider trait; OpenAI, DeepL, Baidu, Youdao, Azure, Google implementations. API config parsing (ApiTranslator.txt), language code resolution, CRLF protection (`<L_F>` tag), HTTP proxy builder (not yet wired). Supports API key via env var, runtime, or config persistence, provider switching |
-| `spell` | Hunspell-based spell check: DLL loading via libloading, tag-aware word splitting, FNV-1a hash cache, fault-ratio lockout, persistent ignore list, suggestions |
+| `sqlite_cache` | ESP parse result cache (SHA-256 keyed SQLite store, row-level updates, auto-prune oldest) |
+| `translation_api` | Translation provider trait; OpenAI, DeepL, Baidu, Youdao, Azure, Google implementations. API config parsing (ApiTranslator.txt), language code resolution, CRLF protection (`<L_F>` tag), runtime HTTP proxy integration. Supports API key via env var, runtime, or config persistence, provider switching |
+| `spell` | Hunspell-based spell check: DLL loading via libloading, tag-aware word splitting, FNV-1a hash cache, fault-ratio lockout, persistent ignore list, suggestions, config persistence (auto-restore dictionary/active on startup) |
 | `types` | Core types: `SkyString`, `EspPointer`, `SkyStringParams`, `GameId` |
 
 ### src-tauri
@@ -188,7 +188,7 @@ Format: `CachePayload { version: u32, strings: Vec<SkyString>, compressed_record
 | File | Responsibility |
 |------|----------------|
 | `main.rs` | Tauri app builder: plugin initialization (`shell`, `dialog`), `AppState` management, command handler registration |
-| `commands.rs` | IPC command implementations: `load_esp`, `load_sst`, `save_sst`, `update_translation`, `get_strings_chunk`, `query_strings_command`, `get_stats`, `heuristic_search`, `translate_string`, `set_openai_api_key`, `export_xml`, `import_xml`, `save_strings`, `list_bsa_files`, `extract_bsa_file`, `parse_pex_strings`, `load_fuz_mapping`, `build_dialog_tree`, `start_batch_translate`, `start_batch_export`, `cancel_batch_job`, `load_config`, `save_config`, `get_api_config`, `spell_check_load`, `spell_check_unload`, `spell_check_toggle`, `spell_check_config`, `spell_check_text`, `spell_check_suggestions`, `spell_check_ignore` |
+| `commands.rs` | IPC command implementations (101 commands): `load_esp`, `load_sst`, `save_sst`, `update_translation`, `get_strings_chunk`, `query_strings_command`, `get_stats`, `heuristic_search`, `translate_string`, `set_openai_api_key`, `export_xml`, `import_xml`, `save_strings`, `list_bsa_files`, `extract_bsa_file`, `parse_pex_strings`, `scan_fuz_directory`, `build_dialog_tree`, `start_batch_translate`, `start_batch_export`, `cancel_batch_job`, `load_config`, `save_config`, `get_api_config`, `spell_check_load`, `spell_check_unload`, `spell_check_toggle`, `spell_check_config`, `spell_check_text`, `spell_check_suggestions`, `spell_check_ignore`, `sst_merge`, `export_dial_html`, `rtl_preview`, `colab_*` |
 | `batch.rs` | Batch processor: sequential ESP file processing, cooperative cancellation, Tauri event emission |
 
 ### ui
@@ -198,14 +198,15 @@ Format: `CachePayload { version: u32, strings: Vec<SkyString>, compressed_record
 | `api/strings.ts` | TypeScript DTO interfaces + Tauri invoke wrappers for every backend command |
 | `stores/appStore.ts` | Zustand store: holds items, filter/sort, selection, file info, theme, language, batch state |
 | `i18n.ts` | react-i18next initialization: 10 language locales, language detection, MenuBar integration |
-| `components/MenuBar.tsx` | Load ESP/SST, Save SST/Strings, Export/Import XML, Reset, language selector, theme switcher, batch panel toggle |
+| `components/MenuBar.tsx` | Load ESP/SST, Merge SST, Save SST/Strings, Export/Import XML, Reset, language selector, theme switcher, batch/tool panel entry points, startup spell-check restore |
 | `components/SidePanel.tsx` | Stats display: total/translated/incomplete/locked counts, record type filter list, load progress |
-| `components/StringTable.tsx` | Virtual scroll list (react-window FixedSizeList): 76K+ strings seamless scroll, client-side filter/sort, status filter buttons, audio playback column |
+| `components/StringTable.tsx` | Virtual scroll list (react-window FixedSizeList): 76K+ strings seamless scroll, client-side filter/sort, resizable EDID/ID/LD columns, status filter buttons, audio playback column |
 | `components/EditorPanel.tsx` | Translation editor: source text, textarea, Save (Ctrl+Enter), heuristic search, translate API, API Key dialog, status badge, spell check (debounced) |
 | `components/BatchPanel.tsx` | Batch file list, game/language detection, translate/export, progress tracking, cancellation |
 | `components/BsaBrowser.tsx` | BSA archive browser: folder tree, file list, preview, extract single/batch |
 | `components/PexPanel.tsx` | PEX script viewer: object tree, translatable strings list, XML export |
-| `components/FuzPanel.tsx` | FUZ audio browser: file scan, RESP/INFO association, WAV playback |
+| `components/FuzPanel.tsx` | FUZ audio browser: file scan, RESP/INFO association, filter, WAV playback, LIP/parse status summary |
+| `components/McmPanel.tsx` | MCM translation editor: load/save/filter/compare, side-by-side source/translation editing, copy-source shortcut, char-count hint |
 | `components/DialogView.tsx` | Dialog tree: QUST→DIAL→INFO grouping, NPC view, inline editing |
 | `App.tsx` | Root layout + global loading overlay (locks UI during critical operations) |
 
@@ -266,7 +267,7 @@ Delphi xTranslator compatible:
 # Full backend build
 cargo build -p xtranslator-tauri
 
-# Core library unit tests (290 tests)
+# Core library unit tests (293 tests)
 cargo test -p xt-core --lib
 
 # End-to-end tests (requires Skyrim SE at D:\SteamLibrary\...)

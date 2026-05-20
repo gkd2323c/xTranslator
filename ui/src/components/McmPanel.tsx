@@ -1,11 +1,11 @@
 import { useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useTranslation } from "react-i18next";
-import { FileText, FileUp, Save } from "lucide-react";
+import { FileText, FileUp, Save, RotateCcw, CheckCircle2, Copy } from "lucide-react";
 import toast from "react-hot-toast";
 import { loadMcmFile, saveMcmFile, mcmCompare } from "../api/strings";
 import type { McmFileDto, McmEntryDto, McmComparePolicy, McmCompareRequest } from "../api/strings";
-import { Button, Badge, EmptyState, Select, Textarea } from "./ui";
+import { Button, Badge, EmptyState, Select } from "./ui";
 
 export function McmPanel() {
   const { t } = useTranslation();
@@ -149,6 +149,13 @@ export function McmPanel() {
                 {translatedCount} / {file.entry_count}
               </span>
             </div>
+            {/* 进度条 */}
+            <div className="mcm-progress-bar-track">
+              <div
+                className="mcm-progress-bar-fill"
+                style={{ width: `${file.entry_count > 0 ? (translatedCount / file.entry_count) * 100 : 0}%` }}
+              />
+            </div>
             <div className="mcm-action-buttons">
               <Button variant="default" size="sm" onClick={handleOpen} icon={<FileUp size={12} />}>
                 {t("mcm.openAnother")}
@@ -198,14 +205,37 @@ export function McmPanel() {
 
           {/* Filter */}
           <div className="sidepanel-section" style={{ padding: "8px" }}>
-            <input
-              type="text"
-              placeholder={t("mcm.filterPlaceholder")}
-              value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-              className="filter-input"
-              style={{ width: "100%" }}
-            />
+            <div className="mcm-filter-row">
+              <input
+                type="text"
+                placeholder={t("mcm.filterPlaceholder")}
+                value={filter}
+                onChange={(e) => setFilter(e.target.value)}
+                className="filter-input"
+                style={{ flex: 1 }}
+              />
+              {filter && filteredEntries.length > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    const clearIndices = filteredEntries.map((e) =>
+                      entries.findIndex((oe) => oe.line_index === e.line_index)
+                    );
+                    const updated = entries.map((e, i) =>
+                      clearIndices.includes(i) ? { ...e, translation: "" } : e
+                    );
+                    setEntries(updated);
+                    if (updated.some((e, i) => e.translation !== entries[i].translation)) {
+                      setModified(true);
+                    }
+                  }}
+                  icon={<RotateCcw size={12} />}
+                >
+                  {t("mcm.clearFiltered", { defaultValue: "Clear filtered" })}
+                </Button>
+              )}
+            </div>
           </div>
 
           {/* Entry list */}
@@ -220,21 +250,40 @@ export function McmPanel() {
                 return (
                   <div
                     key={originalIndex}
-                    className="record-type-row mcm-entry"
+                    className="record-type-row mcm-entry mcm-entry-compact"
                   >
-                    <div className="mcm-entry-id">
-                      {entry.id}
+                    <div className="mcm-entry-header-row">
+                      <span className="mcm-entry-id">{entry.id}</span>
+                      <div className="mcm-entry-header-actions">
+                        {entry.translation.length > 0 && (
+                          <>
+                            <CheckCircle2 size={11} className="mcm-entry-translated-icon" />
+                            <span className="mcm-entry-char-count">
+                              {entry.translation.length}/{entry.source.length}
+                            </span>
+                          </>
+                        )}
+                        <button
+                          className="mcm-entry-copy-btn"
+                          onClick={() => handleEntryChange(originalIndex, entry.source)}
+                          title={t("mcm.copySource", { defaultValue: "Copy source as translation" })}
+                        >
+                          <Copy size={10} />
+                        </button>
+                      </div>
                     </div>
-                    <div className="mcm-entry-source">
-                      {entry.source}
+                    <div className="mcm-entry-body">
+                      <div className="mcm-entry-source-cell">
+                        {entry.source}
+                      </div>
+                      <textarea
+                        value={entry.translation}
+                        onChange={(e) => handleEntryChange(originalIndex, e.target.value)}
+                        placeholder={t("mcm.translationPlaceholder")}
+                        rows={2}
+                        className="mcm-entry-textarea ui-textarea"
+                      />
                     </div>
-                    <Textarea
-                      value={entry.translation}
-                      onChange={(e) => handleEntryChange(originalIndex, e.target.value)}
-                      placeholder={t("mcm.translationPlaceholder")}
-                      rows={2}
-                      className="mcm-entry-textarea"
-                    />
                   </div>
                 );
               })}

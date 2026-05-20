@@ -2,8 +2,7 @@
 
 ## 当前版本
 - **版本**: 1.0.0 (正式版)
-- **测试**: Rust 290 tests · 8 e2e · 7 benchmarks · 0 warnings
-- **构建**: `./build.bat` 一键 release
+- **测试**: `cargo test -p xt-core --lib` → 293 passed
 - **构建**: `./build.bat` 一键 release
 
 ## 发布步骤

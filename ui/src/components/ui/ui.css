@@ -500,3 +500,12 @@
 .ui-kv-row .mono {
   font-family: var(--font-mono);
 }
+
+/* 模态框懒加载 loading 状态 */
+.ui-modal-overlay .modal-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 120px;
+  color: var(--color-text-secondary);
+}

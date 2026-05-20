@@ -799,6 +799,8 @@ export interface FuzMapping {
   dialog_text: string;
   fuz_file: string;
   duration_secs: number;
+  has_lip: boolean;
+  parse_ok: boolean;
 }
 
 export interface FuzScanResponse {
@@ -914,6 +916,9 @@ export interface AppConfigDto {
   proxy_username?: string;
   proxy_password?: string;
   esp_mode?: boolean;
+  spellcheck_dictionary?: string;
+  spellcheck_active?: boolean;
+  spellcheck_loaded?: boolean;
 }
 
 // ── API Config ──────────────────────────────────────────────────────
@@ -1175,4 +1180,27 @@ export async function startStringBatchTranslate(ids: number[], concurrency: numb
 
 export async function cancelStringBatchTranslate(): Promise<void> {
   return invoke("cancel_string_batch_translate");
+}
+
+// ── SST Merge ────────────────────────────────────────────────────────────
+
+export interface MergeStatsDto {
+  added: number;
+  updated: number;
+  overwritten: number;
+  conflicts_skipped: number;
+}
+
+/// 将来源 SST 合并到当前工作数据
+/// 参数：
+/// - `sourcePath`: 来源 SST 文件路径
+/// - `overwrite`: 冲突时是否用来源译文覆盖已有译文
+///
+/// 返回：
+/// - `MergeStatsDto`: 包含 added/updated/overwritten/conflicts_skipped 统计
+export async function sstMerge(
+  sourcePath: string,
+  overwrite: boolean,
+): Promise<MergeStatsDto> {
+  return invoke("sst_merge", { sourcePath, overwrite });
 }

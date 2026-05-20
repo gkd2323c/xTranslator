@@ -488,7 +488,14 @@
     "playbackFailed": "播放失败",
     "foundMatches": "找到 {{matched}} 个匹配（共 {{total}} 个 FUZ 文件）",
     "scanFailed": "扫描失败",
-    "loadAudioFailed": "加载音频失败"
+    "loadAudioFailed": "加载音频失败",
+    "withLip": "有 LIP",
+    "withoutLip": "无 LIP",
+    "filterPlaceholder": "按 ID 或文本过滤...",
+    "hasLip": "有 LIP 数据",
+    "noLip": "无 LIP 数据",
+    "noMatch": "无匹配条目",
+    "parseFailed": "解析失败"
   },
   "dialog": {
     "title": "对话视图",

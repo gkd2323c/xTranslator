@@ -527,6 +527,10 @@ pub struct FuzMapping {
     pub dialog_text: String,
     pub fuz_file: String,
     pub duration_secs: f32,
+    pub has_lip: bool,
+    /// Whether FUZ file was parsed successfully.
+    /// When false, has_lip and duration_secs are not reliable.
+    pub parse_ok: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -782,6 +786,17 @@ pub struct AppConfigDto {
     /// ESP mode: when true, save operations write back to the ESP file directly.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub esp_mode: Option<bool>,
+    /// Last used spell check dictionary name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spellcheck_dictionary: Option<String>,
+    /// Whether spell check was active when last saved.
+    /// false = loaded but inactive (toggled off), or unloaded (see spellcheck_loaded).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spellcheck_active: Option<bool>,
+    /// Whether Hunspell dictionary was loaded when last saved.
+    /// true = auto-restore on startup; false = don't load until user manually Loads.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spellcheck_loaded: Option<bool>,
 }
 
 // ── ESP Write-back DTOs ──────────────────────────────────────────────
