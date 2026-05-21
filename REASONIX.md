@@ -60,5 +60,7 @@ cd ui && npm run test:e2e            # Playwright E2E
 - **ESLint / Prettier** not configured — rely on `cargo clippy` and `tsc --noEmit` for quality.
 - **Debug builds** parse Skyrim.esm 100x+ slower than release; use `.\build.bat` for release.
 - **VMAD 片段** — PERK/PACK/SCEN/INFO/QUST 记录在 VMAD Header 和 Scripts 之间有 Fragment 数据。`vmad.rs` 的 `has_fragments()` + `skip_fragment_data()` 处理跳过和写回保留；修改该逻辑需同步更新三处（`decode_vmad_fast`、`VmadDecoder::decode`、`write_back_rebuild`）。
-- **启发式搜索** — 默认使用 Delphi 风格评分（`heuristic::find_similar_delphi`），旧版字符 Levenshtein `find_similar_translations` 仍保留备用。前端 `HeuristicMatchDTO` 字段兼容两者。
+- **启发式搜索** — 默认使用 Delphi 风格评分（`heuristic::find_similar_delphi` 在 `heuristic/delphi_scoring.rs`），词级哈希 + LCS + LCP + 代理惩罚；旧版字符 Levenshtein `find_similar_translations` 仍保留备用。前端 `HeuristicMatchDTO` 字段兼容两者。
+- **拼写检查持久化** — `config.rs` 中 `AppConfig` 有三个字段：`spellcheck_dictionary` / `spellcheck_active` / `spellcheck_loaded`。前端 `SpellCheckSettingsDialog` 有 `autoRestore()` 和 `persistSpellCheckState()`，`MenuBar` 启动时自动恢复字典。ignore 列表通过 `ignore.txt` 在字典目录自动持久化。
+- **SST Merge** — 后端 `SstDictionary::merge_from()` (按 str_id/record_sig/field_sig 三元组匹配)，Tauri 命令 `sst_merge` 已注册。前端 `MergeSstDialog` 支持文件选择、overwrite 策略、统计展示 (added/updated/overwritten/skipped)、合并后自动刷新。File 菜单有 "Merge SST..." 入口。
 - **Cargo 离线模式** — 依赖已缓存场景下可用 `cargo check --offline` 避免网络代理问题。

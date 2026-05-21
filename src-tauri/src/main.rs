@@ -10,7 +10,7 @@ use crate::batch::BatchExecutor;
 use commands::{
     auto_backup_sst, batch_update_translations, build_dialog_tree, cancel_batch_job, compare_esp_files, compare_source_dest,
     check_aliases, check_pending_cache, apply_translation_cache, discard_translation_cache, compile_pex,
-    toolbox_transform,
+    toolbox_transform, write_text_file,
     start_string_batch_translate, cancel_string_batch_translate,
     export_xml, extract_ba2_file, extract_ba2_folder, extract_bsa_file, extract_bsa_folder,
     finalize, get_all_strings, get_batch_status, get_fuz_audio_data, get_is_dirty, get_stats,
@@ -123,6 +123,7 @@ fn main() {
             // String-level batch translation
             start_string_batch_translate,
             cancel_string_batch_translate,
+            write_text_file,
             // Spell check
             spell_check_load,
             spell_check_unload,

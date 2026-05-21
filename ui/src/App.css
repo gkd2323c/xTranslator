@@ -1840,6 +1840,139 @@ html, body, #root {
   flex-shrink: 0;
 }
 
+/* ── Fuz stats bar charts ────────────────────────────────────────── */
+.fuz-stats-bars {
+  margin: 6px 0;
+}
+
+.fuz-stats-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 3px;
+  font-size: 10px;
+}
+
+.fuz-stats-label {
+  width: 80px;
+  color: var(--color-muted);
+  flex-shrink: 0;
+}
+
+.fuz-stats-value {
+  width: 30px;
+  text-align: right;
+  font-family: var(--font-mono);
+  color: var(--color-ink);
+  flex-shrink: 0;
+}
+
+.fuz-stats-track {
+  flex: 1;
+  height: 6px;
+  background: var(--color-surface-card);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.fuz-stats-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.fuz-stats-fill-ok    { background: #22c55e; }
+.fuz-stats-fill-warn  { background: #f59e0b; }
+.fuz-stats-fill-error { background: #ef4444; }
+
+/* ── Fuz sort bar ────────────────────────────────────────────────── */
+.fuz-sort-bar {
+  display: flex;
+  gap: 4px;
+  padding: 4px 8px;
+  align-items: center;
+  border-bottom: 1px solid var(--color-hairline);
+}
+
+.fuz-sort-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  padding: 2px 6px;
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-soft);
+  color: var(--color-muted);
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s, color 0.15s;
+}
+
+.fuz-sort-btn:hover {
+  background: var(--color-surface-card);
+  color: var(--color-ink);
+}
+
+.fuz-sort-active {
+  background: rgba(59, 130, 246, 0.12);
+  color: #3b82f6;
+  border-color: rgba(59, 130, 246, 0.3);
+}
+
+.fuz-sort-count {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--color-muted-soft);
+  font-family: var(--font-mono);
+}
+
+/* ── Fuz playback progress ───────────────────────────────────────── */
+.fuz-playback-progress {
+  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.fuz-playback-track {
+  flex: 1;
+  height: 4px;
+  background: var(--color-surface-card);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.fuz-playback-fill {
+  height: 100%;
+  background: var(--color-primary);
+  border-radius: 2px;
+  transition: width 0.1s linear;
+}
+
+.fuz-playback-time {
+  font-size: 9px;
+  color: var(--color-muted);
+  font-family: var(--font-mono);
+  flex-shrink: 0;
+}
+
+/* ── Fuz mapping filename ────────────────────────────────────────── */
+.fuz-mapping-filename {
+  font-size: 9px;
+  color: var(--color-muted-soft);
+  font-family: var(--font-mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Fuz playing highlight ───────────────────────────────────────── */
+.fuz-mapping-playing {
+  background: rgba(59, 130, 246, 0.06);
+  border-left: 3px solid var(--color-primary);
+}
+
 /* MCM panel */
 .mcm-progress-bar-track {
   width: 100%;
@@ -1982,6 +2115,185 @@ html, body, #root {
   gap: 4px;
 }
 
+/* ── MCM stats breakdown ───────────────────────────────────────── */
+.mcm-stats-breakdown {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+  justify-content: center;
+}
+
+.mcm-stat-chip {
+  font-size: 10px;
+  padding: 1px 8px;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  line-height: 1.6;
+}
+
+.mcm-stat-translated {
+  background: rgba(34, 197, 94, 0.12);
+  color: #22c55e;
+}
+
+.mcm-stat-partial {
+  background: rgba(245, 158, 11, 0.12);
+  color: #f59e0b;
+}
+
+.mcm-stat-untranslated {
+  background: rgba(107, 114, 128, 0.12);
+  color: #6b7280;
+}
+
+/* ── MCM batch actions ─────────────────────────────────────────── */
+.mcm-batch-actions {
+  display: flex;
+  gap: 2px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+
+.mcm-batch-actions .ui-btn {
+  font-size: 10px;
+  padding: 2px 6px;
+}
+
+/* ── MCM entry status badge ────────────────────────────────────── */
+.mcm-entry-status-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  font-size: 8px;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+/* ── MCM entry row status tint ─────────────────────────────────── */
+.record-type-row.mcm-entry[data-status="translated"] {
+  border-left: 3px solid rgba(34, 197, 94, 0.5);
+}
+
+.record-type-row.mcm-entry[data-status="partial"] {
+  border-left: 3px solid rgba(245, 158, 11, 0.5);
+}
+
+/* ── MCM Compare Result Dialog ─────────────────────────────────── */
+.mcm-compare-result {
+  padding: 0;
+}
+
+.mcm-compare-summary {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+
+.mcm-compare-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.mcm-compare-stat-value {
+  font-size: 24px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  line-height: 1;
+}
+
+.mcm-compare-stat-label {
+  font-size: 11px;
+  color: var(--color-muted);
+}
+
+.mcm-compare-changes h4 {
+  font-size: 13px;
+  margin-bottom: 8px;
+  color: var(--color-ink);
+}
+
+.mcm-compare-change-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mcm-compare-change-row {
+  padding: 8px;
+  background: var(--color-surface-card);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-md);
+}
+
+.mcm-compare-change-id {
+  font-size: 10px;
+  color: var(--color-muted);
+  font-family: var(--font-mono);
+  margin-bottom: 4px;
+}
+
+.mcm-compare-change-source {
+  font-size: 11px;
+  color: var(--color-muted-soft);
+  margin-bottom: 6px;
+  padding: 4px 6px;
+  background: var(--color-surface-soft);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.mcm-compare-change-fields {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.mcm-compare-change-old,
+.mcm-compare-change-new {
+  flex: 1;
+  min-width: 0;
+}
+
+.mcm-compare-change-label {
+  font-size: 9px;
+  color: var(--color-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  display: block;
+  margin-bottom: 2px;
+}
+
+.mcm-compare-change-text {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  padding: 3px 6px;
+  border-radius: var(--radius-sm);
+  display: block;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: var(--color-surface-soft);
+}
+
+.mcm-compare-change-arrow {
+  font-size: 16px;
+  color: var(--color-muted);
+  padding-top: 16px;
+  flex-shrink: 0;
+}
+
+.mcm-diff-added {
+  background: rgba(34, 197, 94, 0.15);
+  color: #22c55e;
+}
+
 /* ESP Compare panel */
 .esp-compare-open-btn {
   margin-top: 16px;
@@ -2101,6 +2413,89 @@ html, body, #root {
   color: var(--color-muted-soft);
   padding: 20px;
   font-size: 12px;
+}
+
+/* ── EspCompare summary bar ────────────────────────────────────── */
+.esp-compare-summary-bar {
+  display: flex;
+  gap: 8px;
+  padding: 4px 12px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  background: var(--color-surface-card);
+  border-bottom: 1px solid var(--color-hairline);
+  align-items: center;
+}
+
+.esp-compare-summary-identical { color: var(--color-muted); }
+.esp-compare-summary-added     { color: #22c55e; }
+.esp-compare-summary-removed   { color: #ef4444; }
+.esp-compare-summary-modified  { color: #f59e0b; }
+.esp-compare-summary-total     { color: var(--color-muted-soft); }
+
+/* ── EspCompare sort + filter bar ───────────────────────────────── */
+.esp-compare-sort-row {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+
+.esp-compare-sort-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  padding: 2px 6px;
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-soft);
+  color: var(--color-muted);
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s, color 0.15s;
+}
+
+.esp-compare-sort-btn:hover {
+  background: var(--color-surface-card);
+  color: var(--color-ink);
+}
+
+.esp-compare-sort-active {
+  background: rgba(59, 130, 246, 0.12);
+  color: #3b82f6;
+  border-color: rgba(59, 130, 246, 0.3);
+}
+
+/* ── EspCompare header actions ──────────────────────────────────── */
+.esp-compare-header-actions {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+/* ── EspCompare result count ────────────────────────────────────── */
+.esp-compare-result-count {
+  font-size: 10px;
+  color: var(--color-muted-soft);
+  padding: 2px 12px;
+  text-align: right;
+  font-family: var(--font-mono);
+}
+
+/* ── EspCompare diff highlighting ───────────────────────────────── */
+.esp-diff-del {
+  background: rgba(239, 68, 68, 0.2);
+  text-decoration: line-through;
+  color: #ef4444;
+  border-radius: 2px;
+  padding: 0 1px;
+}
+
+.esp-diff-add {
+  background: rgba(34, 197, 94, 0.2);
+  color: #22c55e;
+  border-radius: 2px;
+  padding: 0 1px;
 }
 
 /* Finalize panel */

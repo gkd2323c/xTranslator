@@ -1,8 +1,10 @@
 # xTranslator UI 打磨交接文档
 
 > 编写日期：2026-05-20
-> 涉及：Phase 1~3 UI 打磨及后续补强，前端从 ~55% 提升至 ~78%
+> 最后更新：2026-05
+> 涉及：Phase 1~5 UI 打磨及后续补强，前端从 ~55% 提升至 ~90%
 > 核心文件：EditorPanel, StringTable, StatusBar, ContextMenu, DialogView, BsaBrowser, BatchPanel, PexPanel, SidePanel, LogPanel, VocabularyPanel
+> 新增 Phase 4：SpellCheckSettingsDialog, MergeSstDialog
 
 ---
 
@@ -15,7 +17,9 @@
 | **Phase 1** | EditorPanel + StringTable 核心增强 | ~500 | 55%→65% |
 | **Phase 2** | StatusBar + ContextMenu + 底部面板 + DialogView | ~1,000 | 65%→72% |
 | **Phase 3** | BSA + BatchPanel + PEX 面板增强 | ~900 | 72%→75% |
-| **合计** | 15 个组件 | ~2,400 | 55%→75% |
+| **Phase 4** | SpellCheckSettingsDialog + MergeSstDialog + 配置持久化 | ~500 | 75%→82% |
+| **Phase 5** | McmPanel + EspComparePanel + FuzPanel 三个缺口面板增强 | ~600 | 82%→90% |
+| **合计** | 20 个组件 | ~3,500 | 55%→90% |
 
 ---
 
@@ -47,12 +51,25 @@
 | **Vocabulary** | `ui/src/components/bottom/VocabularyPanel.tsx` | ~70% | 2B | 加载词汇统计、可搜索词汇预览(200条)、source↔translation 对照 |
 | **Log** | `ui/src/components/bottom/LogPanel.tsx` | ~80% | 2B | 日志级别着色(INFO/WARN/ERROR)、搜索过滤、自动滚动、复制/清空 |
 
-### 2.4 待打磨面板
+### 2.4 Phase 4 新增组件
+
+| 组件 | 文件 | 完成度 | 关键功能 |
+|------|------|--------|----------|
+| **SpellCheckSettingsDialog** | `ui/src/components/SpellCheckSettingsDialog.tsx` | ~95% | 字典选择/扫描、加载/卸载、启用/禁用切换、配置持久化（dictionary/active/loaded 自动恢复）、MenuBar 启动恢复 |
+| **MergeSstDialog** | `ui/src/components/MergeSstDialog.tsx` | ~95% | 来源 SST 文件选择（Tauri dialog）、overwrite 策略切换、合并执行、统计结果表格（added/updated/overwritten/skipped） |
+
+### 2.5 Phase 5 新增 — 三个缺口面板增强
+
+| 组件 | 文件 | 完成度 | 新增功能 |
+|------|------|--------|----------|
+| **McmPanel** | `ui/src/components/McmPanel.tsx` | ~92% | 翻译状态徽章（🟢已翻译/🟠部分翻译/⚪未翻译）、统计明细（三类计数）、批量操作（Copy sources/Clear all/Reverse）、比较结果对话框（diff 列表 + 统计卡片） |
+| **EspComparePanel** | `ui/src/components/EspComparePanel.tsx` | ~80% | 差异报告导出（新增 `write_text_file` Rust 命令）、字符级 diff 高亮（红色删除线/绿色新增）、排序（ID/Field）、摘要统计条 |
+| **FuzPanel** | `ui/src/components/FuzPanel.tsx` | ~85% | 播放进度条（`requestAnimationFrame` 实时更新）、排序（ID/Duration/Status）、统计可视化（内嵌进度条）、行可读性改进（文件名/播放高亮） |
+
+### 2.6 低优先级打磨
 
 | 组件 | 文件 | 完成度 | 备注 |
 |------|------|--------|------|
-| FUZ 面板 | `ui/src/components/FuzPanel.tsx` | ~70% | 已支持筛选、With/Without LIP/Parse failed 摘要和三态状态；仍缺 LIP 预览 |
-| MCM 面板 | `ui/src/components/McmPanel.tsx` | ~80% | 已支持对照编辑、copy source、char ratio、Clear filtered、compare |
 | 主窗口布局 | `ui/src/App.tsx` + `App.css` | ~80% | 三阶段布局复刻完成，EDID/ID/LD 列宽可调；仍缺列拖放排序 |
 
 ---

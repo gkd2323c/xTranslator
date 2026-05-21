@@ -4764,3 +4764,14 @@ pub fn cancel_string_batch_translate(
     *bq = None;
     Ok(())
 }
+
+/// 写入文本文件（用于导出报告等）
+#[tauri::command]
+pub fn write_text_file(path: String, content: String) -> Result<(), String> {
+    use std::io::Write;
+    let mut file = std::fs::File::create(&path)
+        .map_err(|e| format!("Failed to create file: {}", e))?;
+    file.write_all(content.as_bytes())
+        .map_err(|e| format!("Failed to write file: {}", e))?;
+    Ok(())
+}
