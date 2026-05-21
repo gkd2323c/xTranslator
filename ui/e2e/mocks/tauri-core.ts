@@ -173,6 +173,142 @@ export async function invoke<T = unknown>(cmd: string, args?: Record<string, unk
     case "spell_check_ignore":
       return undefined as T;
 
+    // ── MCM ──────────────────────────────────────────────────────
+    case "load_mcm_file": {
+      const mcmEntries = [
+        { id: "$sGeneral", source: "General Settings", translation: "常规设置", line_index: 0, byte_offset: 0 },
+        { id: "$sAudio", source: "Audio", translation: "", line_index: 1, byte_offset: 30 },
+        { id: "$sVideo", source: "Video", translation: "视频", line_index: 2, byte_offset: 50 },
+        { id: "$sLanguage", source: "Language", translation: "语言", line_index: 3, byte_offset: 70 },
+        { id: "$sSubtitles", source: "Subtitles", translation: "", line_index: 4, byte_offset: 90 },
+        { id: "$sDifficulty", source: "Difficulty", translation: "", line_index: 5, byte_offset: 115 },
+      ];
+      return {
+        path: args?.mcmPath as string ?? "C:/mock/Settings.txt",
+        entry_count: mcmEntries.length,
+        encoding: "UTF-16LE",
+        entries: mcmEntries,
+      } as T;
+    }
+
+    case "save_mcm_file":
+      return undefined as T;
+
+    case "mcm_compare": {
+      const req = args?.request as { entries?: Array<{ id: string; translation: string; line_index: number; source: string; byte_offset: number }>; policy?: string } | undefined;
+      const updated = (req?.entries ?? []).filter((e) => e.translation === "").map((e) => ({
+        ...e,
+        translation: `[ref] ${e.source}`,
+      }));
+      return {
+        matched: (req?.entries ?? []).length,
+        unmatched: 0,
+        updated_entries: updated,
+      } as T;
+    }
+
+    // ── ESP Compare ──────────────────────────────────────────────
+    case "compare_esp_files": {
+      const mockPairs = [
+        { new_id: 0x100, old_id: 0x100, source: "Hello", record_sig: "INFO", field_sig: "FULL", old_source: "Hello", new_source: "Hello" },
+        { new_id: 0x101, old_id: 0x101, source: "Guard text", record_sig: "INFO", field_sig: "FULL", old_source: "Guard text", new_source: "Guard dialogue" },
+        { new_id: 0x102, old_id: 0, source: "New dialogue", record_sig: "QUST", field_sig: "FULL", old_source: "", new_source: "New dialogue" },
+        { new_id: 0, old_id: 0x103, source: "Removed text", record_sig: "INFO", field_sig: "FULL", old_source: "Removed text", new_source: "" },
+      ];
+      return {
+        identical_count: 1,
+        added_count: 1,
+        removed_count: 1,
+        modified_count: 1,
+        identical: [mockPairs[0]],
+        added: [mockPairs[2]],
+        removed: [mockPairs[3]],
+        modified: [mockPairs[1]],
+      } as T;
+    }
+
+    // ── FUZ ──────────────────────────────────────────────────────
+    case "scan_fuz_directory": {
+      const fuzMappings = [
+        { response_id: 0x100, dialog_text: "Hello, I am a guard.", fuz_file: "D:/Voice/guard_1.fuz", duration_secs: 2.5, has_lip: true, parse_ok: true },
+        { response_id: 0x101, dialog_text: "I used to be an adventurer.", fuz_file: "D:/Voice/adventurer.fuz", duration_secs: 3.2, has_lip: true, parse_ok: true },
+        { response_id: 0x102, dialog_text: "Wait, I know you.", fuz_file: "D:/Voice/wait.fuz", duration_secs: 1.8, has_lip: false, parse_ok: true },
+        { response_id: 0x103, dialog_text: "", fuz_file: "D:/Voice/broken.fuz", duration_secs: 0, has_lip: false, parse_ok: false },
+      ];
+      return {
+        fuz_mappings: fuzMappings,
+        total_fuz_files: 10,
+      } as T;
+    }
+
+    case "get_fuz_audio_data":
+      // Return a minimal WAV header with silence (44 bytes header + 1 sec of silence at 8kHz)
+      return Array.from({ length: 8044 }, (_, i) => i < 44 ? [0x52, 0x49, 0x46, 0x46, 0x24, 0x1F, 0x00, 0x00, 0x57, 0x41, 0x56, 0x45, 0x66, 0x6D, 0x74, 0x20, 0x10, 0x00, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x40, 0x1F, 0x00, 0x00, 0x40, 0x1F, 0x00, 0x00, 0x01, 0x00, 0x08, 0x00, 0x64, 0x61, 0x74, 0x61, 0x00, 0x1F, 0x00, 0x00][i] || 0 : 128) as T;
+
+    // ── SST Merge ────────────────────────────────────────────────
+    case "sst_merge": {
+      const req2 = args?.request as { source_path?: string; policy?: string } | undefined;
+      return {
+        added: req2?.policy !== "skip_new" ? 5 : 0,
+        updated: req2?.policy !== "skip_update" ? 3 : 0,
+        overwritten: req2?.policy === "overwrite" ? 2 : 0,
+        skipped: req2?.policy === "overwrite" ? 0 : 8,
+        total_source: 50,
+        total_target: 128,
+      } as T;
+    }
+
+    // ── BSA ──────────────────────────────────────────────────────
+    case "list_bsa_files":
+      return {
+        files: [
+          { path: "meshes/armor/iron/iron_helmet.nif", size: 45000, uncompressed_size: 62000, compressed: true },
+          { path: "textures/armor/iron/iron_helmet.dds", size: 280000, uncompressed_size: 280000, compressed: false },
+          { path: "meshes/weapons/iron/iron_sword.nif", size: 32000, uncompressed_size: 44000, compressed: true },
+          { path: "music/exploration/music_x_1.mp3", size: 1200000, uncompressed_size: 1200000, compressed: false },
+        ],
+        total_files: 4,
+        total_size: 1557000,
+      } as T;
+
+    case "extract_bsa_file":
+    case "extract_bsa_folder":
+      return undefined as T;
+
+    // ── PEX ──────────────────────────────────────────────────────
+    case "parse_pex_strings": {
+      return [
+        {
+          script_name: "QF_MQ101_000337B5",
+          game_id: 1,
+          versions: [1],
+          translatable: [
+            { source: "Wait, I know you", translation: "", property_name: "pDialogue", function_name: "Fragment_0", instruction_offset: 12 },
+            { source: "Let me guess...", translation: "", property_name: "pDialogue", function_name: "Fragment_1", instruction_offset: 24 },
+          ],
+        },
+      ] as T;
+    }
+
+    case "compile_pex":
+      return "/mock/output/test.pex" as T;
+
+    // ── Config (full) ─────────────────────────────────────────────
+    case "load_config":
+      return {
+        theme: "dark",
+        language: "en",
+        current_provider: "openai",
+        openai_api_key: "",
+        deepl_api_key: "",
+        spellcheck_dictionary: "en_US",
+        spellcheck_active: true,
+        spellcheck_loaded: true,
+        proxy_server: "",
+        proxy_port: 0,
+        esp_mode: false,
+      } as T;
+
     case "config_get":
       return args?.key === "data_configs" ? [] : {} as T;
 
@@ -196,6 +332,12 @@ export function __setMockResult(cmd: string, data: unknown): void {
 /** Clear all mock result overrides */
 export function __clearMockResults(): void {
   Object.keys(mockData).forEach((key) => delete mockData[key]);
+}
+
+// Expose for Playwright test access via page.evaluate()
+if (typeof window !== "undefined") {
+  (window as any).__setMockResult = __setMockResult;
+  (window as any).__clearMockResults = __clearMockResults;
 }
 
 // ---- Helpers ----

@@ -29,6 +29,7 @@ export default defineConfig(async () => ({
           "@tauri-apps/api/core": path.resolve(__dirname, "e2e/mocks/tauri-core.ts"),
           "@tauri-apps/api/event": path.resolve(__dirname, "e2e/mocks/tauri-event.ts"),
           "@tauri-apps/api/webview": path.resolve(__dirname, "e2e/mocks/tauri-webview.ts"),
+          "@tauri-apps/plugin-dialog": path.resolve(__dirname, "e2e/mocks/tauri-dialog.ts"),
         },
       }
     : undefined,
