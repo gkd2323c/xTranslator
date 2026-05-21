@@ -35,7 +35,6 @@ tests/fixtures/delphi_golden/*.ILSTRINGS
 .claude/
 .codebuddy/
 .omx/
-.github/
 .gemini/
 .cursor/
 .kilocode/
@@ -43,7 +42,8 @@ tests/fixtures/delphi_golden/*.ILSTRINGS
 .opencode/
 .qoder/
 .qwen/
-.trae/
+.github/prompts/
+.github/skills/
 .trae/
 .codex/
 .deepseek/

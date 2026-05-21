@@ -1,0 +1,36 @@
+name: Playwright E2E (Quick)
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  e2e:
+    name: Playwright E2E
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install UI dependencies
+        run: npm ci --prefix ui
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps
+
+      - name: Start Vite dev server
+        run: |
+          npm --prefix ui run dev &
+          npx wait-on http://localhost:5173 -t 120000
+
+      - name: Run Playwright tests
+        env:
+          CI: true
+          VITE_E2E: true
+        run: npx playwright test --config=ui/playwright.config.ts
