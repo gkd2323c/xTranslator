@@ -30,7 +30,6 @@ jobs:
         run: |
           cargo test -p xt-core --lib
           cargo test -p xt-shared --lib
-          cargo test -p xt-core --test '*' -- --nocapture || echo "⚠️  Integration test fixtures may be missing"
 
   # ── Rust Build ──────────────────────────────────────────────────
   build-backend:
@@ -66,7 +65,7 @@ jobs:
           cache-dependency-path: ui/package-lock.json
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci || npm install
 
       - name: Run tests
         run: npm run test

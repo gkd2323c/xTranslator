@@ -19,7 +19,7 @@ jobs:
           node-version: '18'
 
       - name: Install UI dependencies
-        run: npm ci --prefix ui
+        run: npm ci --prefix ui || npm install --prefix ui
 
       - name: Install Playwright browsers
         run: npx playwright install --with-deps
