@@ -213,8 +213,7 @@ fn compare_sst(delphi_dir: &Path) -> Result<SstDiffResult> {
                 );
             }
             Err(e) => {
-                result.status =
-                    format!("WARNING: Rust failed to parse Delphi SST: {}", e);
+                result.status = format!("WARNING: Rust failed to parse Delphi SST: {}", e);
             }
         }
     } else {
@@ -266,10 +265,7 @@ fn compare_strings_files(
                     let mut matched = 0usize;
                     let mut mismatched = 0usize;
 
-                    for sk in esp_strings
-                        .iter()
-                        .filter(|s| s.list_index == *list_index)
-                    {
+                    for sk in esp_strings.iter().filter(|s| s.list_index == *list_index) {
                         let sid = sk.esp_ptr.str_id.max(0) as u32;
                         if let Some(delphi_source) = delphi_map.get(&sid) {
                             if &sk.source == delphi_source {
@@ -284,10 +280,7 @@ fn compare_strings_files(
                     result.total_mismatched += mismatched;
                 }
                 Err(e) => {
-                    result.status = format!(
-                        "WARNING: Failed to parse Delphi .{} file: {}",
-                        ext, e
-                    );
+                    result.status = format!("WARNING: Failed to parse Delphi .{} file: {}", ext, e);
                 }
             }
         }
@@ -374,9 +367,8 @@ fn print_summary(xml: &XmlDiffResult, sst: &SstDiffResult) {
 
     // Verdict
     println!("── Verdict ──");
-    let total_issues = xml.source_mismatches.len()
-        + xml.only_in_delphi.len()
-        + xml.only_in_rust.len();
+    let total_issues =
+        xml.source_mismatches.len() + xml.only_in_delphi.len() + xml.only_in_rust.len();
     if xml.delphi_count == 0 {
         println!("  WARN: No Delphi golden files found.");
         println!("  Run Delphi xTranslator 1.6.0 and export reference files:");

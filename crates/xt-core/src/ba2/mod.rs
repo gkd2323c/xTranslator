@@ -52,7 +52,10 @@ impl Ba2Archive {
             let message = if header.is_dx10_type() {
                 format!("DX10 BA2 archives (texture files) are not supported. This archive contains textures, not translatable strings.")
             } else {
-                format!("Unsupported BA2 type: {} (only GNRL type is supported for string extraction)", archive_type_str)
+                format!(
+                    "Unsupported BA2 type: {} (only GNRL type is supported for string extraction)",
+                    archive_type_str
+                )
             };
             return Err(io::Error::new(io::ErrorKind::InvalidData, message));
         }
@@ -90,10 +93,7 @@ impl Ba2Archive {
     /// 分割路径为文件夹和文件名
     fn split_path(path: &str) -> (String, String) {
         if let Some(pos) = path.rfind('\\') {
-            (
-                path[..pos].to_lowercase(),
-                path[pos + 1..].to_lowercase(),
-            )
+            (path[..pos].to_lowercase(), path[pos + 1..].to_lowercase())
         } else {
             (String::new(), path.to_lowercase())
         }
@@ -274,7 +274,7 @@ mod tests {
 
     #[test]
     fn test_archive_version_constants() {
-        use header::{BA2_VERSION_FO4, BA2_VERSION_SF, BA2_VERSION_FO4B};
+        use header::{BA2_VERSION_FO4, BA2_VERSION_FO4B, BA2_VERSION_SF};
         assert_eq!(BA2_VERSION_FO4, 0x01);
         assert_eq!(BA2_VERSION_SF, 0x02);
         assert_eq!(BA2_VERSION_FO4B, 0x08);
@@ -282,7 +282,7 @@ mod tests {
 
     #[test]
     fn test_header_dx10_type_detection() {
-        use header::{BA2_TYPE_GNRL, BA2_TYPE_DX10};
+        use header::{BA2_TYPE_DX10, BA2_TYPE_GNRL};
         let mut buf = Vec::new();
         buf.extend_from_slice(b"BTDX");
         buf.extend_from_slice(&0x01u32.to_le_bytes());
