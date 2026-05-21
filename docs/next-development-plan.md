@@ -59,6 +59,7 @@ E2E 测试覆盖                     ■■■■■■■■■■ 100% (5/5 �
 - 对真实 Skyrim SE ESP/ESM 产出可重复验证记录：加载 → 导出 → diff → 结论
 - Delphi 交叉验证 ⏸ 阻塞（需 Delphi 1.6.0 运行环境）
 - 已有 `docs/validation_procedure.md`（L1/L2/L3 框架）
+- 详细实施计划见 [`docs/skyrim-se-validation-plan.md`](docs/skyrim-se-validation-plan.md)
 
 ---
 
