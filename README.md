@@ -1,6 +1,6 @@
 # xTranslator - Rust Rewrite
 
-[![Version: 1.0.0](https://img.shields.io/badge/Version-1.0.0-blue.svg)](RELEASE.md)
+[![Version: 1.1.0](https://img.shields.io/badge/Version-1.1.0-blue.svg)](RELEASE.md)
 [![License: MPL-2.0](https://img.shields.io/badge/License-MPL--2.0-brightgreen.svg)](LICENSE)
 [![Tests](https://img.shields.io/badge/Tests-293_passing-brightgreen.svg)](CHANGELOG.md)
 
