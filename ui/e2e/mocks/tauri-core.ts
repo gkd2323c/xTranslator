@@ -338,10 +338,13 @@ export function __clearMockResults(): void {
 if (typeof window !== "undefined") {
   (window as any).__setMockResult = __setMockResult;
   (window as any).__clearMockResults = __clearMockResults;
+  (window as any).__e2eSeedMockData = __e2eSeedMockData;
+  (window as any).__e2eAutoSeed = __e2eAutoSeed;
 }
 
-// ---- Helpers ----
-
+/**
+ * Generate mock strings for the store.
+ */
 function generateMockStrings(opts: { offset?: number; limit?: number }): Array<{
   id: number;
   source: string;
@@ -408,4 +411,50 @@ function generateMockStrings(opts: { offset?: number; limit?: number }): Array<{
     });
   }
   return items;
+}
+
+// ---- E2E Test Helpers ----
+
+/**
+ * Seed mock IPC responses for the most common commands.
+ */
+function __e2eSeedMockData(): void {
+  mockData["__invoke_result:load_esp"] = {
+    total: 128,
+    compressed_records: 0,
+    strings_loaded: 128,
+    parse_time_ms: 45,
+    record_counts: { INFO: 80, QUST: 30, DIAL: 18 },
+    cached: false,
+    esp_hash: "mock_hash_abc123",
+  };
+  mockData["__invoke_result:get_strings_count"] = 128;
+  mockData["__invoke_result:get_is_dirty"] = false;
+  mockData["__invoke_result:load_sst"] = {
+    matched: 0,
+    unmatched: 128,
+    updated_ids: [],
+    tier_exact: 0,
+    tier_edid: 0,
+    tier_normalized: 0,
+    tier_vocab: 0,
+    ambiguous: 0,
+    pending_skipped: 0,
+    old_data_preserved: 0,
+    warning: 0,
+    big_warning: 0,
+  };
+}
+
+/**
+ * Auto-seed for E2E: sets up IPC mocks AND injects directly into zustand store.
+ */
+function __e2eAutoSeed(): void {
+  (window as any).__e2eAutoSeeded = true;
+  __e2eSeedMockData();
+  const mockItems = generateMockStrings({ offset: 0, limit: 128 });
+  const store = (window as any).__zustandStore;
+  if (store && typeof store.getState().__e2eInjectMock === "function") {
+    store.getState().__e2eInjectMock(mockItems);
+  }
 }

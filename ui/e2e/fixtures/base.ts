@@ -12,8 +12,14 @@ export class AppPage {
   /** Navigate to the app and wait for it to load */
   async goto() {
     await this.page.goto("/");
-    // The app initializes i18n and attempts Tauri IPC — wait for the menu bar to appear
+    // The app initializes i18n and attempts Tauri IPC — wait for network to settle
     await this.page.waitForLoadState("networkidle");
+    // Seed mock data for E2E tests: sets IPC mock results + injects into zustand store
+    await this.page.evaluate(() => {
+      if (typeof (window as any).__e2eAutoSeed === "function") {
+        (window as any).__e2eAutoSeed();
+      }
+    });
   }
 
   /** Get the main application container */
@@ -60,7 +66,7 @@ export class AppPage {
 
   /** Translation editor dialog */
   get editorDialog() {
-    return this.page.locator('[class*="editorDialog"], [class*="editor-dialog"], [class*="EditorDialog"]');
+    return this.page.locator('.ui-modal-overlay');
   }
 }
 

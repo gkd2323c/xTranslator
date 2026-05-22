@@ -399,7 +399,52 @@ export function computeTranslationProgress(allItems: SkyStringDTO[]): { translat
 let filterDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 const FILTER_DEBOUNCE_MS = 150;
 
+// In E2E test mode, the auto-init effect sets a synthetic espPath so loadAllStrings
+// can proceed even without a real file on disk.
+const E2E_SENTINEL_ESP = "http://localhost/e2e-test.esp";
+
 export const useAppStore = create<AppState>((set, get) => ({
+  // E2E mode only: inject mock data directly into the store.
+  // Called by App.tsx on mount in E2E test mode.
+  __e2eInjectMock: (mockItems: SkyStringDTO[]) => {
+    const state = get();
+    if (state.allItems.length > 0) return; // already injected
+    console.log("[E2E __e2eInjectMock] called, items count:", mockItems.length);
+    const items = applyFilterAndSort(
+      mockItems,
+      state.filter,
+      state.useRegex,
+      state.statusFilter,
+      state.recordFilter,
+      state.vmadFilter,
+      state.listIndex,
+      state.sortField,
+      state.sortDir
+    );
+    set({
+      allItems: mockItems,
+      items,
+      total: mockItems.length,
+      filtered: mockItems.length,
+      isLoading: false,
+      isParsing: false,
+      error: null,
+      loadProgress: null,
+      espPath: E2E_SENTINEL_ESP,
+      sstPath: null,
+      stringsDir: null,
+      espStats: {
+        total: mockItems.length,
+        compressed_records: 0,
+        strings_loaded: mockItems.length,
+        parse_time_ms: 5,
+        record_counts: { INFO: Math.floor(mockItems.length * 0.6), QUST: Math.floor(mockItems.length * 0.25), DIAL: Math.floor(mockItems.length * 0.15) },
+        cached: false,
+        esp_hash: "mock_hash_abc123",
+      },
+    });
+  },
+
   allItems: [],
   items: [],
   total: 0,
@@ -984,8 +1029,67 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   loadAllStrings: async () => {
     const state = get();
-    if (!state.espPath) return;
+    if (!state.espPath) {
+      // E2E test mode: check if E2E auto-seed has run (flag set as 'true' boolean)
+      const e2eSeeded = (window as any).__e2eAutoSeeded === true;
+      if (e2eSeeded) {
+        set({ espPath: E2E_SENTINEL_ESP });
+      } else {
+        return; // real usage: no path, not in E2E mode → bail
+      }
+    }
     set({ isLoading: true });
+
+    // E2E mode: use the real mock Tauri API to get data, then inject into store
+    if ((window as any).__e2eAutoSeeded === true) {
+      try {
+        const count = await getStringsCount();
+        const mockItems: SkyStringDTO[] = [];
+        const CHUNK_SIZE = 25000;
+        const totalChunks = Math.ceil(count / CHUNK_SIZE);
+
+        // Fetch all chunks via mock Tauri IPC (synchronous in E2E mode)
+        for (let i = 0; i < totalChunks; i++) {
+          const offset = i * CHUNK_SIZE;
+          const limit = Math.min(CHUNK_SIZE, count - offset);
+          const chunk = await getStringsChunk(offset, limit);
+          mockItems.push(...chunk);
+        }
+
+        const items = applyFilterAndSort(
+          mockItems,
+          state.filter,
+          state.useRegex,
+          state.statusFilter,
+          state.recordFilter,
+          state.vmadFilter,
+          state.listIndex,
+          state.sortField,
+          state.sortDir
+        );
+        set({
+          allItems: mockItems,
+          items,
+          total: mockItems.length,
+          filtered: mockItems.length,
+          isLoading: false,
+          espStats: {
+            total: mockItems.length,
+            compressed_records: 0,
+            strings_loaded: mockItems.length,
+            parse_time_ms: 5,
+            record_counts: { INFO: Math.floor(mockItems.length * 0.6), QUST: Math.floor(mockItems.length * 0.25), DIAL: Math.floor(mockItems.length * 0.15) },
+            cached: false,
+            esp_hash: "mock_hash_abc123",
+          },
+        });
+        return;
+      } catch (e: any) {
+        console.error("E2E mock IPC failed:", e);
+        set({ isLoading: false });
+        return;
+      }
+    }
     try {
       const count = await getStringsCount();
       const CHUNK_SIZE = 25000;
@@ -1159,3 +1263,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       activeBottomTab: "home",
     }),
 }));
+
+// E2E helper: expose the raw zustand store so tests can inject state directly
+if (typeof window !== "undefined") {
+  (window as any).__zustandStore = useAppStore;
+}

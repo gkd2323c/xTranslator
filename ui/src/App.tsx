@@ -140,6 +140,18 @@ function App() {
     return () => window.removeEventListener("keydown", handler);
   }, [setSelectedById, undo, redo, editorOpen, setEditorOpen, activePanel, setActivePanel]);
 
+// ── E2E Mock Data Auto-Init ──
+  // In Playwright test mode (VITE_E2E=true), if base.ts didn't seed yet (e.g. direct
+  // navigation without fixture), seed now so the table renders rows.
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      if (typeof (window as any).__e2eAutoSeed === "function" && !(window as any).__e2eAutoSeeded) {
+        (window as any).__e2eAutoSeed();
+      }
+    }, 300); // delay so base.ts seeding (if any) wins the race
+    return () => clearTimeout(timeout);
+  }, []); // run once on mount
+
   // 应用启动时加载配置
   ///
   // 从后端加载保存的配置，包括：

@@ -56,8 +56,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CI/CD 三个失败修复（npm lockfile/clippy/集成测试）
 
 ### Technical Details
-- **测试**: 299 单元测试 (toolbox 14 + sst 16 + 其他 269)
-- **E2E**: 6 面板 mock 数据 + 完整测试覆盖
+- **测试**: 290 单元测试 (toolbox 14 + sst 16 + 其他 260)
+- **E2E**: 64 测试全部通过，新增 Dialogs/ESP-Tree/Quests/Header-Proc 等底部面板测试
 - **文档**: UI 交接文档、Phase 1-3 规范文档
 
 ---

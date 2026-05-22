@@ -74,7 +74,7 @@ cargo test -p xt-core --lib test_name_here
 # Unit tests
 cd ui && npm test
 
-# E2E tests with Playwright
+# E2E tests with Playwright (55 tests)
 cd ui && npm run test:e2e
 
 # E2E tests with UI
@@ -140,7 +140,7 @@ cargo run --bin test_data_generator
 
 - **Purpose**: Test individual functions and modules
 - **Location**: `crates/xt-core/src/**/*.rs`
-- **Count**: 293 tests
+- **Count**: 290 tests
 - **Coverage**: Core parsing, string handling, SST, XML, cache
 
 ### 2. Smoke Tests
@@ -202,8 +202,8 @@ cargo run --bin test_data_generator
 ### 5. Frontend Tests
 
 - **Purpose**: UI component and interaction testing
-- **Location**: `ui/src/stores/appStore.test.ts`, `ui/tests/e2e/`
-- **Tests**: 14 unit tests + E2E scenarios
+- **Location**: `ui/src/stores/appStore.test.ts`, `ui/e2e/`
+- **Tests**: Vitest unit tests + 64 Playwright E2E scenarios
 
 #### Frontend Test Coverage
 
@@ -212,6 +212,28 @@ cargo run --bin test_data_generator
 3. **User Workflows**: Complete user journeys
 4. **Error States**: UI error handling
 5. **Performance**: Large dataset rendering
+
+#### E2E Test Infrastructure
+
+E2E tests use Playwright with automatic mock data injection:
+
+```
+ui/e2e/
+├── fixtures/base.ts              # Test fixture with auto-seed
+├── mocks/tauri-core.ts            # Mock Tauri API layer
+├── app.spec.ts                    # Core app functionality
+├── components.spec.ts             # UI component behavior
+├── workflows.spec.ts              # User workflows
+└── playwright.config.ts           # Playwright configuration
+```
+
+**Key features**:
+- Mock data auto-loaded via `window.__e2eAutoSeed()` on page load
+- Vite aliases replace Tauri API calls in test mode
+- Zustand store directly injected with test data
+- 15 test categories with tagged tests (`@nav`, `@edit`, `@batch`, etc.)
+
+See [E2E 测试文档](./e2e-test-issues.md) for detailed setup and troubleshooting.
 
 ## CI/CD Integration
 

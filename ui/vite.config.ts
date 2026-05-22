@@ -2,7 +2,10 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
 
-const isE2E = process.env.VITE_E2E === "true";
+// E2E mode: detected from env var (set by Playwright) or NODE_ENV=test
+const isE2E =
+  process.env.VITE_E2E === "true" ||
+  process.env.NODE_ENV === "test";
 
 // https://vitejs.dev/config/
 export default defineConfig(async () => ({

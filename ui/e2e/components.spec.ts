@@ -27,9 +27,9 @@ test.describe("Multi-select and Navigation", { tag: "@nav" }, () => {
     await rows.nth(1).click({ modifiers: ["Control"] });
     await appPage.page.waitForTimeout(200);
 
-    // Both rows should have a selected class
-    await expect(rows.nth(0)).toHaveClass(/virtual-row-selected/);
-    await expect(rows.nth(1)).toHaveClass(/virtual-row-selected/);
+    // Both rows should have a selected class (multi-selected rows use row-selected-multi)
+    await expect(rows.nth(0)).toHaveClass(/row-selected-multi/);
+    await expect(rows.nth(1)).toHaveClass(/row-selected-multi/);
   });
 
   test("Escape deselects the current row", async ({ appPage }) => {

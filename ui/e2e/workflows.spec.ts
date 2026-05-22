@@ -114,14 +114,18 @@ test.describe("Tools Modal Panels", { tag: "@panels" }, () => {
     await appPage.goto();
     await expect(appPage.stringTable).toBeAttached({ timeout: 10_000 });
 
-    // Try to open the Batch panel
-    const batchBtn = appPage.page.locator(
-      'button:has-text("Batch"), button:has-text("批处理"), ' +
-      '[class*="menubar"]:has-text("Batch")'
-    ).first();
-    if (await batchBtn.count() > 0 && await batchBtn.isVisible()) {
-      await batchBtn.click();
-      await appPage.page.waitForTimeout(500);
+    // Try to open the Batch panel via the menu bar Tools dropdown
+    // The menu bar button (top level) should be visible even without ESP loaded
+    const menuBar = appPage.page.locator('.menubar');
+    const toolsMenu = menuBar.locator('button:has-text("Tools"), button:has-text("工具")').first();
+    if (await toolsMenu.count() > 0) {
+      await toolsMenu.hover();
+      await appPage.page.waitForTimeout(200);
+      const batchMenuItem = menuBar.locator('[role="menuitem"]:has-text("Batch"), [role="menuitem"]:has-text("批处理")').first();
+      if (await batchMenuItem.count() > 0) {
+        await batchMenuItem.click();
+        await appPage.page.waitForTimeout(500);
+      }
     }
     // Panels are lazy-loaded; just verify no crash
     expect(true).toBe(true);
@@ -272,17 +276,13 @@ test.describe("Empty & Loading States", { tag: "@states" }, () => {
     await appPage.goto();
     await expect(appPage.bottomPanel).toBeAttached({ timeout: 10_000 });
 
-    // Find the Logs tab and click it
-    const logTab = appPage.page.locator(
-      '.bottom-tab:has-text("Log"), .bottom-tab:has-text("日志"), ' +
-      '.bottom-tab:has-text("Logs")'
-    ).first();
-    if (await logTab.count() > 0) {
-      await logTab.click();
-      await appPage.page.waitForTimeout(300);
-      // The log panel content should appear
-      await expect(logTab).toHaveClass(/bottom-tab-active/);
-    }
+    // Click the Logs tab — use exact match to avoid "Dialog" matches
+    await appPage.page.getByRole("button", { name: "Log", exact: true }).click();
+    await appPage.page.waitForTimeout(500);
+    // The log panel tab should show active state
+    await expect(
+      appPage.page.getByRole("button", { name: "Log", exact: true })
+    ).toHaveClass(/bottom-tab-active/, { timeout: 5000 });
   });
 });
 

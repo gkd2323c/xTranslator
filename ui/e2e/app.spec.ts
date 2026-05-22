@@ -136,13 +136,13 @@ test.describe("Batch Translation", { tag: "@batch" }, () => {
     await appPage.goto();
     await expect(appPage.stringTable).toBeAttached({ timeout: 10_000 });
 
-    // Select first row (click without modifiers)
+    // Select first row with Ctrl+click to add to selectedIds (multi-select)
     const firstRow = appPage.page.locator('.virtual-row').first();
-    await firstRow.click();
+    await firstRow.click({ modifiers: ["Control"] });
 
-    // After selection, check that batch button is not disabled
+    // After multi-selection, check that batch button is not disabled
     const batchButton = appPage.page.locator('.batch-translate-bar button').first();
-    // The button should be enabled when selection is present
+    // The button should be enabled when selectedIds.size > 0
     const isDisabled = await batchButton.isDisabled();
     expect(isDisabled).toBe(false);
   });
