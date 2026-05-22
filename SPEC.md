@@ -415,6 +415,15 @@ T98|x|Pre-processing options: key-value INI storage + IPC (load/list/set/delete/
 T99|x|Batch wizard: multi-ESP header processing (scan dir + parse + apply rules) with progress events|G7
 T100|x|HeaderWizardPanel bottom tab: source dir, game selector, progress bar, result summary|G7
 
+## §P6 新增功能 (v1.1.0)
+
+> v1.1.0 发布后新增的功能（超出原 SPEC 范围）
+
+| id|status|task|cites|
+|---|------|-----|-----|
+| P6.1|x|工具箱例外词列表：Title Case 例外词配置（word_exception_list）、持久化、UI 编辑器|G7|
+| P6.2|x|SST 旧版兼容：读取 v1-v7 格式、SstVersion 枚举、版本感知解析|G3|
+
 ## §B Bugs
 
 id|date|cause|fix

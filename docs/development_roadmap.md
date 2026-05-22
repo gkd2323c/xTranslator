@@ -216,17 +216,19 @@ IPC 命令：`export_dial_html`
 
 ## P5 — 低优先级
 
-### P5.1 SST 旧版本兼容
+### P5.1 SST 旧版本兼容 ✅ 已完成
 
-| 格式 | 说明 | 预估 |
+| 格式 | 说明 | 状态 |
 |------|------|------|
-| SST v1-v7 | 读取旧版 SST 字典格式（v8 是当前主流） | 3-5 天 |
+| SST v1-v7 | 读取旧版 SST 字典格式（v8 是当前主流） | ✅ 已完成 (v8.rs + SstVersion) |
 
-### P5.2 命令脚本编辑器 — `commandProcessor.pas`
+### P5.2 命令脚本编辑器 — `commandProcessor.pas` ⏭️ 暂时跳过
 
 | 功能 | 说明 | 预估 |
 |------|------|------|
 | 脚本编辑器 | SynEdit 风格编辑，命令模板双击插入，`BatchprocessorPath` 存储 | 2-3 天 |
+
+> ⏭️ 暂时跳过：低优先级，与现有 BatchPanel 功能有重叠，可后续按需实现。
 
 ---
 
@@ -252,8 +254,8 @@ Phase E (Week 12-15): P4 验证与质量保证
     └─ P4.2 嵌套 GRUP ✅（118 顶层 GRUP, 50,376 子 GRUP）
     └─ P4.4 VMAD 片段处理 ✅（PERK/PACK/SCEN/INFO/QUST 片段跳过 + 写回保留）
 
-Phase F (按需): P5 低优先级
-    └─ SST 旧版兼容 → 命令脚本编辑器
+Phase F (v1.1.0): P5 功能补全
+    └─ 工具箱例外词列表 ✅ → SST 旧版兼容 ✅ → 命令脚本编辑器 ⏭️
 ```
 
 ---

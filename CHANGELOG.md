@@ -25,6 +25,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - ESP 比较：新增 added/removed/modified 分类统计
   - FUZ 映射：增强音频数据提取
 
+- **工具箱例外词列表** (P6)
+  - Title Case 工具支持例外词（如 "is", "a", "the" 不会大写）
+  - 例外词编辑器 UI：编辑、持久化到 config.json
+  - 新增 IPC 命令：`toolbox_load_exception_words` / `toolbox_get_exception_words`
+
+- **SST 旧版兼容** (P5.1)
+  - 支持读取 SST v1-v8 所有版本
+  - 自动检测魔数识别版本
+  - `SstVersion` 枚举 + 版本感知解析
+
 - **代码规范修复**
   - 综合代码审查修复（clippy/warnings）
   - VMAD 片段处理完善（PERK/PACK/SCEN/INFO/QUST 片段跳过）
@@ -46,7 +56,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CI/CD 三个失败修复（npm lockfile/clippy/集成测试）
 
 ### Technical Details
-- **测试**: 293 单元测试 + 6 E2E mock + 5 新测试
+- **测试**: 299 单元测试 (toolbox 14 + sst 16 + 其他 269)
 - **E2E**: 6 面板 mock 数据 + 完整测试覆盖
 - **文档**: UI 交接文档、Phase 1-3 规范文档
 
