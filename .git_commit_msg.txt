@@ -1,8 +1,0 @@
-test(e2e): 修复 DOM 选择器不匹配 + 面板打开方式
-
-E2E 测试修复：
-- workflows.spec.ts: `.menubar-menu-button` → `.menubar-menu-trigger`（实际 DOM 类名）
-- workflows.spec.ts: `.menubar-toolbar` → `.menubar-actions`（实际 DOM 类名）
-- panels-advanced.spec.ts: `has-text('ESP')` → `has-text('ESP Tree')`（底部 tab 实际名称）
-- panels.spec.ts: 将 toolbar 点击打开面板改为 `openToolPanel` store action（MCM/EspCompare/FUZ/BSA/PEX 面板通过 Tools 菜单而非 toolbar 打开）
-- docs/e2e-test-issues.md: 添加修复记录和待验证清单
