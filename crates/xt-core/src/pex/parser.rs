@@ -121,7 +121,8 @@ fn parse_object_body(
     let doc_idx = cur.read_u16::<LittleEndian>()?;
     let doc_str = lookup_str(st, doc_idx);
     if !doc_str.is_empty() {
-        out.push(PexTranslatableString { translation: String::new(),
+        out.push(PexTranslatableString {
+            translation: String::new(),
             object_name: obj_name.to_string(),
             state_name: String::new(),
             function_name: String::new(),
@@ -149,7 +150,8 @@ fn parse_object_body(
         let vd_idx = cur.read_u16::<LittleEndian>()?;
         let vd = lookup_str(st, vd_idx);
         if !vd.is_empty() {
-            out.push(PexTranslatableString { translation: String::new(),
+            out.push(PexTranslatableString {
+                translation: String::new(),
                 object_name: obj_name.to_string(),
                 state_name: auto_state.clone(),
                 function_name: vn.clone(),
@@ -157,7 +159,8 @@ fn parse_object_body(
                 source_text: vd,
             });
         } else if !vn.is_empty() && !vd.is_empty() {
-            out.push(PexTranslatableString { translation: String::new(),
+            out.push(PexTranslatableString {
+                translation: String::new(),
                 object_name: obj_name.to_string(),
                 state_name: auto_state.clone(),
                 function_name: vn,
@@ -186,7 +189,8 @@ fn parse_object_body(
         let pgd_idx = cur.read_u16::<LittleEndian>()?;
         let pgd = lookup_str(st, pgd_idx);
         if !pgd.is_empty() {
-            out.push(PexTranslatableString { translation: String::new(),
+            out.push(PexTranslatableString {
+                translation: String::new(),
                 object_name: obj_name.to_string(),
                 state_name: String::new(),
                 function_name: String::new(),
@@ -204,7 +208,8 @@ fn parse_object_body(
             let pd_idx = cur.read_u16::<LittleEndian>()?;
             let pd = lookup_str(st, pd_idx);
             if !pd.is_empty() {
-                out.push(PexTranslatableString { translation: String::new(),
+                out.push(PexTranslatableString {
+                    translation: String::new(),
                     object_name: obj_name.to_string(),
                     state_name: String::new(),
                     function_name: pn.clone(),
@@ -212,7 +217,8 @@ fn parse_object_body(
                     source_text: pd,
                 });
             } else if !pn.is_empty() && (pn.contains(' ') || pn.chars().count() > 3) {
-                out.push(PexTranslatableString { translation: String::new(),
+                out.push(PexTranslatableString {
+                    translation: String::new(),
                     object_name: obj_name.to_string(),
                     state_name: String::new(),
                     function_name: String::new(),
@@ -244,7 +250,8 @@ fn parse_object_body(
             let fd_idx = cur.read_u16::<LittleEndian>()?;
             let fd = lookup_str(st, fd_idx);
             if !fd.is_empty() {
-                out.push(PexTranslatableString { translation: String::new(),
+                out.push(PexTranslatableString {
+                    translation: String::new(),
                     object_name: obj_name.to_string(),
                     state_name: sn.clone(),
                     function_name: fn_name,

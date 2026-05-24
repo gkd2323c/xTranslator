@@ -57,10 +57,9 @@ pub fn build_dial_tree(strings: &[SkyString]) -> Vec<DialEntry> {
             b"INFO" => {
                 let form_id = s.esp_ptr.form_id;
                 let parent = s.parent_form_id;
-                let entry =
-                    info_pending
-                        .entry(form_id)
-                        .or_insert((None, None, None, parent));
+                let entry = info_pending
+                    .entry(form_id)
+                    .or_insert((None, None, None, parent));
 
                 match &s.field_sig {
                     b"RNAM" => entry.0 = Some(s.source.clone()),

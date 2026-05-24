@@ -4,7 +4,10 @@ use tauri::Emitter;
 use xt_core::config::AppConfig;
 use xt_core::esp::parser::{EspParser, StringsFiles};
 use xt_core::strings::CodepageTable;
-use xt_core::translation_api::{AzureProvider, BaiduProvider, DeepLProvider, GoogleProvider, OpenAIProvider, ProviderType, TranslationProvider, YoudaoProvider};
+use xt_core::translation_api::{
+    AzureProvider, BaiduProvider, DeepLProvider, GoogleProvider, OpenAIProvider, ProviderType,
+    TranslationProvider, YoudaoProvider,
+};
 use xt_core::types::game_id::GameId;
 use xt_core::types::params::SkyStringParams;
 use xt_core::types::sky_string::SkyString;
@@ -15,7 +18,7 @@ use xt_shared::dto::{
 /// 批处理运行状态
 ///
 /// 状态机：Idle → Running → Done → Idle
-/// 
+///
 /// - Idle: 无任务运行
 /// - Running: 正在处理文件列表
 /// - Done: 任务完成（成功或失败），等待查询结果
@@ -586,7 +589,12 @@ async fn run_batch_translate(
                         let proxy_config = AppConfig::load(&crate::commands::config_dir()).ok();
                         let provider = OpenAIProvider::from_key(api_key.clone());
                         provider
-                            .translate(source_text, source_api_code, target_api_code, proxy_config.as_ref())
+                            .translate(
+                                source_text,
+                                source_api_code,
+                                target_api_code,
+                                proxy_config.as_ref(),
+                            )
                             .await
                             .map_err(|e| e.to_string())
                     }
@@ -598,51 +606,86 @@ async fn run_batch_translate(
                         let proxy_config = AppConfig::load(&crate::commands::config_dir()).ok();
                         let provider = DeepLProvider::new(api_key.clone());
                         provider
-                            .translate(source_text, source_api_code, target_api_code, proxy_config.as_ref())
+                            .translate(
+                                source_text,
+                                source_api_code,
+                                target_api_code,
+                                proxy_config.as_ref(),
+                            )
                             .await
                             .map_err(|e| e.to_string())
                     }
                 }
                 ProviderType::Baidu => {
                     let config = AppConfig::load(&crate::commands::config_dir()).ok();
-                    let app_id = config.as_ref().and_then(|c| c.baidu_app_id.clone()).unwrap_or_default();
-                    let key = config.as_ref().and_then(|c| c.baidu_key.clone()).unwrap_or_default();
+                    let app_id = config
+                        .as_ref()
+                        .and_then(|c| c.baidu_app_id.clone())
+                        .unwrap_or_default();
+                    let key = config
+                        .as_ref()
+                        .and_then(|c| c.baidu_key.clone())
+                        .unwrap_or_default();
                     if app_id.is_empty() || key.is_empty() {
                         Err("Baidu AppId/Key not set".to_string())
                     } else {
                         let proxy_config = config;
                         let provider = BaiduProvider::new(app_id, key);
                         provider
-                            .translate(source_text, source_api_code, target_api_code, proxy_config.as_ref())
+                            .translate(
+                                source_text,
+                                source_api_code,
+                                target_api_code,
+                                proxy_config.as_ref(),
+                            )
                             .await
                             .map_err(|e| e.to_string())
                     }
                 }
                 ProviderType::Youdao => {
                     let config = AppConfig::load(&crate::commands::config_dir()).ok();
-                    let app_key = config.as_ref().and_then(|c| c.youdao_app_key.clone()).unwrap_or_default();
-                    let secret_key = config.as_ref().and_then(|c| c.youdao_secret_key.clone()).unwrap_or_default();
+                    let app_key = config
+                        .as_ref()
+                        .and_then(|c| c.youdao_app_key.clone())
+                        .unwrap_or_default();
+                    let secret_key = config
+                        .as_ref()
+                        .and_then(|c| c.youdao_secret_key.clone())
+                        .unwrap_or_default();
                     if app_key.is_empty() || secret_key.is_empty() {
                         Err("Youdao AppKey/SecretKey not set".to_string())
                     } else {
                         let proxy_config = config;
                         let provider = YoudaoProvider::new(app_key, secret_key);
                         provider
-                            .translate(source_text, source_api_code, target_api_code, proxy_config.as_ref())
+                            .translate(
+                                source_text,
+                                source_api_code,
+                                target_api_code,
+                                proxy_config.as_ref(),
+                            )
                             .await
                             .map_err(|e| e.to_string())
                     }
                 }
                 ProviderType::Azure => {
                     let config = AppConfig::load(&crate::commands::config_dir()).ok();
-                    let key = config.as_ref().and_then(|c| c.azure_key.clone()).unwrap_or_default();
+                    let key = config
+                        .as_ref()
+                        .and_then(|c| c.azure_key.clone())
+                        .unwrap_or_default();
                     if key.is_empty() {
                         Err("Azure subscription key not set".to_string())
                     } else {
                         let proxy_config = config;
                         let provider = AzureProvider::new(key);
                         provider
-                            .translate(source_text, source_api_code, target_api_code, proxy_config.as_ref())
+                            .translate(
+                                source_text,
+                                source_api_code,
+                                target_api_code,
+                                proxy_config.as_ref(),
+                            )
                             .await
                             .map_err(|e| e.to_string())
                     }
@@ -651,7 +694,12 @@ async fn run_batch_translate(
                     let proxy_config = AppConfig::load(&crate::commands::config_dir()).ok();
                     let provider = GoogleProvider::new();
                     provider
-                        .translate(source_text, source_api_code, target_api_code, proxy_config.as_ref())
+                        .translate(
+                            source_text,
+                            source_api_code,
+                            target_api_code,
+                            proxy_config.as_ref(),
+                        )
                         .await
                         .map_err(|e| e.to_string())
                 }

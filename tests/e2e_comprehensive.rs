@@ -1,5 +1,5 @@
 //! Comprehensive E2E tests for xTranslator
-//! 
+//!
 //! This test suite covers:
 //! - ESP parsing with real Skyrim data
 //! - Translation workflow (load → edit → save → verify)
@@ -8,19 +8,19 @@
 //! - BSA archive fallback
 //! - Performance benchmarks
 //! - Error handling and edge cases
-//! 
+//!
 //! Run: cargo test --release -p xt-core --test e2e_comprehensive
 
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
+use tempfile::TempDir;
 use xt_core::esp::parser::EspParser;
+use xt_core::matching;
 use xt_core::sst::v8::SstDictionary;
 use xt_core::strings::StringsFile;
 use xt_core::types::params::SkyStringParams;
 use xt_core::xml;
-use xt_core::matching;
 use xt_core::xml::{XmlExportParams, XmlStringEntry};
-use tempfile::TempDir;
 
 // Test configuration
 const SKYRIM_ESM: &str = r"D:\SteamLibrary\steamapps\common\Skyrim Special Edition\Data\Skyrim.esm";
@@ -47,8 +47,8 @@ fn create_test_parser() -> EspParser {
 }
 
 /// Helper to measure execution time
-fn timed_operation<F, R>(name: &str, f: F) -> R 
-where 
+fn timed_operation<F, R>(name: &str, f: F) -> R
+where
     F: FnOnce() -> R,
 {
     let start = Instant::now();
@@ -66,37 +66,49 @@ fn e2e_esp_parsing_comprehensive() {
 
     let mut parser = create_test_parser();
     let mut file = std::fs::File::open(SKYRIM_ESM).unwrap();
-    
+
     let (total_strings, parse_time) = {
         let start = Instant::now();
         parser.parse(&mut file).unwrap();
         let parse_time = start.elapsed();
         let total = parser.strings.len();
-        println!("⏱️  ESP parsing: {:?} ({} strings, {:.0}/s)", parse_time, total, total as f64 / parse_time.as_secs_f64());
+        println!(
+            "⏱️  ESP parsing: {:?} ({} strings, {:.0}/s)",
+            parse_time,
+            total,
+            total as f64 / parse_time.as_secs_f64()
+        );
         (total, parse_time)
     };
 
     // Basic validation
     assert!(total_strings > 70000, "Too few strings: {}", total_strings);
     assert!(!parser.strings.is_empty(), "No strings loaded");
-    
+
     // Validate string structure
     let first_string = &parser.strings[0];
     assert!(!first_string.source.is_empty(), "First string source empty");
     // Note: id=0 is valid for strings that reference index 0 in the strings file
-    assert!(first_string.id < 1_000_000, "Unreasonable string ID: {}", first_string.id);
-    
+    assert!(
+        first_string.id < 1_000_000,
+        "Unreasonable string ID: {}",
+        first_string.id
+    );
+
     // Print record type distribution
     println!("📊 Total strings: {}", total_strings);
-    
+
     // Performance assertion (allows for BSA scanning when STRINGS files are missing)
     // Without BSA scan: expect < 30s. With BSA scan: up to 600s.
-    assert!(parse_time < Duration::from_secs(600), "Parsing too slow: {:?}", parse_time);
-    
+    assert!(
+        parse_time < Duration::from_secs(600),
+        "Parsing too slow: {:?}",
+        parse_time
+    );
+
     // Validate different record types
-    let record_types: std::collections::HashSet<_> = parser.strings.iter()
-        .map(|s| s.record_sig)
-        .collect();
+    let record_types: std::collections::HashSet<_> =
+        parser.strings.iter().map(|s| s.record_sig).collect();
     assert!(record_types.len() > 5, "Too few record types");
     println!("📋 Record types found: {} types", record_types.len());
 }
@@ -122,21 +134,24 @@ fn e2e_translation_workflow() {
         if i < parser.strings.len() {
             parser.strings[i].source = source.to_string();
             parser.strings[i].translation = translation.to_string();
-            parser.strings[i].params.set(SkyStringParams::TRANSLATED, true);
+            parser.strings[i]
+                .params
+                .set(SkyStringParams::TRANSLATED, true);
         }
     }
 
     // Phase 2: Save to Strings files
     let tmp_dir = TempDir::new().unwrap();
     let strings_output = tmp_dir.path().join("skyrim_english_chinese.strings");
-    
+
     timed_operation("Strings file save", || {
         let mut sf = StringsFile::new();
         sf.format = xt_core::strings::StringsFormat::NullTerminated;
-        
+
         for s in &parser.strings {
             if s.params.is_translated() && !s.translation.is_empty() {
-                sf.strings.insert(s.esp_ptr.str_id as u32, s.translation.clone());
+                sf.strings
+                    .insert(s.esp_ptr.str_id as u32, s.translation.clone());
             }
         }
         sf.save(&strings_output).unwrap();
@@ -145,16 +160,22 @@ fn e2e_translation_workflow() {
     // Phase 3: Verify Strings file
     let reloaded = timed_operation("Strings file reload", || {
         StringsFile::load_with_format(
-            &strings_output, 
-            xt_core::strings::StringsFormat::NullTerminated
-        ).unwrap()
+            &strings_output,
+            xt_core::strings::StringsFormat::NullTerminated,
+        )
+        .unwrap()
     });
 
     // Verify our test translations
     for (i, (_, translation)) in test_translations.iter().enumerate() {
         if i < parser.strings.len() {
             let id = parser.strings[i].esp_ptr.str_id as u32;
-            assert_eq!(reloaded.get(id).unwrap(), *translation, "Translation mismatch for ID {}", id);
+            assert_eq!(
+                reloaded.get(id).unwrap(),
+                *translation,
+                "Translation mismatch for ID {}",
+                id
+            );
         }
     }
 
@@ -174,7 +195,9 @@ fn e2e_sst_dictionary_operations() {
     // Add some test translations
     for i in 0..10.min(parser.strings.len()) {
         parser.strings[i].translation = format!("测试翻译_{}", i);
-        parser.strings[i].params.set(SkyStringParams::TRANSLATED, true);
+        parser.strings[i]
+            .params
+            .set(SkyStringParams::TRANSLATED, true);
     }
 
     // Create SST dictionary
@@ -183,11 +206,11 @@ fn e2e_sst_dictionary_operations() {
     });
 
     assert!(!sst.entries.is_empty(), "SST dictionary is empty");
-    
+
     // Save SST
     let tmp_dir = TempDir::new().unwrap();
     let sst_path = tmp_dir.path().join("test_dictionary.sst");
-    
+
     timed_operation("SST save", || {
         sst.save_to_file(sst_path.to_str().unwrap()).unwrap();
     });
@@ -198,15 +221,24 @@ fn e2e_sst_dictionary_operations() {
     });
 
     // Verify roundtrip
-    assert_eq!(sst.entries.len(), reloaded.entries.len(), "SST entry count mismatch");
-    
+    assert_eq!(
+        sst.entries.len(),
+        reloaded.entries.len(),
+        "SST entry count mismatch"
+    );
+
     // Verify specific entries
     for i in 0..10.min(sst.entries.len()) {
         let original = &sst.entries[i];
-        let reloaded_entry = reloaded.entries.iter()
+        let reloaded_entry = reloaded
+            .entries
+            .iter()
             .find(|e| e.esp_ptr.str_id == original.esp_ptr.str_id)
             .expect("Entry not found after reload");
-        assert_eq!(original.translation, reloaded_entry.translation, "SST roundtrip failed");
+        assert_eq!(
+            original.translation, reloaded_entry.translation,
+            "SST roundtrip failed"
+        );
     }
 
     println!("✅ SST dictionary operations completed");
@@ -225,13 +257,15 @@ fn e2e_xml_roundtrip() {
     // Add test translations
     for i in 0..5.min(parser.strings.len()) {
         parser.strings[i].translation = format!("XML测试_{}", i);
-        parser.strings[i].params.set(SkyStringParams::TRANSLATED, true);
+        parser.strings[i]
+            .params
+            .set(SkyStringParams::TRANSLATED, true);
     }
 
     // Export to XML
     let tmp_dir = TempDir::new().unwrap();
     let xml_path = tmp_dir.path().join("test_export.xml");
-    
+
     // Export to XML
     timed_operation("XML export", || {
         use std::io::BufWriter;
@@ -239,7 +273,9 @@ fn e2e_xml_roundtrip() {
         let mut writer = BufWriter::new(file);
 
         // Build XmlStringEntries from translated strings
-        let entries: Vec<XmlStringEntry> = parser.strings.iter()
+        let entries: Vec<XmlStringEntry> = parser
+            .strings
+            .iter()
             .filter(|s| s.params.is_translated() && !s.translation.is_empty())
             .map(|s| XmlStringEntry {
                 list_index: s.list_index,
@@ -265,11 +301,12 @@ fn e2e_xml_roundtrip() {
     });
 
     // Import back
-    let import_result = timed_operation("XML import", || {
-        xml::parse_xml_file(&xml_path).unwrap()
-    });
+    let import_result = timed_operation("XML import", || xml::parse_xml_file(&xml_path).unwrap());
     let (_import_params, _import_entries) = &import_result;
-    assert!(!_import_entries.is_empty(), "XML import returned no entries");
+    assert!(
+        !_import_entries.is_empty(),
+        "XML import returned no entries"
+    );
 
     // Apply imported translations using the new matching API
     let mut import_strings = parser.strings.clone();
@@ -280,7 +317,11 @@ fn e2e_xml_roundtrip() {
 
     let match_result = matching::apply_xml_dictionary_entries(&mut import_strings, _import_entries);
     println!("  Matched: {} entries", match_result.total_matched());
-    assert!(match_result.total_matched() >= 5, "Too few matches: {}", match_result.total_matched());
+    assert!(
+        match_result.total_matched() >= 5,
+        "Too few matches: {}",
+        match_result.total_matched()
+    );
 
     println!("✅ XML roundtrip completed successfully");
 }
@@ -301,12 +342,18 @@ fn e2e_performance_benchmarks() {
     // Benchmark: Filtering
     {
         let start = Instant::now();
-        let _filtered: Vec<_> = parser.strings.iter()
+        let _filtered: Vec<_> = parser
+            .strings
+            .iter()
             .filter(|s| s.source.contains("Dragon") || s.translation.contains("龙"))
             .collect();
         let filter_time = start.elapsed();
         println!("⏱️  Filter 100k items: {:?}", filter_time);
-        assert!(filter_time < Duration::from_millis(100), "Filtering too slow: {:?}", filter_time);
+        assert!(
+            filter_time < Duration::from_millis(100),
+            "Filtering too slow: {:?}",
+            filter_time
+        );
     }
 
     // Benchmark: Sorting
@@ -316,28 +363,39 @@ fn e2e_performance_benchmarks() {
         sorted.sort_by(|a, b| a.source.cmp(&b.source));
         let sort_time = start.elapsed();
         println!("⏱️  Sort 100k items: {:?}", sort_time);
-        assert!(sort_time < Duration::from_millis(500), "Sorting too slow: {:?}", sort_time);
+        assert!(
+            sort_time < Duration::from_millis(500),
+            "Sorting too slow: {:?}",
+            sort_time
+        );
     }
 
     // Benchmark: Heuristic search
     {
         let start = Instant::now();
         let query = "Dragon";
-        let _results: Vec<_> = parser.strings.iter()
+        let _results: Vec<_> = parser
+            .strings
+            .iter()
             .filter(|s| s.params.is_translated())
             .filter(|s| {
-                s.source.to_lowercase().contains(&query.to_lowercase()) ||
-                s.translation.to_lowercase().contains(&query.to_lowercase())
+                s.source.to_lowercase().contains(&query.to_lowercase())
+                    || s.translation.to_lowercase().contains(&query.to_lowercase())
             })
             .take(10)
             .collect();
         let search_time = start.elapsed();
         println!("⏱️  Heuristic search: {:?}", search_time);
-        assert!(search_time < Duration::from_millis(50), "Search too slow: {:?}", search_time);
+        assert!(
+            search_time < Duration::from_millis(50),
+            "Search too slow: {:?}",
+            search_time
+        );
     }
 
     // Memory usage check
-    let memory_mb = (string_count * std::mem::size_of::<xt_core::types::sky_string::SkyString>()) / 1_048_576;
+    let memory_mb =
+        (string_count * std::mem::size_of::<xt_core::types::sky_string::SkyString>()) / 1_048_576;
     println!("💾 Estimated memory usage: {} MB", memory_mb);
     assert!(memory_mb < 200, "Memory usage too high: {} MB", memory_mb);
 
@@ -358,10 +416,12 @@ fn e2e_error_handling() {
     let empty_sst = SstDictionary::new();
     let tmp_dir = TempDir::new().unwrap();
     let empty_path = tmp_dir.path().join("empty.sst");
-    
-    assert!(empty_sst.save_to_file(empty_path.to_str().unwrap()).is_ok(), 
-            "Should save empty SST");
-    
+
+    assert!(
+        empty_sst.save_to_file(empty_path.to_str().unwrap()).is_ok(),
+        "Should save empty SST"
+    );
+
     let reloaded = SstDictionary::load_from_file(&empty_path).unwrap();
     assert!(reloaded.entries.is_empty(), "Reloaded SST should be empty");
 
@@ -369,11 +429,14 @@ fn e2e_error_handling() {
     let malformed_xml = r#"<broken><unclosed>"#;
     let xml_path = tmp_dir.path().join("malformed.xml");
     std::fs::write(&xml_path, malformed_xml).unwrap();
-    
+
     let parse_result = xml::parse_xml_file(&xml_path);
     // The XML parser may be lenient; we accept either an error or empty content
     if let Ok((_params, entries)) = &parse_result {
-        assert!(entries.is_empty(), "Malformed XML should produce no entries");
+        assert!(
+            entries.is_empty(),
+            "Malformed XML should produce no entries"
+        );
         println!("  (Parser was lenient, returned empty entries)");
     } else {
         println!("  (Parser correctly rejected malformed XML)");
@@ -389,7 +452,7 @@ fn e2e_bsa_fallback() {
     assert!(skyrim_data_available(), "Skyrim.esm not found");
 
     let mut parser = EspParser::new();
-    
+
     // Test BSA loading (should fallback if strings files missing)
     // BSA fallback: try loading from BSA if strings files aren't available
     // Note: this will be slow if strings files don't exist (scans all BSAs)
@@ -408,16 +471,18 @@ fn e2e_bsa_fallback() {
 fn e2e_multi_game_basic() {
     // Test that we can at least handle different game configurations
     let games = vec!["skyrim", "fallout4", "starfield"];
-    
+
     for game in games {
         // Use a separate scope to avoid UnwindSafe issues with &mut
-        let result = std::panic::catch_unwind(
-            std::panic::AssertUnwindSafe(|| {
-                let mut p = EspParser::new();
-                p.load_strings_files(DATA_DIR, game);
-            })
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let mut p = EspParser::new();
+            p.load_strings_files(DATA_DIR, game);
+        }));
+        assert!(
+            result.is_ok(),
+            "Should handle {} configuration gracefully",
+            game
         );
-        assert!(result.is_ok(), "Should handle {} configuration gracefully", game);
     }
 
     println!("✅ Multi-game compatibility check passed");

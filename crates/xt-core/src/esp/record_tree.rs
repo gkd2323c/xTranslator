@@ -72,12 +72,16 @@ impl EspField {
 
             // 如果这是 XXXX 字段，提取下一个字段的大小
             if is_size_xxxx && buffer.len() >= 4 {
-                next_explicit_size =
-                    Some(u32::from_le_bytes([buffer[0], buffer[1], buffer[2], buffer[3]]));
+                next_explicit_size = Some(u32::from_le_bytes([
+                    buffer[0], buffer[1], buffer[2], buffer[3],
+                ]));
             }
 
             fields.push(EspField {
-                header: FieldHeader { name: sig, dsize: read_size as u16 },
+                header: FieldHeader {
+                    name: sig,
+                    dsize: read_size as u16,
+                },
                 buffer,
                 is_size_xxxx,
             });
@@ -361,7 +365,9 @@ fn compress_zlib(data: &[u8]) -> std::io::Result<Vec<u8>> {
     // 使用快速压缩以提升性能（游戏不关心微小的体积差异）
     let mut encoder = ZlibEncoder::new(Vec::new(), Compression::fast());
     encoder.write_all(data)?;
-    encoder.finish().map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
+    encoder
+        .finish()
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
 }
 
 /// TES4 头部记录（文件开头的插件主头部）
@@ -422,13 +428,22 @@ impl Tes4Header {
             match &sig {
                 b"HEDR" if dsize >= 12 => {
                     info.version = f32::from_le_bytes([
-                        field_data[0], field_data[1], field_data[2], field_data[3],
+                        field_data[0],
+                        field_data[1],
+                        field_data[2],
+                        field_data[3],
                     ]);
                     info.num_records = u32::from_le_bytes([
-                        field_data[4], field_data[5], field_data[6], field_data[7],
+                        field_data[4],
+                        field_data[5],
+                        field_data[6],
+                        field_data[7],
                     ]);
                     info.next_object_id = u32::from_le_bytes([
-                        field_data[8], field_data[9], field_data[10], field_data[11],
+                        field_data[8],
+                        field_data[9],
+                        field_data[10],
+                        field_data[11],
                     ]);
                 }
                 b"CNAM" => {
@@ -442,9 +457,8 @@ impl Tes4Header {
                 }
                 b"ONAM" => {
                     for chunk in field_data.chunks_exact(4) {
-                        info.overridden_forms.push(u32::from_le_bytes([
-                            chunk[0], chunk[1], chunk[2], chunk[3],
-                        ]));
+                        info.overridden_forms
+                            .push(u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]));
                     }
                 }
                 _ => {}
@@ -539,8 +553,7 @@ impl EspFile {
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_secs();
-            let backup_path =
-                path.with_extension(format!("backup.{}", timestamp));
+            let backup_path = path.with_extension(format!("backup.{}", timestamp));
             std::fs::copy(path, &backup_path)?;
         }
 
@@ -590,7 +603,7 @@ mod tests {
         data.extend_from_slice(b"XXXX");
         data.extend_from_slice(&4u16.to_le_bytes()); // dsize=4 for XXXX itself
         data.extend_from_slice(&70000u32.to_le_bytes()); // next field size
-        // Large field
+                                                         // Large field
         data.extend_from_slice(b"DESC");
         // dsize in header is 0 (overridden by XXXX)
         data.extend_from_slice(&0u16.to_le_bytes());
@@ -620,7 +633,10 @@ mod tests {
     fn make_test_record(fields: Vec<EspField>, compressed: bool) -> EspRecord {
         let data_len: usize = fields.iter().map(|f| 6 + f.buffer.len()).sum();
         EspRecord {
-            header: GenericHeader { name: *b"NPC_", dsize: data_len as u32 },
+            header: GenericHeader {
+                name: *b"NPC_",
+                dsize: data_len as u32,
+            },
             record_header_data: RecordHeaderData {
                 flags: if compressed { 0x00040000 } else { 0 },
                 form_id: 0x1234,
@@ -639,7 +655,10 @@ mod tests {
 
     fn make_field(sig: &[u8; 4], data: &[u8]) -> EspField {
         EspField {
-            header: FieldHeader { name: *sig, dsize: data.len() as u16 },
+            header: FieldHeader {
+                name: *sig,
+                dsize: data.len() as u16,
+            },
             buffer: data.to_vec(),
             is_size_xxxx: false,
         }
@@ -747,16 +766,18 @@ mod tests {
         assert_eq!(xxxx_value, 70000);
 
         // The DESC field should still be 70000 bytes
-        let desc_idx = record.fields.iter().position(|f| f.header.name == *b"DESC").unwrap();
+        let desc_idx = record
+            .fields
+            .iter()
+            .position(|f| f.header.name == *b"DESC")
+            .unwrap();
         assert_eq!(record.fields[desc_idx].buffer.len(), 70000);
     }
 
     #[test]
     fn test_rebuild_xxxx_remove_when_shrink() {
         // Start with a large field that needs XXXX
-        let fields = vec![
-            make_field(b"DESC", &vec![0xBB; 70000]),
-        ];
+        let fields = vec![make_field(b"DESC", &vec![0xBB; 70000])];
         let mut record = make_test_record(fields, false);
 
         record.rebuild_data().unwrap();
@@ -780,9 +801,16 @@ mod tests {
     fn test_rebuild_raw_passthrough() {
         let raw_data = vec![0xDE, 0xAD, 0xBE, 0xEF];
         let mut record = EspRecord {
-            header: GenericHeader { name: *b"NPC_", dsize: 4 },
+            header: GenericHeader {
+                name: *b"NPC_",
+                dsize: 4,
+            },
             record_header_data: RecordHeaderData {
-                flags: 0, form_id: 0x1234, version: 44, f_version: 15, v_info: 0,
+                flags: 0,
+                form_id: 0x1234,
+                version: 44,
+                f_version: 15,
+                v_info: 0,
             },
             fields: Vec::new(),
             compressed: false,
@@ -811,10 +839,17 @@ mod tests {
         let record = make_test_record(fields, false);
 
         let grup = EspGrup {
-            header: GenericHeader { name: *b"GRUP", dsize: 0 },
+            header: GenericHeader {
+                name: *b"GRUP",
+                dsize: 0,
+            },
             grup_header: GrupHeader {
-                s_ident: [0; 4], s_type: 0, s_tstamp: 0,
-                param1: 0, param2: 0, param3: 0,
+                s_ident: [0; 4],
+                s_type: 0,
+                s_tstamp: 0,
+                param1: 0,
+                param2: 0,
+                param3: 0,
             },
             records: vec![record],
             children: Vec::new(),
@@ -822,9 +857,16 @@ mod tests {
 
         let esp_file = EspFile {
             tes4: Tes4Header {
-                generic: GenericHeader { name: *b"TES4", dsize: 0 },
+                generic: GenericHeader {
+                    name: *b"TES4",
+                    dsize: 0,
+                },
                 record_header_data: RecordHeaderData {
-                    flags: 0, form_id: 0, version: 44, f_version: 15, v_info: 0,
+                    flags: 0,
+                    form_id: 0,
+                    version: 44,
+                    f_version: 15,
+                    v_info: 0,
                 },
                 field_data: Vec::new(),
             },
@@ -871,10 +913,17 @@ mod tests {
         record.fields[1].header.dsize = 20;
 
         let mut grup = EspGrup {
-            header: GenericHeader { name: *b"GRUP", dsize: 0 },
+            header: GenericHeader {
+                name: *b"GRUP",
+                dsize: 0,
+            },
             grup_header: GrupHeader {
-                s_ident: [0; 4], s_type: 0, s_tstamp: 0,
-                param1: 0, param2: 0, param3: 0,
+                s_ident: [0; 4],
+                s_type: 0,
+                s_tstamp: 0,
+                param1: 0,
+                param2: 0,
+                param3: 0,
             },
             records: vec![record],
             children: Vec::new(),
@@ -893,9 +942,16 @@ mod tests {
         // Serialize
         let esp_file = EspFile {
             tes4: Tes4Header {
-                generic: GenericHeader { name: *b"TES4", dsize: 0 },
+                generic: GenericHeader {
+                    name: *b"TES4",
+                    dsize: 0,
+                },
                 record_header_data: RecordHeaderData {
-                    flags: 0, form_id: 0, version: 44, f_version: 15, v_info: 0,
+                    flags: 0,
+                    form_id: 0,
+                    version: 44,
+                    f_version: 15,
+                    v_info: 0,
                 },
                 field_data: Vec::new(),
             },
@@ -907,27 +963,44 @@ mod tests {
 
         // Verify the translated text appears in the output
         let has_translated = buf.windows(20).any(|w| w == b"Translated Text Here");
-        assert!(has_translated, "Translated text not found in serialized output");
+        assert!(
+            has_translated,
+            "Translated text not found in serialized output"
+        );
     }
 
     #[test]
     fn test_grup_recalculate_size_nested() {
         // Test nested GRUP size calculation
         let inner_grup = EspGrup {
-            header: GenericHeader { name: *b"GRUP", dsize: 0 },
+            header: GenericHeader {
+                name: *b"GRUP",
+                dsize: 0,
+            },
             grup_header: GrupHeader {
-                s_ident: [0; 4], s_type: 8, s_tstamp: 0,
-                param1: 0, param2: 0, param3: 0,
+                s_ident: [0; 4],
+                s_type: 8,
+                s_tstamp: 0,
+                param1: 0,
+                param2: 0,
+                param3: 0,
             },
             records: vec![make_test_record(vec![make_field(b"EDID", b"Inner")], false)],
             children: Vec::new(),
         };
 
         let mut outer_grup = EspGrup {
-            header: GenericHeader { name: *b"GRUP", dsize: 0 },
+            header: GenericHeader {
+                name: *b"GRUP",
+                dsize: 0,
+            },
             grup_header: GrupHeader {
-                s_ident: [0; 4], s_type: 0, s_tstamp: 0,
-                param1: 0, param2: 0, param3: 0,
+                s_ident: [0; 4],
+                s_type: 0,
+                s_tstamp: 0,
+                param1: 0,
+                param2: 0,
+                param3: 0,
             },
             records: vec![make_test_record(vec![make_field(b"EDID", b"Outer")], false)],
             children: vec![inner_grup],

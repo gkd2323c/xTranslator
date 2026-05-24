@@ -3,15 +3,18 @@ use std::sync::{Arc, Mutex};
 use tauri::Emitter;
 use xt_core::batch_queue::BatchQueue;
 use xt_core::cache_index::CacheIndex;
-use xt_core::sqlite_cache::SqliteCache;
 use xt_core::esp::parser::{EspParser, StringsFiles};
 use xt_core::esp::record_tree::EspFile;
 use xt_core::matching::{apply_dictionary_entries_with_policy, ApplyPolicy, DictionaryApplyEntry};
 use xt_core::pex::types::PexTranslatableString;
+use xt_core::sqlite_cache::SqliteCache;
 use xt_core::sst::v8::SstDictionary;
 use xt_core::strings::CodepageTable;
-use xt_core::translation_api::{AzureProvider, BaiduProvider, DeepLProvider, GoogleProvider, OpenAIProvider, ProviderType, TranslationProvider, YoudaoProvider};
 use xt_core::translation_api::config::ApiTranslatorConfig;
+use xt_core::translation_api::{
+    AzureProvider, BaiduProvider, DeepLProvider, GoogleProvider, OpenAIProvider, ProviderType,
+    TranslationProvider, YoudaoProvider,
+};
 use xt_core::translation_cache::TranslationCache;
 use xt_core::types::game_id::GameId;
 use xt_core::types::params::SkyStringParams;
@@ -21,14 +24,15 @@ use xt_core::xml::{
     XmlExportParams,
 };
 use xt_shared::dto::{
-    AutoBackupRequest, AutoBackupResponse, BatchConfig, BatchEntry, BatchStatus, BsaFileEntryDto,
-    BsaFileListDto, CtdaFuncDto, DataConfigsDto, DialogInfoDto, DialogTreeDto, EspComparePairDto, EspCompareResultDto,
-    EspLoadProgress, FieldSizeInfoDto, FinalizeRequest, FinalizeResponse, FuzMapping, FuzScanResponse,
-    HeuristicMatchDTO, HeuristicSearchRequest, LoadEspResponse, LoadSstResponse, McmEntryDto,
-    McmComparePolicy, McmCompareRequest, McmCompareResult, McmFileDto, McmSaveRequest, NpcDialogDto, PexScriptDto, PexTranslatableDto, QueryRequest,
-    QueryResponse, SaveStringsRequest, SaveStringsResponse, SkyStringDTO, TranslateRequest,
-    XmlExportRequest, XmlImportResponse, XmlProgress,
-    CheckPendingCacheResponse, RecoveryInfo, ApplyCacheResponse,
+    ApplyCacheResponse, AutoBackupRequest, AutoBackupResponse, BatchConfig, BatchEntry,
+    BatchStatus, BsaFileEntryDto, BsaFileListDto, CheckPendingCacheResponse, CtdaFuncDto,
+    DataConfigsDto, DialogInfoDto, DialogTreeDto, EspComparePairDto, EspCompareResultDto,
+    EspLoadProgress, FieldSizeInfoDto, FinalizeRequest, FinalizeResponse, FuzMapping,
+    FuzScanResponse, HeuristicMatchDTO, HeuristicSearchRequest, LoadEspResponse, LoadSstResponse,
+    McmComparePolicy, McmCompareRequest, McmCompareResult, McmEntryDto, McmFileDto, McmSaveRequest,
+    NpcDialogDto, PexScriptDto, PexTranslatableDto, QueryRequest, QueryResponse, RecoveryInfo,
+    SaveStringsRequest, SaveStringsResponse, SkyStringDTO, TranslateRequest, XmlExportRequest,
+    XmlImportResponse, XmlProgress,
 };
 
 use crate::batch::BatchExecutor;
@@ -317,13 +321,15 @@ pub async fn load_esp(
                             current: 100,
                             total: 100,
                             percentage: 100,
-                            message: format!("Loaded from cache ({} strings)", cached.strings.len()),
+                            message: format!(
+                                "Loaded from cache ({} strings)",
+                                cached.strings.len()
+                            ),
                         },
                     );
 
                     let total = cached.strings.len() as u32;
-                    let record_counts = cache.compute_record_counts(hash)
-                        .unwrap_or_default();
+                    let record_counts = cache.compute_record_counts(hash).unwrap_or_default();
 
                     // 缓存命中：字符串已就绪，但 ESP 树仍需构建（write-back 需要）
                     // 在阻塞线程内解析文件结构以构建记录树
@@ -385,7 +391,7 @@ pub async fn load_esp(
             let data_dir = std::path::Path::new("Data");
             let mut parser =
                 EspParser::with_game(data_dir, game_id).unwrap_or_else(|_| EspParser::new());
-            
+
             // 启用 ESP 模式以构建记录树（用于回写支持）
             parser.enable_esp_mode();
 
@@ -808,7 +814,9 @@ pub async fn colab_get_labels(
     let mut labels: std::collections::BTreeMap<u32, String> = std::collections::BTreeMap::new();
     for sk in old.iter().chain(strings.iter()) {
         if sk.colab_id > 0 {
-            labels.entry(sk.colab_id as u32).or_insert_with(|| format!("Slot {}", sk.colab_id));
+            labels
+                .entry(sk.colab_id as u32)
+                .or_insert_with(|| format!("Slot {}", sk.colab_id));
         }
     }
     Ok(labels.into_iter().collect())
@@ -1114,11 +1122,7 @@ pub async fn heuristic_search(
 
     let max_res = request.max_results.unwrap_or(5);
 
-    let matches = xt_core::heuristic::find_similar_delphi(
-        &request.source,
-        &candidates,
-        max_res,
-    );
+    let matches = xt_core::heuristic::find_similar_delphi(&request.source, &candidates, max_res);
 
     let dtos: Vec<HeuristicMatchDTO> = matches
         .into_iter()
@@ -1203,60 +1207,104 @@ pub async fn translate_string(
 
     let result = match provider_type {
         ProviderType::OpenAI => {
-            let provider = OpenAIProvider::from_key(api_key)
-                .with_config(state.api_config.clone());
+            let provider = OpenAIProvider::from_key(api_key).with_config(state.api_config.clone());
             provider
-                .translate(&text, &resolved_source, &resolved_target, proxy_config.as_ref())
+                .translate(
+                    &text,
+                    &resolved_source,
+                    &resolved_target,
+                    proxy_config.as_ref(),
+                )
                 .await
                 .map_err(|e| e.to_string())?
         }
         ProviderType::DeepL => {
             let provider = DeepLProvider::new(api_key);
             provider
-                .translate(&text, &resolved_source, &resolved_target, proxy_config.as_ref())
+                .translate(
+                    &text,
+                    &resolved_source,
+                    &resolved_target,
+                    proxy_config.as_ref(),
+                )
                 .await
                 .map_err(|e| e.to_string())?
         }
         ProviderType::Baidu => {
-            let app_id = state.baidu_app_id.lock().map_err(|e| e.to_string())?
+            let app_id = state
+                .baidu_app_id
+                .lock()
+                .map_err(|e| e.to_string())?
                 .clone()
                 .ok_or_else(|| "Baidu AppId not set".to_string())?;
-            let key = state.baidu_key.lock().map_err(|e| e.to_string())?
+            let key = state
+                .baidu_key
+                .lock()
+                .map_err(|e| e.to_string())?
                 .clone()
                 .ok_or_else(|| "Baidu Key not set".to_string())?;
             let provider = BaiduProvider::new(app_id, key);
             provider
-                .translate(&text, &resolved_source, &resolved_target, proxy_config.as_ref())
+                .translate(
+                    &text,
+                    &resolved_source,
+                    &resolved_target,
+                    proxy_config.as_ref(),
+                )
                 .await
                 .map_err(|e| e.to_string())?
         }
         ProviderType::Youdao => {
-            let app_key = state.youdao_app_key.lock().map_err(|e| e.to_string())?
+            let app_key = state
+                .youdao_app_key
+                .lock()
+                .map_err(|e| e.to_string())?
                 .clone()
                 .ok_or_else(|| "Youdao AppKey not set".to_string())?;
-            let secret_key = state.youdao_secret_key.lock().map_err(|e| e.to_string())?
+            let secret_key = state
+                .youdao_secret_key
+                .lock()
+                .map_err(|e| e.to_string())?
                 .clone()
                 .ok_or_else(|| "Youdao SecretKey not set".to_string())?;
             let provider = YoudaoProvider::new(app_key, secret_key);
             provider
-                .translate(&text, &resolved_source, &resolved_target, proxy_config.as_ref())
+                .translate(
+                    &text,
+                    &resolved_source,
+                    &resolved_target,
+                    proxy_config.as_ref(),
+                )
                 .await
                 .map_err(|e| e.to_string())?
         }
         ProviderType::Azure => {
-            let key = state.azure_key.lock().map_err(|e| e.to_string())?
+            let key = state
+                .azure_key
+                .lock()
+                .map_err(|e| e.to_string())?
                 .clone()
                 .ok_or_else(|| "Azure subscription key not set".to_string())?;
             let provider = AzureProvider::new(key);
             provider
-                .translate(&text, &resolved_source, &resolved_target, proxy_config.as_ref())
+                .translate(
+                    &text,
+                    &resolved_source,
+                    &resolved_target,
+                    proxy_config.as_ref(),
+                )
                 .await
                 .map_err(|e| e.to_string())?
         }
         ProviderType::Google => {
             let provider = GoogleProvider::new();
             provider
-                .translate(&text, &resolved_source, &resolved_target, proxy_config.as_ref())
+                .translate(
+                    &text,
+                    &resolved_source,
+                    &resolved_target,
+                    proxy_config.as_ref(),
+                )
                 .await
                 .map_err(|e| e.to_string())?
         }
@@ -1308,7 +1356,11 @@ pub async fn set_baidu_api_key(
     key: String,
 ) -> Result<(), String> {
     let mut aid = state.baidu_app_id.lock().map_err(|e| e.to_string())?;
-    *aid = if app_id.is_empty() { None } else { Some(app_id) };
+    *aid = if app_id.is_empty() {
+        None
+    } else {
+        Some(app_id)
+    };
     let mut k = state.baidu_key.lock().map_err(|e| e.to_string())?;
     *k = if key.is_empty() { None } else { Some(key) };
     Ok(())
@@ -1322,9 +1374,17 @@ pub async fn set_yooudao_api_key(
     secret_key: String,
 ) -> Result<(), String> {
     let mut ak = state.youdao_app_key.lock().map_err(|e| e.to_string())?;
-    *ak = if app_key.is_empty() { None } else { Some(app_key) };
+    *ak = if app_key.is_empty() {
+        None
+    } else {
+        Some(app_key)
+    };
     let mut sk = state.youdao_secret_key.lock().map_err(|e| e.to_string())?;
-    *sk = if secret_key.is_empty() { None } else { Some(secret_key) };
+    *sk = if secret_key.is_empty() {
+        None
+    } else {
+        Some(secret_key)
+    };
     Ok(())
 }
 
@@ -1360,19 +1420,47 @@ pub async fn get_translation_providers(
     state: tauri::State<'_, Arc<AppState>>,
 ) -> Result<(String, Vec<String>, bool, bool, bool, bool, bool, bool), String> {
     let current = state.current_provider.lock().map_err(|e| e.to_string())?;
-    let openai_set = state.openai_api_key.lock().map_err(|e| e.to_string())?.is_some();
-    let deepl_set = state.deepl_api_key.lock().map_err(|e| e.to_string())?.is_some();
-    let baidu_set = state.baidu_app_id.lock().map_err(|e| e.to_string())?.is_some()
+    let openai_set = state
+        .openai_api_key
+        .lock()
+        .map_err(|e| e.to_string())?
+        .is_some();
+    let deepl_set = state
+        .deepl_api_key
+        .lock()
+        .map_err(|e| e.to_string())?
+        .is_some();
+    let baidu_set = state
+        .baidu_app_id
+        .lock()
+        .map_err(|e| e.to_string())?
+        .is_some()
         && state.baidu_key.lock().map_err(|e| e.to_string())?.is_some();
-    let youdao_set = state.youdao_app_key.lock().map_err(|e| e.to_string())?.is_some()
-        && state.youdao_secret_key.lock().map_err(|e| e.to_string())?.is_some();
+    let youdao_set = state
+        .youdao_app_key
+        .lock()
+        .map_err(|e| e.to_string())?
+        .is_some()
+        && state
+            .youdao_secret_key
+            .lock()
+            .map_err(|e| e.to_string())?
+            .is_some();
     let azure_set = state.azure_key.lock().map_err(|e| e.to_string())?.is_some();
     let google_set = true; // Google is keyless
 
     Ok((
         current.to_string(),
-        ProviderType::all().into_iter().map(|s| s.to_string()).collect(),
-        openai_set, deepl_set, baidu_set, youdao_set, azure_set, google_set,
+        ProviderType::all()
+            .into_iter()
+            .map(|s| s.to_string())
+            .collect(),
+        openai_set,
+        deepl_set,
+        baidu_set,
+        youdao_set,
+        azure_set,
+        google_set,
     ))
 }
 
@@ -1615,10 +1703,7 @@ pub async fn save_strings(
         // 加载源语言文件作为基础（保留所有未翻译条目）
         let mut strings_file = if source_path.exists() {
             if let Some(ref table) = codepage_table_ref {
-                xt_core::strings::StringsFile::load_with_codepage_table(
-                    &source_path,
-                    table,
-                )
+                xt_core::strings::StringsFile::load_with_codepage_table(&source_path, table)
             } else {
                 xt_core::strings::StringsFile::load_with_format(
                     &source_path,
@@ -2035,7 +2120,10 @@ pub async fn extract_ba2_folder(
 
 /// Parse a PEX file and extract translatable strings
 #[tauri::command]
-pub async fn parse_pex_strings(pex_path: String, game: Option<String>) -> Result<PexScriptDto, String> {
+pub async fn parse_pex_strings(
+    pex_path: String,
+    game: Option<String>,
+) -> Result<PexScriptDto, String> {
     let mut file =
         std::fs::File::open(&pex_path).map_err(|e| format!("Failed to open PEX: {}", e))?;
 
@@ -2086,14 +2174,17 @@ pub async fn parse_pex_strings(pex_path: String, game: Option<String>) -> Result
 
 /// Decompile a PEX file into Papyrus-like pseudocode
 #[tauri::command]
-pub async fn decompile_pex(pex_path: String) -> Result<xt_shared::dto::DecompilePexResponse, String> {
-    let data = std::fs::read(&pex_path)
-        .map_err(|e| format!("Failed to read PEX: {}", e))?;
+pub async fn decompile_pex(
+    pex_path: String,
+) -> Result<xt_shared::dto::DecompilePexResponse, String> {
+    let data = std::fs::read(&pex_path).map_err(|e| format!("Failed to read PEX: {}", e))?;
 
     let decompiled = xt_core::pex::decompile::decompile_pex(&data)
         .map_err(|e| format!("Failed to decompile PEX: {}", e))?;
 
-    let script_name = decompiled.objects.first()
+    let script_name = decompiled
+        .objects
+        .first()
         .map(|o| o.name.clone())
         .unwrap_or_else(|| {
             std::path::Path::new(&pex_path)
@@ -2104,10 +2195,14 @@ pub async fn decompile_pex(pex_path: String) -> Result<xt_shared::dto::Decompile
         });
 
     let object_count = decompiled.objects.len() as u32;
-    let function_count = decompiled.objects.iter()
+    let function_count = decompiled
+        .objects
+        .iter()
         .map(|o| o.states.iter().map(|s| s.functions.len()).sum::<usize>())
         .sum::<usize>() as u32;
-    let instruction_count = decompiled.objects.iter()
+    let instruction_count = decompiled
+        .objects
+        .iter()
         .flat_map(|o| o.states.iter())
         .flat_map(|s| s.functions.iter())
         .map(|f| f.instructions.len())
@@ -2136,7 +2231,9 @@ fn load_no_trans_procs(game: Option<&str>) -> std::collections::HashSet<String> 
         "Starfield" => "Starfield",
         _ => "SkyrimSE",
     };
-    let path = std::path::Path::new("Data").join(game_subdir).join("pexNoTransProc.txt");
+    let path = std::path::Path::new("Data")
+        .join(game_subdir)
+        .join("pexNoTransProc.txt");
     if !path.exists() {
         return std::collections::HashSet::new();
     }
@@ -2203,8 +2300,10 @@ use xt_core::esp::compare::{self, CompareEntry, EspComparison};
 fn comparison_to_dto(comp: EspComparison) -> EspCompareResultDto {
     let sig_to_str = |sig: &[u8; 4]| String::from_utf8_lossy(sig).to_string();
 
-    let old_by_id: HashMap<u32, &CompareEntry> = comp.old_strings.iter().map(|e| (e.id, e)).collect();
-    let new_by_id: HashMap<u32, &CompareEntry> = comp.new_strings.iter().map(|e| (e.id, e)).collect();
+    let old_by_id: HashMap<u32, &CompareEntry> =
+        comp.old_strings.iter().map(|e| (e.id, e)).collect();
+    let new_by_id: HashMap<u32, &CompareEntry> =
+        comp.new_strings.iter().map(|e| (e.id, e)).collect();
 
     let to_pair = |new_id: u32, old_id: u32| -> EspComparePairDto {
         let new_e = new_by_id.get(&new_id).copied();
@@ -2329,8 +2428,8 @@ fn mcm_file_to_dto(file: &xt_core::mcm::McmFile) -> McmFileDto {
 /// Load and parse an MCM translation file
 #[tauri::command]
 pub async fn load_mcm_file(mcm_path: String) -> Result<McmFileDto, String> {
-    let file = mcm::parse_mcm_file(&mcm_path)
-        .map_err(|e| format!("Failed to parse MCM file: {}", e))?;
+    let file =
+        mcm::parse_mcm_file(&mcm_path).map_err(|e| format!("Failed to parse MCM file: {}", e))?;
     Ok(mcm_file_to_dto(&file))
 }
 
@@ -2343,7 +2442,11 @@ pub async fn save_mcm_file(request: McmSaveRequest) -> Result<(), String> {
         .map_err(|e| format!("Failed to open MCM file for save: {}", e))?;
 
     for dto_entry in &request.entries {
-        if let Some(entry) = file.entries.iter_mut().find(|e| e.line_index as u32 == dto_entry.line_index) {
+        if let Some(entry) = file
+            .entries
+            .iter_mut()
+            .find(|e| e.line_index as u32 == dto_entry.line_index)
+        {
             entry.translation = dto_entry.translation.clone();
         }
     }
@@ -2387,11 +2490,7 @@ pub async fn mcm_compare(request: McmCompareRequest) -> Result<McmCompareResult,
         ratio < 0.3
     }
 
-    fn should_update(
-        current_trans: &str,
-        policy: &McmComparePolicy,
-        source: &str,
-    ) -> bool {
+    fn should_update(current_trans: &str, policy: &McmComparePolicy, source: &str) -> bool {
         match policy {
             McmComparePolicy::All => true,
             McmComparePolicy::NoTrans => current_trans.is_empty(),
@@ -2577,7 +2676,10 @@ pub async fn scan_fuz_directory(
             );
             let parse_ok = parsed.is_ok();
             let dur = parsed.as_ref().map(|f| f.duration_secs).unwrap_or(0.0);
-            let has_lip = parsed.as_ref().map(|f| f.lip_data.is_some()).unwrap_or(false);
+            let has_lip = parsed
+                .as_ref()
+                .map(|f| f.lip_data.is_some())
+                .unwrap_or(false);
 
             let dialog_text = strings
                 .iter()
@@ -2931,7 +3033,10 @@ pub async fn toolbox_transform(
 
         if apply_to_source {
             let new_source = xt_core::toolbox::apply_tool(
-                tool_type, &sk.source, &sk.source, header_text.as_deref(),
+                tool_type,
+                &sk.source,
+                &sk.source,
+                header_text.as_deref(),
             );
             if new_source != sk.source {
                 sk.source = new_source;
@@ -2941,7 +3046,10 @@ pub async fn toolbox_transform(
 
         if apply_to_translation {
             let new_trans = xt_core::toolbox::apply_tool(
-                tool_type, &sk.translation, &sk.source, header_text.as_deref(),
+                tool_type,
+                &sk.translation,
+                &sk.source,
+                header_text.as_deref(),
             );
             if new_trans != sk.translation {
                 sk.translation = new_trans;
@@ -2963,9 +3071,31 @@ pub async fn toolbox_transform(
     Ok(count)
 }
 
+// ── Toolbox Exception Words ──────────────────────────────────────
+
+use xt_core::toolbox::{get_exception_words, load_exception_words};
+
+/// Load toolbox exception words from config and apply to runtime.
+/// Called during app startup after loading config.
+#[tauri::command]
+pub async fn toolbox_load_exception_words(
+    words: Option<String>,
+) -> Result<(), String> {
+    if let Some(ref w) = words {
+        load_exception_words(w);
+    }
+    Ok(())
+}
+
+/// Get exception words list.
+#[tauri::command]
+pub async fn toolbox_get_exception_words() -> Result<Vec<String>, String> {
+    Ok(get_exception_words())
+}
+
 // ── Spell Check Commands ───────────────────────────────────────────
 
-use xt_shared::dto::{SpellCheckConfigDto, SpellCheckResultDto, SpellFaultDto, MergeStatsDto};
+use xt_shared::dto::{MergeStatsDto, SpellCheckConfigDto, SpellCheckResultDto, SpellFaultDto};
 
 /// Load Hunspell DLL and dictionary for spell checking.
 #[tauri::command]
@@ -2990,9 +3120,7 @@ pub async fn spell_check_load(
 
 /// Unload the spell checker.
 #[tauri::command]
-pub async fn spell_check_unload(
-    state: tauri::State<'_, Arc<AppState>>,
-) -> Result<(), String> {
+pub async fn spell_check_unload(state: tauri::State<'_, Arc<AppState>>) -> Result<(), String> {
     let mut checker = state.spell_checker.lock().map_err(|e| e.to_string())?;
     checker.unload();
     Ok(())
@@ -3000,9 +3128,7 @@ pub async fn spell_check_unload(
 
 /// Toggle spell check active state.
 #[tauri::command]
-pub async fn spell_check_toggle(
-    state: tauri::State<'_, Arc<AppState>>,
-) -> Result<bool, String> {
+pub async fn spell_check_toggle(state: tauri::State<'_, Arc<AppState>>) -> Result<bool, String> {
     let mut checker = state.spell_checker.lock().map_err(|e| e.to_string())?;
     checker.config.active = !checker.config.active;
     Ok(checker.config.active)
@@ -3075,7 +3201,7 @@ pub async fn spell_check_ignore(
 
 // ── Header Processor Commands ──────────────────────────────────────
 
-use xt_core::header_processor::{HeaderRuleDto, HeaderApplyResult};
+use xt_core::header_processor::{HeaderApplyResult, HeaderRuleDto};
 
 /// Load header processor rules from an INI file.
 #[tauri::command]
@@ -3083,14 +3209,19 @@ pub async fn header_rules_load(
     state: tauri::State<'_, Arc<AppState>>,
     path: String,
 ) -> Result<Vec<HeaderRuleDto>, String> {
-    let text = std::fs::read_to_string(&path)
-        .map_err(|e| format!("Failed to read rules file: {}", e))?;
+    let text =
+        std::fs::read_to_string(&path).map_err(|e| format!("Failed to read rules file: {}", e))?;
     let rule_set = xt_core::header_processor::HeaderRuleSet::from_ini_text(&text);
-    let dtos: Vec<HeaderRuleDto> = rule_set.rules.iter().enumerate().map(|(i, r)| {
-        let mut d = HeaderRuleDto::from(r);
-        d.index = i;
-        d
-    }).collect();
+    let dtos: Vec<HeaderRuleDto> = rule_set
+        .rules
+        .iter()
+        .enumerate()
+        .map(|(i, r)| {
+            let mut d = HeaderRuleDto::from(r);
+            d.index = i;
+            d
+        })
+        .collect();
     *state.header_rules.lock().map_err(|e| e.to_string())? = rule_set;
     Ok(dtos)
 }
@@ -3101,11 +3232,16 @@ pub async fn header_rules_list(
     state: tauri::State<'_, Arc<AppState>>,
 ) -> Result<Vec<HeaderRuleDto>, String> {
     let rules = state.header_rules.lock().map_err(|e| e.to_string())?;
-    Ok(rules.rules.iter().enumerate().map(|(i, r)| {
-        let mut d = HeaderRuleDto::from(r);
-        d.index = i;
-        d
-    }).collect())
+    Ok(rules
+        .rules
+        .iter()
+        .enumerate()
+        .map(|(i, r)| {
+            let mut d = HeaderRuleDto::from(r);
+            d.index = i;
+            d
+        })
+        .collect())
 }
 
 /// Toggle a rule's enabled state by index.
@@ -3136,7 +3272,10 @@ pub async fn header_rules_apply(
         let esp_file = state.esp_file.lock().map_err(|e| e.to_string())?;
         if let Some(ref ef) = *esp_file {
             let mut map = std::collections::HashMap::new();
-            fn collect_edids(groups: &[xt_core::esp::record_tree::EspGrup], map: &mut std::collections::HashMap<u32, String>) {
+            fn collect_edids(
+                groups: &[xt_core::esp::record_tree::EspGrup],
+                map: &mut std::collections::HashMap<u32, String>,
+            ) {
                 for grup in groups {
                     for rec in &grup.records {
                         if let Some(ref edid) = rec.editor_id {
@@ -3260,7 +3399,11 @@ pub async fn header_batch_process(
         "Starfield" => xt_core::types::game_id::GameId::Starfield,
         _ => return Err(format!("Unknown game ID: {}", config.game_id)),
     };
-    let rules = state.header_rules.lock().map_err(|e| e.to_string())?.clone();
+    let rules = state
+        .header_rules
+        .lock()
+        .map_err(|e| e.to_string())?
+        .clone();
     let total = esp_files.len();
     let mut success = 0usize;
     let mut failed = 0usize;
@@ -3268,24 +3411,32 @@ pub async fn header_batch_process(
     let mut errors: Vec<String> = Vec::new();
 
     for (i, path) in esp_files.iter().enumerate() {
-        let fname = path.file_name().unwrap_or_default().to_string_lossy().to_string();
+        let fname = path
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string();
 
-        let _ = window.emit("header-batch-progress", HeaderBatchProgress {
-            current: i + 1,
-            total,
-            file_path: fname.clone(),
-            strings_matched: total_matched,
-            stage: "parsing".into(),
-            detail_count: None,
-            message: String::new(),
-        });
+        let _ = window.emit(
+            "header-batch-progress",
+            HeaderBatchProgress {
+                current: i + 1,
+                total,
+                file_path: fname.clone(),
+                strings_matched: total_matched,
+                stage: "parsing".into(),
+                detail_count: None,
+                message: String::new(),
+            },
+        );
 
         // 解析 ESP
-        let esp_data = std::fs::read(path)
-            .map_err(|e| format!("Failed to read {}: {}", fname, e))?;
+        let esp_data =
+            std::fs::read(path).map_err(|e| format!("Failed to read {}: {}", fname, e))?;
 
         let mut parser = match xt_core::esp::parser::EspParser::with_game(
-            std::path::Path::new(&config.data_dir), game_id,
+            std::path::Path::new(&config.data_dir),
+            game_id,
         ) {
             Ok(p) => p,
             Err(e) => {
@@ -3301,27 +3452,41 @@ pub async fn header_batch_process(
             failed += 1;
             let err = format!("Parse failed {}: {}", fname, e);
             errors.push(err.clone());
-            let _ = window.emit("header-batch-progress", HeaderBatchProgress {
-                current: i + 1, total, file_path: fname.clone(),
-                strings_matched: total_matched,
-                stage: "error".into(),
-                detail_count: None,
-                message: err,
-            });
+            let _ = window.emit(
+                "header-batch-progress",
+                HeaderBatchProgress {
+                    current: i + 1,
+                    total,
+                    file_path: fname.clone(),
+                    strings_matched: total_matched,
+                    stage: "error".into(),
+                    detail_count: None,
+                    message: err,
+                },
+            );
             continue;
         }
 
-        let _ = window.emit("header-batch-progress", HeaderBatchProgress {
-            current: i + 1, total, file_path: fname.clone(),
-            strings_matched: total_matched, stage: "applying".into(),
-            detail_count: Some(parser.strings.len()),
-            message: String::new(),
-        });
+        let _ = window.emit(
+            "header-batch-progress",
+            HeaderBatchProgress {
+                current: i + 1,
+                total,
+                file_path: fname.clone(),
+                strings_matched: total_matched,
+                stage: "applying".into(),
+                detail_count: Some(parser.strings.len()),
+                message: String::new(),
+            },
+        );
 
         // 从记录树构建 EDID 映射
         let edid_map: std::collections::HashMap<u32, String> = {
             let mut map = std::collections::HashMap::new();
-            fn collect_edids(grups: &[xt_core::esp::record_tree::EspGrup], map: &mut std::collections::HashMap<u32, String>) {
+            fn collect_edids(
+                grups: &[xt_core::esp::record_tree::EspGrup],
+                map: &mut std::collections::HashMap<u32, String>,
+            ) {
                 for grup in grups {
                     for rec in &grup.records {
                         if let Some(ref edid) = rec.editor_id {
@@ -3347,8 +3512,13 @@ pub async fn header_batch_process(
             let edid = edid_map.get(&form_id).cloned().unwrap_or_default();
 
             if let Some(_new_text) = rules.apply_rules(
-                &record_sig, &field_sig, &edid, form_id, &[],
-                &sk.translation, &sk.source,
+                &record_sig,
+                &field_sig,
+                &edid,
+                form_id,
+                &[],
+                &sk.translation,
+                &sk.source,
             ) {
                 file_matched += 1;
             }
@@ -3356,21 +3526,31 @@ pub async fn header_batch_process(
 
         total_matched += file_matched;
 
-        let _ = window.emit("header-batch-progress", HeaderBatchProgress {
-            current: i + 1, total, file_path: fname.clone(),
-            strings_matched: total_matched, stage: "complete".into(),
-            detail_count: Some(file_matched as usize),
-            message: String::new(),
-        });
+        let _ = window.emit(
+            "header-batch-progress",
+            HeaderBatchProgress {
+                current: i + 1,
+                total,
+                file_path: fname.clone(),
+                strings_matched: total_matched,
+                stage: "complete".into(),
+                detail_count: Some(file_matched as usize),
+                message: String::new(),
+            },
+        );
 
         success += 1;
     }
 
     let duration_ms = start.elapsed().as_millis() as u64;
     let result = HeaderBatchComplete {
-        total_files: total, success, failed,
+        total_files: total,
+        success,
+        failed,
         total_strings_matched: total_matched,
-        duration_ms, is_cancelled: false, errors,
+        duration_ms,
+        is_cancelled: false,
+        errors,
     };
 
     let _ = window.emit("header-batch-complete", result.clone());
@@ -3385,8 +3565,7 @@ pub async fn header_rules_save(
 ) -> Result<(), String> {
     let rules = state.header_rules.lock().map_err(|e| e.to_string())?;
     let text = rules.to_ini_text();
-    std::fs::write(&path, text)
-        .map_err(|e| format!("Failed to save rules: {}", e))
+    std::fs::write(&path, text).map_err(|e| format!("Failed to save rules: {}", e))
 }
 
 /// Delete a rule at the given index. Returns updated rule list.
@@ -3399,11 +3578,16 @@ pub async fn header_rules_delete(
     if index < rules.rules.len() {
         rules.rules.remove(index);
     }
-    Ok(rules.rules.iter().enumerate().map(|(i, r)| {
-        let mut d = HeaderRuleDto::from(r);
-        d.index = i;
-        d
-    }).collect())
+    Ok(rules
+        .rules
+        .iter()
+        .enumerate()
+        .map(|(i, r)| {
+            let mut d = HeaderRuleDto::from(r);
+            d.index = i;
+            d
+        })
+        .collect())
 }
 
 /// Move a rule up or down. Returns updated rule list.
@@ -3419,11 +3603,16 @@ pub async fn header_rules_move(
     } else if direction == "down" && index + 1 < rules.rules.len() {
         rules.rules.swap(index, index + 1);
     }
-    Ok(rules.rules.iter().enumerate().map(|(i, r)| {
-        let mut d = HeaderRuleDto::from(r);
-        d.index = i;
-        d
-    }).collect())
+    Ok(rules
+        .rules
+        .iter()
+        .enumerate()
+        .map(|(i, r)| {
+            let mut d = HeaderRuleDto::from(r);
+            d.index = i;
+            d
+        })
+        .collect())
 }
 
 /// Update a rule's field at the given index. Returns updated rule list.
@@ -3440,19 +3629,36 @@ pub async fn header_rules_update(
             "header" => rule.header = value,
             "r_sig" => rule.r_sig = value,
             "f_sig" => rule.f_sig = value,
-            "in_edid" => rule.in_edid = value.split('|').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect(),
-            "ex_edid" => rule.ex_edid = value.split('|').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect(),
+            "in_edid" => {
+                rule.in_edid = value
+                    .split('|')
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect()
+            }
+            "ex_edid" => {
+                rule.ex_edid = value
+                    .split('|')
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect()
+            }
             "regex" => rule.regex = if value.is_empty() { None } else { Some(value) },
             "full_replace" => rule.full_replace = value == "true",
             "pre_process" => rule.pre_process = value == "true",
             _ => {}
         }
     }
-    Ok(rules.rules.iter().enumerate().map(|(i, r)| {
-        let mut d = HeaderRuleDto::from(r);
-        d.index = i;
-        d
-    }).collect())
+    Ok(rules
+        .rules
+        .iter()
+        .enumerate()
+        .map(|(i, r)| {
+            let mut d = HeaderRuleDto::from(r);
+            d.index = i;
+            d
+        })
+        .collect())
 }
 
 /// Add a new blank rule. Returns updated rule list.
@@ -3461,23 +3667,28 @@ pub async fn header_rules_add(
     state: tauri::State<'_, Arc<AppState>>,
 ) -> Result<Vec<HeaderRuleDto>, String> {
     let mut rules = state.header_rules.lock().map_err(|e| e.to_string())?;
-    rules.rules.push(xt_core::header_processor::HeaderRule::default());
-    Ok(rules.rules.iter().enumerate().map(|(i, r)| {
-        let mut d = HeaderRuleDto::from(r);
-        d.index = i;
-        d
-    }).collect())
+    rules
+        .rules
+        .push(xt_core::header_processor::HeaderRule::default());
+    Ok(rules
+        .rules
+        .iter()
+        .enumerate()
+        .map(|(i, r)| {
+            let mut d = HeaderRuleDto::from(r);
+            d.index = i;
+            d
+        })
+        .collect())
 }
 
 // ── Template Manager Commands ───────────────────────────────────────
 
-use xt_core::header_processor::{TemplateInfo, TemplateManager, PreProcessingOpts};
+use xt_core::header_processor::{PreProcessingOpts, TemplateInfo, TemplateManager};
 
 /// List available templates in a directory.
 #[tauri::command]
-pub async fn header_templates_list(
-    dir: String,
-) -> Result<Vec<TemplateInfo>, String> {
+pub async fn header_templates_list(dir: String) -> Result<Vec<TemplateInfo>, String> {
     TemplateManager::list_templates(&dir)
 }
 
@@ -3500,21 +3711,23 @@ pub async fn header_templates_load(
     name: String,
 ) -> Result<Vec<HeaderRuleDto>, String> {
     let rule_set = TemplateManager::load_template(&dir, &name)?;
-    let dtos: Vec<HeaderRuleDto> = rule_set.rules.iter().enumerate().map(|(i, r)| {
-        let mut d = HeaderRuleDto::from(r);
-        d.index = i;
-        d
-    }).collect();
+    let dtos: Vec<HeaderRuleDto> = rule_set
+        .rules
+        .iter()
+        .enumerate()
+        .map(|(i, r)| {
+            let mut d = HeaderRuleDto::from(r);
+            d.index = i;
+            d
+        })
+        .collect();
     *state.header_rules.lock().map_err(|e| e.to_string())? = rule_set;
     Ok(dtos)
 }
 
 /// Delete a named template.
 #[tauri::command]
-pub async fn header_templates_delete(
-    dir: String,
-    name: String,
-) -> Result<(), String> {
+pub async fn header_templates_delete(dir: String, name: String) -> Result<(), String> {
     TemplateManager::delete_template(&dir, &name)
 }
 
@@ -3531,12 +3744,15 @@ pub async fn preproc_opts_load(
     state: tauri::State<'_, Arc<AppState>>,
     path: String,
 ) -> Result<PreProcOptsDto, String> {
-    let text = std::fs::read_to_string(&path)
-        .map_err(|e| format!("Failed to read opts file: {}", e))?;
+    let text =
+        std::fs::read_to_string(&path).map_err(|e| format!("Failed to read opts file: {}", e))?;
     let opts = xt_core::header_processor::PreProcessingOpts::from_ini_text(&text);
     let mut sorted: Vec<_> = opts.options.into_iter().collect();
     sorted.sort_by(|a, b| a.0.cmp(&b.0));
-    *state.pre_processing_opts.lock().map_err(|e| e.to_string())? = PreProcessingOpts {
+    *state
+        .pre_processing_opts
+        .lock()
+        .map_err(|e| e.to_string())? = PreProcessingOpts {
         options: sorted.iter().cloned().collect(),
     };
     Ok(PreProcOptsDto { options: sorted })
@@ -3547,8 +3763,15 @@ pub async fn preproc_opts_load(
 pub async fn preproc_opts_list(
     state: tauri::State<'_, Arc<AppState>>,
 ) -> Result<PreProcOptsDto, String> {
-    let opts = state.pre_processing_opts.lock().map_err(|e| e.to_string())?;
-    let mut sorted: Vec<_> = opts.options.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+    let opts = state
+        .pre_processing_opts
+        .lock()
+        .map_err(|e| e.to_string())?;
+    let mut sorted: Vec<_> = opts
+        .options
+        .iter()
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect();
     sorted.sort_by(|a, b| a.0.cmp(&b.0));
     Ok(PreProcOptsDto { options: sorted })
 }
@@ -3560,9 +3783,16 @@ pub async fn preproc_opts_set(
     key: String,
     value: String,
 ) -> Result<PreProcOptsDto, String> {
-    let mut opts = state.pre_processing_opts.lock().map_err(|e| e.to_string())?;
+    let mut opts = state
+        .pre_processing_opts
+        .lock()
+        .map_err(|e| e.to_string())?;
     opts.set(&key, &value);
-    let mut sorted: Vec<_> = opts.options.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+    let mut sorted: Vec<_> = opts
+        .options
+        .iter()
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect();
     sorted.sort_by(|a, b| a.0.cmp(&b.0));
     Ok(PreProcOptsDto { options: sorted })
 }
@@ -3573,9 +3803,16 @@ pub async fn preproc_opts_delete(
     state: tauri::State<'_, Arc<AppState>>,
     key: String,
 ) -> Result<PreProcOptsDto, String> {
-    let mut opts = state.pre_processing_opts.lock().map_err(|e| e.to_string())?;
+    let mut opts = state
+        .pre_processing_opts
+        .lock()
+        .map_err(|e| e.to_string())?;
     opts.options.remove(&key);
-    let mut sorted: Vec<_> = opts.options.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+    let mut sorted: Vec<_> = opts
+        .options
+        .iter()
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect();
     sorted.sort_by(|a, b| a.0.cmp(&b.0));
     Ok(PreProcOptsDto { options: sorted })
 }
@@ -3586,10 +3823,12 @@ pub async fn preproc_opts_save(
     state: tauri::State<'_, Arc<AppState>>,
     path: String,
 ) -> Result<(), String> {
-    let opts = state.pre_processing_opts.lock().map_err(|e| e.to_string())?;
+    let opts = state
+        .pre_processing_opts
+        .lock()
+        .map_err(|e| e.to_string())?;
     let text = opts.to_ini_text();
-    std::fs::write(&path, text)
-        .map_err(|e| format!("Failed to save opts: {}", e))
+    std::fs::write(&path, text).map_err(|e| format!("Failed to save opts: {}", e))
 }
 
 /// Check alias integrity between source and translation.
@@ -3602,20 +3841,24 @@ pub async fn check_aliases(
     id: u32,
 ) -> Result<AliasCheckResult, String> {
     let strings = state.strings.lock().map_err(|e| e.to_string())?;
-    let sk = strings.iter().find(|s| s.id == id)
+    let sk = strings
+        .iter()
+        .find(|s| s.id == id)
         .ok_or_else(|| format!("String with id {} not found", id))?;
 
     let source_aliases = extract_aliases(&sk.source);
     let trans_aliases = extract_aliases(&sk.translation);
 
     // 检查：源文本中存在但翻译中缺失的别名
-    let missing_in_trans: Vec<String> = source_aliases.iter()
+    let missing_in_trans: Vec<String> = source_aliases
+        .iter()
         .filter(|a| !trans_aliases.iter().any(|t| t.eq_ignore_ascii_case(a)))
         .cloned()
         .collect();
 
     // 检查：翻译中存在但源文本中没有的别名
-    let extra_in_trans: Vec<String> = trans_aliases.iter()
+    let extra_in_trans: Vec<String> = trans_aliases
+        .iter()
         .filter(|a| !source_aliases.iter().any(|t| t.eq_ignore_ascii_case(a)))
         .cloned()
         .collect();
@@ -3675,6 +3918,7 @@ fn config_to_dto(cfg: &xt_core::config::AppConfig) -> AppConfigDto {
         spellcheck_dictionary: cfg.spellcheck_dictionary.clone(),
         spellcheck_active: cfg.spellcheck_active,
         spellcheck_loaded: cfg.spellcheck_loaded,
+        word_exception_list: cfg.word_exception_list.clone(),
     }
 }
 
@@ -3698,6 +3942,7 @@ fn dto_to_config(dto: &AppConfigDto) -> xt_core::config::AppConfig {
         spellcheck_dictionary: dto.spellcheck_dictionary.clone(),
         spellcheck_active: dto.spellcheck_active,
         spellcheck_loaded: dto.spellcheck_loaded,
+        word_exception_list: dto.word_exception_list.clone(),
     }
 }
 
@@ -3714,7 +3959,8 @@ pub async fn save_config(config: AppConfigDto) -> Result<(), String> {
     let dir = config_dir();
     let mut existing = xt_core::config::AppConfig::load(&dir).unwrap_or_default();
     existing.apply(&dto_to_config(&config));
-    existing.save(&dir)
+    existing
+        .save(&dir)
         .map_err(|e| format!("Failed to save config: {}", e))
 }
 
@@ -3729,8 +3975,9 @@ pub async fn get_esp_header(
     state: tauri::State<'_, Arc<AppState>>,
 ) -> Result<xt_shared::dto::EspHeaderInfoDto, String> {
     let esp_file_lock = state.esp_file.lock().map_err(|e| e.to_string())?;
-    let esp_file = esp_file_lock.as_ref()
-        .ok_or_else(|| "No ESP file loaded. Enable ESP mode and load an ESP file first.".to_string())?;
+    let esp_file = esp_file_lock.as_ref().ok_or_else(|| {
+        "No ESP file loaded. Enable ESP mode and load an ESP file first.".to_string()
+    })?;
 
     let info = esp_file.tes4.parse_fields();
 
@@ -3754,10 +4001,12 @@ pub async fn save_esp(
     request: xt_shared::dto::SaveEspRequest,
 ) -> Result<xt_shared::dto::SaveEspResponse, String> {
     let esp_file_lock = state.esp_file.lock().map_err(|e| e.to_string())?;
-    let esp_file = esp_file_lock.as_ref().ok_or_else(|| "No ESP file loaded or ESP mode not enabled".to_string())?;
-    
+    let esp_file = esp_file_lock
+        .as_ref()
+        .ok_or_else(|| "No ESP file loaded or ESP mode not enabled".to_string())?;
+
     let strings = state.strings.lock().map_err(|e| e.to_string())?;
-    
+
     // 构建索引：非 VMAD 字段用单值，(form_id, record_sig, field_sig) → &SkyString
     // VMAD 字段用 Vec 容纳多个字符串
     let mut string_index: HashMap<(u32, [u8; 4], [u8; 4]), &SkyString> = HashMap::new();
@@ -3771,19 +4020,23 @@ pub async fn save_esp(
                     .push(sk);
             } else {
                 string_index.insert(
-                    (sk.esp_ptr.form_id, sk.esp_ptr.record_sig, sk.esp_ptr.field_sig),
+                    (
+                        sk.esp_ptr.form_id,
+                        sk.esp_ptr.record_sig,
+                        sk.esp_ptr.field_sig,
+                    ),
                     sk,
                 );
             }
         }
     }
-    
+
     // 创建 ESP 文件的可变副本以进行重建
     let mut esp_file_mut = esp_file.clone();
-    
+
     // 遍历树中的所有记录，更新可翻译字段
     let mut records_modified = 0u32;
-    
+
     fn update_records_in_grup(
         grup: &mut xt_core::esp::record_tree::EspGrup,
         string_index: &HashMap<(u32, [u8; 4], [u8; 4]), &SkyString>,
@@ -3791,12 +4044,12 @@ pub async fn save_esp(
         codepage: &xt_core::strings::CodepageConfig,
     ) -> Result<u32, String> {
         let mut modified = 0u32;
-        
+
         for record in &mut grup.records {
             if record.header.name == *b"TES4" {
                 continue;
             }
-            
+
             for field in &mut record.fields {
                 if field.is_size_xxxx {
                     continue;
@@ -3809,7 +4062,9 @@ pub async fn save_esp(
                         for sk in vmad_strings.iter() {
                             let offset = (-sk.esp_ptr.str_id) as usize;
                             if let Ok(new_buf) = xt_core::vmad::write_vmad_string(
-                                &field.buffer, offset, &sk.translation
+                                &field.buffer,
+                                offset,
+                                &sk.translation,
                             ) {
                                 field.buffer = new_buf;
                                 field.header.dsize = field.buffer.len() as u16;
@@ -3827,45 +4082,49 @@ pub async fn save_esp(
                     modified += 1;
                 }
             }
-            
+
             if modified > 0 {
-                record.rebuild_data().map_err(|e| format!("Failed to rebuild record: {}", e))?;
+                record
+                    .rebuild_data()
+                    .map_err(|e| format!("Failed to rebuild record: {}", e))?;
             }
         }
-        
+
         for child in &mut grup.children {
             modified += update_records_in_grup(child, string_index, vmad_index, codepage)?;
         }
-        
+
         Ok(modified)
     }
-    
+
     // 获取游戏的代码页配置
     let codepage_config = {
         let codepage_table = state.codepage_table.lock().map_err(|e| e.to_string());
         match codepage_table {
-            Ok(ref table) if table.is_some() => {
-                table.as_ref().unwrap().get_or_utf8("default")
-            }
+            Ok(ref table) if table.is_some() => table.as_ref().unwrap().get_or_utf8("default"),
             _ => xt_core::strings::CodepageConfig::default(),
         }
     };
-    
+
     for grup in &mut esp_file_mut.top_level_grups {
-        records_modified += update_records_in_grup(grup, &string_index, &vmad_index, &codepage_config)?;
+        records_modified +=
+            update_records_in_grup(grup, &string_index, &vmad_index, &codepage_config)?;
     }
-    
+
     // 重建所有记录以重新计算大小
-    esp_file_mut.rebuild_all().map_err(|e| format!("Failed to rebuild ESP: {}", e))?;
-    
+    esp_file_mut
+        .rebuild_all()
+        .map_err(|e| format!("Failed to rebuild ESP: {}", e))?;
+
     // 保存到文件
-    esp_file_mut.save_to_file(&request.path, request.create_backup)
+    esp_file_mut
+        .save_to_file(&request.path, request.create_backup)
         .map_err(|e| format!("Failed to save ESP file: {}", e))?;
-    
+
     let bytes_written = std::fs::metadata(&request.path)
         .map(|m| m.len())
         .unwrap_or(0);
-    
+
     Ok(xt_shared::dto::SaveEspResponse {
         bytes_written,
         records_modified,
@@ -3879,42 +4138,48 @@ pub async fn finalize_esp(
     request: xt_shared::dto::FinalizeEspRequest,
 ) -> Result<xt_shared::dto::FinalizeEspResponse, String> {
     let esp_file_lock = state.esp_file.lock().map_err(|e| e.to_string())?;
-    let esp_file = esp_file_lock.as_ref().ok_or_else(|| "No ESP file loaded or ESP mode not enabled".to_string())?;
-    
+    let esp_file = esp_file_lock
+        .as_ref()
+        .ok_or_else(|| "No ESP file loaded or ESP mode not enabled".to_string())?;
+
     let strings = state.strings.lock().map_err(|e| e.to_string())?;
     let _sst_old_data = state.sst_old_data.lock().map_err(|e| e.to_string())?;
-    
+
     // 构建索引：(form_id, record_sig, field_sig) → &SkyString，O(1) 查找
     let mut string_index: HashMap<(u32, [u8; 4], [u8; 4]), &SkyString> = HashMap::new();
     for sk in strings.iter() {
         string_index.insert(
-            (sk.esp_ptr.form_id, sk.esp_ptr.record_sig, sk.esp_ptr.field_sig),
+            (
+                sk.esp_ptr.form_id,
+                sk.esp_ptr.record_sig,
+                sk.esp_ptr.field_sig,
+            ),
             sk,
         );
     }
-    
+
     // 创建 ESP 文件的可变副本以进行重建
     let mut esp_file_mut = esp_file.clone();
-    
+
     let mut records_modified = 0u32;
-    
+
     fn apply_translations_to_records(
         grup: &mut xt_core::esp::record_tree::EspGrup,
         string_index: &HashMap<(u32, [u8; 4], [u8; 4]), &SkyString>,
         codepage: &xt_core::strings::CodepageConfig,
     ) -> Result<u32, String> {
         let mut modified = 0u32;
-        
+
         for record in &mut grup.records {
             if record.header.name == *b"TES4" {
                 continue;
             }
-            
+
             for field in &mut record.fields {
                 if field.is_size_xxxx {
                     continue;
                 }
-                
+
                 let key = (record.form_id, record.header.name, field.header.name);
                 if let Some(sk) = string_index.get(&key) {
                     let text = if !sk.translation.is_empty() {
@@ -3922,26 +4187,28 @@ pub async fn finalize_esp(
                     } else {
                         sk.source.clone()
                     };
-                    
+
                     if !text.is_empty() && text != field.buffer_to_string(codepage) {
                         field.update_buffer(&text, codepage);
                         modified += 1;
                     }
                 }
             }
-            
+
             if modified > 0 {
-                record.rebuild_data().map_err(|e| format!("Failed to rebuild record: {}", e))?;
+                record
+                    .rebuild_data()
+                    .map_err(|e| format!("Failed to rebuild record: {}", e))?;
             }
         }
-        
+
         for child in &mut grup.children {
             modified += apply_translations_to_records(child, string_index, codepage)?;
         }
-        
+
         Ok(modified)
     }
-    
+
     // 获取语言的代码页配置
     let codepage_config = {
         let codepage_table = state.codepage_table.lock().map_err(|e| e.to_string());
@@ -3952,18 +4219,21 @@ pub async fn finalize_esp(
             _ => xt_core::strings::CodepageConfig::default(),
         }
     };
-    
+
     for grup in &mut esp_file_mut.top_level_grups {
         records_modified += apply_translations_to_records(grup, &string_index, &codepage_config)?;
     }
-    
+
     // 重建所有记录
-    esp_file_mut.rebuild_all().map_err(|e| format!("Failed to rebuild ESP: {}", e))?;
-    
+    esp_file_mut
+        .rebuild_all()
+        .map_err(|e| format!("Failed to rebuild ESP: {}", e))?;
+
     // 保存 ESP 文件
-    esp_file_mut.save_to_file(&request.esp_path, request.create_backup)
+    esp_file_mut
+        .save_to_file(&request.esp_path, request.create_backup)
         .map_err(|e| format!("Failed to save ESP file: {}", e))?;
-    
+
     // 导出 Strings 文件
     let strings_files = export_strings_files(
         &strings,
@@ -3972,7 +4242,7 @@ pub async fn finalize_esp(
         &request.language,
         &codepage_config,
     )?;
-    
+
     Ok(xt_shared::dto::FinalizeEspResponse {
         esp_path: request.esp_path,
         strings_files,
@@ -3989,14 +4259,9 @@ fn export_strings_files(
     language: &str,
     codepage: &xt_core::strings::CodepageConfig,
 ) -> Result<Vec<String>, String> {
-    export_strings_files_inner(
-        strings,
-        strings_dir,
-        base_name,
-        language,
-        codepage,
-        |sk| (!sk.translation.is_empty(), sk.translation.clone()),
-    )
+    export_strings_files_inner(strings, strings_dir, base_name, language, codepage, |sk| {
+        (!sk.translation.is_empty(), sk.translation.clone())
+    })
 }
 
 /// 导出非本地化 ESP 的 Strings 文件（使用源文本作为回退）。
@@ -4007,21 +4272,14 @@ fn export_strings_files_for_delocalize(
     language: &str,
     codepage: &xt_core::strings::CodepageConfig,
 ) -> Result<Vec<String>, String> {
-    export_strings_files_inner(
-        strings,
-        strings_dir,
-        base_name,
-        language,
-        codepage,
-        |sk| {
-            let text = if !sk.translation.is_empty() {
-                sk.translation.clone()
-            } else {
-                sk.source.clone()
-            };
-            (!text.is_empty(), text)
-        },
-    )
+    export_strings_files_inner(strings, strings_dir, base_name, language, codepage, |sk| {
+        let text = if !sk.translation.is_empty() {
+            sk.translation.clone()
+        } else {
+            sk.source.clone()
+        };
+        (!text.is_empty(), text)
+    })
 }
 
 /// Common implementation for exporting strings files in binary format.
@@ -4070,10 +4328,7 @@ fn export_strings_files_inner(
         let filepath = strings_path.join(&filename);
 
         let format = xt_core::strings::StringsFile::detect_format(&filepath);
-        let sfile = xt_core::strings::StringsFile::from_entries(
-            entries,
-            codepage.clone(),
-        );
+        let sfile = xt_core::strings::StringsFile::from_entries(entries, codepage.clone());
         sfile
             .save_with_format(&filepath, format)
             .map_err(|e| format!("Failed to write strings file {}: {}", filename, e))?;
@@ -4091,41 +4346,47 @@ pub async fn delocalize_esp(
     request: xt_shared::dto::DelocalizeEspRequest,
 ) -> Result<xt_shared::dto::DelocalizeEspResponse, String> {
     let esp_file_lock = state.esp_file.lock().map_err(|e| e.to_string())?;
-    let esp_file = esp_file_lock.as_ref().ok_or_else(|| "No ESP file loaded or ESP mode not enabled".to_string())?;
-    
+    let esp_file = esp_file_lock
+        .as_ref()
+        .ok_or_else(|| "No ESP file loaded or ESP mode not enabled".to_string())?;
+
     let strings = state.strings.lock().map_err(|e| e.to_string())?;
-    
+
     // 构建索引：(form_id, record_sig, field_sig) → &SkyString，O(1) 查找
     let mut string_index: HashMap<(u32, [u8; 4], [u8; 4]), &SkyString> = HashMap::new();
     for sk in strings.iter() {
         string_index.insert(
-            (sk.esp_ptr.form_id, sk.esp_ptr.record_sig, sk.esp_ptr.field_sig),
+            (
+                sk.esp_ptr.form_id,
+                sk.esp_ptr.record_sig,
+                sk.esp_ptr.field_sig,
+            ),
             sk,
         );
     }
-    
+
     // 创建 ESP 文件的可变副本
     let mut esp_file_mut = esp_file.clone();
-    
+
     let mut new_string_count = 0u32;
-    
+
     fn delocalize_records_in_grup(
         grup: &mut xt_core::esp::record_tree::EspGrup,
         string_index: &HashMap<(u32, [u8; 4], [u8; 4]), &SkyString>,
         codepage: &xt_core::strings::CodepageConfig,
     ) -> Result<u32, String> {
         let mut new_strings = 0u32;
-        
+
         for record in &mut grup.records {
             if record.header.name == *b"TES4" {
                 continue;
             }
-            
+
             for field in &mut record.fields {
                 if field.is_size_xxxx {
                     continue;
                 }
-                
+
                 let key = (record.form_id, record.header.name, field.header.name);
                 if let Some(sk) = string_index.get(&key) {
                     let text = if !sk.translation.is_empty() {
@@ -4133,26 +4394,28 @@ pub async fn delocalize_esp(
                     } else {
                         sk.source.clone()
                     };
-                    
+
                     if !text.is_empty() {
                         field.update_buffer(&text, codepage);
                         new_strings += 1;
                     }
                 }
             }
-            
+
             if new_strings > 0 {
-                record.rebuild_data().map_err(|e| format!("Failed to rebuild record: {}", e))?;
+                record
+                    .rebuild_data()
+                    .map_err(|e| format!("Failed to rebuild record: {}", e))?;
             }
         }
-        
+
         for child in &mut grup.children {
             new_strings += delocalize_records_in_grup(child, string_index, codepage)?;
         }
-        
+
         Ok(new_strings)
     }
-    
+
     // 获取语言的代码页配置
     let codepage_config = {
         let codepage_table = state.codepage_table.lock().map_err(|e| e.to_string());
@@ -4163,18 +4426,21 @@ pub async fn delocalize_esp(
             _ => xt_core::strings::CodepageConfig::default(),
         }
     };
-    
+
     for grup in &mut esp_file_mut.top_level_grups {
         new_string_count += delocalize_records_in_grup(grup, &string_index, &codepage_config)?;
     }
-    
+
     // 重建所有记录
-    esp_file_mut.rebuild_all().map_err(|e| format!("Failed to rebuild ESP: {}", e))?;
-    
+    esp_file_mut
+        .rebuild_all()
+        .map_err(|e| format!("Failed to rebuild ESP: {}", e))?;
+
     // 保存 ESP 文件
-    esp_file_mut.save_to_file(&request.esp_path, request.create_backup)
+    esp_file_mut
+        .save_to_file(&request.esp_path, request.create_backup)
         .map_err(|e| format!("Failed to save delocalized ESP file: {}", e))?;
-    
+
     // 导出 Strings 文件
     let strings_files = export_strings_files_for_delocalize(
         &strings,
@@ -4183,7 +4449,7 @@ pub async fn delocalize_esp(
         &request.language,
         &codepage_config,
     )?;
-    
+
     Ok(xt_shared::dto::DelocalizeEspResponse {
         new_string_count,
         strings_files_paths: strings_files,
@@ -4203,7 +4469,7 @@ pub async fn get_api_config(
             label: cfg.label.clone(),
             enabled: cfg.enabled,
             models: cfg.models.clone(),
-default_query: cfg.default_query.clone(),
+            default_query: cfg.default_query.clone(),
             char_limit: cfg.char_limit,
             array_limit: cfg.array_limit,
         });
@@ -4241,7 +4507,10 @@ pub async fn finalize(
             .unwrap_or_default();
 
         let total_strings = strings.len() as u32;
-        let translated_count = strings.iter().filter(|sk| sk.params.is_translated()).count() as u32;
+        let translated_count = strings
+            .iter()
+            .filter(|sk| sk.params.is_translated())
+            .count() as u32;
 
         let mut translated_map: std::collections::HashMap<(u8, i32), String> =
             std::collections::HashMap::new();
@@ -4252,7 +4521,12 @@ pub async fn finalize(
         }
 
         (
-            (strings.clone(), total_strings, translated_count, translated_map),
+            (
+                strings.clone(),
+                total_strings,
+                translated_count,
+                translated_map,
+            ),
             (source_lang, strings_dir, esp_path),
             old_data.clone(),
         )
@@ -4290,10 +4564,7 @@ pub async fn finalize(
 
         let mut strings_file = if source_path.exists() {
             if let Some(ref table) = codepage_table_ref {
-                xt_core::strings::StringsFile::load_with_codepage_table(
-                    &source_path,
-                    table,
-                )
+                xt_core::strings::StringsFile::load_with_codepage_table(&source_path, table)
             } else {
                 xt_core::strings::StringsFile::load_with_format(
                     &source_path,
@@ -4480,14 +4751,14 @@ pub fn apply_translation_cache(
 
     *state.is_dirty.lock().map_err(|e| e.to_string())? = true;
 
-    Ok(ApplyCacheResponse { applied_count: applied })
+    Ok(ApplyCacheResponse {
+        applied_count: applied,
+    })
 }
 
 /// 丢弃翻译缓存（不恢复）
 #[tauri::command]
-pub fn discard_translation_cache(
-    esp_hash: String,
-) -> Result<(), String> {
+pub fn discard_translation_cache(esp_hash: String) -> Result<(), String> {
     let base_dir = cache_dir()
         .parent()
         .ok_or("无法确定缓存父目录")?
@@ -4507,12 +4778,32 @@ pub async fn start_string_batch_translate(
     let concurrency = concurrency.clamp(1, 10);
 
     let provider_type = *state.current_provider.lock().map_err(|e| e.to_string())?;
-    let openai_key = state.openai_api_key.lock().map_err(|e| e.to_string())?.clone();
-    let deepl_key = state.deepl_api_key.lock().map_err(|e| e.to_string())?.clone();
-    let baidu_app_id = state.baidu_app_id.lock().map_err(|e| e.to_string())?.clone();
+    let openai_key = state
+        .openai_api_key
+        .lock()
+        .map_err(|e| e.to_string())?
+        .clone();
+    let deepl_key = state
+        .deepl_api_key
+        .lock()
+        .map_err(|e| e.to_string())?
+        .clone();
+    let baidu_app_id = state
+        .baidu_app_id
+        .lock()
+        .map_err(|e| e.to_string())?
+        .clone();
     let baidu_key = state.baidu_key.lock().map_err(|e| e.to_string())?.clone();
-    let youdao_app_key = state.youdao_app_key.lock().map_err(|e| e.to_string())?.clone();
-    let youdao_secret_key = state.youdao_secret_key.lock().map_err(|e| e.to_string())?.clone();
+    let youdao_app_key = state
+        .youdao_app_key
+        .lock()
+        .map_err(|e| e.to_string())?
+        .clone();
+    let youdao_secret_key = state
+        .youdao_secret_key
+        .lock()
+        .map_err(|e| e.to_string())?
+        .clone();
     let azure_key = state.azure_key.lock().map_err(|e| e.to_string())?.clone();
     let api_config = state.api_config.clone();
 
@@ -4623,13 +4914,16 @@ pub async fn start_string_batch_translate(
 
                 let progress = queue.mark_done();
 
-                let _ = window.emit("batch-string-progress", serde_json::json!({
-                    "str_id": batch_result.str_id,
-                    "translated": batch_result.translated,
-                    "error": batch_result.error,
-                    "completed": progress.completed,
-                    "total": progress.total,
-                }));
+                let _ = window.emit(
+                    "batch-string-progress",
+                    serde_json::json!({
+                        "str_id": batch_result.str_id,
+                        "translated": batch_result.translated,
+                        "error": batch_result.error,
+                        "completed": progress.completed,
+                        "total": progress.total,
+                    }),
+                );
 
                 batch_result
             });
@@ -4664,12 +4958,15 @@ pub async fn start_string_batch_translate(
             }
         }
 
-        let _ = window.emit("batch-string-complete", serde_json::json!({
-            "total": summary.total,
-            "succeeded": summary.succeeded,
-            "failed": summary.failed,
-            "errors": summary.errors,
-        }));
+        let _ = window.emit(
+            "batch-string-complete",
+            serde_json::json!({
+                "total": summary.total,
+                "succeeded": summary.succeeded,
+                "failed": summary.failed,
+                "errors": summary.errors,
+            }),
+        );
     });
 
     Ok("started".to_string())
@@ -4694,38 +4991,50 @@ async fn translate_single_with_retry(
             ProviderType::OpenAI => {
                 let key = openai_key.as_ref().ok_or("No OpenAI API key")?;
                 let provider = OpenAIProvider::new(key.clone());
-                provider.translate(source, "", "", None).await
+                provider
+                    .translate(source, "", "", None)
+                    .await
                     .map_err(|e| e.to_string())
             }
             ProviderType::DeepL => {
                 let key = deepl_key.as_ref().ok_or("No DeepL API key")?;
                 let provider = DeepLProvider::new(key.clone());
-                provider.translate(source, "", "", None).await
+                provider
+                    .translate(source, "", "", None)
+                    .await
                     .map_err(|e| e.to_string())
             }
             ProviderType::Baidu => {
                 let app_id = baidu_app_id.as_ref().ok_or("No Baidu AppId")?;
                 let key = baidu_key.as_ref().ok_or("No Baidu Key")?;
                 let provider = BaiduProvider::new(app_id.clone(), key.clone());
-                provider.translate(source, "", "", None).await
+                provider
+                    .translate(source, "", "", None)
+                    .await
                     .map_err(|e| e.to_string())
             }
             ProviderType::Youdao => {
                 let app_key = youdao_app_key.as_ref().ok_or("No Youdao AppKey")?;
                 let secret_key = youdao_secret_key.as_ref().ok_or("No Youdao SecretKey")?;
                 let provider = YoudaoProvider::new(app_key.clone(), secret_key.clone());
-                provider.translate(source, "", "", None).await
+                provider
+                    .translate(source, "", "", None)
+                    .await
                     .map_err(|e| e.to_string())
             }
             ProviderType::Azure => {
                 let key = azure_key.as_ref().ok_or("No Azure subscription key")?;
                 let provider = AzureProvider::new(key.clone());
-                provider.translate(source, "", "", None).await
+                provider
+                    .translate(source, "", "", None)
+                    .await
                     .map_err(|e| e.to_string())
             }
             ProviderType::Google => {
                 let provider = GoogleProvider::new();
-                provider.translate(source, "", "", None).await
+                provider
+                    .translate(source, "", "", None)
+                    .await
                     .map_err(|e| e.to_string())
             }
         };
@@ -4754,9 +5063,7 @@ async fn translate_single_with_retry(
 
 /// 取消字符串级批量翻译
 #[tauri::command]
-pub fn cancel_string_batch_translate(
-    state: tauri::State<'_, Arc<AppState>>,
-) -> Result<(), String> {
+pub fn cancel_string_batch_translate(state: tauri::State<'_, Arc<AppState>>) -> Result<(), String> {
     let mut bq = state.batch_queue.lock().map_err(|e| e.to_string())?;
     if let Some(ref queue) = *bq {
         queue.cancel();
@@ -4769,8 +5076,8 @@ pub fn cancel_string_batch_translate(
 #[tauri::command]
 pub fn write_text_file(path: String, content: String) -> Result<(), String> {
     use std::io::Write;
-    let mut file = std::fs::File::create(&path)
-        .map_err(|e| format!("Failed to create file: {}", e))?;
+    let mut file =
+        std::fs::File::create(&path).map_err(|e| format!("Failed to create file: {}", e))?;
     file.write_all(content.as_bytes())
         .map_err(|e| format!("Failed to write file: {}", e))?;
     Ok(())

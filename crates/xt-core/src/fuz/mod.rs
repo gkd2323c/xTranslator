@@ -96,10 +96,10 @@ impl FuzFile {
     /// 解析 LIP 唇形同步数据
     fn parse_lip_data(version: u32, data: &[u8]) -> Result<LipData> {
         let mut cursor = Cursor::new(data);
-        
+
         // 读取关键帧数量
         let keyframe_count = cursor.read_u32::<LittleEndian>()?;
-        
+
         let mut keyframes = Vec::with_capacity(keyframe_count as usize);
         for _ in 0..keyframe_count {
             let time = cursor.read_f32::<LittleEndian>()?;
@@ -107,10 +107,7 @@ impl FuzFile {
             keyframes.push(LipKeyframe { time, shape });
         }
 
-        Ok(LipData {
-            version,
-            keyframes,
-        })
+        Ok(LipData { version, keyframes })
     }
 }
 
@@ -167,11 +164,11 @@ mod tests {
         data.extend_from_slice(b"FUZE");
         // LIP version = 1
         data.extend_from_slice(&1u32.to_le_bytes());
-        
+
         // LIP data: 4 bytes (keyframe count) + 2 keyframes * 5 bytes each = 14 bytes
         let lip_size = 14u32;
         data.extend_from_slice(&lip_size.to_le_bytes());
-        
+
         // LIP data content
         let keyframe_count = 2u32;
         data.extend_from_slice(&keyframe_count.to_le_bytes());
@@ -246,7 +243,7 @@ mod tests {
         let lip_data = fuz.lip_data.unwrap();
         assert_eq!(lip_data.version, 1);
         assert_eq!(lip_data.keyframes.len(), 2);
-        
+
         assert_eq!(lip_data.keyframes[0].time, 0.0);
         assert_eq!(lip_data.keyframes[0].shape, 1);
         assert_eq!(lip_data.keyframes[1].time, 0.5);
@@ -278,10 +275,19 @@ mod tests {
 
     #[test]
     fn test_lip_keyframe_equality() {
-        let kf1 = LipKeyframe { time: 0.5, shape: 3 };
-        let kf2 = LipKeyframe { time: 0.5, shape: 3 };
-        let kf3 = LipKeyframe { time: 1.0, shape: 3 };
-        
+        let kf1 = LipKeyframe {
+            time: 0.5,
+            shape: 3,
+        };
+        let kf2 = LipKeyframe {
+            time: 0.5,
+            shape: 3,
+        };
+        let kf3 = LipKeyframe {
+            time: 1.0,
+            shape: 3,
+        };
+
         assert_eq!(kf1, kf2);
         assert_ne!(kf1, kf3);
     }

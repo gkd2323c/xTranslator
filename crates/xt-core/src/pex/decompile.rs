@@ -1050,11 +1050,7 @@ fn emit_instruction(out: &mut String, inst: &Instruction, st: &StrTab) {
                 let arr = arg_name(inst.args[1], st);
                 let val = arg_name(inst.args[2], st);
                 let start = arg_name(inst.args[3], st);
-                let _ = writeln!(
-                    out,
-                    "        {} = {}.find({}, {})",
-                    dest, arr, val, start
-                );
+                let _ = writeln!(out, "        {} = {}.find({}, {})", dest, arr, val, start);
             }
         }
         Opcode::ArrayRfindElement => {
@@ -1063,11 +1059,7 @@ fn emit_instruction(out: &mut String, inst: &Instruction, st: &StrTab) {
                 let arr = arg_name(inst.args[1], st);
                 let val = arg_name(inst.args[2], st);
                 let start = arg_name(inst.args[3], st);
-                let _ = writeln!(
-                    out,
-                    "        {} = {}.rfind({}, {})",
-                    dest, arr, val, start
-                );
+                let _ = writeln!(out, "        {} = {}.rfind({}, {})", dest, arr, val, start);
             }
         }
         Opcode::ArrayAddElement => {
@@ -1126,11 +1118,7 @@ fn emit_instruction(out: &mut String, inst: &Instruction, st: &StrTab) {
             }
         }
         Opcode::Invalid => {
-            let _ = writeln!(
-                out,
-                "        ; invalid({:?})",
-                inst.args
-            );
+            let _ = writeln!(out, "        ; invalid({:?})", inst.args);
         }
     }
 }
@@ -1181,7 +1169,17 @@ mod tests {
         // 9: "Int"
 
         let strings: Vec<&str> = vec![
-            "", "", "TestScript", "", "", "", "Int", "count", "", "GetCount", "Int",
+            "",
+            "",
+            "TestScript",
+            "",
+            "",
+            "",
+            "Int",
+            "count",
+            "",
+            "GetCount",
+            "Int",
         ];
         // idx 0:"", 1:"", 2:"TestScript", 3:"", 4:"", 5:"", 6:"Int", 7:"count", 8:"", 9:"GetCount", 10:"Int"
 
@@ -1189,7 +1187,8 @@ mod tests {
         // Magic
         data.extend_from_slice(&0xFA57C0DEu32.to_le_bytes());
         // Header
-        data.push(3); data.push(10);
+        data.push(3);
+        data.push(10);
         data.extend_from_slice(&1u16.to_le_bytes());
         data.extend_from_slice(&0u64.to_le_bytes());
         // String table
@@ -1244,9 +1243,9 @@ mod tests {
         body.extend_from_slice(&0u16.to_le_bytes());
         // locals = 1 (Int count)
         body.extend_from_slice(&1u16.to_le_bytes());
-        body.extend_from_slice(&7u16.to_le_bytes());  // name=idx7 "count"
-        body.extend_from_slice(&6u16.to_le_bytes());  // type=idx6 "Int"
-        // instructions = 3
+        body.extend_from_slice(&7u16.to_le_bytes()); // name=idx7 "count"
+        body.extend_from_slice(&6u16.to_le_bytes()); // type=idx6 "Int"
+                                                     // instructions = 3
         body.extend_from_slice(&3u16.to_le_bytes());
         // inst 0: Jump (0x15), 2 args
         body.push(0x15u8);
@@ -1302,7 +1301,8 @@ mod tests {
     fn test_decompile_empty_object_list() {
         let mut data = Vec::new();
         data.extend_from_slice(&0xFA57C0DEu32.to_le_bytes());
-        data.push(3); data.push(10);
+        data.push(3);
+        data.push(10);
         data.extend_from_slice(&1u16.to_le_bytes());
         data.extend_from_slice(&0u64.to_le_bytes());
         data.extend_from_slice(&0u16.to_le_bytes()); // empty string table

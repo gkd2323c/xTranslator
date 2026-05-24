@@ -51,7 +51,8 @@ impl TranslationCache {
     }
 
     fn journal_path(&self, esp_hash: &str) -> PathBuf {
-        self.cache_dir().join(format!("{}.{}", esp_hash, JOURNAL_EXT))
+        self.cache_dir()
+            .join(format!("{}.{}", esp_hash, JOURNAL_EXT))
     }
 
     /// 追加一条翻译记录到 journal 文件
@@ -65,8 +66,7 @@ impl TranslationCache {
         translated_text: &str,
     ) -> Result<(), String> {
         let dir = self.cache_dir();
-        std::fs::create_dir_all(&dir)
-            .map_err(|e| format!("创建缓存目录失败: {}", e))?;
+        std::fs::create_dir_all(&dir).map_err(|e| format!("创建缓存目录失败: {}", e))?;
 
         let timestamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -80,8 +80,8 @@ impl TranslationCache {
             timestamp,
         };
 
-        let line = serde_json::to_string(&record)
-            .map_err(|e| format!("序列化缓存记录失败: {}", e))?;
+        let line =
+            serde_json::to_string(&record).map_err(|e| format!("序列化缓存记录失败: {}", e))?;
 
         let path = self.journal_path(esp_hash);
         let mut file = std::fs::OpenOptions::new()
@@ -91,7 +91,8 @@ impl TranslationCache {
             .map_err(|e| format!("打开 journal 文件失败: {}", e))?;
 
         writeln!(file, "{}", line).map_err(|e| format!("写入 journal 失败: {}", e))?;
-        file.flush().map_err(|e| format!("flush journal 失败: {}", e))?;
+        file.flush()
+            .map_err(|e| format!("flush journal 失败: {}", e))?;
 
         Ok(())
     }
@@ -105,8 +106,8 @@ impl TranslationCache {
             return Ok(Vec::new());
         }
 
-        let file = std::fs::File::open(&path)
-            .map_err(|e| format!("打开 journal 文件失败: {}", e))?;
+        let file =
+            std::fs::File::open(&path).map_err(|e| format!("打开 journal 文件失败: {}", e))?;
         let reader = BufReader::new(file);
 
         let mut records = Vec::new();
@@ -174,8 +175,7 @@ impl TranslationCache {
     pub fn discard_cache(&self, esp_hash: &str) -> Result<(), String> {
         let path = self.journal_path(esp_hash);
         if path.exists() {
-            std::fs::remove_file(&path)
-                .map_err(|e| format!("删除 journal 文件失败: {}", e))?;
+            std::fs::remove_file(&path).map_err(|e| format!("删除 journal 文件失败: {}", e))?;
         }
         Ok(())
     }
@@ -211,8 +211,12 @@ mod tests {
         let (cache, tmp) = setup_cache();
         let hash = "abc123def456";
 
-        cache.append_translation(hash, 1, "Iron Sword", "铁剑").unwrap();
-        cache.append_translation(hash, 2, "Steel Armor", "钢甲").unwrap();
+        cache
+            .append_translation(hash, 1, "Iron Sword", "铁剑")
+            .unwrap();
+        cache
+            .append_translation(hash, 2, "Steel Armor", "钢甲")
+            .unwrap();
 
         let records = cache.read_all(hash).unwrap();
         assert_eq!(records.len(), 2);

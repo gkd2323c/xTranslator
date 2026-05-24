@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { toolboxTransform } from "../api/strings";
+import { toolboxTransform, toolboxLoadExceptionWords, toolboxGetExceptionWords, saveConfig, loadConfig } from "../api/strings";
 import toast from "react-hot-toast";
 import { Button, Modal, Select } from "./ui";
 
@@ -33,8 +33,21 @@ export function ToolboxDialog({ open, onClose, selectedIds, onApplied }: Toolbox
   const [target, setTarget] = useState("translation");
   const [headerText, setHeaderText] = useState("");
   const [running, setRunning] = useState(false);
+  const [showExceptionEditor, setShowExceptionEditor] = useState(false);
+  const [exceptionWords, setExceptionWords] = useState<string[]>([]);
+  const [exceptionText, setExceptionText] = useState("");
 
-  if (!open) return null;
+  // Load exception words when dialog opens
+  useEffect(() => {
+    if (open) {
+      toolboxGetExceptionWords().then(setExceptionWords).catch(() => setExceptionWords([]));
+    }
+  }, [open]);
+
+  // Sync exception words text with list
+  useEffect(() => {
+    setExceptionText(exceptionWords.join("\n"));
+  }, [exceptionWords]);
 
   const handleApply = async () => {
     setRunning(true);
@@ -48,6 +61,57 @@ export function ToolboxDialog({ open, onClose, selectedIds, onApplied }: Toolbox
       setRunning(false);
     }
   };
+
+  const handleSaveExceptions = async () => {
+    try {
+      const words = exceptionText.split("\n").map((w) => w.trim()).filter((w) => w.length > 0);
+      await toolboxLoadExceptionWords(words.join("\n"));
+      setExceptionWords(words);
+
+      // Save to config
+      const currentConfig = await loadConfig();
+      await saveConfig({ ...currentConfig, word_exception_list: words.join("\n") });
+      toast.success(t("toolbox.exceptionWordsSaved", { count: words.length }));
+      setShowExceptionEditor(false);
+    } catch (e: any) {
+      toast.error(String(e));
+    }
+  };
+
+  if (!open) return null;
+
+  // Exception words editor modal
+  if (showExceptionEditor) {
+    return (
+      <Modal
+        open={open}
+        onClose={() => setShowExceptionEditor(false)}
+        title={t("toolbox.exceptionWordsTitle")}
+        size="lg"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setShowExceptionEditor(false)}>
+              {t("common.cancel")}
+            </Button>
+            <Button variant="primary" onClick={handleSaveExceptions}>
+              {t("common.save")}
+            </Button>
+          </>
+        }
+      >
+        <div className="dialog-section">
+          <p className="ui-modal-hint">{t("toolbox.exceptionWordsHint")}</p>
+          <textarea
+            className="ui-textarea"
+            rows={12}
+            value={exceptionText}
+            onChange={(e) => setExceptionText(e.target.value)}
+            placeholder={"is\na\nthe\nan\nof\nand\nor\nbut\n"}
+          />
+        </div>
+      </Modal>
+    );
+  }
 
   return (
     <Modal
@@ -106,6 +170,22 @@ export function ToolboxDialog({ open, onClose, selectedIds, onApplied }: Toolbox
             onChange={(e) => setHeaderText(e.target.value)}
             placeholder={t("toolbox.headerPlaceholder")}
           />
+        </div>
+      )}
+
+      {tool === "title_case" && (
+        <div className="dialog-section">
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div>
+              <label className="dialog-label">{t("toolbox.exceptionWords")}</label>
+              <p className="ui-modal-hint">
+                {t("toolbox.exceptionWordsCount", { count: exceptionWords.length })}
+              </p>
+            </div>
+            <Button variant="ghost" size="sm" onClick={() => setShowExceptionEditor(true)}>
+              {t("common.edit")}
+            </Button>
+          </div>
         </div>
       )}
     </Modal>

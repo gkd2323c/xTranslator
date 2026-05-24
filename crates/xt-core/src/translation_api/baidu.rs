@@ -78,7 +78,10 @@ impl super::TranslationProvider for BaiduProvider {
             .map_err(|e| anyhow::anyhow!("Baidu API invalid JSON: {} — body: {}", e, body))?;
 
         if let Some(error_code) = json.get("error_code") {
-            let error_msg = json.get("error_msg").and_then(|v| v.as_str()).unwrap_or("unknown");
+            let error_msg = json
+                .get("error_msg")
+                .and_then(|v| v.as_str())
+                .unwrap_or("unknown");
             return Err(anyhow::anyhow!(
                 "Baidu API error: code={}, msg={}",
                 error_code,
@@ -86,9 +89,9 @@ impl super::TranslationProvider for BaiduProvider {
             ));
         }
 
-        let translated = json["trans_result"][0]["dst"]
-            .as_str()
-            .ok_or_else(|| anyhow::anyhow!("Baidu API: no 'dst' field in response — body: {}", body))?;
+        let translated = json["trans_result"][0]["dst"].as_str().ok_or_else(|| {
+            anyhow::anyhow!("Baidu API: no 'dst' field in response — body: {}", body)
+        })?;
 
         Ok(super::restore_crlf_with_style(translated, crlf_style))
     }
@@ -115,10 +118,7 @@ mod tests {
 
     #[test]
     fn test_baidu_sign() {
-        let provider = BaiduProvider::new(
-            "20200101000399999".to_string(),
-            "abcdefg".to_string(),
-        );
+        let provider = BaiduProvider::new("20200101000399999".to_string(), "abcdefg".to_string());
         let sign = provider.compute_sign("apple", "1435660288");
         assert!(!sign.is_empty());
         assert_eq!(sign.len(), 32); // MD5 hex

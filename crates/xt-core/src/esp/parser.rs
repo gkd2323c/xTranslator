@@ -168,7 +168,11 @@ impl StringsFiles {
     ) -> Self {
         use std::ffi::OsStr;
         let dir = dir.as_ref();
-        let formats = [("STRINGS", StringsFormat::NullTerminated), ("DLSTRINGS", StringsFormat::LengthPrefixed), ("ILSTRINGS", StringsFormat::LengthPrefixed)];
+        let formats = [
+            ("STRINGS", StringsFormat::NullTerminated),
+            ("DLSTRINGS", StringsFormat::LengthPrefixed),
+            ("ILSTRINGS", StringsFormat::LengthPrefixed),
+        ];
 
         // 1. 快速路径：磁盘直接加载
         let mut strings: Option<StringsFile> = None;
@@ -202,7 +206,8 @@ impl StringsFiles {
             if let Ok(entries) = std::fs::read_dir(dir) {
                 for entry in entries.flatten() {
                     let path = entry.path();
-                    let ext_lower = path.extension()
+                    let ext_lower = path
+                        .extension()
                         .and_then(OsStr::to_str)
                         .unwrap_or("")
                         .to_lowercase();
@@ -225,22 +230,35 @@ impl StringsFiles {
                 let rank = |p: &std::path::PathBuf| -> u8 {
                     let name = p.file_name().and_then(OsStr::to_str).unwrap_or("");
                     let lower = name.to_lowercase();
-                    if lower.contains("interface") || lower.contains("misc") { 0 }
-                    else if lower.contains("textures") { 2 }
-                    else { 1 }
+                    if lower.contains("interface") || lower.contains("misc") {
+                        0
+                    } else if lower.contains("textures") {
+                        2
+                    } else {
+                        1
+                    }
                 };
                 rank(a).cmp(&rank(b))
             });
 
             for (archive_path, is_ba2) in &archive_paths {
                 for (i, (ext, _fmt)) in formats.iter().enumerate() {
-                    if !missing[i] { continue; }
-                    let bsa_path = format!("strings/{}_{}.{}", base_name.to_lowercase(), language, ext.to_lowercase());
+                    if !missing[i] {
+                        continue;
+                    }
+                    let bsa_path = format!(
+                        "strings/{}_{}.{}",
+                        base_name.to_lowercase(),
+                        language,
+                        ext.to_lowercase()
+                    );
                     let data = if *is_ba2 {
-                        crate::ba2::Ba2Archive::open(archive_path).ok()
+                        crate::ba2::Ba2Archive::open(archive_path)
+                            .ok()
                             .and_then(|a| a.extract_file(&bsa_path).ok())
                     } else {
-                        crate::bsa::BsaArchive::open(archive_path).ok()
+                        crate::bsa::BsaArchive::open(archive_path)
+                            .ok()
                             .and_then(|a| a.extract_file(&bsa_path).ok())
                     };
 
@@ -267,7 +285,9 @@ impl StringsFiles {
                         }
                     }
                 }
-                if !missing.iter().any(|&m| m) { break; }
+                if !missing.iter().any(|&m| m) {
+                    break;
+                }
             }
         }
 
@@ -592,18 +612,18 @@ impl EspParser {
         // 直接解析 TES4 字段；RecordHeaderData 已在上方消费。
         self.parse_record_fields_direct(b"TES4", 0, &tes4_data)?;
 
-// 流式解析后续记录/组。Delphi 原版顺序读取 GenericHeader →
-    // 判断 GRUP/Record → 按需读取数据，避免 read_to_end 大内存分配。
-    let mut grup_count = 0u32;
-    let mut record_count = 0u32;
+        // 流式解析后续记录/组。Delphi 原版顺序读取 GenericHeader →
+        // 判断 GRUP/Record → 按需读取数据，避免 read_to_end 大内存分配。
+        let mut grup_count = 0u32;
+        let mut record_count = 0u32;
 
-    loop {
-        match self.parse_top_level_debug(reader, &mut grup_count, &mut record_count) {
-            Ok(()) => {}
-            Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => break,
-            Err(e) => return Err(e),
+        loop {
+            match self.parse_top_level_debug(reader, &mut grup_count, &mut record_count) {
+                Ok(()) => {}
+                Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => break,
+                Err(e) => return Err(e),
+            }
         }
-    }
 
         Ok(())
     }
@@ -613,17 +633,17 @@ impl EspParser {
         self.parse_top_level_debug(reader, &mut 0, &mut 0)
     }
 
-fn parse_top_level_debug<R: Read>(
-    &mut self,
-    reader: &mut R,
-    grup_count: &mut u32,
-    record_count: &mut u32,
-) -> Result<()> {
-    let header = match GenericHeader::read_from(reader) {
-        Ok(h) => h,
-        Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => return Err(e),
-        Err(e) => return Err(e),
-    };
+    fn parse_top_level_debug<R: Read>(
+        &mut self,
+        reader: &mut R,
+        grup_count: &mut u32,
+        record_count: &mut u32,
+    ) -> Result<()> {
+        let header = match GenericHeader::read_from(reader) {
+            Ok(h) => h,
+            Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => return Err(e),
+            Err(e) => return Err(e),
+        };
 
         if header.is_grup() {
             *grup_count += 1;
@@ -654,11 +674,7 @@ fn parse_top_level_debug<R: Read>(
 
                 let mut cursor = Cursor::new(&grup_data);
                 loop {
-                    match self.parse_record_debug_for_tree(
-                        &mut cursor,
-                        record_count,
-                        &mut grup,
-                    ) {
+                    match self.parse_record_debug_for_tree(&mut cursor, record_count, &mut grup) {
                         Ok(()) => {}
                         Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => break,
                         Err(_e) => break,
@@ -772,10 +788,7 @@ fn parse_top_level_debug<R: Read>(
                         self.parse_record_fields_direct(&header.name, form_id, &decompressed)?;
                     }
                     Err(e) => {
-                        log::warn!(
-                            "failed to decompress record {:?}: {}",
-                            header.name, e
-                        );
+                        log::warn!("failed to decompress record {:?}: {}", header.name, e);
                     }
                 }
             } else {
@@ -792,10 +805,7 @@ fn parse_top_level_debug<R: Read>(
                     (fields, decompressed, false)
                 }
                 Err(e) => {
-                    log::warn!(
-                        "failed to decompress record {:?}: {}",
-                        header.name, e
-                    );
+                    log::warn!("failed to decompress record {:?}: {}", header.name, e);
                     // Treat as raw — move record_data directly, no clone
                     (Vec::new(), record_data, true)
                 }
@@ -811,7 +821,11 @@ fn parse_top_level_debug<R: Read>(
             .iter()
             .find(|f| f.header.name == *b"EDID")
             .and_then(|f| {
-                let len = f.buffer.iter().position(|&b| b == 0).unwrap_or(f.buffer.len());
+                let len = f
+                    .buffer
+                    .iter()
+                    .position(|&b| b == 0)
+                    .unwrap_or(f.buffer.len());
                 String::from_utf8(f.buffer[..len].to_vec()).ok()
             });
 
@@ -1004,10 +1018,7 @@ fn parse_top_level_debug<R: Read>(
                     )?;
                 }
                 Err(e) => {
-                    log::warn!(
-                        "failed to decompress record {:?}: {}",
-                        header.name, e
-                    );
+                    log::warn!("failed to decompress record {:?}: {}", header.name, e);
                 }
             }
             return Ok(()); // 压缩记录处理完成

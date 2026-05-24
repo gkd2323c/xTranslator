@@ -65,9 +65,7 @@ impl super::TranslationProvider for AzureProvider {
 
         let translated = json[0]["translations"][0]["text"]
             .as_str()
-            .ok_or_else(|| {
-                anyhow::anyhow!("Azure API: no translations[0].text in response")
-            })?;
+            .ok_or_else(|| anyhow::anyhow!("Azure API: no translations[0].text in response"))?;
 
         Ok(super::restore_crlf_with_style(translated, crlf_style))
     }

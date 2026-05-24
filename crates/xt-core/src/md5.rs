@@ -5,7 +5,7 @@
 
 /// 计算输入字符串的 MD5 哈希值，返回 32 位小写十六进制字符串。
 pub fn md5_hex(input: &str) -> String {
-    use md5::{Md5, Digest};
+    use md5::{Digest, Md5};
     let digest = Md5::digest(input.as_bytes());
     format!("{:032x}", digest)
 }

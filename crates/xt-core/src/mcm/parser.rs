@@ -39,9 +39,7 @@ fn decode_bytes(bytes: &[u8], encoding: &McmEncoding) -> String {
             let (decoded, _, _) = encoding_rs::UTF_16BE.decode(bytes);
             decoded.into_owned()
         }
-        McmEncoding::Utf8 | McmEncoding::Ansi(_) => {
-            String::from_utf8_lossy(bytes).into_owned()
-        }
+        McmEncoding::Utf8 | McmEncoding::Ansi(_) => String::from_utf8_lossy(bytes).into_owned(),
     }
 }
 
@@ -49,9 +47,7 @@ fn decode_bytes(bytes: &[u8], encoding: &McmEncoding) -> String {
 fn line_byte_len(line: &str, encoding: &McmEncoding) -> usize {
     match encoding {
         McmEncoding::Utf8 | McmEncoding::Ansi(_) => line.as_bytes().len(),
-        McmEncoding::Utf16Le | McmEncoding::Utf16Be => {
-            line.encode_utf16().count() * 2
-        }
+        McmEncoding::Utf16Le | McmEncoding::Utf16Be => line.encode_utf16().count() * 2,
     }
 }
 

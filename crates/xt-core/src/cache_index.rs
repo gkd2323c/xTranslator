@@ -56,7 +56,12 @@ impl CacheIndex {
         let meta = file_path.metadata().ok()?;
         let key = file_path.to_string_lossy().to_string().to_lowercase();
         let entry = self.entries.get(&key)?;
-        let mtime = meta.modified().ok()?.duration_since(std::time::UNIX_EPOCH).ok()?.as_secs();
+        let mtime = meta
+            .modified()
+            .ok()?
+            .duration_since(std::time::UNIX_EPOCH)
+            .ok()?
+            .as_secs();
         let size = meta.len();
         if entry.mtime == mtime && entry.size == size {
             Some(entry.sha256.clone())
@@ -69,7 +74,8 @@ impl CacheIndex {
     pub fn store(&mut self, file_path: &Path, sha256: &str) {
         if let Ok(meta) = file_path.metadata() {
             let key = file_path.to_string_lossy().to_string().to_lowercase();
-            let mtime = meta.modified()
+            let mtime = meta
+                .modified()
                 .ok()
                 .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
                 .map(|d| d.as_secs())

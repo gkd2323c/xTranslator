@@ -687,7 +687,12 @@
     "trim": "去除空白",
     "targetTranslation": "译文",
     "targetSource": "原文",
-    "targetBoth": "两者"
+    "targetBoth": "两者",
+    "exceptionWords": "例外词列表",
+    "exceptionWordsCount": "已排除 {{count}} 个词不大写",
+    "exceptionWordsHint": "每行输入一个词。这些词在标题格式中不会大写。例如：is, a, the, an, of",
+    "exceptionWordsTitle": "编辑例外词",
+    "exceptionWordsSaved": "已保存 {{count}} 个例外词"
   },
   "spellcheck": {
     "title": "拼写检查",

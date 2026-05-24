@@ -55,15 +55,19 @@ impl SqliteCache {
         self.prune()?;
 
         // Touch file so prune keeps recently used
-        let _ = std::fs::File::open(&path).and_then(|f| {
-            f.set_modified(std::time::SystemTime::now())
-        });
+        let _ =
+            std::fs::File::open(&path).and_then(|f| f.set_modified(std::time::SystemTime::now()));
 
         Ok(())
     }
 
     /// 更新单条翻译（不重写整个缓存）
-    pub fn update_translation(&self, esp_hash: &str, id: u32, translation: &str) -> rusqlite::Result<()> {
+    pub fn update_translation(
+        &self,
+        esp_hash: &str,
+        id: u32,
+        translation: &str,
+    ) -> rusqlite::Result<()> {
         let path = self.db_path(esp_hash);
         let conn = Connection::open(&path)?;
         conn.execute(
@@ -74,18 +78,24 @@ impl SqliteCache {
     }
 
     /// 按 record_sig 查询字符串
-    pub fn query_by_record_sig(&self, esp_hash: &str, record_sig: &str) -> rusqlite::Result<Vec<SkyString>> {
+    pub fn query_by_record_sig(
+        &self,
+        esp_hash: &str,
+        record_sig: &str,
+    ) -> rusqlite::Result<Vec<SkyString>> {
         let path = self.db_path(esp_hash);
         let conn = Connection::open(&path)?;
-        let mut stmt = conn.prepare(
-            "SELECT * FROM strings WHERE esp_hash = ?1 AND record_sig = ?2 ORDER BY id",
-        )?;
+        let mut stmt = conn
+            .prepare("SELECT * FROM strings WHERE esp_hash = ?1 AND record_sig = ?2 ORDER BY id")?;
         let rows = stmt.query_map(params![esp_hash, record_sig], |row| row_to_sky_string(row))?;
         rows.collect()
     }
 
     /// 统计各 record_sig 的字符串数量
-    pub fn compute_record_counts(&self, esp_hash: &str) -> rusqlite::Result<std::collections::HashMap<String, usize>> {
+    pub fn compute_record_counts(
+        &self,
+        esp_hash: &str,
+    ) -> rusqlite::Result<std::collections::HashMap<String, usize>> {
         let path = self.db_path(esp_hash);
         let conn = Connection::open(&path)?;
         let mut stmt = conn.prepare(
@@ -140,7 +150,12 @@ impl SqliteCache {
         Ok(())
     }
 
-    fn write_payload(&self, conn: &Connection, esp_hash: &str, payload: &CachePayload) -> rusqlite::Result<()> {
+    fn write_payload(
+        &self,
+        conn: &Connection,
+        esp_hash: &str,
+        payload: &CachePayload,
+    ) -> rusqlite::Result<()> {
         conn.execute(
             "INSERT INTO cache_meta (esp_hash, version, compressed_records, strings_loaded) VALUES (?1, ?2, ?3, ?4)",
             params![esp_hash, payload.version, payload.compressed_records, payload.strings_loaded],
@@ -223,12 +238,10 @@ impl SqliteCache {
         }
 
         let mut entries: Vec<(std::time::SystemTime, PathBuf)> = Vec::new();
-        for entry in std::fs::read_dir(&self.cache_dir).map_err(|e| {
-            rusqlite::Error::InvalidParameterName(e.to_string())
-        })? {
-            let entry = entry.map_err(|e| {
-                rusqlite::Error::InvalidParameterName(e.to_string())
-            })?;
+        for entry in std::fs::read_dir(&self.cache_dir)
+            .map_err(|e| rusqlite::Error::InvalidParameterName(e.to_string()))?
+        {
+            let entry = entry.map_err(|e| rusqlite::Error::InvalidParameterName(e.to_string()))?;
             let path = entry.path();
             if path.extension().and_then(|e| e.to_str()) != Some("sqlite") {
                 continue;

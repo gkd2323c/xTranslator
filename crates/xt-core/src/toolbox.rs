@@ -2,6 +2,40 @@
 //!
 //! 对应 Delphi TESVT_StringsStatus.pas 的 applytoolBox + setStr_* 系列函数。
 
+use std::collections::HashSet;
+use std::sync::{LazyLock, RwLock};
+
+/// Global exception words set for TitleCase.
+/// Loaded from config.json `word_exception_list` field.
+/// Case-insensitive matching (normalized to lowercase for lookup).
+static EXCEPTION_WORDS: LazyLock<RwLock<HashSet<String>>> =
+    LazyLock::new(|| RwLock::new(HashSet::new()));
+
+/// Load exception words from a newline-separated string.
+pub fn load_exception_words(words: &str) {
+    let mut set = EXCEPTION_WORDS.write().unwrap();
+    set.clear();
+    for line in words.lines() {
+        let trimmed = line.trim();
+        if !trimmed.is_empty() {
+            set.insert(trimmed.to_lowercase());
+        }
+    }
+}
+
+/// Check if a word is in the exception list (case-insensitive).
+pub fn is_exception_word(word: &str) -> bool {
+    EXCEPTION_WORDS.read().unwrap().contains(&word.to_lowercase())
+}
+
+/// Get all exception words as a sorted vector.
+pub fn get_exception_words() -> Vec<String> {
+    let set = EXCEPTION_WORDS.read().unwrap();
+    let mut words: Vec<String> = set.iter().cloned().collect();
+    words.sort();
+    words
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ToolType {
     UppercaseAll,
@@ -29,8 +63,13 @@ impl ToolType {
 
     pub fn all_names() -> Vec<&'static str> {
         vec![
-            "uppercase_all", "lowercase_all", "uppercase_first",
-            "title_case", "fix_alias", "add_header", "trim",
+            "uppercase_all",
+            "lowercase_all",
+            "uppercase_first",
+            "title_case",
+            "fix_alias",
+            "add_header",
+            "trim",
         ]
     }
 }
@@ -72,7 +111,13 @@ fn uppercase_first_word(text: &str) -> String {
 }
 
 fn title_case(text: &str) -> String {
-    split_and_transform(text, |word, _, _| first_char_upper_rest_lower(word))
+    split_and_transform(text, |word, _, _| {
+        if is_exception_word(word) {
+            word.to_lowercase()
+        } else {
+            first_char_upper_rest_lower(word)
+        }
+    })
 }
 
 /// Fix `<Alias=...>` and similar tags: copy tag patterns from source into translation.
@@ -220,29 +265,77 @@ mod tests {
 
     #[test]
     fn test_uppercase_all() {
-        assert_eq!(apply_tool(ToolType::UppercaseAll, "hello world", "", None), "HELLO WORLD");
-        assert_eq!(apply_tool(ToolType::UppercaseAll, "Hello <Alias=test> World", "", None), "HELLO <Alias=test> WORLD");
+        assert_eq!(
+            apply_tool(ToolType::UppercaseAll, "hello world", "", None),
+            "HELLO WORLD"
+        );
+        assert_eq!(
+            apply_tool(ToolType::UppercaseAll, "Hello <Alias=test> World", "", None),
+            "HELLO <Alias=test> WORLD"
+        );
     }
 
     #[test]
     fn test_lowercase_all() {
-        assert_eq!(apply_tool(ToolType::LowercaseAll, "HELLO WORLD", "", None), "hello world");
-        assert_eq!(apply_tool(ToolType::LowercaseAll, "HELLO <Alias=Test> WORLD", "", None), "hello <Alias=Test> world");
+        assert_eq!(
+            apply_tool(ToolType::LowercaseAll, "HELLO WORLD", "", None),
+            "hello world"
+        );
+        assert_eq!(
+            apply_tool(ToolType::LowercaseAll, "HELLO <Alias=Test> WORLD", "", None),
+            "hello <Alias=Test> world"
+        );
     }
 
     #[test]
     fn test_uppercase_first_word() {
-        assert_eq!(apply_tool(ToolType::UppercaseFirstWord, "hello world test", "", None), "Hello world test");
+        assert_eq!(
+            apply_tool(ToolType::UppercaseFirstWord, "hello world test", "", None),
+            "Hello world test"
+        );
     }
 
     #[test]
     fn test_title_case() {
-        assert_eq!(apply_tool(ToolType::TitleCase, "hello world", "", None), "Hello World");
+        assert_eq!(
+            apply_tool(ToolType::TitleCase, "hello world", "", None),
+            "Hello World"
+        );
+    }
+
+    #[test]
+    fn test_title_case_with_exception_words() {
+        load_exception_words("is\na\nthe\n");
+        assert_eq!(
+            apply_tool(ToolType::TitleCase, "it is a good dog", "", None),
+            "It is a Good Dog"
+        );
+        load_exception_words(""); // Clear
+    }
+
+    #[test]
+    fn test_exception_words_case_insensitive() {
+        load_exception_words("IS\n");
+        assert!(is_exception_word("IS"));
+        assert!(is_exception_word("is"));
+        assert!(is_exception_word("Is"));
+        load_exception_words("");
+    }
+
+    #[test]
+    fn test_get_exception_words_sorted() {
+        load_exception_words("zebra\napple\nmango");
+        let words = get_exception_words();
+        assert_eq!(words, vec!["apple", "mango", "zebra"]);
+        load_exception_words("");
     }
 
     #[test]
     fn test_trim() {
-        assert_eq!(apply_tool(ToolType::TrimString, "  hello world  ", "", None), "hello world");
+        assert_eq!(
+            apply_tool(ToolType::TrimString, "  hello world  ", "", None),
+            "hello world"
+        );
     }
 
     #[test]
@@ -270,17 +363,26 @@ mod tests {
 
     #[test]
     fn test_add_header() {
-        assert_eq!(apply_tool(ToolType::AddHeader, "hello", "", Some("Title: ")), "Title:  hello");
+        assert_eq!(
+            apply_tool(ToolType::AddHeader, "hello", "", Some("Title: ")),
+            "Title:  hello"
+        );
     }
 
     #[test]
     fn test_add_header_empty() {
-        assert_eq!(apply_tool(ToolType::AddHeader, "hello", "", Some("")), "hello");
+        assert_eq!(
+            apply_tool(ToolType::AddHeader, "hello", "", Some("")),
+            "hello"
+        );
     }
 
     #[test]
     fn test_tool_type_from_str() {
-        assert_eq!(ToolType::from_str("uppercase_all"), Some(ToolType::UppercaseAll));
+        assert_eq!(
+            ToolType::from_str("uppercase_all"),
+            Some(ToolType::UppercaseAll)
+        );
         assert_eq!(ToolType::from_str("nonexistent"), None);
     }
 }

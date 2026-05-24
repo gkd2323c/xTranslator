@@ -258,7 +258,13 @@ impl ProviderType {
 pub trait TranslationProvider: Send + Sync {
     /// 翻译文本（异步）
     /// proxy: Optional AppConfig with proxy settings
-    async fn translate(&self, text: &str, source_lang: &str, target_lang: &str, proxy: Option<&crate::config::AppConfig>) -> Result<String>;
+    async fn translate(
+        &self,
+        text: &str,
+        source_lang: &str,
+        target_lang: &str,
+        proxy: Option<&crate::config::AppConfig>,
+    ) -> Result<String>;
 }
 
 /// API 翻译器配置（解析 ApiTranslator.txt）

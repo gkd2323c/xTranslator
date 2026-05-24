@@ -919,6 +919,7 @@ export interface AppConfigDto {
   spellcheck_dictionary?: string;
   spellcheck_active?: boolean;
   spellcheck_loaded?: boolean;
+  word_exception_list?: string;
 }
 
 // ── API Config ──────────────────────────────────────────────────────
@@ -1203,4 +1204,18 @@ export async function sstMerge(
   overwrite: boolean,
 ): Promise<MergeStatsDto> {
   return invoke("sst_merge", { sourcePath, overwrite });
+}
+
+// ── Toolbox Exception Words ────────────────────────────────────────────
+
+/// Load toolbox exception words from config into runtime state.
+export async function toolboxLoadExceptionWords(
+  words: string | undefined,
+): Promise<void> {
+  return invoke("toolbox_load_exception_words", { words });
+}
+
+/// Get exception words list.
+export async function toolboxGetExceptionWords(): Promise<string[]> {
+  return invoke("toolbox_get_exception_words");
 }

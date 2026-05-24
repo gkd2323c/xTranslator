@@ -25,8 +25,6 @@ const LD_MAX_BREAK: u32 = 25;
 /// Maximum words extracted per string (Delphi `iWordThreshold`)
 const WORD_THRESHOLD: usize = 1000;
 
-
-
 // ── Word tokenization ──────────────────────────────────────────────────
 
 /// Split text into words (matching Delphi `getWordsMatchHash` tokenization).
@@ -159,10 +157,12 @@ fn word_hash_levenshtein(hashes1: &[u32], hashes2: &[u32]) -> u32 {
     for i in 1..=n {
         curr[0] = i as u32;
         for j in 1..=m {
-            let cost = if hashes1[i - 1] == hashes2[j - 1] { 0 } else { 1 };
-            curr[j] = (prev[j] + 1)
-                .min(curr[j - 1] + 1)
-                .min(prev[j - 1] + cost);
+            let cost = if hashes1[i - 1] == hashes2[j - 1] {
+                0
+            } else {
+                1
+            };
+            curr[j] = (prev[j] + 1).min(curr[j - 1] + 1).min(prev[j - 1] + cost);
         }
         std::mem::swap(&mut prev, &mut curr);
     }
@@ -179,11 +179,7 @@ fn word_hash_levenshtein(hashes1: &[u32], hashes2: &[u32]) -> u32 {
 /// 4. Final: adjusted LD + proxy
 ///
 /// Returns (score, accepted), where accepted = score <= result_threshold.
-pub fn words_match_score(
-    source: &str,
-    candidate: &str,
-    result_threshold: f32,
-) -> (f32, bool) {
+pub fn words_match_score(source: &str, candidate: &str, result_threshold: f32) -> (f32, bool) {
     let src_words = tokenize_words(source);
     let cand_words = tokenize_words(candidate);
     let proxy = alias_proxy_penalty(source, candidate);
@@ -293,10 +289,10 @@ pub fn delphi_heuristic_score(source: &str, candidate: &str, threshold: f32) -> 
 pub struct DelphiHeuristicMatch {
     pub source: String,
     pub translation: String,
-    pub score: f32,          // lower = better
-    pub word_score: f32,     // word-level score
-    pub sub_score: f32,      // substring score
-    pub prefix_score: f32,   // prefix score
+    pub score: f32,        // lower = better
+    pub word_score: f32,   // word-level score
+    pub sub_score: f32,    // substring score
+    pub prefix_score: f32, // prefix score
 }
 
 /// Search for similar translations using Delphi-style scoring.
@@ -374,10 +370,7 @@ mod tests {
     #[test]
     fn test_alias_proxy_penalty() {
         // Same alias count = 0 penalty
-        assert_eq!(
-            alias_proxy_penalty("<Alias=Player>", "<Alias=Player>"),
-            0.0
-        );
+        assert_eq!(alias_proxy_penalty("<Alias=Player>", "<Alias=Player>"), 0.0);
         // Different counts = penalty
         let penalty = alias_proxy_penalty("<Alias=Player>", "No alias");
         assert!(penalty > 0.0);

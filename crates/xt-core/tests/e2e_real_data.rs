@@ -469,11 +469,15 @@ fn e2e_esp_compare_self_benchmark() {
 
     println!("\n=== ESP Compare Self-Benchmark ===");
     println!("File: {}", SKYRIM_ESM);
-    let size_mb = std::fs::metadata(skyrim).map(|m| m.len() / 1024 / 1024).unwrap_or(0);
+    let size_mb = std::fs::metadata(skyrim)
+        .map(|m| m.len() / 1024 / 1024)
+        .unwrap_or(0);
     println!("Size: {} MB\n", size_mb);
 
     let workspace_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent().and_then(|p| p.parent()).unwrap_or_else(|| std::path::Path::new("."));
+        .parent()
+        .and_then(|p| p.parent())
+        .unwrap_or_else(|| std::path::Path::new("."));
     let project_data = workspace_root.join("Data");
 
     // Phase 1: SHA-256 hash
@@ -491,7 +495,11 @@ fn e2e_esp_compare_self_benchmark() {
     let mut parser2 = EspParser::with_game(&project_data, GameId::SkyrimSE).unwrap();
     parser2.load_strings_files(DATA_DIR, "skyrim");
     let loaded = parser2.strings_files.loaded_count();
-    println!("  Strings files ({} loaded): {}ms", loaded, t2.elapsed().as_millis());
+    println!(
+        "  Strings files ({} loaded): {}ms",
+        loaded,
+        t2.elapsed().as_millis()
+    );
 
     // Phase 4: ESP parse only (no strings)
     let t3 = std::time::Instant::now();
@@ -499,15 +507,28 @@ fn e2e_esp_compare_self_benchmark() {
     let mut file = std::fs::File::open(SKYRIM_ESM).unwrap();
     parser3.parse(&mut file).unwrap();
     let total = parser3.strings.len();
-    println!("  ESP parse (no strings, {} strings): {}ms", total, t3.elapsed().as_millis());
+    println!(
+        "  ESP parse (no strings, {} strings): {}ms",
+        total,
+        t3.elapsed().as_millis()
+    );
 
     // Phase 5: Full compare (self)
     let t4 = std::time::Instant::now();
-    let result = compare_esp_files(SKYRIM_ESM, SKYRIM_ESM, project_data.to_str(), GameId::SkyrimSE);
+    let result = compare_esp_files(
+        SKYRIM_ESM,
+        SKYRIM_ESM,
+        project_data.to_str(),
+        GameId::SkyrimSE,
+    );
     let compare_ms = t4.elapsed().as_millis();
     match &result {
         Ok(comp) => {
-            println!("  Full self-compare: {}ms (matched: {}, cache miss)", compare_ms, comp.matched_pairs.len());
+            println!(
+                "  Full self-compare: {}ms (matched: {}, cache miss)",
+                compare_ms,
+                comp.matched_pairs.len()
+            );
             assert_eq!(comp.added.len(), 0);
             assert_eq!(comp.removed.len(), 0);
         }
@@ -516,7 +537,12 @@ fn e2e_esp_compare_self_benchmark() {
 
     // Phase 6: Second compare (cache hit)
     let t5 = std::time::Instant::now();
-    let _ = compare_esp_files(SKYRIM_ESM, SKYRIM_ESM, project_data.to_str(), GameId::SkyrimSE);
+    let _ = compare_esp_files(
+        SKYRIM_ESM,
+        SKYRIM_ESM,
+        project_data.to_str(),
+        GameId::SkyrimSE,
+    );
     println!("  Cached self-compare: {}ms", t5.elapsed().as_millis());
 
     println!("\n✅ ESP Compare Benchmark PASSED");

@@ -15,7 +15,6 @@
 //! Fragments: version 1-5=TES5, 6=FO4
 //! ```
 
-
 /// VMAD 字符串属性
 #[derive(Clone, Debug)]
 pub struct VmadString {
@@ -123,8 +122,10 @@ impl VmadDecoder {
         // 跳过 Fragment 数据块（PERK/PACK/SCEN/INFO/QUST 在 Header 和 Scripts 之间嵌入片段）
         if has_fragments(obj_type) {
             if pos + 4 <= self.buffer.len() {
-                let _fragment_version = i16::from_le_bytes([self.buffer[pos], self.buffer[pos + 1]]);
-                let fragment_count = u16::from_le_bytes([self.buffer[pos + 2], self.buffer[pos + 3]]);
+                let _fragment_version =
+                    i16::from_le_bytes([self.buffer[pos], self.buffer[pos + 1]]);
+                let fragment_count =
+                    u16::from_le_bytes([self.buffer[pos + 2], self.buffer[pos + 3]]);
                 pos += 4;
                 let _ = skip_fragment_data(&self.buffer, &mut pos, fragment_count, obj_type);
             }
@@ -298,7 +299,11 @@ impl VmadDecoder {
     /// 变长字符串写回：重新构建 VMAD buffer
     ///
     /// 策略：重新序列化整个 VMAD 结构，在目标偏移量处替换字符串。
-    fn write_back_rebuild(&mut self, target_offset: usize, new_bytes: &[u8]) -> Result<(), VmadError> {
+    fn write_back_rebuild(
+        &mut self,
+        target_offset: usize,
+        new_bytes: &[u8],
+    ) -> Result<(), VmadError> {
         let mut pos = 0usize;
 
         // 读取 header
@@ -609,7 +614,12 @@ fn has_fragments(obj_type: i16) -> bool {
 /// - 4 = INFO → 每个片段 14 字节 (questFormID + fileOffset + dataLen + aliasID)
 /// - 5 = QUST → 每个片段包含 Stage/Objective 数据
 /// - 其他 → 无片段数据
-fn skip_fragment_data(data: &[u8], pos: &mut usize, fragment_count: u16, obj_type: i16) -> Result<(), VmadError> {
+fn skip_fragment_data(
+    data: &[u8],
+    pos: &mut usize,
+    fragment_count: u16,
+    obj_type: i16,
+) -> Result<(), VmadError> {
     let count = fragment_count as usize;
     let bytes_to_skip: usize = match obj_type {
         1 => count * 4,  // PERK: formID per fragment
@@ -631,7 +641,11 @@ fn skip_fragment_data(data: &[u8], pos: &mut usize, fragment_count: u16, obj_typ
 /// 用于解析时的快速路径，避免 buffer.to_vec() 堆分配。
 /// 支持跳过 Fragment 数据块（PERK/PACK/SCEN/INFO/QUST 记录）。
 /// 对 VMAD 缓冲区执行写回：在指定偏移处替换字符串，返回修改后的缓冲区
-pub fn write_vmad_string(data: &[u8], offset: usize, new_value: &str) -> Result<Vec<u8>, VmadError> {
+pub fn write_vmad_string(
+    data: &[u8],
+    offset: usize,
+    new_value: &str,
+) -> Result<Vec<u8>, VmadError> {
     // version 参数仅用于 VmadDecoder 构造，内部 write_back 从 buffer 读取实际版本
     let mut decoder = VmadDecoder::new(data, 5);
     decoder.write_back(offset, new_value)?;
@@ -677,9 +691,15 @@ pub(crate) fn decode_vmad_fast(data: &[u8], _version: i16) -> Vec<VmadString> {
 
     for _ in 0..script_count {
         // Read script name (u8 length prefix)
-        let name_len = if pos < data.len() { data[pos] as usize } else { break };
+        let name_len = if pos < data.len() {
+            data[pos] as usize
+        } else {
+            break;
+        };
         pos += 1;
-        if pos + name_len > data.len() { break; }
+        if pos + name_len > data.len() {
+            break;
+        }
         let script_name = std::str::from_utf8(&data[pos..pos + name_len])
             .unwrap_or("")
             .to_string();
@@ -695,9 +715,15 @@ pub(crate) fn decode_vmad_fast(data: &[u8], _version: i16) -> Vec<VmadString> {
 
         for _ in 0..prop_count {
             // Property name (u8 length prefix)
-            let pname_len = if pos < data.len() { data[pos] as usize } else { break };
+            let pname_len = if pos < data.len() {
+                data[pos] as usize
+            } else {
+                break;
+            };
             pos += 1;
-            if pos + pname_len > data.len() { break; }
+            if pos + pname_len > data.len() {
+                break;
+            }
             let prop_name = std::str::from_utf8(&data[pos..pos + pname_len])
                 .unwrap_or("")
                 .to_string();
@@ -708,14 +734,24 @@ pub(crate) fn decode_vmad_fast(data: &[u8], _version: i16) -> Vec<VmadString> {
             pos += 1;
 
             // Status (u8)
-            if pos >= data.len() { break; }
+            if pos >= data.len() {
+                break;
+            }
             pos += 1;
 
             // Read value based on type
             match prop_type_byte {
-                3 => { // String type
-                    if pos + 4 > data.len() { break; }
-                    let len = u32::from_le_bytes([data[pos], data[pos+1], data[pos+2], data[pos+3]]) as usize;
+                3 => {
+                    // String type
+                    if pos + 4 > data.len() {
+                        break;
+                    }
+                    let len = u32::from_le_bytes([
+                        data[pos],
+                        data[pos + 1],
+                        data[pos + 2],
+                        data[pos + 3],
+                    ]) as usize;
                     pos += 4;
                     let str_end = (pos + len).min(data.len());
                     let value = String::from_utf8_lossy(&data[pos..str_end]).to_string();
@@ -732,32 +768,78 @@ pub(crate) fn decode_vmad_fast(data: &[u8], _version: i16) -> Vec<VmadString> {
                         });
                     }
                 }
-                1 | 4 | 6 | 7 => { pos += 1; } // Null, Int (u8), Bool, Variable
-                2 => { pos += 4; } // Object (u32 formid)
-                5 => { pos += 4; } // Float (f32)
-                11 => { // Struct
-                    if pos + 4 > data.len() { break; }
-                    let count = u32::from_le_bytes([data[pos], data[pos+1], data[pos+2], data[pos+3]]) as usize;
+                1 | 4 | 6 | 7 => {
+                    pos += 1;
+                } // Null, Int (u8), Bool, Variable
+                2 => {
+                    pos += 4;
+                } // Object (u32 formid)
+                5 => {
+                    pos += 4;
+                } // Float (f32)
+                11 => {
+                    // Struct
+                    if pos + 4 > data.len() {
+                        break;
+                    }
+                    let count = u32::from_le_bytes([
+                        data[pos],
+                        data[pos + 1],
+                        data[pos + 2],
+                        data[pos + 3],
+                    ]) as usize;
                     pos += 4 + count * 12; // 3 × u32 per element
                 }
-                12 | 14 => { // StringArray, FloatArray
-                    if pos + 4 > data.len() { break; }
-                    let count = u32::from_le_bytes([data[pos], data[pos+1], data[pos+2], data[pos+3]]) as usize;
+                12 | 14 => {
+                    // StringArray, FloatArray
+                    if pos + 4 > data.len() {
+                        break;
+                    }
+                    let count = u32::from_le_bytes([
+                        data[pos],
+                        data[pos + 1],
+                        data[pos + 2],
+                        data[pos + 3],
+                    ]) as usize;
                     pos += 4 + count * 4;
                 }
-                13 => { // IntArray
-                    if pos + 4 > data.len() { break; }
-                    let count = u32::from_le_bytes([data[pos], data[pos+1], data[pos+2], data[pos+3]]) as usize;
+                13 => {
+                    // IntArray
+                    if pos + 4 > data.len() {
+                        break;
+                    }
+                    let count = u32::from_le_bytes([
+                        data[pos],
+                        data[pos + 1],
+                        data[pos + 2],
+                        data[pos + 3],
+                    ]) as usize;
                     pos += 4 + count * 4;
                 }
-                15 => { // BoolArray
-                    if pos + 4 > data.len() { break; }
-                    let count = u32::from_le_bytes([data[pos], data[pos+1], data[pos+2], data[pos+3]]) as usize;
+                15 => {
+                    // BoolArray
+                    if pos + 4 > data.len() {
+                        break;
+                    }
+                    let count = u32::from_le_bytes([
+                        data[pos],
+                        data[pos + 1],
+                        data[pos + 2],
+                        data[pos + 3],
+                    ]) as usize;
                     pos += 4 + count;
                 }
-                17 => { // ArrayStruct (FO4)
-                    if pos + 4 > data.len() { break; }
-                    let count = u32::from_le_bytes([data[pos], data[pos+1], data[pos+2], data[pos+3]]) as usize;
+                17 => {
+                    // ArrayStruct (FO4)
+                    if pos + 4 > data.len() {
+                        break;
+                    }
+                    let count = u32::from_le_bytes([
+                        data[pos],
+                        data[pos + 1],
+                        data[pos + 2],
+                        data[pos + 3],
+                    ]) as usize;
                     pos += 4;
                     for _ in 0..count {
                         pos += 12; // 3 × u32 per struct element
@@ -897,7 +979,7 @@ mod tests {
         data.extend_from_slice(b"Prp"); // propName
         data.push(3u8); // type=String
         data.push(0u8); // status
-        // String: u32 length = 2 (4 bytes: 02 00 00 00), then "Hi"
+                        // String: u32 length = 2 (4 bytes: 02 00 00 00), then "Hi"
         data.extend_from_slice(&2u32.to_le_bytes());
         data.extend_from_slice(b"Hi");
 
@@ -947,7 +1029,9 @@ mod tests {
         assert_eq!(strings[0].value, "Hi");
 
         // 替换为更长的字符串
-        decoder.write_back(strings[0].offset, "Hello World!").unwrap();
+        decoder
+            .write_back(strings[0].offset, "Hello World!")
+            .unwrap();
 
         // 重新解码验证
         let strings2 = decoder.decode();
@@ -1032,7 +1116,9 @@ mod tests {
         assert_eq!(strings[1].value, "Val2");
 
         // 替换第二个脚本的字符串为更长的值
-        decoder.write_back(strings[1].offset, "ReplacedValue").unwrap();
+        decoder
+            .write_back(strings[1].offset, "ReplacedValue")
+            .unwrap();
 
         let strings2 = decoder.decode();
         assert_eq!(strings2.len(), 2);
@@ -1060,7 +1146,7 @@ mod tests {
         data.extend_from_slice(b"Arr"); // propName
         data.push(12u8); // type=StringArray
         data.push(0u8); // status
-        // StringArray: count(u32) + strings with u8 len prefix
+                        // StringArray: count(u32) + strings with u8 len prefix
         data.extend_from_slice(&3u32.to_le_bytes()); // count=3
         data.push(3); // len
         data.extend_from_slice(b"Foo"); // "Foo"

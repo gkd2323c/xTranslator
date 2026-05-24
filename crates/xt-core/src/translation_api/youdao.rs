@@ -91,11 +91,12 @@ impl super::TranslationProvider for YoudaoProvider {
             }
         }
 
-        let translated = json["translation"][0]
-            .as_str()
-            .ok_or_else(|| {
-                anyhow::anyhow!("Youdao API: no 'translation' field in response — body: {}", body)
-            })?;
+        let translated = json["translation"][0].as_str().ok_or_else(|| {
+            anyhow::anyhow!(
+                "Youdao API: no 'translation' field in response — body: {}",
+                body
+            )
+        })?;
 
         Ok(super::restore_crlf_with_style(translated, crlf_style))
     }
@@ -122,10 +123,7 @@ mod tests {
 
     #[test]
     fn test_yooudao_sign() {
-        let provider = YoudaoProvider::new(
-            "test_app_key".to_string(),
-            "test_secret".to_string(),
-        );
+        let provider = YoudaoProvider::new("test_app_key".to_string(), "test_secret".to_string());
         let sign = provider.compute_sign("hello", "1435660288");
         assert!(!sign.is_empty());
         assert_eq!(sign.len(), 32);

@@ -797,6 +797,9 @@ pub struct AppConfigDto {
     /// true = auto-restore on startup; false = don't load until user manually Loads.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub spellcheck_loaded: Option<bool>,
+    /// Exception words list for toolbox TitleCase (newline-separated string).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub word_exception_list: Option<String>,
 }
 
 // ── ESP Write-back DTOs ──────────────────────────────────────────────

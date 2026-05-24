@@ -67,11 +67,7 @@ fn split_blocks(text: &str) -> Vec<String> {
 
     let mut blocks = Vec::new();
     let mut current = String::new();
-    let mut current_type = classify_char(
-        chars[0],
-        None,
-        chars.get(1).copied(),
-    );
+    let mut current_type = classify_char(chars[0], None, chars.get(1).copied());
     current.push(chars[0]);
 
     for i in 1..chars.len() {
@@ -122,7 +118,11 @@ pub fn reverse_rtl(text: &str) -> Option<String> {
         }
     }
 
-    if has_arabic { Some(result) } else { None }
+    if has_arabic {
+        Some(result)
+    } else {
+        None
+    }
 }
 
 /// Process a multi-line RTL string.
@@ -177,42 +177,157 @@ fn connects_left(ch: char) -> bool {
 fn shape_char(ch: char, pos: ArabicPosition) -> Option<char> {
     // Table: (isolated, final, initial, medial)
     let shaped = match ch {
-        '\u{0621}' => [Some('\u{FE80}'), None, None, None],                         // Hamza
-        '\u{0622}' => [Some('\u{FE81}'), Some('\u{FE82}'), None, None],              // Alef Madda
-        '\u{0623}' => [Some('\u{FE83}'), Some('\u{FE84}'), None, None],              // Alef Hamza Above
-        '\u{0624}' => [Some('\u{FE85}'), Some('\u{FE86}'), None, None],              // Waw Hamza
-        '\u{0625}' => [Some('\u{FE87}'), Some('\u{FE88}'), None, None],              // Alef Hamza Below
-        '\u{0626}' => [Some('\u{FE89}'), Some('\u{FE8A}'), Some('\u{FE8B}'), Some('\u{FE8C}')], // Ya Hamza
-        '\u{0627}' => [Some('\u{FE8D}'), Some('\u{FE8E}'), None, None],              // Alef
-        '\u{0628}' => [Some('\u{FE8F}'), Some('\u{FE90}'), Some('\u{FE91}'), Some('\u{FE92}')], // Ba
-        '\u{0629}' => [Some('\u{FE93}'), Some('\u{FE94}'), None, None],              // Teh Marbuta
-        '\u{062A}' => [Some('\u{FE95}'), Some('\u{FE96}'), Some('\u{FE97}'), Some('\u{FE98}')], // Ta
-        '\u{062B}' => [Some('\u{FE99}'), Some('\u{FE9A}'), Some('\u{FE9B}'), Some('\u{FE9C}')], // Tha
-        '\u{062C}' => [Some('\u{FE9D}'), Some('\u{FE9E}'), Some('\u{FE9F}'), Some('\u{FEA0}')], // Jeem
-        '\u{062D}' => [Some('\u{FEA1}'), Some('\u{FEA2}'), Some('\u{FEA3}'), Some('\u{FEA4}')], // Ha
-        '\u{062E}' => [Some('\u{FEA5}'), Some('\u{FEA6}'), Some('\u{FEA7}'), Some('\u{FEA8}')], // Kha
-        '\u{062F}' => [Some('\u{FEA9}'), Some('\u{FEAA}'), None, None],              // Dal
-        '\u{0630}' => [Some('\u{FEAB}'), Some('\u{FEAC}'), None, None],              // Thal
-        '\u{0631}' => [Some('\u{FEAD}'), Some('\u{FEAE}'), None, None],              // Ra
-        '\u{0632}' => [Some('\u{FEAF}'), Some('\u{FEB0}'), None, None],              // Zain
-        '\u{0633}' => [Some('\u{FEB1}'), Some('\u{FEB2}'), Some('\u{FEB3}'), Some('\u{FEB4}')], // Seen
-        '\u{0634}' => [Some('\u{FEB5}'), Some('\u{FEB6}'), Some('\u{FEB7}'), Some('\u{FEB8}')], // Sheen
-        '\u{0635}' => [Some('\u{FEB9}'), Some('\u{FEBA}'), Some('\u{FEBB}'), Some('\u{FEBC}')], // Sad
-        '\u{0636}' => [Some('\u{FEBD}'), Some('\u{FEBE}'), Some('\u{FEBF}'), Some('\u{FEC0}')], // Dad
-        '\u{0637}' => [Some('\u{FEC1}'), Some('\u{FEC2}'), Some('\u{FEC3}'), Some('\u{FEC4}')], // Tah
-        '\u{0638}' => [Some('\u{FEC5}'), Some('\u{FEC6}'), Some('\u{FEC7}'), Some('\u{FEC8}')], // Zah
-        '\u{0639}' => [Some('\u{FEC9}'), Some('\u{FECA}'), Some('\u{FECB}'), Some('\u{FECC}')], // Ain
-        '\u{063A}' => [Some('\u{FECD}'), Some('\u{FECE}'), Some('\u{FECF}'), Some('\u{FED0}')], // Ghain
-        '\u{0641}' => [Some('\u{FED1}'), Some('\u{FED2}'), Some('\u{FED3}'), Some('\u{FED4}')], // Fa
-        '\u{0642}' => [Some('\u{FED5}'), Some('\u{FED6}'), Some('\u{FED7}'), Some('\u{FED8}')], // Qaf
-        '\u{0643}' => [Some('\u{FED9}'), Some('\u{FEDA}'), Some('\u{FEDB}'), Some('\u{FEDC}')], // Kaf
-        '\u{0644}' => [Some('\u{FEDD}'), Some('\u{FEDE}'), Some('\u{FEDF}'), Some('\u{FEE0}')], // Lam
-        '\u{0645}' => [Some('\u{FEE1}'), Some('\u{FEE2}'), Some('\u{FEE3}'), Some('\u{FEE4}')], // Meem
-        '\u{0646}' => [Some('\u{FEE5}'), Some('\u{FEE6}'), Some('\u{FEE7}'), Some('\u{FEE8}')], // Noon
-        '\u{0647}' => [Some('\u{FEE9}'), Some('\u{FEEA}'), Some('\u{FEEB}'), Some('\u{FEEC}')], // Ha
-        '\u{0648}' => [Some('\u{FEED}'), Some('\u{FEEE}'), None, None],              // Waw
-        '\u{0649}' => [Some('\u{FEEF}'), Some('\u{FEF0}'), None, None],              // Alef Maksura
-        '\u{064A}' => [Some('\u{FEF1}'), Some('\u{FEF2}'), Some('\u{FEF3}'), Some('\u{FEF4}')], // Ya
+        '\u{0621}' => [Some('\u{FE80}'), None, None, None], // Hamza
+        '\u{0622}' => [Some('\u{FE81}'), Some('\u{FE82}'), None, None], // Alef Madda
+        '\u{0623}' => [Some('\u{FE83}'), Some('\u{FE84}'), None, None], // Alef Hamza Above
+        '\u{0624}' => [Some('\u{FE85}'), Some('\u{FE86}'), None, None], // Waw Hamza
+        '\u{0625}' => [Some('\u{FE87}'), Some('\u{FE88}'), None, None], // Alef Hamza Below
+        '\u{0626}' => [
+            Some('\u{FE89}'),
+            Some('\u{FE8A}'),
+            Some('\u{FE8B}'),
+            Some('\u{FE8C}'),
+        ], // Ya Hamza
+        '\u{0627}' => [Some('\u{FE8D}'), Some('\u{FE8E}'), None, None], // Alef
+        '\u{0628}' => [
+            Some('\u{FE8F}'),
+            Some('\u{FE90}'),
+            Some('\u{FE91}'),
+            Some('\u{FE92}'),
+        ], // Ba
+        '\u{0629}' => [Some('\u{FE93}'), Some('\u{FE94}'), None, None], // Teh Marbuta
+        '\u{062A}' => [
+            Some('\u{FE95}'),
+            Some('\u{FE96}'),
+            Some('\u{FE97}'),
+            Some('\u{FE98}'),
+        ], // Ta
+        '\u{062B}' => [
+            Some('\u{FE99}'),
+            Some('\u{FE9A}'),
+            Some('\u{FE9B}'),
+            Some('\u{FE9C}'),
+        ], // Tha
+        '\u{062C}' => [
+            Some('\u{FE9D}'),
+            Some('\u{FE9E}'),
+            Some('\u{FE9F}'),
+            Some('\u{FEA0}'),
+        ], // Jeem
+        '\u{062D}' => [
+            Some('\u{FEA1}'),
+            Some('\u{FEA2}'),
+            Some('\u{FEA3}'),
+            Some('\u{FEA4}'),
+        ], // Ha
+        '\u{062E}' => [
+            Some('\u{FEA5}'),
+            Some('\u{FEA6}'),
+            Some('\u{FEA7}'),
+            Some('\u{FEA8}'),
+        ], // Kha
+        '\u{062F}' => [Some('\u{FEA9}'), Some('\u{FEAA}'), None, None], // Dal
+        '\u{0630}' => [Some('\u{FEAB}'), Some('\u{FEAC}'), None, None], // Thal
+        '\u{0631}' => [Some('\u{FEAD}'), Some('\u{FEAE}'), None, None], // Ra
+        '\u{0632}' => [Some('\u{FEAF}'), Some('\u{FEB0}'), None, None], // Zain
+        '\u{0633}' => [
+            Some('\u{FEB1}'),
+            Some('\u{FEB2}'),
+            Some('\u{FEB3}'),
+            Some('\u{FEB4}'),
+        ], // Seen
+        '\u{0634}' => [
+            Some('\u{FEB5}'),
+            Some('\u{FEB6}'),
+            Some('\u{FEB7}'),
+            Some('\u{FEB8}'),
+        ], // Sheen
+        '\u{0635}' => [
+            Some('\u{FEB9}'),
+            Some('\u{FEBA}'),
+            Some('\u{FEBB}'),
+            Some('\u{FEBC}'),
+        ], // Sad
+        '\u{0636}' => [
+            Some('\u{FEBD}'),
+            Some('\u{FEBE}'),
+            Some('\u{FEBF}'),
+            Some('\u{FEC0}'),
+        ], // Dad
+        '\u{0637}' => [
+            Some('\u{FEC1}'),
+            Some('\u{FEC2}'),
+            Some('\u{FEC3}'),
+            Some('\u{FEC4}'),
+        ], // Tah
+        '\u{0638}' => [
+            Some('\u{FEC5}'),
+            Some('\u{FEC6}'),
+            Some('\u{FEC7}'),
+            Some('\u{FEC8}'),
+        ], // Zah
+        '\u{0639}' => [
+            Some('\u{FEC9}'),
+            Some('\u{FECA}'),
+            Some('\u{FECB}'),
+            Some('\u{FECC}'),
+        ], // Ain
+        '\u{063A}' => [
+            Some('\u{FECD}'),
+            Some('\u{FECE}'),
+            Some('\u{FECF}'),
+            Some('\u{FED0}'),
+        ], // Ghain
+        '\u{0641}' => [
+            Some('\u{FED1}'),
+            Some('\u{FED2}'),
+            Some('\u{FED3}'),
+            Some('\u{FED4}'),
+        ], // Fa
+        '\u{0642}' => [
+            Some('\u{FED5}'),
+            Some('\u{FED6}'),
+            Some('\u{FED7}'),
+            Some('\u{FED8}'),
+        ], // Qaf
+        '\u{0643}' => [
+            Some('\u{FED9}'),
+            Some('\u{FEDA}'),
+            Some('\u{FEDB}'),
+            Some('\u{FEDC}'),
+        ], // Kaf
+        '\u{0644}' => [
+            Some('\u{FEDD}'),
+            Some('\u{FEDE}'),
+            Some('\u{FEDF}'),
+            Some('\u{FEE0}'),
+        ], // Lam
+        '\u{0645}' => [
+            Some('\u{FEE1}'),
+            Some('\u{FEE2}'),
+            Some('\u{FEE3}'),
+            Some('\u{FEE4}'),
+        ], // Meem
+        '\u{0646}' => [
+            Some('\u{FEE5}'),
+            Some('\u{FEE6}'),
+            Some('\u{FEE7}'),
+            Some('\u{FEE8}'),
+        ], // Noon
+        '\u{0647}' => [
+            Some('\u{FEE9}'),
+            Some('\u{FEEA}'),
+            Some('\u{FEEB}'),
+            Some('\u{FEEC}'),
+        ], // Ha
+        '\u{0648}' => [Some('\u{FEED}'), Some('\u{FEEE}'), None, None], // Waw
+        '\u{0649}' => [Some('\u{FEEF}'), Some('\u{FEF0}'), None, None], // Alef Maksura
+        '\u{064A}' => [
+            Some('\u{FEF1}'),
+            Some('\u{FEF2}'),
+            Some('\u{FEF3}'),
+            Some('\u{FEF4}'),
+        ], // Ya
         _ => return None,
     };
 
@@ -228,12 +343,12 @@ fn shape_char(ch: char, pos: ArabicPosition) -> Option<char> {
 fn deshape_char(ch: char) -> Option<char> {
     // Build reverse map from all presentation forms to base chars
     let base_chars = [
-        '\u{0621}', '\u{0622}', '\u{0623}', '\u{0624}', '\u{0625}', '\u{0626}',
-        '\u{0627}', '\u{0628}', '\u{0629}', '\u{062A}', '\u{062B}', '\u{062C}',
-        '\u{062D}', '\u{062E}', '\u{062F}', '\u{0630}', '\u{0631}', '\u{0632}',
-        '\u{0633}', '\u{0634}', '\u{0635}', '\u{0636}', '\u{0637}', '\u{0638}',
-        '\u{0639}', '\u{063A}', '\u{0641}', '\u{0642}', '\u{0643}', '\u{0644}',
-        '\u{0645}', '\u{0646}', '\u{0647}', '\u{0648}', '\u{0649}', '\u{064A}',
+        '\u{0621}', '\u{0622}', '\u{0623}', '\u{0624}', '\u{0625}', '\u{0626}', '\u{0627}',
+        '\u{0628}', '\u{0629}', '\u{062A}', '\u{062B}', '\u{062C}', '\u{062D}', '\u{062E}',
+        '\u{062F}', '\u{0630}', '\u{0631}', '\u{0632}', '\u{0633}', '\u{0634}', '\u{0635}',
+        '\u{0636}', '\u{0637}', '\u{0638}', '\u{0639}', '\u{063A}', '\u{0641}', '\u{0642}',
+        '\u{0643}', '\u{0644}', '\u{0645}', '\u{0646}', '\u{0647}', '\u{0648}', '\u{0649}',
+        '\u{064A}',
     ];
 
     for &base in &base_chars {
@@ -329,7 +444,7 @@ mod tests {
         assert_eq!(mirror_symbol('{'), '}');
         assert_eq!(mirror_symbol('['), ']');
         assert_eq!(mirror_symbol('A'), 'A'); // no change
-        // < and > are NOT mirrored (Bethesda tags)
+                                             // < and > are NOT mirrored (Bethesda tags)
         assert_eq!(mirror_symbol('<'), '<');
         assert_eq!(mirror_symbol('>'), '>');
     }

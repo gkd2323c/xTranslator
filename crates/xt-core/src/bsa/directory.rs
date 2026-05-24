@@ -270,10 +270,7 @@ mod tests {
 
         // Extension matching is case-sensitive for str_to_num part,
         // so use lowercase consistently (Bethesda uses lowercase in BSAs).
-        assert_eq!(
-            bsa_hash64("test", ".kf"),
-            bsa_hash64("test", ".kf")
-        );
+        assert_eq!(bsa_hash64("test", ".kf"), bsa_hash64("test", ".kf"));
     }
 
     #[test]

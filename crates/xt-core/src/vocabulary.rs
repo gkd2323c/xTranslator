@@ -32,7 +32,9 @@ fn parse_vocabulary_content(content: &str) -> Vec<String> {
             if trimmed.starts_with('#') || trimmed.is_empty() {
                 return None;
             }
-            trimmed.strip_prefix("STRINGS=").map(|s| s.trim().to_string())
+            trimmed
+                .strip_prefix("STRINGS=")
+                .map(|s| s.trim().to_string())
         })
         .collect()
 }
@@ -76,14 +78,8 @@ impl Vocabulary {
         codepage: Option<&CodepageTable>,
     ) {
         for ext in &["strings", "dlstrings", "ilstrings"] {
-            let source_path = strings_dir.join(format!(
-                "{}_{}.{}",
-                base_name, source_lang, ext
-            ));
-            let target_path = strings_dir.join(format!(
-                "{}_{}.{}",
-                base_name, target_lang, ext
-            ));
+            let source_path = strings_dir.join(format!("{}_{}.{}", base_name, source_lang, ext));
+            let target_path = strings_dir.join(format!("{}_{}.{}", base_name, target_lang, ext));
 
             if !source_path.exists() || !target_path.exists() {
                 continue;
@@ -105,8 +101,7 @@ impl Vocabulary {
                 }
                 if let Some(target_text) = target_file.strings.get(&id) {
                     if !target_text.is_empty() {
-                        self.pairs
-                            .push((source_text.clone(), target_text.clone()));
+                        self.pairs.push((source_text.clone(), target_text.clone()));
                     }
                 }
             }

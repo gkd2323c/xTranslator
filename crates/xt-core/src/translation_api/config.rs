@@ -75,31 +75,38 @@ impl ApiTranslatorConfig {
         for prefix in &prefixes {
             let mut cfg = ApiProviderConfig::default();
 
-            cfg.enabled = raw.get(&format!("{}_enabled", prefix))
+            cfg.enabled = raw
+                .get(&format!("{}_enabled", prefix))
                 .map(|v| v == "true")
                 .unwrap_or(false);
 
-            cfg.label = raw.get(&format!("{}_Label", prefix))
+            cfg.label = raw
+                .get(&format!("{}_Label", prefix))
                 .cloned()
                 .unwrap_or_else(|| prefix.to_string());
 
-            cfg.char_limit = raw.get(&format!("{}_CharLimit", prefix))
+            cfg.char_limit = raw
+                .get(&format!("{}_CharLimit", prefix))
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(5000);
 
-            cfg.array_limit = raw.get(&format!("{}_ArrayLimit", prefix))
+            cfg.array_limit = raw
+                .get(&format!("{}_ArrayLimit", prefix))
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(0);
 
-            cfg.array_pause_secs = raw.get(&format!("{}_ArrayTimePause", prefix))
+            cfg.array_pause_secs = raw
+                .get(&format!("{}_ArrayTimePause", prefix))
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(0);
 
-            cfg.max_char_per_min = raw.get(&format!("{}_ArrayMaxCharPerMin", prefix))
+            cfg.max_char_per_min = raw
+                .get(&format!("{}_ArrayMaxCharPerMin", prefix))
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(0);
 
-            cfg.single_pause_secs = raw.get(&format!("{}_SingleTimePause", prefix))
+            cfg.single_pause_secs = raw
+                .get(&format!("{}_SingleTimePause", prefix))
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(1);
 
@@ -123,10 +130,18 @@ impl ApiTranslatorConfig {
                     // Skip known config keys
                     if matches!(
                         suffix,
-                        "enabled" | "Label" | "CharLimit" | "ArrayLimit"
-                            | "ArrayTimePause" | "ArrayMaxCharPerMin"
-                            | "SingleTimePause" | "ApiUrl" | "ProApiUrl"
-                            | "DefaultQuery" | "Powered" | "PoweredUrl"
+                        "enabled"
+                            | "Label"
+                            | "CharLimit"
+                            | "ArrayLimit"
+                            | "ArrayTimePause"
+                            | "ArrayMaxCharPerMin"
+                            | "SingleTimePause"
+                            | "ApiUrl"
+                            | "ProApiUrl"
+                            | "DefaultQuery"
+                            | "Powered"
+                            | "PoweredUrl"
                     ) {
                         continue;
                     }
@@ -247,8 +262,14 @@ DeepL_russian=ru
         let config = ApiTranslatorConfig::parse(content);
         let dl = config.get("DeepL").unwrap();
         assert!(dl.enabled);
-        assert_eq!(dl.api_url.as_deref(), Some("https://api-free.deepl.com/v2/translate"));
-        assert_eq!(dl.pro_api_url.as_deref(), Some("https://api.deepl.com/v2/translate"));
+        assert_eq!(
+            dl.api_url.as_deref(),
+            Some("https://api-free.deepl.com/v2/translate")
+        );
+        assert_eq!(
+            dl.pro_api_url.as_deref(),
+            Some("https://api.deepl.com/v2/translate")
+        );
         assert_eq!(dl.lang_codes.get("english").unwrap(), "en");
     }
 

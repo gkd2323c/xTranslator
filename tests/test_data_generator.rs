@@ -31,7 +31,9 @@ impl TestDataGenerator {
 
     /// Generate synthetic SkyString data for testing
     pub fn generate_sky_strings(&self, count: usize) -> Vec<SkyString> {
-        let record_sigs = ["INFO", "NPC_", "QUST", "BOOK", "WEAP", "ARMO", "MGEF", "ACTI"];
+        let record_sigs = [
+            "INFO", "NPC_", "QUST", "BOOK", "WEAP", "ARMO", "MGEF", "ACTI",
+        ];
         let mut strings = Vec::with_capacity(count);
 
         for i in 0..count {
@@ -54,13 +56,7 @@ impl TestDataGenerator {
             let record_sig = make_sig(record_sigs[i % 8]);
             let field_sig = make_sig("FULL");
 
-            let mut sk = SkyString::new(
-                (i + 1) as u32,
-                source,
-                translation,
-                record_sig,
-                field_sig,
-            );
+            let mut sk = SkyString::new((i + 1) as u32, source, translation, record_sig, field_sig);
 
             sk.list_index = (i % 3) as u8;
             sk.colab_id = (i % 256) as u8;
@@ -117,7 +113,8 @@ impl TestDataGenerator {
 
         for s in strings {
             if !s.translation.is_empty() {
-                sf.strings.insert(s.esp_ptr.str_id as u32, s.translation.clone());
+                sf.strings
+                    .insert(s.esp_ptr.str_id as u32, s.translation.clone());
             }
         }
 
@@ -159,10 +156,16 @@ Falkreath=佛克瑞斯城
     /// Generate test data configuration
     pub fn generate_test_config(&self) -> HashMap<String, String> {
         let mut config = HashMap::new();
-        config.insert("test_data_dir".to_string(), self.temp_dir.path().to_string_lossy().to_string());
+        config.insert(
+            "test_data_dir".to_string(),
+            self.temp_dir.path().to_string_lossy().to_string(),
+        );
         config.insert("string_count".to_string(), "1000".to_string());
         config.insert("translated_ratio".to_string(), "0.33".to_string());
-        config.insert("record_types".to_string(), "INFO,NPC_,QUST,BOOK,WEAP,ARMO,MGEF,ACTI".to_string());
+        config.insert(
+            "record_types".to_string(),
+            "INFO,NPC_,QUST,BOOK,WEAP,ARMO,MGEF,ACTI".to_string(),
+        );
         config
     }
 
@@ -183,8 +186,14 @@ Falkreath=佛克瑞斯城
                 xml.push_str(&format!("    <id>{}</id>\n", s.esp_ptr.str_id));
                 xml.push_str(&format!("    <record_sig>{}</record_sig>\n", rec));
                 xml.push_str(&format!("    <field_sig>{}</field_sig>\n", fld));
-                xml.push_str(&format!("    <source>{}</source>\n", self.escape_xml(&s.source)));
-                xml.push_str(&format!("    <translation>{}</translation>\n", self.escape_xml(&s.translation)));
+                xml.push_str(&format!(
+                    "    <source>{}</source>\n",
+                    self.escape_xml(&s.source)
+                ));
+                xml.push_str(&format!(
+                    "    <translation>{}</translation>\n",
+                    self.escape_xml(&s.translation)
+                ));
                 xml.push_str("  </string>\n");
             }
         }
@@ -226,9 +235,8 @@ mod tests {
         assert_eq!(first.record_sig, make_sig("INFO"));
 
         // Check variety
-        let record_types: std::collections::HashSet<_> = strings.iter()
-            .map(|s| s.record_sig)
-            .collect();
+        let record_types: std::collections::HashSet<_> =
+            strings.iter().map(|s| s.record_sig).collect();
         assert!(record_types.len() > 5);
     }
 

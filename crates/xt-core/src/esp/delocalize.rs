@@ -90,10 +90,7 @@ fn build_normalized_index(strings: &[SkyString]) -> HashMap<(u32, [u8; 4]), Vec<
 
     for sk in strings {
         if let Some(norm_hash) = sk.normalized_hash {
-            index
-                .entry((norm_hash, sk.field_sig))
-                .or_default()
-                .push(sk);
+            index.entry((norm_hash, sk.field_sig)).or_default().push(sk);
         }
     }
 
@@ -176,9 +173,10 @@ fn delocalize_record(
                         let norm_key = (norm_hash, field.header.name);
                         if let Some(candidates) = normalized_index.get(&norm_key) {
                             // 验证规范化文本实际匹配（哈希碰撞检查）
-                            if let Some(sk) = candidates.iter().find(|sk| {
-                                sk.source_normalized.as_deref() == Some(norm.as_str())
-                            }) {
+                            if let Some(sk) = candidates
+                                .iter()
+                                .find(|sk| sk.source_normalized.as_deref() == Some(norm.as_str()))
+                            {
                                 let trans_text = if !sk.translation.is_empty() {
                                     &sk.translation
                                 } else {
@@ -223,11 +221,7 @@ fn reassign_grup(grup: &EspGrup, next_id: &mut u32, result: &mut Vec<(u32, Strin
     }
 }
 
-fn reassign_record(
-    record: &EspRecord,
-    next_id: &mut u32,
-    result: &mut Vec<(u32, String, u8)>,
-) {
+fn reassign_record(record: &EspRecord, next_id: &mut u32, result: &mut Vec<(u32, String, u8)>) {
     if record.raw {
         return;
     }
@@ -341,10 +335,13 @@ mod tests {
     #[test]
     fn test_delocalize_minimal() {
         // Create a record with inline text
-        let record = make_test_record(0x1234, vec![
-            make_string_field(*b"EDID", "TestNPC"),
-            make_string_field(*b"FULL", "Hello World"),
-        ]);
+        let record = make_test_record(
+            0x1234,
+            vec![
+                make_string_field(*b"EDID", "TestNPC"),
+                make_string_field(*b"FULL", "Hello World"),
+            ],
+        );
 
         let grup = EspGrup {
             header: GenericHeader {
@@ -382,18 +379,15 @@ mod tests {
         };
 
         // Verify the record has inline text
-        assert_eq!(esp.top_level_grups[0].records[0].fields[1].buffer, b"Hello World\0");
+        assert_eq!(
+            esp.top_level_grups[0].records[0].fields[1].buffer,
+            b"Hello World\0"
+        );
     }
 
     #[test]
     fn test_string_map_building() {
-        let mut sk = SkyString::new(
-            0,
-            "Hello".to_string(),
-            String::new(),
-            *b"INFO",
-            *b"FULL",
-        );
+        let mut sk = SkyString::new(0, "Hello".to_string(), String::new(), *b"INFO", *b"FULL");
         sk.esp_ptr.form_id = 0x1234;
 
         let entries = vec![sk];

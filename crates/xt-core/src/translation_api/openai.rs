@@ -74,9 +74,7 @@ impl OpenAIProvider {
         if let Some(ref cfg) = self.config {
             if let Some(oai) = cfg.get("OpenAI") {
                 if let Some(ref template) = oai.default_query {
-                    return template.replace("%lang_dest%", dest_lang)
-                        + "\n\n"
-                        + text;
+                    return template.replace("%lang_dest%", dest_lang) + "\n\n" + text;
                 }
             }
         }
@@ -115,7 +113,13 @@ struct ChatChoice {
 
 #[async_trait]
 impl super::TranslationProvider for OpenAIProvider {
-    async fn translate(&self, text: &str, _source_lang: &str, target_lang: &str, proxy: Option<&crate::config::AppConfig>) -> Result<String> {
+    async fn translate(
+        &self,
+        text: &str,
+        _source_lang: &str,
+        target_lang: &str,
+        proxy: Option<&crate::config::AppConfig>,
+    ) -> Result<String> {
         let (protected, crlf_style) = super::protect_crlf(text);
         let query = self.build_query(&protected, target_lang);
 

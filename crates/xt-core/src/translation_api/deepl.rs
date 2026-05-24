@@ -74,7 +74,13 @@ impl DeepLProvider {
 
 #[async_trait::async_trait]
 impl super::TranslationProvider for DeepLProvider {
-    async fn translate(&self, text: &str, source_lang: &str, target_lang: &str, proxy: Option<&crate::config::AppConfig>) -> Result<String> {
+    async fn translate(
+        &self,
+        text: &str,
+        source_lang: &str,
+        target_lang: &str,
+        proxy: Option<&crate::config::AppConfig>,
+    ) -> Result<String> {
         let (protected, crlf_style) = super::protect_crlf(text);
         let client = match proxy {
             Some(cfg) => super::build_client(cfg),

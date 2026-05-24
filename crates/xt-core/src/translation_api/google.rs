@@ -57,9 +57,9 @@ impl super::TranslationProvider for GoogleProvider {
             .map_err(|e| anyhow::anyhow!("Google API invalid JSON: {}", e))?;
 
         // Google response: [[["text", "orig", ...], ...], null, "src"]
-        let segments = json[0].as_array().ok_or_else(|| {
-            anyhow::anyhow!("Google API: unexpected response format")
-        })?;
+        let segments = json[0]
+            .as_array()
+            .ok_or_else(|| anyhow::anyhow!("Google API: unexpected response format"))?;
 
         let mut result = String::new();
         for seg in segments {

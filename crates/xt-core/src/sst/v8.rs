@@ -7,9 +7,87 @@ use std::fs::File;
 use std::io::{BufReader, BufWriter, Read, Result, Write};
 use std::path::Path;
 
+/// SST 版本魔数定义 (Little-Endian)
+/// 用于标识不同版本的 SST 文件格式
+mod sst_magic {
+    /// v1: SSU2 (基础格式)
+    pub const V1: u32 = 0x32555353; // $32555353
+    /// v2: SSU3
+    pub const V2: u32 = 0x33555353; // $33555353
+    /// v3: SSU4
+    pub const V3: u32 = 0x34555353; // $34555353
+    /// v4: SSU5
+    pub const V4: u32 = 0x35555353; // $35555353
+    /// v5: SSU6 (添加 real edidHash)
+    pub const V5: u32 = 0x36555353; // $36555353
+    /// v6: SSU7 (添加 colabId)
+    pub const V6: u32 = 0x37555353; // $37555353
+    /// v7: SSU8 (添加 colab label)
+    pub const V7: u32 = 0x38555353; // $38555353
+    /// v8: SSU9 (添加 master list)
+    pub const V8: u32 = 0x39555353; // $39555353
+    /// 当前最新版本
+    pub const CURRENT: u32 = V8;
+}
+
+/// SST 版本号
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum SstVersion {
+    V1,
+    V2,
+    V3,
+    V4,
+    V5,
+    V6,
+    V7,
+    V8,
+}
+
+impl SstVersion {
+    /// 从魔数获取版本号
+    pub fn from_magic(magic: u32) -> Option<Self> {
+        match magic {
+            0x32555353 => Some(Self::V1),
+            0x33555353 => Some(Self::V2),
+            0x34555353 => Some(Self::V3),
+            0x35555353 => Some(Self::V4),
+            0x36555353 => Some(Self::V5),
+            0x37555353 => Some(Self::V6),
+            0x38555353 => Some(Self::V7),
+            0x39555353 => Some(Self::V8),
+            _ => None,
+        }
+    }
+
+    /// 获取版本号 (1-8)
+    pub fn as_u32(&self) -> u32 {
+        match self {
+            Self::V1 => 1,
+            Self::V2 => 2,
+            Self::V3 => 3,
+            Self::V4 => 4,
+            Self::V5 => 5,
+            Self::V6 => 6,
+            Self::V7 => 7,
+            Self::V8 => 8,
+        }
+    }
+
+    /// 获取版本比较值（用于 >= 比较）
+    fn cmp_value(&self) -> u32 {
+        self.as_u32()
+    }
+}
+
+impl std::fmt::Display for SstVersion {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "v{}", self.as_u32())
+    }
+}
+
 /// SST v8 魔数: $39555353 (little-endian bytes: 53 55 53 39)
 /// 对应 ASCII: "9USS"（倒序）
-pub const SST_V8_MAGIC: u32 = 0x39555353;
+pub const SST_V8_MAGIC: u32 = sst_magic::V8;
 
 /// SST 字典结构
 ///
@@ -24,9 +102,11 @@ pub const SST_V8_MAGIC: u32 = 0x39555353;
 /// - v7: 添加 Colab Label List
 /// - v8: 添加 Master List（游戏主文件列表）
 ///
-/// 当前使用 v8 格式，向后兼容 v6+。
+/// 当前使用 v8 格式，向后兼容 v1-v7。
 #[derive(Clone, Debug)]
 pub struct SstDictionary {
+    /// 读取的 SST 版本
+    pub version: Option<SstVersion>,
     /// Master 文件列表 (v8+)
     /// 记录 SST 创建时的游戏主文件（如 "Skyrim.esm", "Update.esm"）
     /// 用于验证 SST 与当前游戏版本的兼容性
@@ -43,6 +123,7 @@ pub struct SstDictionary {
 impl SstDictionary {
     pub fn new() -> Self {
         Self {
+            version: None,
             master_list: Vec::new(),
             colab_labels: Vec::new(),
             entries: Vec::new(),
@@ -52,6 +133,7 @@ impl SstDictionary {
     /// 从 SkyString 列表创建 SST 字典
     pub fn from_entries(entries: Vec<SkyString>) -> Self {
         Self {
+            version: Some(SstVersion::V8),
             master_list: Vec::new(),
             colab_labels: Vec::new(),
             entries,
@@ -65,6 +147,7 @@ impl SstDictionary {
     /// - `masters`: 游戏主文件列表（如 ["Skyrim.esm", "Update.esm"]）
     pub fn from_entries_with_masters(entries: Vec<SkyString>, masters: Vec<String>) -> Self {
         Self {
+            version: Some(SstVersion::V8),
             master_list: masters,
             colab_labels: Vec::new(),
             entries,
@@ -89,68 +172,63 @@ impl SstDictionary {
         self.write_to(&mut writer)
     }
 
-    /// 读取 SST v8 文件
+    /// 读取 SST 文件（支持 v1-v8 所有版本）
     ///
-    /// 文件格式（小端序）：
-    /// 1. 魔数 (4 bytes): 0x39555353 ("9USS")
-    /// 2. v4 占位符 (1 byte): 保留字段
-    /// 3. Master List (v8+):
-    ///    - 数量 (4 bytes, i32)
-    ///    - 每个 master: Delphi 字符串
-    /// 4. Colab Label List (v7+):
-    ///    - 数量 (4 bytes, i32)
-    ///    - 每个标签: ID (4 bytes) + 标签名 (Delphi 字符串)
-    /// 5. 字符串条目 (循环到 EOF):
-    ///    - listIndex (1 byte): 0=.STRINGS, 1=.DLSTRINGS, 2=.ILSTRINGS
-    ///    - EspPointerLite (24 bytes):
-    ///      - str_id (4 bytes, i32)
-    ///      - form_id (4 bytes, u32)
-    ///      - record_sig (4 bytes)
-    ///      - field_sig (4 bytes)
-    ///      - index (2 bytes, u16)
-    ///      - index_max (2 bytes, u16)
-    ///      - edid_hash (4 bytes, u32)
-    ///    - colabId (1 byte): 协作 ID
-    ///    - sparams (1 byte): 状态参数
-    ///    - source (Delphi 字符串)
-    ///    - translation (Delphi 字符串)
+    /// 根据魔数自动检测版本，然后按各版本规范解析。
+    ///
+    /// 各版本差异：
+    /// - v1-v2: 只有 listIndex + sparams + source + translation
+    /// - v3+: 添加 str_id, form_id
+    /// - v4+: 添加 index (v3 有可选), indexMax + edidHash
+    /// - v5+: 添加 colabId
+    /// - v6+: 添加 colabId 到条目
+    /// - v7+: 添加 Colab Label List (文件级别)
+    /// - v8+: 添加 Master List (文件级别)
+    ///
+    /// v1-v5 的 EspPointer 字段布局：
+    /// - v1: 无 str_id/form_id，直接从 sparams 开始
+    /// - v2: 无 str_id/form_id，直接从 sparams 开始
+    /// - v3: str_id(4) + form_id(4) + field_sig(4) [+ index(2) 可选] + sparams
+    /// - v4: str_id(4) + form_id(4) + record_sig(4) + field_sig(4) + index(2) + indexMax(2) + edidHash(4) + sparams
+    /// - v5: 同 v4 + colabId
     pub fn read_from<R: Read>(reader: &mut R) -> Result<Self> {
-        // 1. 魔数
+        // 1. 魔数 - 用于确定版本
         let magic = reader.read_u32::<LittleEndian>()?;
-        if magic != SST_V8_MAGIC {
-            return Err(std::io::Error::new(
+        let version = SstVersion::from_magic(magic).ok_or_else(|| {
+            std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
-                format!(
-                    "Invalid SST magic: expected {:08X}, got {:08X}",
-                    SST_V8_MAGIC, magic
-                ),
-            ));
-        }
+                format!("Unknown SST magic: {:08X}", magic),
+            )
+        })?;
 
         let mut dict = Self::new();
+        dict.version = Some(version);
 
-        // 2. v4 占位符 (1 byte)
-        let _v4_flag = reader.read_u8()?;
+        // 2. v4 占位符 (v3+ 有这个字节)
+        if version.as_u32() >= 3 {
+            let _v4_flag = reader.read_u8()?;
+        }
 
         // 3. Master List (v8+)
-        // 记录 SST 创建时的游戏主文件，用于版本验证
-        let master_count = reader.read_i32::<LittleEndian>()?;
-        for _ in 0..master_count {
-            let s = read_delphi_string(reader)?;
-            dict.master_list.push(s);
+        if version >= SstVersion::V8 {
+            let master_count = reader.read_i32::<LittleEndian>()?;
+            for _ in 0..master_count {
+                let s = read_delphi_string(reader)?;
+                dict.master_list.push(s);
+            }
         }
 
         // 4. Colab Label List (v7+)
-        // 多人协作翻译时的身份标识
-        let colab_count = reader.read_i32::<LittleEndian>()?;
-        for _ in 0..colab_count {
-            let id = reader.read_i32::<LittleEndian>()? as u32;
-            let label = read_delphi_string(reader)?;
-            dict.colab_labels.push((id, label));
+        if version >= SstVersion::V7 {
+            let colab_count = reader.read_i32::<LittleEndian>()?;
+            for _ in 0..colab_count {
+                let id = reader.read_i32::<LittleEndian>()? as u32;
+                let label = read_delphi_string(reader)?;
+                dict.colab_labels.push((id, label));
+            }
         }
 
         // 5. 字符串条目 (循环到 EOF)
-        // 每个条目包含源文本、翻译、位置信息和状态标志
         loop {
             // 尝试读取 listIndex (1 byte)
             let mut list_index_buf = [0u8; 1];
@@ -161,46 +239,56 @@ impl SstDictionary {
             }
             let list_index = list_index_buf[0];
 
-            // 读取 EspPointerLite (24 bytes)
-            // 这是字符串在 ESP 文件中的精确位置信息
-            let str_id = reader.read_i32::<LittleEndian>()?;
-            let form_id = reader.read_u32::<LittleEndian>()?;
-            let mut record_sig = [0u8; 4];
-            reader.read_exact(&mut record_sig)?;
-            let mut field_sig = [0u8; 4];
-            reader.read_exact(&mut field_sig)?;
-            let index = reader.read_u16::<LittleEndian>()?;
-            let index_max = reader.read_u16::<LittleEndian>()?;
-            let edid_hash = reader.read_u32::<LittleEndian>()?;
+            // 读取 EspPointer 并填充各字段
+            let mut esp_ptr = EspPointer::null();
+            let mut colab_id = 0u8;
 
-            let esp_ptr = EspPointer {
-                str_id,
-                form_id,
-                record_sig,
-                field_sig,
-                index,
-                index_max,
-                edid_hash,
-            };
+            // v2+: 有 str_id 和 form_id
+            if version >= SstVersion::V2 {
+                esp_ptr.str_id = reader.read_i32::<LittleEndian>()?;
+                esp_ptr.form_id = reader.read_u32::<LittleEndian>()?;
+            }
 
-            // colabId (v6+)
-            // 用于多人协作翻译时的记录归属
-            let colab_id = reader.read_u8()?;
+            // v4+: 有 record_sig
+            if version >= SstVersion::V4 {
+                reader.read_exact(&mut esp_ptr.record_sig)?;
+            }
 
-            // sparams (1 byte)
-            // 状态参数：translated/locked/incomplete 等标志位
+            // 所有版本都有 field_sig
+            reader.read_exact(&mut esp_ptr.field_sig)?;
+
+            // v3+: 有 index (但 v3 是可选的，这里简化处理)
+            if version >= SstVersion::V3 {
+                esp_ptr.index = reader.read_u16::<LittleEndian>()?;
+            }
+
+            // v4+: 有 index_max 和 edid_hash
+            if version >= SstVersion::V4 {
+                esp_ptr.index_max = reader.read_u16::<LittleEndian>()?;
+                esp_ptr.edid_hash = reader.read_u32::<LittleEndian>()?;
+            }
+
+            // v6+: 条目中有 colabId
+            if version >= SstVersion::V6 {
+                colab_id = reader.read_u8()?;
+            }
+
+            // sparams (1 byte) - 所有版本都有
             let params_byte = reader.read_u8()?;
             let params = SkyStringParams(params_byte);
 
             // source string
-            // 原文（通常为英文）
             let source = read_delphi_string(reader)?;
 
             // translation string
-            // 译文（目标语言）
             let translation = read_delphi_string(reader)?;
 
-            let mut sk = SkyString::new(0, source, translation, *b"UNKN", *b"UNKN");
+            // 跳过空翻译（与 Delphi 一致）
+            if source.is_empty() && translation.is_empty() {
+                continue;
+            }
+
+            let mut sk = SkyString::new(0, source, translation, esp_ptr.record_sig, esp_ptr.field_sig);
             sk.esp_ptr = esp_ptr;
             sk.params = params;
             sk.colab_id = colab_id;
@@ -275,7 +363,11 @@ impl SstDictionary {
             std::collections::HashMap::with_capacity(self.entries.len());
         for (i, entry) in self.entries.iter().enumerate() {
             index.insert(
-                (entry.esp_ptr.str_id, entry.esp_ptr.record_sig, entry.esp_ptr.field_sig),
+                (
+                    entry.esp_ptr.str_id,
+                    entry.esp_ptr.record_sig,
+                    entry.esp_ptr.field_sig,
+                ),
                 i,
             );
         }
@@ -391,6 +483,7 @@ mod tests {
         let dict2 = SstDictionary::read_from(&mut buf.as_slice()).unwrap();
 
         // Verify
+        assert_eq!(dict2.version, Some(SstVersion::V8));
         assert_eq!(dict.master_list, dict2.master_list);
         assert_eq!(dict.colab_labels.len(), dict2.colab_labels.len());
         assert_eq!(dict.entries.len(), dict2.entries.len());
@@ -441,11 +534,23 @@ mod tests {
     #[test]
     fn test_merge_new_entries() {
         let mut target = SstDictionary::new();
-        target.entries.push(SkyString::new(0, "hello".into(), "".into(), *b"INFO", *b"FULL"));
+        target.entries.push(SkyString::new(
+            0,
+            "hello".into(),
+            "".into(),
+            *b"INFO",
+            *b"FULL",
+        ));
         target.entries[0].esp_ptr.str_id = 1;
 
         let mut source = SstDictionary::new();
-        source.entries.push(SkyString::new(0, "world".into(), "世界".into(), *b"INFO", *b"FULL"));
+        source.entries.push(SkyString::new(
+            0,
+            "world".into(),
+            "世界".into(),
+            *b"INFO",
+            *b"FULL",
+        ));
         source.entries[0].esp_ptr.str_id = 2;
 
         let stats = target.merge_from(&source, false);
@@ -456,11 +561,23 @@ mod tests {
     #[test]
     fn test_merge_update_existing() {
         let mut target = SstDictionary::new();
-        target.entries.push(SkyString::new(0, "hello".into(), "".into(), *b"INFO", *b"FULL"));
+        target.entries.push(SkyString::new(
+            0,
+            "hello".into(),
+            "".into(),
+            *b"INFO",
+            *b"FULL",
+        ));
         target.entries[0].esp_ptr.str_id = 1;
 
         let mut source = SstDictionary::new();
-        source.entries.push(SkyString::new(0, "hello".into(), "你好".into(), *b"INFO", *b"FULL"));
+        source.entries.push(SkyString::new(
+            0,
+            "hello".into(),
+            "你好".into(),
+            *b"INFO",
+            *b"FULL",
+        ));
         source.entries[0].esp_ptr.str_id = 1;
 
         let stats = target.merge_from(&source, false);
@@ -471,11 +588,23 @@ mod tests {
     #[test]
     fn test_merge_conflict_no_overwrite() {
         let mut target = SstDictionary::new();
-        target.entries.push(SkyString::new(0, "hello".into(), "你好".into(), *b"INFO", *b"FULL"));
+        target.entries.push(SkyString::new(
+            0,
+            "hello".into(),
+            "你好".into(),
+            *b"INFO",
+            *b"FULL",
+        ));
         target.entries[0].esp_ptr.str_id = 1;
 
         let mut source = SstDictionary::new();
-        source.entries.push(SkyString::new(0, "hello".into(), "您好".into(), *b"INFO", *b"FULL"));
+        source.entries.push(SkyString::new(
+            0,
+            "hello".into(),
+            "您好".into(),
+            *b"INFO",
+            *b"FULL",
+        ));
         source.entries[0].esp_ptr.str_id = 1;
 
         let stats = target.merge_from(&source, false);
@@ -486,15 +615,111 @@ mod tests {
     #[test]
     fn test_merge_conflict_with_overwrite() {
         let mut target = SstDictionary::new();
-        target.entries.push(SkyString::new(0, "hello".into(), "你好".into(), *b"INFO", *b"FULL"));
+        target.entries.push(SkyString::new(
+            0,
+            "hello".into(),
+            "你好".into(),
+            *b"INFO",
+            *b"FULL",
+        ));
         target.entries[0].esp_ptr.str_id = 1;
 
         let mut source = SstDictionary::new();
-        source.entries.push(SkyString::new(0, "hello".into(), "您好".into(), *b"INFO", *b"FULL"));
+        source.entries.push(SkyString::new(
+            0,
+            "hello".into(),
+            "您好".into(),
+            *b"INFO",
+            *b"FULL",
+        ));
         source.entries[0].esp_ptr.str_id = 1;
 
         let stats = target.merge_from(&source, true);
         assert_eq!(stats.overwritten, 1);
         assert_eq!(target.entries[0].translation, "您好");
+    }
+
+    #[test]
+    fn test_read_sst_v4_format() {
+        use crate::sst::encoding::write_delphi_string;
+
+        // v4 format structure (based on Delphi loadVocabUserCache):
+        // - list_index(1)
+        // - str_id(4), form_id(4) [v2+]
+        // - record_sig(4), field_sig(4) [v4+]
+        // - index(2), index_max(2), edid_hash(4) [v4+]
+        // - sparams(1)
+        // - source, translation [Delphi strings]
+        let mut buf = Vec::new();
+        buf.extend_from_slice(&0x35555353u32.to_le_bytes()); // v4 magic
+        buf.push(0); // v4 placeholder flag
+        buf.push(1); // list_index = .DLSTRINGS
+        buf.extend_from_slice(&1i32.to_le_bytes()); // str_id
+        buf.extend_from_slice(&0x01000001u32.to_le_bytes()); // form_id
+        buf.extend_from_slice(b"QUST"); // record_sig
+        buf.extend_from_slice(b"FULL"); // field_sig
+        buf.extend_from_slice(&1u16.to_le_bytes()); // index
+        buf.extend_from_slice(&10u16.to_le_bytes()); // index_max
+        buf.extend_from_slice(&0x12345678u32.to_le_bytes()); // edid_hash
+        buf.push(0x01); // sparams
+        write_delphi_string(&mut buf, "Quest Name").unwrap();
+        write_delphi_string(&mut buf, "任务名称").unwrap();
+
+        let dict = SstDictionary::read_from(&mut buf.as_slice()).unwrap();
+        assert_eq!(dict.version, Some(SstVersion::V4));
+        assert_eq!(dict.entries.len(), 1);
+        assert_eq!(dict.entries[0].source, "Quest Name");
+        assert_eq!(dict.entries[0].esp_ptr.str_id, 1);
+        assert_eq!(dict.entries[0].esp_ptr.record_sig, *b"QUST");
+        assert_eq!(dict.entries[0].esp_ptr.edid_hash, 0x12345678);
+        assert_eq!(dict.entries[0].list_index, 1);
+    }
+
+    #[test]
+    fn test_read_sst_v7_format() {
+        use crate::sst::encoding::write_delphi_string;
+
+        // v7: adds Colab Label List (file-level)
+        let mut buf = Vec::new();
+        buf.extend_from_slice(&0x38555353u32.to_le_bytes()); // v7 magic
+        buf.push(0); // v4 placeholder flag
+        // Colab Label List (v7+): count(4) + [(id:4 + label)]
+        buf.extend_from_slice(&2i32.to_le_bytes()); // 2 labels
+        buf.extend_from_slice(&1i32.to_le_bytes()); // label 1 id
+        write_delphi_string(&mut buf, "Alice").unwrap();
+        buf.extend_from_slice(&2i32.to_le_bytes()); // label 2 id
+        write_delphi_string(&mut buf, "Bob").unwrap();
+        // Entry
+        buf.push(0); // list_index
+        buf.extend_from_slice(&5i32.to_le_bytes()); // str_id
+        buf.extend_from_slice(&0x02000005u32.to_le_bytes()); // form_id
+        buf.extend_from_slice(b"INFO");
+        buf.extend_from_slice(b"FULL");
+        buf.extend_from_slice(&0u16.to_le_bytes()); // index
+        buf.extend_from_slice(&0u16.to_le_bytes()); // index_max
+        buf.extend_from_slice(&0u32.to_le_bytes()); // edid_hash
+        buf.push(1); // colabId (v6+)
+        buf.push(0x01); // sparams
+        write_delphi_string(&mut buf, "Hello").unwrap();
+        write_delphi_string(&mut buf, "你好").unwrap();
+
+        let dict = SstDictionary::read_from(&mut buf.as_slice()).unwrap();
+        assert_eq!(dict.version, Some(SstVersion::V7));
+        assert_eq!(dict.colab_labels.len(), 2);
+        assert_eq!(dict.colab_labels[0], (1, "Alice".to_string()));
+        assert_eq!(dict.entries.len(), 1);
+        assert_eq!(dict.entries[0].colab_id, 1);
+    }
+
+    #[test]
+    fn test_sst_version_enum() {
+        assert_eq!(SstVersion::V1.as_u32(), 1);
+        assert_eq!(SstVersion::V8.as_u32(), 8);
+        assert!(SstVersion::V5 >= SstVersion::V4);
+        assert!(SstVersion::V1 < SstVersion::V8);
+
+        assert_eq!(SstVersion::from_magic(0x39555353), Some(SstVersion::V8));
+        assert_eq!(SstVersion::from_magic(0x32555353), Some(SstVersion::V1));
+        assert_eq!(SstVersion::from_magic(0x99999999), None);
     }
 }

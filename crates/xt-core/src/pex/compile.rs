@@ -8,9 +8,9 @@
 //! so opcode references in object bodies remain valid. This is the same approach
 //! Delphi xTranslator uses.
 
+use super::types::{PexScript, PexStringEntry, PexTranslatableString};
 use std::collections::HashMap;
-use std::io::{self, Write, Cursor};
-use super::types::{PexScript, PexTranslatableString, PexStringEntry};
+use std::io::{self, Cursor, Write};
 
 /// Compilation result
 #[derive(Debug)]
@@ -104,7 +104,10 @@ pub fn compile_pex(
     buffer.write_all(&0xFA57C0DEu32.to_le_bytes())?;
 
     // Header
-    buffer.write_all(&[original_script.header.major_version, original_script.header.minor_version])?;
+    buffer.write_all(&[
+        original_script.header.major_version,
+        original_script.header.minor_version,
+    ])?;
     buffer.write_all(&original_script.header.game_id.to_le_bytes())?;
     buffer.write_all(&original_script.header.compile_time.to_le_bytes())?;
 
@@ -217,21 +220,28 @@ mod tests {
     #[test]
     fn test_build_string_table_updates_translations() {
         let original = vec![
-            PexStringEntry { index: 0, text: "Hello".to_string() },
-            PexStringEntry { index: 1, text: "World".to_string() },
-            PexStringEntry { index: 2, text: "Test".to_string() },
-        ];
-
-        let translations = vec![
-            PexTranslatableString {
-                object_name: "MyScript".to_string(),
-                state_name: String::new(),
-                function_name: String::new(),
-                string_type: "DebugString".to_string(),
-                source_text: "Hello".to_string(),
-                translation: "你好".to_string(),
+            PexStringEntry {
+                index: 0,
+                text: "Hello".to_string(),
+            },
+            PexStringEntry {
+                index: 1,
+                text: "World".to_string(),
+            },
+            PexStringEntry {
+                index: 2,
+                text: "Test".to_string(),
             },
         ];
+
+        let translations = vec![PexTranslatableString {
+            object_name: "MyScript".to_string(),
+            state_name: String::new(),
+            function_name: String::new(),
+            string_type: "DebugString".to_string(),
+            source_text: "Hello".to_string(),
+            translation: "你好".to_string(),
+        }];
 
         let (updated, _, count) = build_string_table(&original, &translations);
 
@@ -245,8 +255,14 @@ mod tests {
     #[test]
     fn test_build_string_table_preserves_indices() {
         let original = vec![
-            PexStringEntry { index: 0, text: "A".to_string() },
-            PexStringEntry { index: 5, text: "B".to_string() },
+            PexStringEntry {
+                index: 0,
+                text: "A".to_string(),
+            },
+            PexStringEntry {
+                index: 5,
+                text: "B".to_string(),
+            },
         ];
 
         let (updated, _, _) = build_string_table(&original, &[]);

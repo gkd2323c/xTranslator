@@ -673,7 +673,12 @@
     "trim": "Trim",
     "targetTranslation": "Translation",
     "targetSource": "Source",
-    "targetBoth": "Both"
+    "targetBoth": "Both",
+    "exceptionWords": "Exception Words",
+    "exceptionWordsCount": "{{count}} words excluded from capitalization",
+    "exceptionWordsHint": "Enter one word per line. These words will not be capitalized in Title Case. Example: is, a, the, an, of",
+    "exceptionWordsTitle": "Edit Exception Words",
+    "exceptionWordsSaved": "{{count}} exception words saved"
   },
   "spellcheck": {
     "title": "Spell Check",

@@ -49,6 +49,10 @@ pub struct AppConfig {
     /// true = auto-restore on startup; false = don't load until user manually Loads.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub spellcheck_loaded: Option<bool>,
+    /// Exception words list for toolbox TitleCase (e.g., "is", "a", "the" - words that should not be capitalized).
+    /// Stored as newline-separated string, persisted in config.json.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub word_exception_list: Option<String>,
 }
 
 impl AppConfig {
@@ -74,24 +78,60 @@ impl AppConfig {
     }
 
     pub fn apply(&mut self, other: &Self) {
-        if other.openai_api_key.is_some() { self.openai_api_key = other.openai_api_key.clone(); }
-        if other.deepl_api_key.is_some() { self.deepl_api_key = other.deepl_api_key.clone(); }
-        if other.baidu_app_id.is_some() { self.baidu_app_id = other.baidu_app_id.clone(); }
-        if other.baidu_key.is_some() { self.baidu_key = other.baidu_key.clone(); }
-        if other.youdao_app_key.is_some() { self.youdao_app_key = other.youdao_app_key.clone(); }
-        if other.youdao_secret_key.is_some() { self.youdao_secret_key = other.youdao_secret_key.clone(); }
-        if other.azure_key.is_some() { self.azure_key = other.azure_key.clone(); }
-        if other.current_provider.is_some() { self.current_provider = other.current_provider.clone(); }
-        if other.theme.is_some() { self.theme = other.theme.clone(); }
-        if other.language.is_some() { self.language = other.language.clone(); }
-        if other.proxy_server.is_some() { self.proxy_server = other.proxy_server.clone(); }
-        if other.proxy_port.is_some() { self.proxy_port = other.proxy_port; }
-        if other.proxy_username.is_some() { self.proxy_username = other.proxy_username.clone(); }
-        if other.proxy_password.is_some() { self.proxy_password = other.proxy_password.clone(); }
-        if other.esp_mode.is_some() { self.esp_mode = other.esp_mode; }
-        if other.spellcheck_dictionary.is_some() { self.spellcheck_dictionary = other.spellcheck_dictionary.clone(); }
-        if other.spellcheck_active.is_some() { self.spellcheck_active = other.spellcheck_active; }
-        if other.spellcheck_loaded.is_some() { self.spellcheck_loaded = other.spellcheck_loaded; }
+        if other.openai_api_key.is_some() {
+            self.openai_api_key = other.openai_api_key.clone();
+        }
+        if other.deepl_api_key.is_some() {
+            self.deepl_api_key = other.deepl_api_key.clone();
+        }
+        if other.baidu_app_id.is_some() {
+            self.baidu_app_id = other.baidu_app_id.clone();
+        }
+        if other.baidu_key.is_some() {
+            self.baidu_key = other.baidu_key.clone();
+        }
+        if other.youdao_app_key.is_some() {
+            self.youdao_app_key = other.youdao_app_key.clone();
+        }
+        if other.youdao_secret_key.is_some() {
+            self.youdao_secret_key = other.youdao_secret_key.clone();
+        }
+        if other.azure_key.is_some() {
+            self.azure_key = other.azure_key.clone();
+        }
+        if other.current_provider.is_some() {
+            self.current_provider = other.current_provider.clone();
+        }
+        if other.theme.is_some() {
+            self.theme = other.theme.clone();
+        }
+        if other.language.is_some() {
+            self.language = other.language.clone();
+        }
+        if other.proxy_server.is_some() {
+            self.proxy_server = other.proxy_server.clone();
+        }
+        if other.proxy_port.is_some() {
+            self.proxy_port = other.proxy_port;
+        }
+        if other.proxy_username.is_some() {
+            self.proxy_username = other.proxy_username.clone();
+        }
+        if other.proxy_password.is_some() {
+            self.proxy_password = other.proxy_password.clone();
+        }
+        if other.esp_mode.is_some() {
+            self.esp_mode = other.esp_mode;
+        }
+        if other.spellcheck_dictionary.is_some() {
+            self.spellcheck_dictionary = other.spellcheck_dictionary.clone();
+        }
+        if other.spellcheck_active.is_some() {
+            self.spellcheck_active = other.spellcheck_active;
+        }
+        if other.spellcheck_loaded.is_some() {
+            self.spellcheck_loaded = other.spellcheck_loaded;
+        }
     }
 }
 

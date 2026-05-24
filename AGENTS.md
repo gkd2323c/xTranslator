@@ -202,6 +202,29 @@ Quick checks:
 - Latest commit → `RELEASE.md`
 - When deleting a doc file, run `rg <filename> --include '*.md'` to find stale references
 
+## CodeGraph
+
+CodeGraph builds a semantic knowledge graph of the codebase (`.codegraph/` exists). CodeGraph is NOT configured as an opencode MCP server — use CLI commands instead.
+
+**Before any codegraph operation**, run `codegraph sync` to refresh the index.
+
+**Never call `codegraph_explore` or `codegraph_context` directly in the main session** — these return large amounts of source code. Instead, delegate exploration to subagents/Explore agents with this instruction:
+
+> This project has CodeGraph initialized. Run `codegraph sync` first, then use `codegraph_explore` as PRIMARY tool — it returns full source from all relevant files in one call. Do NOT re-read files it already returned source for.
+
+**CLI equivalents** (use via Bash tool):
+
+| MCP Tool (unavailable) | CLI Replacement |
+|------------------------|-----------------|
+| `codegraph_search` | `codegraph query <symbol>` |
+| `codegraph_callers` / `codegraph_callees` | `codegraph query "function <name>"` (less precise) |
+| `codegraph_impact` | `codegraph affected <file>` |
+| `codegraph_node` | `codegraph query "<symbol>"` |
+| `codegraph_files` | `codegraph files` |
+| `codegraph_status` | `codegraph status` |
+
+If `.codegraph/` didn't exist, ask user to run `codegraph init -i`.
+
 ## Known Limitations
 
 - E2E tests need real Skyrim.esm.

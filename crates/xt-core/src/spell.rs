@@ -78,10 +78,10 @@ impl HunspellHandle {
                 .get(b"Hunspell_create")
                 .map_err(|e| format!("Hunspell_create not found: {}", e))?;
 
-            let aff_c = std::ffi::CString::new(aff_path)
-                .map_err(|e| format!("Invalid aff path: {}", e))?;
-            let dic_c = std::ffi::CString::new(dic_path)
-                .map_err(|e| format!("Invalid dic path: {}", e))?;
+            let aff_c =
+                std::ffi::CString::new(aff_path).map_err(|e| format!("Invalid aff path: {}", e))?;
+            let dic_c =
+                std::ffi::CString::new(dic_path).map_err(|e| format!("Invalid dic path: {}", e))?;
 
             let handle = create(aff_c.as_ptr(), dic_c.as_ptr());
             if handle.is_null() {
@@ -282,7 +282,11 @@ impl SpellChecker {
 
     /// Add a word to the persistent ignore list.
     pub fn add_ignore(&mut self, word: &str) {
-        if !self.ignore_list.iter().any(|w| w.eq_ignore_ascii_case(word)) {
+        if !self
+            .ignore_list
+            .iter()
+            .any(|w| w.eq_ignore_ascii_case(word))
+        {
             self.ignore_list.push(word.to_string());
         }
         let hash = hash_word(word);
@@ -420,10 +424,9 @@ impl SpellChecker {
 // ── Word splitting ───────────────────────────────────────────────
 
 const WORD_DELIMITERS: &[char] = &[
-    ' ', '\t', '\r', '\n', '.', ',', '!', '?', ':', ';',
-    '-', '\'', '"', '(', ')', '[', ']', '{', '}', '/', '\\',
-    '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
-    '+', '=', '*', '&', '%', '$', '#', '@', '~', '`', '|',
+    ' ', '\t', '\r', '\n', '.', ',', '!', '?', ':', ';', '-', '\'', '"', '(', ')', '[', ']', '{',
+    '}', '/', '\\', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '+', '=', '*', '&', '%', '$',
+    '#', '@', '~', '`', '|',
 ];
 
 const END_LINE_CHARS: &[char] = &['.', '!', '?', '\r', '\n'];
@@ -649,7 +652,10 @@ mod tests {
     #[test]
     fn test_default_ignore_path_uses_spellcheck_parent_dir() {
         let ignore_path = SpellChecker::default_ignore_path_for_dict_dir("SpellCheck/dictionaries");
-        assert_eq!(ignore_path.file_name().and_then(|name| name.to_str()), Some("ignore.txt"));
+        assert_eq!(
+            ignore_path.file_name().and_then(|name| name.to_str()),
+            Some("ignore.txt")
+        );
         assert_eq!(
             ignore_path
                 .parent()

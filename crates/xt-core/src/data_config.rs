@@ -118,13 +118,7 @@ pub fn parse_field_size_ref(path: &Path) -> HashMap<String, FieldSizeInfo> {
             let max_size = u32::from_str(right).ok()?;
 
             let key = format!("{}:{}", rec.to_uppercase(), field.to_uppercase());
-            Some((
-                key,
-                FieldSizeInfo {
-                    max_size,
-                    can_wrap,
-                },
-            ))
+            Some((key, FieldSizeInfo { max_size, can_wrap }))
         })
         .collect()
 }
@@ -189,10 +183,13 @@ mod tests {
 
     fn temp_file(content: &str) -> PathBuf {
         let dir = std::env::temp_dir();
-        let path = dir.join(format!("xt_test_{}.txt", std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()));
+        let path = dir.join(format!(
+            "xt_test_{}.txt",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
         fs::write(&path, content).unwrap();
         path
     }

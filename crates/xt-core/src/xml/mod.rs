@@ -501,11 +501,7 @@ pub fn write_xml_export<W: Write>(
                 escape(&rec_text)
             )?;
         } else {
-            writeln!(
-                writer,
-                r#"      <REC>{}</REC>"#,
-                escape(&rec_text)
-            )?;
+            writeln!(writer, r#"      <REC>{}</REC>"#, escape(&rec_text))?;
         }
 
         writeln!(writer, "      <Source>{}</Source>", escape(&entry.source))?;

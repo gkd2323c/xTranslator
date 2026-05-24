@@ -111,7 +111,11 @@ fn benchmark_memory_patterns() {
     }
     let t = start.elapsed();
     println!("  HashMap with capacity 50K   : {:?}", t);
-    assert!(t < Duration::from_millis(100), "HashMap alloc too slow: {:?}", t);
+    assert!(
+        t < Duration::from_millis(100),
+        "HashMap alloc too slow: {:?}",
+        t
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -131,7 +135,11 @@ fn benchmark_regex_operations() {
     let _n: usize = strings.iter().filter(|s| re.is_match(s)).count();
     let t = start.elapsed();
     println!("  Simple regex 10K            : {:?}", t);
-    assert!(t < Duration::from_millis(200), "simple regex too slow: {:?}", t);
+    assert!(
+        t < Duration::from_millis(200),
+        "simple regex too slow: {:?}",
+        t
+    );
 
     // Complex regex
     let start = Instant::now();
@@ -139,7 +147,11 @@ fn benchmark_regex_operations() {
     let _n: usize = strings.iter().filter(|s| re.is_match(s)).count();
     let t = start.elapsed();
     println!("  Complex regex 10K           : {:?}", t);
-    assert!(t < Duration::from_millis(300), "complex regex too slow: {:?}", t);
+    assert!(
+        t < Duration::from_millis(300),
+        "complex regex too slow: {:?}",
+        t
+    );
 
     // Multiple regex patterns
     let start = Instant::now();
@@ -154,7 +166,11 @@ fn benchmark_regex_operations() {
         .count();
     let t = start.elapsed();
     println!("  Multi-pattern regex 10K     : {:?}", t);
-    assert!(t < Duration::from_millis(400), "multi regex too slow: {:?}", t);
+    assert!(
+        t < Duration::from_millis(400),
+        "multi regex too slow: {:?}",
+        t
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -182,14 +198,22 @@ fn benchmark_file_io() {
     let t_write = start.elapsed();
     let size_kb = content.len() / 1024;
     println!("  Write ~{}KB file             : {:?}", size_kb, t_write);
-    assert!(t_write < Duration::from_secs(1), "write too slow: {:?}", t_write);
+    assert!(
+        t_write < Duration::from_secs(1),
+        "write too slow: {:?}",
+        t_write
+    );
 
     // Read
     let start = Instant::now();
     let _read_back = std::fs::read_to_string(&file_path).unwrap();
     let t_read = start.elapsed();
     println!("  Read back                   : {:?}", t_read);
-    assert!(t_read < Duration::from_millis(500), "read too slow: {:?}", t_read);
+    assert!(
+        t_read < Duration::from_millis(500),
+        "read too slow: {:?}",
+        t_read
+    );
 
     let _ = std::fs::remove_file(&file_path);
 }
@@ -220,14 +244,22 @@ fn benchmark_json_serialization() {
     let json_string = serde_json::to_string(&data).unwrap();
     let t = start.elapsed();
     println!("  Serialize 10K objects       : {:?}", t);
-    assert!(t < Duration::from_millis(500), "serialize too slow: {:?}", t);
+    assert!(
+        t < Duration::from_millis(500),
+        "serialize too slow: {:?}",
+        t
+    );
 
     // Deserialize
     let start = Instant::now();
     let _restored: Vec<serde_json::Value> = serde_json::from_str(&json_string).unwrap();
     let t = start.elapsed();
     println!("  Deserialize 10K objects     : {:?}", t);
-    assert!(t < Duration::from_millis(300), "deserialize too slow: {:?}", t);
+    assert!(
+        t < Duration::from_millis(300),
+        "deserialize too slow: {:?}",
+        t
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -258,7 +290,11 @@ fn benchmark_concurrent_operations() {
     }
     let t = start.elapsed();
     println!("  4 threads filter 50K        : {:?}", t);
-    assert!(t < Duration::from_millis(200), "concurrent too slow: {:?}", t);
+    assert!(
+        t < Duration::from_millis(200),
+        "concurrent too slow: {:?}",
+        t
+    );
 }
 
 // ---------------------------------------------------------------------------
