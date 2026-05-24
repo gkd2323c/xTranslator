@@ -48,6 +48,7 @@ C20: Jaccard threshold 0.5 for vocabulary overlap matching (`MIN_JACCARD` in `ma
 api: `load_esp` → `LoadEspResponse { total, compressed_records, strings_loaded, parse_time_ms, record_counts, cached, esp_hash }`
 api: `load_sst` → `LoadSstResponse { matched, unmatched, updated_ids, tier_exact, tier_edid, tier_normalized, tier_vocab, ambiguous, pending_skipped, old_data_preserved, warning, big_warning }`
 api: `save_sst` → `()`
+api: `sst_merge` → `MergeStatsDto { added, updated, overwritten, conflicts_skipped }` (merge another SST file; takes source_path + overwrite flag)
 api: `get_esp_header` → `EspHeaderInfoDto { version, num_records, next_object_id, author, description, masters[], flags }`
 api: `save_esp` → `SaveEspResponse { bytes_written, records_modified }` (direct ESP write-back; takes `SaveEspRequest { path, create_backup }`)
 api: `finalize_esp` → `FinalizeEspResponse { esp_path, strings_files[], records_modified }` (SST→ESP rebuild+serialize+Strings export)
@@ -75,14 +76,16 @@ api: `translate_string` → `String` (current provider, `spawn_blocking`)
 api: `set_openai_api_key` → `()` (memory only, no disk persistence)
 api: `set_deepl_api_key` → `()` (memory only, no disk persistence)
 api: `set_translation_provider` → `()` (switch between openai/deepl/baidu/youdao)
-api: `get_translation_providers` → `TranslationProvidersResponse { providers[], openaiConfigured, deeplConfigured, baiduConfigured, youdaoConfigured }`
+api: `get_translation_providers` → `TranslationProvidersResponse { providers[], openaiConfigured, deeplConfigured, baiduConfigured, youdaoConfigured, azureConfigured, googleConfigured }`
 api: `set_baidu_api_key` → `()` (takes app_id + key, memory only)
 api: `set_yooudao_api_key` → `()` (takes app_key + secret_key, memory only)
+api: `set_azure_api_key` → `()` (takes api_key, memory only)
 api: `tcsc_batch_convert` → `Vec<u32>` (batch convert filtered translations; direction: "to_simplified"|"to_traditional", optional ids)
 api: `tcsc_convert` → `String` (single-string TCSC conversion; takes text + direction)
 api: `rtl_reverse` → `String` (reverse RTL text for Arabic/Hebrew display)
 api: `shape_arabic` → `String` (logical-order → presentation forms)
 api: `deshape_arabic` → `String` (presentation forms → logical base chars)
+api: `rtl_preview` → `String` (live RTL preview; takes text + apply_reverse: bool)
 api: `load_vocabulary` → `VocabularyInfo { pair_count, base_names }` (parse vocabulary.txt, enrich heuristic search)
 
 #### XML
@@ -117,6 +120,7 @@ api: `get_fuz_audio_data` → `Vec<u8>` (extract WAV bytes from FUZ file)
 api: `get_fuz_lip_data` → `FuzLipDataResponse { lip_data: Option<LipDataDto>, duration_secs, sample_rate, channels }` (extract LIP keyframe data from FUZ file)
 
 api: `build_dialog_tree` → `DialogTreeDto { npcs[] }` (group INFO by parent DIAL FormID, associate NPC_ names)
+api: `export_dial_html` → `()` (export dialog tree as HTML; takes title)
 
 #### Config
 
@@ -155,7 +159,60 @@ api: `auto_backup_sst` → `AutoBackupResponse { backup_path, total_backups }` (
 #### Tooling
 
 api: `toolbox_transform` → `u32` (modified count; takes tool name, target [source|translation|both], optional ids, optional header_text)
+api: `toolbox_load_exception_words` → `()` (load exception words from config; takes optional words string)
+api: `toolbox_get_exception_words` → `Vec<String>` (get current exception words list)
+api: `write_text_file` → `()` (write text content to file; takes path + content; for export reports)
 
+#### Collaboration Labels
+yy|
+api: `colab_get_labels` → `Vec<(u32, String)>` (get all 8 collaboration label slots)
+api: `colab_set_label` → `()` (update label name; takes slot_id: u32 + name: String)
+api: `colab_assign` → `()` (assign collaboration label to strings; takes ids: Vec<u32> + slot_id: u32)
+api: `colab_filter` → `()` (filter strings by collaboration slot; takes slot_id: u32 + mode: u8; 0=off,1=include,2=exclude)
+yy|
+#### Spell Check
+yy|
+api: `spell_check_load` → `()` (load Hunspell DLL + dictionary; takes dll_path + dict_dir)
+api: `spell_check_unload` → `()` (unload spell checker)
+api: `spell_check_toggle` → `bool` (toggle active state; returns new state)
+api: `spell_check_config` → `SpellCheckConfigDto` (get available dictionaries + current state)
+api: `spell_check_text` → `SpellCheckResultDto` (analyze text for spelling errors)
+api: `spell_check_suggestions` → `Vec<String>` (get spelling suggestions for a word)
+api: `spell_check_ignore` → `()` (add word to ignore list)
+yy|
+#### Header Processor
+yy|
+##### Rules
+yy|
+api: `header_rules_load` → `()` (load rules from INI file; takes path)
+api: `header_rules_list` → `Vec<HeaderRuleDto>` (get current loaded rules)
+api: `header_rules_toggle` → `()` (toggle rule enabled; takes index: usize)
+api: `header_rules_apply` → `HeaderApplyResult` (apply rules to all loaded strings)
+api: `header_rules_save` → `()` (save rules to INI file; takes path)
+api: `header_rules_delete` → `Vec<HeaderRuleDto>` (delete rule at index; returns updated list)
+api: `header_rules_move` → `Vec<HeaderRuleDto>` (move rule up/down; takes index + direction)
+api: `header_rules_update` → `Vec<HeaderRuleDto>` (update rule field at index; returns updated list)
+api: `header_rules_add` → `Vec<HeaderRuleDto>` (add blank rule at end; returns updated list)
+yy|
+##### Templates
+yy|
+api: `header_templates_list` → `Vec<TemplateInfo>` (list available templates in directory)
+api: `header_templates_save` → `()` (save current rules as named template)
+api: `header_templates_load` → `Vec<HeaderRuleDto>` (load named template; returns updated list)
+api: `header_templates_delete` → `()` (delete named template; takes dir + name)
+yy|
+##### Pre-processing Options
+yy|
+api: `preproc_opts_load` → `()` (load pre-processing options from INI file; takes path)
+api: `preproc_opts_list` → `PreProcOptsDto` (get current pre-processing options)
+api: `preproc_opts_set` → `()` (set key-value pair; takes key + value)
+api: `preproc_opts_delete` → `()` (delete a key; takes key)
+api: `preproc_opts_save` → `()` (save pre-processing options to INI file; takes path)
+yy|
+##### Batch Wizard
+yy|
+api: `header_batch_process` → `()` (process all ESP files in source_dir; emits header-batch-progress/comple te events)
+yy|
 ### Events
 
 evt: `esp-load-progress` → `EspLoadProgress { stage, current, total, percentage, message }` (stage may be "cached" on cache hit)
@@ -165,6 +222,8 @@ evt: `batch-file-complete` → `BatchFileComplete { job_id, file_path, translate
 evt: `batch-complete` → `BatchComplete { job_id, total_files, success, failed, total_translated, total_errors, duration_ms, is_cancelled, errors[] }`
 evt: `batch-string-progress` → `{ str_id, translated, error, completed, total }`
 evt: `batch-string-complete` → `{ total, succeeded, failed, errors[] }`
+evt: `header-batch-progress` → `{ job_id, source_dir, current_file, total_files, current_name, percentage }` (per-file progress during batch header processing)
+evt: `header-batch-complete` → `{ job_id, total_files, processed, errors[] }` (batch header processing complete)
 
 ### Core Types
 
@@ -191,9 +250,9 @@ type: `BatchFileError` → `{ file_path, error }`
 type: `EspHeaderInfoDto` → `{ version, num_records, next_object_id, author, description, masters[], flags }`
 type: `SaveEspRequest` → `{ path, create_backup }`
 type: `SaveEspResponse` → `{ bytes_written, records_modified }`
-type: `FinalizeEspRequest` → `{ esp_path, source_lang, target_lang, create_backup }`
+type: `FinalizeEspRequest` → `{ esp_path, strings_dir, base_name, language, create_backup }`
 type: `FinalizeEspResponse` → `{ esp_path, strings_files[], records_modified }`
-type: `DelocalizeEspRequest` → `{ esp_path, source_lang, target_lang, create_backup }`
+type: `DelocalizeEspRequest` → `{ esp_path, strings_dir, base_name, language, create_backup }`
 type: `DelocalizeEspResponse` → `{ new_string_count, strings_files_paths[] }`
 type: `EspCompareResultDto` → `{ identical_count, added_count, removed_count, modified_count, identical[], added[], removed[], modified[] }`
 
@@ -222,8 +281,9 @@ type: `McmCompareResult` → `{ matched, unmatched, updated_entries[] }`
 
 #### Config DTOs
 
-type: `AppConfigDto` → `{ theme?, language?, openai_api_key?, deepl_api_key?, translation_provider?, proxy_server?, proxy_port?, proxy_username?, proxy_password?, esp_mode? }`
+type: `AppConfigDto` → `{ theme?, language?, openai_api_key?, deepl_api_key?, baidu_app_id?, baidu_key?, youdao_app_key?, youdao_secret_key?, azure_key?, current_provider?, proxy_server?, proxy_port?, proxy_username?, proxy_password?, esp_mode?, spellcheck_dictionary?, spellcheck_active?, spellcheck_loaded?, word_exception_list? }`
 type: `ApiConfigResponse` → `{ providers: Vec<ApiProviderInfo> }`
+type: `ApiProviderInfo` → `{ name: String, label: String, enabled: bool, models: Vec<String>, default_query?: String, char_limit: u32, array_limit: u32 }`
 type: `DataConfigsDto` → `{ ctda_funcs[], field_size_ref[], dial_sub_type[], emote_definition[] }`
 type: `CtdaFuncDto` → `{ id, name, params }`
 type: `FieldSizeInfoDto` → `{ max_size, can_wrap }`
@@ -235,11 +295,18 @@ type: `AutoBackupResponse` → `{ backup_path, total_backups }`
 type: `CheckPendingCacheResponse` → `{ recovery: Option<RecoveryInfo> }`
 type: `RecoveryInfo` → `{ esp_name, pending_count, cache_file_path }`
 type: `ApplyCacheResponse` → `{ applied_count }`
-type: `FinalizeRequest` → `{ output_dir?, target_lang?, base_name? }`
-type: `FinalizeResponse` → `{ strings_count, sst_saved, xml_exported }`
+type: `FinalizeRequest` → `{ strings_output_dir, target_lang, base_name, sst_path?, xml_path? }`
+type: `FinalizeResponse` → `{ strings_path, dlstrings_path, ilstrings_path, sst_path, xml_path, translated_count, total_count }`
 type: `TcscDirection` → `ToSimplified | ToTraditional`
 type: `VocabularyInfo` → `{ pair_count, base_names[] }`
 type: `AliasCheckResult` → `{ source_aliases[], trans_aliases[], missing_in_trans[], extra_in_trans[], has_mismatch }`
+type: `MergeStatsDto` → `{ added: usize, updated: usize, overwritten: usize, conflicts_skipped: usize }`
+yy|
+#### Spell Check DTOs
+yy|
+type: `SpellFaultDto` → `{ word: String, start_byte: usize, end_byte: usize }`
+type: `SpellCheckResultDto` → `{ faults: Vec<SpellFaultDto>, total_words: usize, fault_ratio_locked: bool, active: bool }`
+type: `SpellCheckConfigDto` → `{ available_dictionaries: Vec<String>, current_dictionary: Option<String>, active: bool, loaded: bool }`
 
 ### File Formats
 
@@ -315,6 +382,10 @@ V50: ∀ `HeaderRule.apply` → if regex set, use `regex.replace(source)` instea
 V51: ∀ templates → each stored as `<name>.txt` INI file in templates directory; list/save/load/delete via TemplateManager
 V52: ∀ `header_batch_process` → scan source_dir for .esp/.esm files; parse each with EspParser::with_game; apply rules; emit header-batch-progress/comple te events
 V53: ∀ `PreProcessingOpts` → key-value HashMap stored as `[PreProcessingOpts]\nkey=value` INI section
+V54: ∀ `spell_check_load` → load Hunspell DLL via libloading; dictionary from dict_dir + .aff/.dic; on failure keep checker unloaded; `spell_check_unload` drops all state
+V55: ∀ `spell_check_text` → tokenize by word boundaries; check each word against Hunspell dictionary; ignore list checked before dictionary lookup; fault positions are byte offsets in source text
+V56: ∀ collaboration labels → 8 slots (0-7); each slot stores label name + per-string assignment via colab_id field; colab_filter mode: 0=off, 1=include assigned, 2=exclude assigned
+V57: ∀ `sst_merge` → match by (str_id, record_sig, field_sig) triple; overwrite existing translation only when overwrite=true; conflicts_skipped counts entries with matching triple but overwrite=false
 
 ## §T Tasks
 
@@ -419,6 +490,13 @@ T97|x|Template manager: save/load/delete named rule templates as INI files|G7
 T98|x|Pre-processing options: key-value INI storage + IPC (load/list/set/delete/save) + UI editor|G7
 T99|x|Batch wizard: multi-ESP header processing (scan dir + parse + apply rules) with progress events|G7
 T100|x|HeaderWizardPanel bottom tab: source dir, game selector, progress bar, result summary|G7
+T101|x|Spell check integration (Hunspell DLL load/unload, dictionary management, config persistence)|G7
+T102|x|Spell check UI (fault underline, context menu suggestions, ignore list, config panel)|G7
+T103|x|Collaboration labels (8-slot label system, assign/filter per-string)|G7
+T104|x|SST merge command (merge another SST file into current data)|G3
+T105|x|Export dialog tree as HTML command|G12
+T106|x|RTL live preview command (preview with/without reverse)|G9
+T107|x|Skyrim SE validation suite (golden snapshot, regression script, CLI stats)|G7
 
 ## §P6 新增功能 (v1.1.0)
 
@@ -428,6 +506,11 @@ T100|x|HeaderWizardPanel bottom tab: source dir, game selector, progress bar, re
 |---|------|-----|-----|
 | P6.1|x|工具箱例外词列表：Title Case 例外词配置（word_exception_list）、持久化、UI 编辑器|G7|
 | P6.2|x|SST 旧版兼容：读取 v1-v7 格式、SstVersion 枚举、版本感知解析|G3|
+| P6.3|x|拼写检查系统：Hunspell DLL 动态加载、词典管理、拼写错误检测/建议/忽略列表、配置持久化、UI 集成|G7|
+| P6.4|x|协作标签：8 槽位标签系统、分配/过滤/显示，用于多人协作翻译|G7|
+| P6.5|x|SST 合并：sst_merge 命令支持两个 SST 文件合并|G3|
+| P6.6|x|对话树 HTML 导出 + RTL 实时预览|G7,G9|
+| P6.7|x|Skyrim SE 验证硬化：金快照对比 + 回归脚本 + 统计命令|G7|
 
 ## §B Bugs
 
