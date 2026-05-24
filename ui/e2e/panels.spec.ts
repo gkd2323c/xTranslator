@@ -1,14 +1,14 @@
 import { test, expect } from "./fixtures/base";
 
-// Helper: open a sidebar panel by clicking its toolbar button
-async function openPanel(page: any, label: string) {
-  const btn = page.locator(
-    `[aria-label="${label}"], [title="${label}"], button:has-text("${label}")`
-  ).first();
-  if (await btn.count() > 0) {
-    await btn.click();
-    await page.waitForTimeout(400);
-  }
+// Helper: open a tool panel via zustand store action (panels are opened via Tools menu, not toolbar)
+async function openToolPanel(page: any, panelName: string) {
+  await page.evaluate((name: string) => {
+    const store = (window as any).__zustandStore?.getState();
+    if (store?.setActivePanel) {
+      store.setActivePanel(name);
+    }
+  }, panelName);
+  await page.waitForTimeout(500);
 }
 
 // ===================================================================
@@ -17,7 +17,7 @@ async function openPanel(page: any, label: string) {
 test.describe("MCM Panel", { tag: "@mcm" }, () => {
   test("loads MCM file and shows entries with status badges", async ({ appPage }) => {
     await appPage.goto();
-    await openPanel(appPage.page, "Open MCM Panel");
+    await openToolPanel(appPage.page, "mcm");
 
     // Seed mock data
     await appPage.page.evaluate(() => {
@@ -56,7 +56,7 @@ test.describe("MCM Panel", { tag: "@mcm" }, () => {
 test.describe("ESP Compare Panel", { tag: "@esp-compare" }, () => {
   test("runs comparison and shows sort buttons", async ({ appPage }) => {
     await appPage.goto();
-    await openPanel(appPage.page, "Open ESP Compare");
+    await openToolPanel(appPage.page, "espCompare");
 
     // Seed mock data
     await appPage.page.evaluate(() => {
@@ -94,7 +94,7 @@ test.describe("ESP Compare Panel", { tag: "@esp-compare" }, () => {
 test.describe("FUZ Panel", { tag: "@fuz" }, () => {
   test("scans directory and shows stats", async ({ appPage }) => {
     await appPage.goto();
-    await openPanel(appPage.page, "Open Voice Panel");
+    await openToolPanel(appPage.page, "fuz");
 
     // Seed mock data
     await appPage.page.evaluate(() => {
@@ -127,7 +127,7 @@ test.describe("BSA Browser", { tag: "@bsa" }, () => {
     await appPage.goto();
     await expect(appPage.stringTable).toBeAttached({ timeout: 10_000 });
 
-    await openPanel(appPage.page, "Open BSA Browser");
+    await openToolPanel(appPage.page, "bsa");
     await appPage.page.waitForTimeout(300);
 
     // BSA panel should render some content
@@ -144,7 +144,7 @@ test.describe("PEX Panel", { tag: "@pex" }, () => {
     await appPage.goto();
     await expect(appPage.stringTable).toBeAttached({ timeout: 10_000 });
 
-    await openPanel(appPage.page, "Open PEX Panel");
+    await openToolPanel(appPage.page, "pex");
     await appPage.page.waitForTimeout(300);
 
     const sidepanel = appPage.page.locator('[class*="sidepanel"]').first();

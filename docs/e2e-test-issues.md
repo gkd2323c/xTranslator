@@ -1,6 +1,6 @@
 # E2E 测试文档
 
-> 更新于 2026-05-22：全部 55 个测试通过 ✅
+> 更新于 2026-05-24：DOM 选择器修复后重测中
 
 ---
 
@@ -9,10 +9,10 @@
 | 指标 | 值 |
 |------|-----|
 | 总测试数 | 64 |
-| 通过 | 64 |
-| 失败 | 0 |
 | 测试文件 | 5 个 spec 文件 |
 | 运行时间 | ~14s |
+
+> **注意**：由于 Playwright 依赖真实 Chromium 浏览器，当前 headless 环境无法直接运行 E2E 测试。以下修复基于代码审查发现的 DOM 选择器不匹配问题。|
 
 ## 测试文件
 
@@ -141,6 +141,51 @@ export function generateMockStrings(count: number = 20): StringEntry[] {
   }));
 }
 ```
+
+## 2026-05-24 修复记录
+
+本次修复基于代码审查发现的 DOM 选择器不匹配问题，共修改 3 个测试文件：
+
+### 1. `workflows.spec.ts` — 菜单选择器修正
+
+| 原选择器 | 修正后 | 原因 |
+|---------|--------|------|
+| `.menubar-menu-button` | `.menubar-menu-trigger` | MenuBar 实际使用 `.menubar-menu-trigger` 作为菜单触发按钮类名 |
+| `.menubar-toolbar` | `.menubar-actions` | 工具栏容器实际类名为 `.menubar-actions` |
+
+### 2. `panels-advanced.spec.ts` — Tab 名称修正
+
+| 原选择器 | 修正后 | 原因 |
+|---------|--------|------|
+| `.bottom-tab:has-text('ESP')` | `.bottom-tab:has-text('ESP Tree')` | 底部面板 tab 名称是 "ESP Tree"，不是 "ESP" |
+
+### 3. `panels.spec.ts` — 面板打开方式修正
+
+**问题**：MCM / EspCompare / FUZ / BSA / PEX 面板通过 Tools 菜单打开，不在 toolbar 上。原 `openPanel` 辅助函数尝试点击 toolbar 按钮，找不到对应元素。
+
+**修复**：新增 `openToolPanel` 辅助函数，通过 `window.__zustandStore.getState().setActivePanel()` 直接打开面板：
+
+```ts
+async function openToolPanel(page: any, panelName: string) {
+  await page.evaluate((name: string) => {
+    const store = (window as any).__zustandStore?.getState();
+    if (store?.setActivePanel) {
+      store.setActivePanel(name);
+    }
+  }, panelName);
+  await page.waitForTimeout(500);
+}
+```
+
+### 待验证项
+
+以下修复已提交，需在真实浏览器环境中运行 `npm run test:e2e` 验证：
+
+- [ ] `workflows.spec.ts` — `@menu` tag 测试
+- [ ] `panels-advanced.spec.ts` — `@esp-tree` tag 测试
+- [ ] `panels.spec.ts` — `@mcm`, `@esp-compare`, `@fuz`, `@bsa`, `@pex` tag 测试
+
+---
 
 ## 常见问题排查
 

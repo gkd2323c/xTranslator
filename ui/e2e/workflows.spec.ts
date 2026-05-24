@@ -7,7 +7,7 @@ test.describe("Menu System", { tag: "@menu" }, () => {
   test("File menu dropdown items exist", async ({ appPage }) => {
     await appPage.goto();
     // The menu bar should have dropdown buttons: File, Translate, Options, Tools, Wizards
-    const menuButtons = appPage.page.locator('.menubar-menu-button, [class*="menuButton"]');
+    const menuButtons = appPage.page.locator('.menubar-menu-trigger, .menubar-menu-strip, [class*="menuButton"]');
     const count = await menuButtons.count();
     // At minimum the file menu button exists
     expect(count).toBeGreaterThanOrEqual(0);
@@ -26,7 +26,7 @@ test.describe("Menu System", { tag: "@menu" }, () => {
   test("menu bar has load and save action buttons", async ({ appPage }) => {
     await appPage.goto();
     // The toolbar area should have action icon buttons
-    const toolbarButtons = appPage.page.locator('.menubar-actions button, .menubar-toolbar button');
+    const toolbarButtons = appPage.page.locator('.menubar-actions button');
     const count = await toolbarButtons.count();
     expect(count).toBeGreaterThanOrEqual(1);
   });

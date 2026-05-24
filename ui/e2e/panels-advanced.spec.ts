@@ -23,7 +23,7 @@ test.describe("ESP Tree Panel", { tag: "@esp-tree" }, () => {
     await expect(appPage.bottomPanel).toBeAttached({ timeout: 10_000 });
 
     // Switch to ESP Tree tab
-    const espTab = appPage.page.locator(".bottom-tab:has-text('ESP')").first();
+    const espTab = appPage.page.locator(".bottom-tab:has-text('ESP Tree')").first();
     if (await espTab.count() > 0) {
       await espTab.click();
       await appPage.page.waitForTimeout(500);
@@ -39,7 +39,7 @@ test.describe("ESP Tree Panel", { tag: "@esp-tree" }, () => {
     await expect(appPage.bottomPanel).toBeAttached({ timeout: 10_000 });
 
     // Switch to ESP Tree tab
-    const espTab = appPage.page.locator(".bottom-tab:has-text('ESP')").first();
+    const espTab = appPage.page.locator(".bottom-tab:has-text('ESP Tree')").first();
     if (await espTab.count() > 0) {
       await espTab.click();
       await appPage.page.waitForTimeout(500);
