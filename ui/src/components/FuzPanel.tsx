@@ -1,10 +1,10 @@
 import { useState, useRef, useMemo, useCallback, useEffect } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useTranslation } from "react-i18next";
-import { Volume2, Play, Pause, FolderSearch, CheckCircle2, XCircle, AlertTriangle, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
+import { Volume2, Play, Pause, FolderSearch, XCircle, AlertTriangle, Eye, EyeOff, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
 import toast from "react-hot-toast";
-import { scanFuzDirectory, getFuzAudioData } from "../api/strings";
-import type { FuzScanResponse, FuzMapping } from "../api/strings";
+import { scanFuzDirectory, getFuzAudioData, getFuzLipData } from "../api/strings";
+import type { FuzScanResponse, FuzMapping, LipKeyframeDto, FuzLipDataResponse } from "../api/strings";
 import { Button, EmptyState } from "./ui";
 
 type SortField = "response_id" | "duration_secs" | "status";
@@ -192,6 +192,50 @@ export function FuzPanel() {
     });
   }, []);
 
+// ── LIP keyframe preview ──────────────────────────────────────
+
+const [lipPreviewId, setLipPreviewId] = useState<number | null>(null);
+const [lipCache, setLipCache] = useState<Record<number, FuzLipDataResponse>>({});
+const [loadingLipId, setLoadingLipId] = useState<number | null>(null);
+
+const loadLipData = useCallback(async (mapping: FuzMapping) => {
+  if (lipCache[mapping.response_id]) return;
+  setLoadingLipId(mapping.response_id);
+  try {
+    const result = await getFuzLipData(mapping.fuz_file);
+    setLipCache((prev) => ({ ...prev, [mapping.response_id]: result }));
+  } catch {
+    toast.error("Failed to load LIP keyframe data");
+  } finally {
+    setLoadingLipId(null);
+  }
+}, [lipCache]);
+
+const handleLipToggle = useCallback((mapping: FuzMapping) => {
+  if (lipPreviewId === mapping.response_id) {
+    setLipPreviewId(null);
+  } else {
+    setLipPreviewId(mapping.response_id);
+    loadLipData(mapping);
+  }
+}, [lipPreviewId, loadLipData]);
+
+// ── LIP visualization helpers ─────────────────────────────────
+
+const LIP_SHAPE_COLORS: Record<number, string> = {
+  0: "#888", 1: "#e74c3c", 2: "#e67e22", 3: "#f1c40f",
+  4: "#2ecc71", 5: "#3498db", 6: "#9b59b6", 7: "#e91e63",
+};
+
+const SHAPE_LABELS: Record<number, string> = {
+  0: "\u2014", 1: "A", 2: "E", 3: "I",
+  4: "O", 5: "U", 6: "F", 7: "V",
+};
+
+const getShapeColor = (s: number): string => LIP_SHAPE_COLORS[s] || "#888";
+const getShapeLabel = (s: number): string => SHAPE_LABELS[s] || "?";
+
+
   // ── Render ──────────────────────────────────────────────────────
 
   const SortIcon = sortDir === "asc" ? ArrowUp : sortDir === "desc" ? ArrowDown : ArrowUpDown;
@@ -360,20 +404,104 @@ export function FuzPanel() {
                       <span className="fuz-mapping-duration">
                         {m.duration_secs.toFixed(1)}s
                       </span>
-                      {!m.parse_ok ? (
-                        <span title={t("fuz.parseFailed", { defaultValue: "Parse failed" })}>
-                          <AlertTriangle size={12} className="fuz-parse-error" />
-                        </span>
-                      ) : m.has_lip ? (
-                        <span title={t("fuz.hasLip", { defaultValue: "Has LIP data" })}>
-                          <CheckCircle2 size={12} className="fuz-lip-yes" />
-                        </span>
-                      ) : (
-                        <span title={t("fuz.noLip", { defaultValue: "No LIP data" })}>
-                          <XCircle size={12} className="fuz-lip-no" />
-                        </span>
-                      )}
+                    {!m.parse_ok ? (
+                      <span title={t("fuz.parseFailed", { defaultValue: "Parse failed" })}>
+                        <AlertTriangle size={12} className="fuz-parse-error" />
+                      </span>
+                    ) : m.has_lip ? (
+                      <button
+                        className={`fuz-lip-toggle ${lipPreviewId === m.response_id ? "fuz-lip-active" : ""}`}
+                        onClick={() => handleLipToggle(m)}
+                        title={
+                          lipPreviewId === m.response_id
+                            ? t("fuz.hideLip", { defaultValue: "Hide LIP keyframes" })
+                            : t("fuz.showLip", { defaultValue: "Show LIP keyframes" })
+                        }
+                      >
+                        {loadingLipId === m.response_id ? (
+                          <span className="fuz-lip-loading" />
+                        ) : lipPreviewId === m.response_id ? (
+                          <EyeOff size={12} className="fuz-lip-active-icon" />
+                        ) : (
+                          <Eye size={12} className="fuz-lip-yes" />
+                        )}
+                      </button>
+                    ) : (
+                      <span title={t("fuz.noLip", { defaultValue: "No LIP data" })}>
+                        <XCircle size={12} className="fuz-lip-no" />
+                      </span>
+                    )}
                     </div>
+
+                    {/* ── LIP keyframe preview ────────────────────── */}
+                    {lipPreviewId === m.response_id && lipCache[m.response_id]?.lip_data && (
+                      <div className="fuz-lip-preview">
+                        <div className="fuz-lip-header">
+                          <span className="fuz-lip-title">
+                            {t("fuz.lipKeyframes", { defaultValue: "Lip-sync Keyframes" })}
+                          </span>
+                          <span className="fuz-lip-info">
+                            {lipCache[m.response_id].lip_data!.keyframes.length} frames
+                            {" | v"}{lipCache[m.response_id].lip_data!.version}
+                          </span>
+                        </div>
+                        <div className="fuz-lip-bars-wrapper">
+                          <div className="fuz-lip-bars">
+                            {(() => {
+                              const kfs = lipCache[m.response_id].lip_data!.keyframes;
+                              const totalDur = m.duration_secs || 1;
+                              const barH = Math.max(18, Math.min(28, 360 / kfs.length));
+                              return kfs.map((kf: LipKeyframeDto, i: number) => {
+                                const left = (kf.time / totalDur) * 100;
+                                const w = Math.max(0.5, ((kfs[i + 1]?.time ?? totalDur) - kf.time) / totalDur * 100);
+                                return (
+                                  <div
+                                    key={i}
+                                    className="fuz-lip-bar"
+                                    style={{
+                                      left: `${left}%`,
+                                      width: `${w}%`,
+                                      height: `${barH}px`,
+                                      backgroundColor: getShapeColor(kf.shape),
+                                    }}
+                                    title={`t=${kf.time.toFixed(3)}s shape=${getShapeLabel(kf.shape)} (${kf.shape})`}
+                                  />
+                                );
+                              });
+                            })()}
+                          </div>
+                          {/* Time axis */}
+                          <div className="fuz-lip-time-axis">
+                            {[0, 0.25, 0.5, 0.75, 1.0].map((pct) => (
+                              <span
+                                key={pct}
+                                className="fuz-lip-time-tick"
+                                style={{ left: `${pct * 100}%` }}
+                              >
+                                {(m.duration_secs * pct).toFixed(1)}s
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                        {/* Shape legend */}
+                        <div className="fuz-lip-legend">
+                          {[0, 1, 2, 3, 4, 5, 6, 7].map((s) => (
+                            <span key={s} className="fuz-lip-legend-item">
+                              <span
+                                className="fuz-lip-legend-swatch"
+                                style={{ backgroundColor: getShapeColor(s) }}
+                              />
+                              {getShapeLabel(s)}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {lipPreviewId === m.response_id && !lipCache[m.response_id]?.lip_data && loadingLipId !== m.response_id && (
+                      <div className="fuz-lip-preview fuz-lip-empty-preview">
+                        <span className="fuz-lip-no-data">{t("fuz.noLipData", { defaultValue: "No LIP keyframe data available" })}</span>
+                      </div>
+                    )}
                   </div>
                 );
               })}

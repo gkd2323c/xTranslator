@@ -53,7 +53,7 @@
 | **XML 导出** | ✅ | ✅ 写入+实体转义 | ~95% | `write_xml_export` Delphi 兼容格式，只导出有翻译的条目 |
 | **BSA/BA2 归档** | ✅ 提取+浏览 | ✅ BSA + BA2 GNRL 全支持 + 预览 | ~85% | `BsaArchive` v0x68/v0x69，`Ba2Archive` v0x01/0x02/0x08 GNRL，`BsaBrowser` 组件新增文件预览(元数据) + 文件名搜索(高亮) |
 | **PEX 脚本解析** | ✅ 反编译+编辑 | ✅ 字符串提取+写回+搜索 | ~90% | PEX parser 完成（Header+StringTable+ObjectInfo），可翻译字符串提取 + PexPanel 新增字符串搜索+表格化布局+伪代码视图(行号/复制)；写回 PEX 已完成（字符串表原地更新，原始 opcode/调试信息全部保留，索引不变，roundtrip 测试通过） |
-| **FUZ 音频映射** | ✅ 映射+播放 | ✅ FuzFile parse + WAV 播放 | ~70% | FuzHeader 解析 + Sound/Voice/ 扫描 + RESP/INFO 关联 + FuzPanel；已支持筛选、With/Without LIP/Parse failed 摘要和三态行状态，仍缺 LIP 预览 |
+| **FUZ 音频映射** | ✅ 映射+播放 | ✅ FuzFile parse + WAV 播放 | ~95% | FuzHeader 解析 + Sound/Voice/ 扫描 + RESP/INFO 关联 + FuzPanel；已支持筛选、With/Without LIP/Parse failed 摘要和三态行状态、LIP 关键帧彩色可视化预览（含形状图例和时间轴） |
 
 ---
 

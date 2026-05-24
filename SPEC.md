@@ -114,6 +114,8 @@ api: `mcm_compare` → `McmCompareResult { matched, unmatched, updated_entries[]
 
 api: `scan_fuz_directory` → `FuzScanResponse { fuz_mappings[], total_fuz_files }` (map FUZ files to dialog strings)
 api: `get_fuz_audio_data` → `Vec<u8>` (extract WAV bytes from FUZ file)
+api: `get_fuz_lip_data` → `FuzLipDataResponse { lip_data: Option<LipDataDto>, duration_secs, sample_rate, channels }` (extract LIP keyframe data from FUZ file)
+
 api: `build_dialog_tree` → `DialogTreeDto { npcs[] }` (group INFO by parent DIAL FormID, associate NPC_ names)
 
 #### Config
@@ -203,8 +205,11 @@ type: `DecompilePexResponse` → `{ script_name, object_count, function_count, i
 
 #### FUZ / Dialog DTOs
 
-type: `FuzMapping` → `{ response_id, dialog_text, fuz_file, duration_secs }`
+type: `FuzMapping` → `{ response_id, dialog_text, fuz_file, duration_secs, has_lip, parse_ok }`
 type: `FuzScanResponse` → `{ fuz_mappings[], total_fuz_files }`
+type: `LipKeyframeDto` → `{ time: f32, shape: u8 }`
+type: `LipDataDto` → `{ version: u32, keyframes: Vec<LipKeyframeDto> }`
+type: `FuzLipDataResponse` → `{ lip_data: Option<LipDataDto>, duration_secs, sample_rate, channels }`
 type: `DialogInfoDto` → `{ id, form_id, source, translation, dialog_text }`
 type: `NpcDialogDto` → `{ npc_edid, dialogues[] }`
 type: `DialogTreeDto` → `{ npcs[] }`

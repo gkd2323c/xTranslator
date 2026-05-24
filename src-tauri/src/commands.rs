@@ -27,8 +27,9 @@ use xt_shared::dto::{
     ApplyCacheResponse, AutoBackupRequest, AutoBackupResponse, BatchConfig, BatchEntry,
     BatchStatus, BsaFileEntryDto, BsaFileListDto, CheckPendingCacheResponse, CtdaFuncDto,
     DataConfigsDto, DialogInfoDto, DialogTreeDto, EspComparePairDto, EspCompareResultDto,
-    EspLoadProgress, FieldSizeInfoDto, FinalizeRequest, FinalizeResponse, FuzMapping,
-    FuzScanResponse, HeuristicMatchDTO, HeuristicSearchRequest, LoadEspResponse, LoadSstResponse,
+    EspLoadProgress, FieldSizeInfoDto, FinalizeRequest, FinalizeResponse, FuzLipDataResponse,
+    FuzMapping, FuzScanResponse, HeuristicMatchDTO, HeuristicSearchRequest, LipDataDto,
+    LipKeyframeDto, LoadEspResponse, LoadSstResponse,
     McmComparePolicy, McmCompareRequest, McmCompareResult, McmEntryDto, McmFileDto, McmSaveRequest,
     NpcDialogDto, PexScriptDto, PexTranslatableDto, QueryRequest, QueryResponse, RecoveryInfo,
     SaveStringsRequest, SaveStringsResponse, SkyStringDTO, TranslateRequest, XmlExportRequest,
@@ -2714,6 +2715,33 @@ pub async fn get_fuz_audio_data(fuz_path: String) -> Result<Vec<u8>, String> {
     let fuz =
         xt_core::fuz::FuzFile::parse(&mut file).map_err(|e| format!("Failed to parse: {}", e))?;
     Ok(fuz.wav_data)
+}
+
+#[tauri::command]
+pub async fn get_fuz_lip_data(fuz_path: String) -> Result<FuzLipDataResponse, String> {
+    let mut file =
+        std::fs::File::open(&fuz_path).map_err(|e| format!("Failed to open FUZ: {}", e))?;
+    let fuz =
+        xt_core::fuz::FuzFile::parse(&mut file).map_err(|e| format!("Failed to parse: {}", e))?;
+
+    let lip_data = fuz.lip_data.map(|ld| LipDataDto {
+        version: ld.version,
+        keyframes: ld
+            .keyframes
+            .into_iter()
+            .map(|kf| LipKeyframeDto {
+                time: kf.time,
+                shape: kf.shape,
+            })
+            .collect(),
+    });
+
+    Ok(FuzLipDataResponse {
+        lip_data,
+        duration_secs: fuz.duration_secs,
+        sample_rate: fuz.sample_rate,
+        channels: fuz.channels,
+    })
 }
 
 // ── Dialog Tree Commands ─────────────────────────────────────────────

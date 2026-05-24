@@ -1835,6 +1835,128 @@ html, body, #root {
   flex-shrink: 0;
 }
 
+.fuz-lip-toggle {
+  background: none;
+  border: none;
+  padding: 2px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 3px;
+  transition: background 0.15s;
+}
+.fuz-lip-toggle:hover {
+  background: var(--color-hover);
+}
+.fuz-lip-active {
+  background: var(--color-selected);
+}
+.fuz-lip-active-icon {
+  color: var(--color-accent);
+}
+.fuz-lip-loading {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--color-muted);
+  border-top-color: var(--color-accent);
+  border-radius: 50%;
+  animation: fuz-lip-spin 0.6s linear infinite;
+}
+@keyframes fuz-lip-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── LIP keyframe visualization ──────────────────────────────────── */
+.fuz-lip-preview {
+  padding: 6px 4px 4px 4px;
+  margin-top: 4px;
+  border-top: 1px solid var(--color-border);
+  background: var(--color-bg-secondary);
+  border-radius: 4px;
+  grid-column: 1 / -1;
+  width: 100%;
+}
+.fuz-lip-empty-preview {
+  text-align: center;
+  color: var(--color-muted);
+  font-size: 11px;
+  padding: 8px 4px;
+}
+.fuz-lip-no-data {
+  font-style: italic;
+}
+.fuz-lip-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+  font-size: 10px;
+}
+.fuz-lip-title {
+  font-weight: 600;
+  color: var(--color-text);
+}
+.fuz-lip-info {
+  color: var(--color-muted);
+}
+.fuz-lip-bars-wrapper {
+  position: relative;
+  margin-bottom: 2px;
+  padding-bottom: 14px;
+}
+.fuz-lip-bars {
+  position: relative;
+  height: 28px;
+  background: var(--color-bg);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.fuz-lip-bar {
+  position: absolute;
+  bottom: 0;
+  border-radius: 1px;
+  opacity: 0.85;
+  transition: opacity 0.1s;
+  min-width: 1px;
+}
+.fuz-lip-bar:hover {
+  opacity: 1;
+  outline: 1px solid rgba(255,255,255,0.5);
+  z-index: 2;
+}
+.fuz-lip-time-axis {
+  position: relative;
+  height: 12px;
+}
+.fuz-lip-time-tick {
+  position: absolute;
+  font-size: 8px;
+  color: var(--color-muted);
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+.fuz-lip-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  justify-content: center;
+  margin-top: 4px;
+}
+.fuz-lip-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 9px;
+  color: var(--color-muted);
+}
+.fuz-lip-legend-swatch {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+}
+
 .fuz-parse-error {
   color: var(--color-warning);
   flex-shrink: 0;

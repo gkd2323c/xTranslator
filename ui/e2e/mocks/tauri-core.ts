@@ -245,6 +245,34 @@ export async function invoke<T = unknown>(cmd: string, args?: Record<string, unk
       // Return a minimal WAV header with silence (44 bytes header + 1 sec of silence at 8kHz)
       return Array.from({ length: 8044 }, (_, i) => i < 44 ? [0x52, 0x49, 0x46, 0x46, 0x24, 0x1F, 0x00, 0x00, 0x57, 0x41, 0x56, 0x45, 0x66, 0x6D, 0x74, 0x20, 0x10, 0x00, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x40, 0x1F, 0x00, 0x00, 0x40, 0x1F, 0x00, 0x00, 0x01, 0x00, 0x08, 0x00, 0x64, 0x61, 0x74, 0x61, 0x00, 0x1F, 0x00, 0x00][i] || 0 : 128) as T;
 
+    case "get_fuz_lip_data": {
+      const fuzPath = args?.fuzPath as string || "";
+      const hasLip = !fuzPath.includes("nolip") && !fuzPath.includes("broken");
+      if (!hasLip) {
+        return { lip_data: null, duration_secs: 2.0, sample_rate: 44100, channels: 1 } as T;
+      }
+      return {
+        lip_data: {
+          version: 1,
+          keyframes: [
+            { time: 0.000, shape: 0 },
+            { time: 0.083, shape: 1 },
+            { time: 0.167, shape: 2 },
+            { time: 0.250, shape: 3 },
+            { time: 0.333, shape: 4 },
+            { time: 0.417, shape: 5 },
+            { time: 0.500, shape: 0 },
+            { time: 0.583, shape: 6 },
+            { time: 0.667, shape: 7 },
+            { time: 0.750, shape: 0 },
+          ],
+        },
+        duration_secs: 1.5,
+        sample_rate: 44100,
+        channels: 1,
+      } as T;
+    }
+
     // ── SST Merge ────────────────────────────────────────────────
     case "sst_merge": {
       const req2 = args?.request as { source_path?: string; policy?: string } | undefined;

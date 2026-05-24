@@ -171,7 +171,7 @@ Format: `sqlite_cache::CachePayload { version: u32, strings: Vec<SkyString>, com
 | `ba2` | BA2 (Bethesda Archive 2) parser for Fallout 4/Starfield. GNRL type support, file listing and extraction |
 | `pex` | PEX (Papyrus) script parser + compiler: string table extraction, in-place translation update with index preservation |
 | `mcm` | MCM (Mod Configuration Menu) translation file parser: UTF-16LE/UTF-8/ANSI encoding detection, BOM handling, key-value extraction, save with original encoding+line endings |
-| `fuz` | FUZ audio container parser: FuzHeader + WAV extraction, Sound/Voice/ directory scanning, RESP/INFO association |
+| `fuz` | FUZ audio container parser: FuzHeader + LIP keyframe + WAV extraction, Sound/Voice/ directory scanning, RESP/INFO association |
 | `tcsc` | Traditional/Simplified Chinese conversion: OpenCC dictionary (primary, 3960 pairs) + Delphi Charset_SCTC.txt (fallback, 2552 pairs), compile-time embedded, `to_simplified()` / `to_traditional()` |
 | `config` | App configuration persistence: `AppConfig` (theme, language, API keys, proxy, spell check state), JSON load/save, merge-only updates |
 | `sst::v8` | SST v8 dictionary format: read/write with Delphi-compatible UTF-16LE encoding, FNV-1a hashing, bidirectional roundtrip |
@@ -188,7 +188,7 @@ Format: `sqlite_cache::CachePayload { version: u32, strings: Vec<SkyString>, com
 | File | Responsibility |
 |------|----------------|
 | `main.rs` | Tauri app builder: plugin initialization (`shell`, `dialog`), `AppState` management, command handler registration |
-| `commands.rs` | IPC command implementations (101 commands): `load_esp`, `load_sst`, `save_sst`, `update_translation`, `get_strings_chunk`, `query_strings_command`, `get_stats`, `heuristic_search`, `translate_string`, `set_openai_api_key`, `export_xml`, `import_xml`, `save_strings`, `list_bsa_files`, `extract_bsa_file`, `parse_pex_strings`, `scan_fuz_directory`, `build_dialog_tree`, `start_batch_translate`, `start_batch_export`, `cancel_batch_job`, `load_config`, `save_config`, `get_api_config`, `spell_check_load`, `spell_check_unload`, `spell_check_toggle`, `spell_check_config`, `spell_check_text`, `spell_check_suggestions`, `spell_check_ignore`, `sst_merge`, `export_dial_html`, `rtl_preview`, `colab_*` |
+| `commands.rs` | IPC command implementations (102 commands): `load_esp`, `load_sst`, `save_sst`, `update_translation`, `get_strings_chunk`, `query_strings_command`, `get_stats`, `heuristic_search`, `translate_string`, `set_openai_api_key`, `export_xml`, `import_xml`, `save_strings`, `list_bsa_files`, `extract_bsa_file`, `parse_pex_strings`, `scan_fuz_directory`, `get_fuz_audio_data`, `get_fuz_lip_data`, `build_dialog_tree`, `start_batch_translate`, `start_batch_export`, `cancel_batch_job`, `load_config`, `save_config`, `get_api_config`, `spell_check_load`, `spell_check_unload`, `spell_check_toggle`, `spell_check_config`, `spell_check_text`, `spell_check_suggestions`, `spell_check_ignore`, `sst_merge`, `export_dial_html`, `rtl_preview`, `colab_*` |
 | `batch.rs` | Batch processor: sequential ESP file processing, cooperative cancellation, Tauri event emission |
 
 ### ui
@@ -205,7 +205,7 @@ Format: `sqlite_cache::CachePayload { version: u32, strings: Vec<SkyString>, com
 | `components/BatchPanel.tsx` | Batch file list, game/language detection, translate/export, progress tracking, cancellation |
 | `components/BsaBrowser.tsx` | BSA archive browser: folder tree, file list, preview, extract single/batch |
 | `components/PexPanel.tsx` | PEX script viewer: object tree, translatable strings list, XML export |
-| `components/FuzPanel.tsx` | FUZ audio browser: file scan, RESP/INFO association, filter, WAV playback, LIP/parse status summary |
+| `components/FuzPanel.tsx` | FUZ audio browser: file scan, RESP/INFO association, filter, WAV playback, LIP keyframe visualization, LIP/parse status summary |
 | `components/McmPanel.tsx` | MCM translation editor: load/save/filter/compare, side-by-side source/translation editing, copy-source shortcut, char-count hint |
 | `components/DialogView.tsx` | Dialog tree: QUST→DIAL→INFO grouping, NPC view, inline editing |
 | `App.tsx` | Root layout + global loading overlay (locks UI during critical operations) |

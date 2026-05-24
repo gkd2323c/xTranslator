@@ -519,6 +519,31 @@ pub struct EspHeaderInfoDto {
     pub is_localized: bool,
 }
 
+/// LIP keyframe — lip-sync data point for FUZ voice files
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct LipKeyframeDto {
+    /// Time offset in seconds
+    pub time: f32,
+    /// Lip-sync shape index (0-15): 0=silence, 1=A, 2=E, 3=I, 4=O, 5=U, 6=F, 7=V, 8=silent
+    pub shape: u8,
+}
+
+/// LIP data from a FUZ file
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct LipDataDto {
+    pub version: u32,
+    pub keyframes: Vec<LipKeyframeDto>,
+}
+
+/// Response for fetching LIP keyframe data from a specific FUZ file
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct FuzLipDataResponse {
+    pub lip_data: Option<LipDataDto>,
+    pub duration_secs: f32,
+    pub sample_rate: u32,
+    pub channels: u16,
+}
+
 // ── FUZ DTOs ────────────────────────────────────────────────────────
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

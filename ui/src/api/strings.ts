@@ -816,6 +816,28 @@ export async function getFuzAudioData(fuzPath: string): Promise<number[]> {
   return invoke("get_fuz_audio_data", { fuzPath });
 }
 
+export interface LipKeyframeDto {
+  time: number;
+  shape: number;
+}
+
+export interface LipDataDto {
+  version: number;
+  keyframes: LipKeyframeDto[];
+}
+
+export interface FuzLipDataResponse {
+  lip_data: LipDataDto | null;
+  duration_secs: number;
+  sample_rate: number;
+  channels: number;
+}
+
+export async function getFuzLipData(fuzPath: string): Promise<FuzLipDataResponse> {
+  return invoke("get_fuz_lip_data", { fuzPath });
+}
+
+
 // ── Dialog Tree Types ───────────────────────────────────────────────
 
 export interface DialogInfoDto {
