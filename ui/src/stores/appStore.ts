@@ -1124,7 +1124,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         // Fallback 2: paginated query
         try {
           const response = await queryStrings({
-            file_id: state.espPath,
+            file_id: state.espPath || "",
             offset: 0,
             limit: 100,
             filter: state.filter || undefined,

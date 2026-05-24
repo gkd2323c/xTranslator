@@ -3080,11 +3080,11 @@ use xt_core::toolbox::{get_exception_words, load_exception_words};
 #[tauri::command]
 pub async fn toolbox_load_exception_words(
     words: Option<String>,
-) -> Result<(), String> {
+) -> Result<String, String> {
     if let Some(ref w) = words {
         load_exception_words(w);
     }
-    Ok(())
+    Ok("ok".to_string())
 }
 
 /// Get exception words list.

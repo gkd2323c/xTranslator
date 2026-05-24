@@ -29,7 +29,8 @@ use commands::{
     spell_check_ignore, spell_check_load, spell_check_suggestions, spell_check_text,
     spell_check_toggle, spell_check_unload, sst_merge, start_batch_export, start_batch_translate,
     start_string_batch_translate, tcsc_batch_convert, tcsc_convert, toolbox_transform,
-    translate_string, update_translation, write_text_file, AppState,
+    toolbox_load_exception_words, toolbox_get_exception_words, translate_string,
+    update_translation, write_text_file, AppState,
 };
 use std::sync::Arc;
 

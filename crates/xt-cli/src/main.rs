@@ -93,6 +93,23 @@ fn main() -> Result<()> {
             }
             commands::golden_diff::run_golden_diff(&args[2], &args[3])?
         }
+        "stats" => {
+            if args.len() < 3 {
+                println!("Usage: xt-cli stats <input.esp/esm> [game]");
+                println!("Example: xt-cli stats Skyrim.esm SkyrimSE");
+                return Ok(());
+            }
+            let game = args.get(3).and_then(|g| match g.as_str() {
+                "Skyrim" => Some(xt_core::types::game_id::GameId::Skyrim),
+                "SkyrimSE" => Some(xt_core::types::game_id::GameId::SkyrimSE),
+                "Fallout4" => Some(xt_core::types::game_id::GameId::Fallout4),
+                "FalloutNV" => Some(xt_core::types::game_id::GameId::FalloutNV),
+                "Fallout76" => Some(xt_core::types::game_id::GameId::Fallout76),
+                "Starfield" => Some(xt_core::types::game_id::GameId::Starfield),
+                _ => None,
+            });
+            commands::stats::dump_stats(&args[2], game)?
+        }
         "strings" => {
             if args.len() < 4 {
                 println!("Usage: xt-cli strings <load|save|modify> ...");
