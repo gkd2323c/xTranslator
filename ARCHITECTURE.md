@@ -267,7 +267,7 @@ Delphi xTranslator compatible:
 # Full backend build
 cargo build -p xtranslator-tauri
 
-# Core library unit tests (293 tests)
+# Core library unit tests (299 tests)
 cargo test -p xt-core --lib
 
 # End-to-end tests (requires Skyrim SE at D:\SteamLibrary\...)

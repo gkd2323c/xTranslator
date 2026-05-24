@@ -25,7 +25,7 @@
 ## Commands
 
 ```bash
-cargo test -p xt-core --lib          # core unit tests (no deps, 293 tests)
+cargo test -p xt-core --lib          # core unit tests (no deps, 299 tests)
 cargo test --workspace               # all tests
 cargo test --release -p xtranslator-tests --test basic_benchmarks  # benchmarks
 cargo build -p xtranslator-tauri     # debug build

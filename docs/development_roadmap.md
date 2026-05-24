@@ -109,7 +109,7 @@ IPC 命令：`toolbox_transform`。支持按字符串 ID 或全量操作，可�
 | 5 | 修复 Alias | 格式化 `<Alias=...>` 标签 | ✅ |
 | 6 | 添加头部 | 字符串前添加指定文本 | ✅ |
 | 7 | 修整字符串 | Trim 首尾空白 | ✅ |
-| - | 例外词列表 | 编辑 `lWordExceptionList` | 待实现 |
+| - | 例外词列表 | 编辑 `lWordExceptionList` | ✅ 已完成 (P6.1, v1.1.0) |
 
 ### P2.3 SST 合并 — `MergeSst.pas` ✅ 已完成
 

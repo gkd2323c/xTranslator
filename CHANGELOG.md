@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [Unreleased]
+
+### Added
+- **Skyrim SE 验证硬化**
+  - golden snapshot 锁存：`docs/skyrim-se-golden-2026-05-24.md`（75,754 strings, 118 top GRUPs, 50,376 sub GRUPs）
+  - 验证报告：`docs/skyrim-se-validation-report.md`（L1/L2/L3 全部通过）
+  - 回归检查脚本：`scripts/validate_skyrim_se.ps1`（一键运行 L1/L2/编译检查，可选 golden snapshot 对比）
+  - xt-cli 新增 `stats` 命令：加载 ESP/ESM 输出 golden snapshot 格式统计
+
+### Fixed
+- Tauri 后端编译错误：`toolbox_load_exception_words` never-type fallback（Rust 2024 兼容性）
+- `main.rs` 漏 import `toolbox_load_exception_words` / `toolbox_get_exception_words`
+- TypeScript 编译错误：`appStore.ts` `file_id` 类型不匹配
+
+### Technical Details
+- **测试**: 299 单元测试全部通过
+- **Rust**: 1.95.0, Tauri 2.x 后端零 warning 编译
+- **前端**: TypeScript 零错误，Vite 构建通过
+
+---
+
 ## [1.1.0] - 2026-05-22
 
 ### Added

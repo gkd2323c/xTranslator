@@ -140,7 +140,7 @@ cargo run --bin test_data_generator
 
 - **Purpose**: Test individual functions and modules
 - **Location**: `crates/xt-core/src/**/*.rs`
-- **Count**: 290 tests
+- **Count**: 299 tests
 - **Coverage**: Core parsing, string handling, SST, XML, cache
 
 ### 2. Smoke Tests

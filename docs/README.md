@@ -31,6 +31,9 @@ This directory is organized by reader need. Start with the repository entry poin
 | [`development_roadmap.md`](development_roadmap.md) | Comprehensive Delphi parity gaps and development roadmap with priorities and effort estimates |
 | [`delphi_analysis.md`](delphi_analysis.md) | Delphi source findings mapped to Rust implementation areas |
 | [`delphi_rust_fix_plan.md`](delphi_rust_fix_plan.md) | Delphi → Rust inconsistency remediation plan |
+| [`skyrim-se-validation-plan.md`](skyrim-se-validation-plan.md) | Skyrim SE validation hardening plan (L1/L2/L3 framework) |
+| [`skyrim-se-validation-report.md`](skyrim-se-validation-report.md) | Skyrim SE validation report (L1/L2/L3 all passed) |
+| [`skyrim-se-golden-2026-05-24.md`](skyrim-se-golden-2026-05-24.md) | Golden snapshot: 75,754 strings, 118 top GRUPs, 50,376 sub GRUPs |
 | [`cross_validation_report.md`](cross_validation_report.md) | Cross-validation between Delphi and Rust implementations |
 | [`../legacy/original-delphi/README.md`](../legacy/original-delphi/README.md) | Original Delphi project archive layout |
 
@@ -111,7 +114,7 @@ Completed implementation plans and historical documents live in [`archive/`](arc
 rg "toolchain_and_roadmap|IMPLEMENTATION_SUMMARY|DESIGN\.md" --include "*.md" docs/ *.md
 
 # 检查数字一致性
-rg "293 tests|290 tests|181 tests|247 tests" *.md docs/
+rg "299 tests|293 tests|290 tests|181 tests|247 tests" *.md docs/
 rg "45.*task|100.*task" *.md docs/
 rg "4/8|6/8.*provider|翻译 API.*OpenAI.*DeepL.*Baidu.*Youdao.*Azure.*Google" *.md docs/
 rg "10K items|25K items" *.md docs/

@@ -1,8 +1,8 @@
 # xTranslator 功能对比：Delphi 原版 vs Rust 重写
 
-> **更新日期**：2026-05-20
+> **更新日期**：2026-05-24
 > **原版版本**：xTranslator 1.6.0（Delphi 12.1 CE，~6.7 万行代码，10+ 年迭代）
-> **重写版本**：v1.0.0 — 后端 ~88%（293 单元测试，101 IPC 命令），前端 ~78%（43 组件，Phase 1-3 UI 打磨完成，近期补齐 FUZ/MCM/列宽打磨）
+> **重写版本**：v1.1.0 — 后端 ~90%（299 单元测试，101 IPC 命令），前端 ~80%（43 组件，Phase 1-3 UI 打磨完成）
 >
 > 界面复刻的独立推进方案见 [`ui_reproduction_plan.md`](ui_reproduction_plan.md)。
 
@@ -72,7 +72,7 @@
 | **最终化 (finalize)** | ✅ 导出翻译结果 | ✅ ESP finalize + Strings 导出 | ~90% | `finalize_esp` 命令：应用 SST 翻译→重建记录→序列化→导出 .STRINGS/.DLSTRINGS/.ILSTRINGS |
 | **批量处理器** | ✅ 命令式批处理 | ✅ BatchExecutor + BatchPanel | ~80% | Multi-file translate/export, progress events, cancel, error review per-file, stats cards, retry failed |
 | **RTL 支持 (阿拉伯语)** | ✅ RTL 标签+字符串反向 | ✅ rtl.rs + EditorPanel RTL 按钮 | ~80% | `rtl.rs`：阿拉伯字符检测 + 块反转 + 符号镜像 + 阿拉伯整形（Shape/deshape）均已从 Delphi 移植，roundtrip 测试通过；EditorPanel RTL 按钮 |
-| **中文繁简转换** | ✅ SC↔TC 字符映射 | ✅ IPC + MenuBar + EditorPanel 按钮 | ~90% | `tcsc.rs`：OpenCC 主字典(3960对)+Delphi 字典回退(2552对)，编译时嵌入；IPC 命令+MenuBar 按钮+EditorPanel 内转换按钮均已集成；批量转换待实现 |
+| **中文繁简转换** | ✅ SC↔TC 字符映射 | ✅ IPC + MenuBar + EditorPanel 按钮 + 批量转换 | ~95% | `tcsc.rs`：OpenCC 主字典(3960对)+Delphi 字典回退(2552对)，编译时嵌入；IPC 命令+MenuBar 按钮+EditorPanel 内转换按钮+`tcsc_batch_convert` 批量转换均已集成 |
 
 ---
 
@@ -126,7 +126,7 @@
 | 游戏 | 原版 | Rust 重写 Data/ | record_defs | codepage | 验证状态 |
 |------|------|----------------|-------------|----------|---------|
 | Skyrim | ✅ | ✅ Skyrim/ | ⚠️ 待验证 | ⚠️ 待验证 | GameId 枚举存在 |
-| **SkyrimSE** | ✅ | ✅ SkyrimSE/ | ✅ 22 条 | ✅ 24 语言 | **主要验证目标，71,937 条** |
+| **SkyrimSE** | ✅ | ✅ SkyrimSE/ | ✅ 22 条 | ✅ 24 语言 | **golden snapshot 验证通过** (75,754 strings, 118 top GRUPs, 50,376 sub GRUPs) |
 | Fallout4 | ✅ | ✅ Fallout4/ | ⚠️ 待验证 | ⚠️ 待验证 | Data 目录存在 |
 | FalloutNV | ✅ | ✅ FalloutNV/ | ⚠️ 待验证 | ⚠️ 待验证 | GameId 枚举存在 |
 | Fallout76 | ✅ | ✅ Fallout76/ | ✅ 9 文件 | ⚠️ 待验证 | Data 目录有文件 |
@@ -194,7 +194,7 @@
 | ~~pexNoTransProc.txt 未解析~~ | ✅ 已解析并用于 PEX 过滤 | Done |
 | ~~嵌套 GRUP 验证~~ | ✅ 已通过 — Skyrim.esm: 118 个顶层 GRUP, 50,376 个子 GRUP, CELL/WRLD/REFR 精确匹配 | Done (2026-05-12) |
 | Delphi 交叉验证 | 无法确认 99% 一致率 | 需 Delphi 环境生成对照文件；替代方案见 `docs/validation_procedure.md` |
-| SST 旧版本兼容 | 无法读取 v1-v7 SST | 低优先级，v8 是主流格式 |
+| ~~SST 旧版本兼容~~ | ✅ v1-v7 读取已实现 (P5.1) | 低优先级写入仍只支持 v8，v8 是主流格式 |
 
 ---
 
@@ -223,7 +223,7 @@
 |--------|------|------|
 | SST v8 双向兼容 | ✅ roundtrip 测试通过 | Rust 读写 SST 可被 Delphi 正确读取（理论） |
 | Strings 格式兼容 | ✅ 三格式读写 | 格式精确复刻（null-终止/长度前缀） |
-| ESP 解析一致性 | ⚠️ 待验证 | 71,937 条 vs 原版，需 Delphi 环境做 diff |
+| ESP 解析一致性 | ✅ golden snapshot 已锁存 | 75,754 strings vs 原版 71,937，差异合理（含 VMAD 等新增字段）；Delphi 环境 diff 仍待进行，见 `docs/skyrim-se-validation-report.md` |
 | Codepage 行为一致 | ✅ 算法复刻 | UTF-8 优先 + codepage fallback，与 Delphi 逻辑一致 |
 | FNV-1a 哈希 | ✅ 验证通过 | UTF-16LE 低字节 FNV-1a |
 | record_defs 解析 | ✅ 标记支持 | */?/-proc 与原版格式一致 |

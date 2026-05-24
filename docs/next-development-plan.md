@@ -1,7 +1,7 @@
 # 下一阶段开发计划
 
 > 专注 Skyrim SE，跨游戏验证搁置
-> 编制日期：2026-05 | 最后更新：2026-05
+> 编制日期：2026-05 | 最后更新：2026-05-24
 
 ---
 
@@ -18,6 +18,7 @@ SST 合并                         ■■■■■■■■■■ 100% (前后�
 UI 组件                          ■■■■■■■■■□  ~90% (MCM/EspCompare/FUZ 面板增强完成)
 E2E 测试覆盖                     ■■■■■■■■□□  ~78% (6 面板测试: 45/58 通过, 15 待修)
 代码审查                         ■■■■■■■■■■ 100% (12/12 项闭环)
+验证硬化 (Skyrim SE)             ■■■■■■■■■■ 100% (golden snapshot + 回归脚本)
 跨游戏验证 (搁置)                □□□□□□□□□□   0%
 ```
 
@@ -30,6 +31,7 @@ E2E 测试覆盖                     ■■■■■■■■□□  ~78% (6 面
 | **E2E 测试增强** | 5/5 场景（23 tests）：搜索/编辑/ESP/批量/拼写 | ✅ |
 | **代码审查修复** | 两轮共 12 项发现全部闭环 | ✅ |
 | **拼写检查收尾** | 配置持久化（dictionary/loaded/active 自动恢复）+ 编辑器集成 | ✅ |
+| **验证硬化** | Skyrim SE golden snapshot + 回归脚本 + L1/L2/L3 验证报告 | ✅ |
 | **SST Merge 前端** | MergeSstDialog（文件选择/overwrite 策略/统计结果/自动刷新） | ✅ |
 | **UI Phase D** | RTL 预览 + HTML 导出 + 协作系统 | ✅ |
 | **McmPanel 增强** | 翻译状态徽章、统计明细、批量操作、比较结果对话框 | ✅ |
@@ -55,10 +57,13 @@ E2E 测试覆盖                     ■■■■■■■■□□  ~78% (6 面
 
 ---
 
-### 方向 2 — 验证硬化（Skyrim SE 范围）
+### 方向 2 — 验证硬化（Skyrim SE 范围） ✅ 已完成
 
-- 对真实 Skyrim SE ESP/ESM 产出可重复验证记录：加载 → 导出 → diff → 结论
-- Delphi 交叉验证 ⏸ 阻塞（需 Delphi 1.6.0 运行环境）
+- 对真实 Skyrim SE ESP/ESM 产出可重复验证记录：加载 → 导出 → diff → 结论 ✅
+- golden snapshot 已锁存：`docs/skyrim-se-golden-2026-05-24.md`（75,754 strings, 118 top GRUPs）✅
+- 验证报告已产出：`docs/skyrim-se-validation-report.md`（L1/L2/L3 全部通过）✅
+- 回归检查脚本已提交：`scripts/validate_skyrim_se.ps1` ✅
+- Delphi 交叉验证 ⏸ 仍阻塞（需 Delphi 1.6.0 运行环境）
 - 已有 `docs/validation_procedure.md`（L1/L2/L3 框架）
 - 详细实施计划见 [`docs/skyrim-se-validation-plan.md`](docs/skyrim-se-validation-plan.md)
 
@@ -77,7 +82,7 @@ E2E 测试覆盖                     ■■■■■■■■□□  ~78% (6 面
 
 | 优先级 | 方向 | 投入 | 收益 | 理由 |
 |--------|------|------|------|------|
-| 🥇 | 验证硬化（Skyrim SE） | 1-2 天 | 质量闭环 | 建立可重复验证流程 |
-| 🥈 | P5 低优先级 | 按需 | 兼容性/扩展 | SST 旧版兼容、命令脚本编辑器 |
+| 🥇 | ~~验证硬化（Skyrim SE）~~ | ~~1-2 天~~ | ~~质量闭环~~ | ✅ 已完成：golden snapshot + 回归脚本 + 验证报告 |
+| 🥈 | P5 低优先级 | 按需 | 兼容性/扩展 | 命令脚本编辑器（SST 旧版读取已兼容 v1-v7） |
 
 > **当前推荐优先推进验证硬化**：UI 打磨已完成，剩余工作聚焦质量闭环。

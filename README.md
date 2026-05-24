@@ -2,7 +2,7 @@
 
 [![Version: 1.1.0](https://img.shields.io/badge/Version-1.1.0-blue.svg)](RELEASE.md)
 [![License: MPL-2.0](https://img.shields.io/badge/License-MPL--2.0-brightgreen.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/Tests-293_passing-brightgreen.svg)](CHANGELOG.md)
+[![Tests](https://img.shields.io/badge/Tests-299_passing-brightgreen.svg)](CHANGELOG.md)
 
 [中文版](README_zh-CN.md)
 
@@ -52,7 +52,7 @@ A modern Rust-based translator for Bethesda game mods (Skyrim, Skyrim SE, Fallou
 - **Heuristic Search (Delphi Scoring)**: Word-level hash matching, LCS, LCP, alias proxy penalty — aligned with original Delphi scoring algorithm
 - **NPC/Dialog View**: Dialog tree grouped by QUST→DIAL→INFO with NPC association
 - **Multi-Language UI**: 10 languages (zh-CN, en, de, es, fr, ja, ko, pl, pt, ru)
-- **Toolbox**: 7 text transformation tools (case conversion, alias fixing, header adding, trimming)
+- **Toolbox**: 7 text transformation tools + exception word list (case conversion, alias fixing, header adding, trimming)
 
 ## Project Structure
 
@@ -96,7 +96,13 @@ All core functionality is implemented and tested:
 - ✅ 10-language i18n UI
 - ✅ Theme system (Obsidian/Slate/Light/Auto)
 
-Remaining work focuses on deeper validation against the Delphi original and parity polish for secondary surfaces: broader cross-game verification, Delphi real-data cross-checking, and continued UI refinement.
+**Skyrim SE validation hardened** — golden snapshot locked (75,754 strings, 118 top GRUPs), regression script available. Delphi cross-check still pending (requires Delphi 1.6.0 runtime).
+
+Recent additions in v1.1.0:
+- Toolbox exception words list (P6) — Title Case exception word editor with persistence
+- SST v1-v7 backward read compatibility (P5.1) — auto-detect version magic
+- Skyrim SE validation hardening — L1/L2/L3 validation + golden snapshot + regression script
+- Delphi-style heuristic scoring (6-dimension composite)
 
 ## Documentation
 

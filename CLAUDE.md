@@ -9,7 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ### 构建 & 测试
 ```bash
 cargo build --workspace              # 编译全部
-cargo test -p xt-core --lib          # 核心单元测试（290 tests, 0 warnings）
+cargo test -p xt-core --lib          # 核心单元测试（299 tests, 0 warnings）
 cd ui && npx tsc --noEmit           # 前端类型检查
 cd ui && npm run test               # 前端 Vitest
 ```
