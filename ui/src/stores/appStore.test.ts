@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import type { SkyStringDTO } from "../api/strings";
 
-// Helper to create test items
+// 辅助函数：创建测试条目
 function makeItem(overrides: Partial<SkyStringDTO> = {}): SkyStringDTO {
   return {
     id: 1,
@@ -19,9 +19,9 @@ function makeItem(overrides: Partial<SkyStringDTO> = {}): SkyStringDTO {
   };
 }
 
-// Import the pure functions (they are exported from the module)
-// We need to test them directly since they're not exported from the store
-// Let's recreate the logic here for testing
+// 导入纯函数（它们已从模块中导出）
+// 我们需要直接测试它们，因为它们没有从 store 中导出
+// 让我们在这里重新创建测试逻辑
 
 function applyFilterAndSort(
   allItems: SkyStringDTO[],

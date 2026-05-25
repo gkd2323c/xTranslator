@@ -74,7 +74,7 @@ pub fn build_dial_tree(strings: &[SkyString]) -> Vec<DialEntry> {
         }
     }
 
-    // Assemble INFO entries into DIAL topics
+    // 将 INFO 条目组装到 DIAL 话题中
     for (info_form_id, (prompt, response, response_trans, parent)) in info_pending {
         if let Some(response) = response {
             let entry = InfoEntry {
@@ -87,7 +87,7 @@ pub fn build_dial_tree(strings: &[SkyString]) -> Vec<DialEntry> {
         }
     }
 
-    // Build final dial tree
+    // 构建最终的对话树
     let mut tree: Vec<DialEntry> = dial_map
         .into_iter()
         .map(|(form_id, (topic, topic_trans))| {
@@ -101,7 +101,7 @@ pub fn build_dial_tree(strings: &[SkyString]) -> Vec<DialEntry> {
         })
         .collect();
 
-    // Sort by topic name
+    // 按话题名称排序
     tree.sort_by(|a, b| a.topic.cmp(&b.topic));
 
     tree

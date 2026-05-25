@@ -1,10 +1,10 @@
-//! Youdao translation provider
+//! 有道翻译服务商
 //!
-//! Implements the Youdao Translate API (https://ai.youdao.com).
+//! 实现有道翻译 API (https://ai.youdao.com)。
 //!
-//! Authentication: MD5(appKey + text + salt + secretKey) signature.
+//! Authentication: MD5(appKey + text + salt + secretKey) 签名。
 //! Endpoint: http://openapi.youdao.com/api
-//! Response JSON field: translation[0]
+//! Response JSON 字段: translation[0]
 
 use anyhow::Result;
 use std::time::{SystemTime, UNIX_EPOCH};

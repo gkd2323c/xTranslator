@@ -341,21 +341,31 @@ pub struct BatchStatus {
     pub job_id: String,
     /// 任务类型 "translate" | "export"
     pub job_type: String,
+    /// 待处理的文件总数
     pub total_files: u32,
+    /// 已成功处理的文件数
     pub completed_files: u32,
+    /// 处理失败的文件数
     pub failed_files: u32,
     /// 当前正在处理的文件名
     #[serde(default)]
     pub current_file: Option<String>,
     /// 当前文件的进度 0.0~1.0
     pub current_file_progress: f32,
+    /// 全部文件中的字符串总数
     pub total_strings: u32,
+    /// 已翻译完成的字符串数
     pub translated_strings: u32,
+    /// 任务是否正在运行
     pub is_running: bool,
+    /// 任务是否已被用户取消
     pub is_cancelled: bool,
+    /// 任务是否全部完成
     pub is_completed: bool,
+    /// 任务是否因错误而中止
     pub is_failed: bool,
     #[serde(default)]
+    /// 收集到的错误信息列表
     pub errors: Vec<String>,
     /// 已消耗的毫秒数
     pub elapsed_ms: u64,
@@ -364,13 +374,19 @@ pub struct BatchStatus {
 /// 批处理进度事件载荷（实时下发）
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct BatchProgress {
+    /// 当前处理任务的 Job ID
     pub job_id: String,
+    /// 当前文件的完整路径
     pub file_path: String,
     /// 当前阶段："parsing", "translating", "saving"
     pub stage: String,
+    /// 当前处理的文件序号（1-based）
     pub current_file: u32,
+    /// 待处理的文件总数
     pub total_files: u32,
+    /// 当前文件已翻译的字符串数
     pub strings_translated: u32,
+    /// 当前文件的字符串总数
     pub total_strings: u32,
     #[serde(default)]
     pub message: String,
@@ -379,24 +395,38 @@ pub struct BatchProgress {
 /// 单文件完成事件
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct BatchFileComplete {
+    /// 任务 ID
     pub job_id: String,
+    /// 已完成的文件路径
     pub file_path: String,
+    /// 成功翻译的字符串数
     pub translated: u32,
+    /// 跳过的字符串数（已翻译或无需翻译）
     pub skipped: u32,
+    /// 遇到的错误数
     pub errors: u32,
+    /// 处理该文件耗时（毫秒）
     pub duration_ms: u64,
 }
 
 /// 批次完成事件
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct BatchComplete {
+    /// 任务 ID
     pub job_id: String,
+    /// 处理的文件总数
     pub total_files: u32,
+    /// 成功处理的文件数
     pub success: u32,
+    /// 失败的文件数
     pub failed: u32,
+    /// 所有文件已翻译的字符串总数
     pub total_translated: u32,
+    /// 所有文件遇到的错误总数
     pub total_errors: u32,
+    /// 整个批次耗时（毫秒）
     pub duration_ms: u64,
+    /// 是否是被用户取消而结束
     pub is_cancelled: bool,
     #[serde(default)]
     pub errors: Vec<BatchFileError>,
@@ -405,7 +435,9 @@ pub struct BatchComplete {
 /// 批处理中出错的文件信息
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct BatchFileError {
+    /// 出错的文件路径
     pub file_path: String,
+    /// 错误描述
     pub message: String,
 }
 
@@ -442,100 +474,124 @@ pub struct AutoBackupResponse {
 
 // ── BSA Browser DTOs ───────────────────────────────────────────────
 
+/// BSA 文件浏览器单个文件条目 DTO
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct BsaFileEntryDto {
+    /// 归档内相对路径
     pub path: String,
+    /// 文件大小（字节）
     pub size: u64,
+    /// 是否已压缩
     pub compressed: bool,
+    /// 所属文件夹名
     pub folder: String,
 }
 
+/// BSA 归档文件列表 DTO
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct BsaFileListDto {
+    /// BSA 文件名
     pub archive_name: String,
+    /// BSA 格式版本
     pub version: u32,
+    /// 归档中文件总数
     pub total_files: u32,
+    /// 包含的文件夹路径列表
     pub folders: Vec<String>,
+    /// 所有文件条目
     pub files: Vec<BsaFileEntryDto>,
 }
 
 // ── PEX DTOs ────────────────────────────────────────────────────────
 
+/// PEX 脚本中可翻译的字符串条目 DTO
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PexTranslatableDto {
+    /// 脚本对象名（即 PEX 文件名）
     pub object_name: String,
+    /// 状态名（空字符串表示默认状态）
     pub state_name: String,
+    /// 包含该字符串的函数名
     pub function_name: String,
+    /// 字符串类型："string"、"none"等
     pub string_type: String,
+    /// 源语言文本
     pub source_text: String,
     /// 翻译后的文本（为空表示未翻译）
     #[serde(default)]
     pub translation: String,
 }
 
+/// PEX 脚本文件概要 DTO
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PexScriptDto {
+    /// 脚本名称（对象名）
     pub script_name: String,
+    /// 游戏 ID（PEX 文件头部编码）
     pub game_id: u16,
+    /// 主版本号
     pub major_version: u8,
+    /// 次版本号
     pub minor_version: u8,
+    /// 脚本中的字符串总数（包括不可翻译的）
     pub string_count: u32,
+    /// 可翻译条目列表
     pub translatable: Vec<PexTranslatableDto>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct DecompilePexResponse {
-    /// Script name (from first object)
+    /// 脚本名称（来自第一个对象）
     pub script_name: String,
-    /// Number of objects decompiled
+    /// 反编译的对象数量
     pub object_count: u32,
-    /// Number of functions decompiled
+    /// 反编译的函数数量
     pub function_count: u32,
-    /// Number of instructions decoded
+    /// 解码的指令数量
     pub instruction_count: u32,
-    /// Generated pseudocode
+    /// 生成的伪代码
     pub pseudocode: String,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct EspHeaderInfoDto {
-    /// HEDR version
+    /// HEDR 版本号
     pub version: f32,
-    /// Number of records in the file
+    /// 文件中的记录数
     pub num_records: u32,
-    /// Next available FormID
+    /// 下一个可用的 FormID
     pub next_object_id: u32,
-    /// Author name (CNAM)
+    /// 作者名称 (CNAM)
     pub author: String,
-    /// File description (SNAM)
+    /// 文件描述 (SNAM)
     pub description: String,
-    /// Master file names (MAST)
+    /// 母版文件名列表 (MAST)
     pub masters: Vec<String>,
-    /// Number of overridden FormIDs
+    /// 被覆盖的 FormID 数量
     pub overridden_count: u32,
-    /// Whether the file has the ESM flag
+    /// 文件是否具有 ESM 标志
     pub is_master: bool,
-    /// Whether the file is localized
+    /// 文件是否已被本地化
     pub is_localized: bool,
 }
 
-/// LIP keyframe — lip-sync data point for FUZ voice files
+/// LIP 关键帧 — FUZ 语音文件的口型同步数据点
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct LipKeyframeDto {
-    /// Time offset in seconds
+    /// 以秒为单位的时间偏移
     pub time: f32,
-    /// Lip-sync shape index (0-15): 0=silence, 1=A, 2=E, 3=I, 4=O, 5=U, 6=F, 7=V, 8=silent
+    /// 口型同步形状索引 (0-15)：0=静音，1=A，2=E，3=I，4=O，5=U，6=F，7=V，8=静音
     pub shape: u8,
 }
 
-/// LIP data from a FUZ file
+/// 来自 FUZ 文件的 LIP 数据
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct LipDataDto {
     pub version: u32,
     pub keyframes: Vec<LipKeyframeDto>,
 }
 
-/// Response for fetching LIP keyframe data from a specific FUZ file
+/// 获取特定 FUZ 文件的 LIP 关键帧数据的响应
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct FuzLipDataResponse {
     pub lip_data: Option<LipDataDto>,
@@ -553,8 +609,8 @@ pub struct FuzMapping {
     pub fuz_file: String,
     pub duration_secs: f32,
     pub has_lip: bool,
-    /// Whether FUZ file was parsed successfully.
-    /// When false, has_lip and duration_secs are not reliable.
+    /// FUZ 文件是否解析成功。
+    /// 当为 false 时，has_lip 和 duration_secs 将不可信。
     pub parse_ok: bool,
 }
 
@@ -566,29 +622,40 @@ pub struct FuzScanResponse {
 
 // ── Dialog Tree DTOs ─────────────────────────────────────────────────
 
+/// 对话信息条目 DTO
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct DialogInfoDto {
+    /// SkyString 唯一 ID
     pub id: u32,
+    /// 对话的 FormID
     pub form_id: u32,
+    /// 源语言文本
     pub source: String,
+    /// 翻译文本
     pub translation: String,
+    /// 对话原文（可能与 source 不同，如来自 INFO:NAM1 vs INFO:RNAM）
     pub dialog_text: String,
 }
 
+/// 单个 NPC 的对话树 DTO
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct NpcDialogDto {
+    /// NPC 的 Editor ID
     pub npc_edid: String,
+    /// NPC 的对话条目列表
     pub dialogues: Vec<DialogInfoDto>,
 }
 
+/// 全局对话树 DTO
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct DialogTreeDto {
+    /// 所有 NPC 的对话树
     pub npcs: Vec<NpcDialogDto>,
 }
 
 // ── ESP Compare DTOs ─────────────────────────────────────────────────
 
-/// A single string pair in the comparison result
+/// 对比结果中的单个字符串对
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct EspComparePairDto {
     pub new_id: u32,
@@ -600,20 +667,20 @@ pub struct EspComparePairDto {
     pub new_source: String,
 }
 
-/// Summary of the comparison result
+/// 对比结果的摘要
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct EspCompareResultDto {
     pub identical_count: usize,
     pub added_count: usize,
     pub removed_count: usize,
     pub modified_count: usize,
-    /// New IDs that are identical (same key + same text)
+    /// 相同的新 ID（键和文本均相同）
     pub identical: Vec<EspComparePairDto>,
-    /// New IDs present in new ESP but not in old
+    /// 仅在旧 ESP 中不存在，但存在于新 ESP 中的新 ID
     pub added: Vec<EspComparePairDto>,
-    /// Old IDs present in old ESP but not in new
+    /// 仅在旧 ESP 中存在，但不存在于新 ESP 中的旧 ID
     pub removed: Vec<EspComparePairDto>,
-    /// New IDs with same key but different text
+    /// 键相同但文本不同（被修改）的新 ID
     pub modified: Vec<EspComparePairDto>,
 }
 
@@ -727,44 +794,44 @@ pub struct ApiConfigResponse {
 
 // ── Finalize DTOs ─────────────────────────────────────────────────────
 
-/// Finalize workflow request — orchestrates save_strings + save_sst + export_xml.
+/// 导出最终生成工作流请求，协调调用 save_strings + save_sst + export_xml。
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct FinalizeRequest {
-    /// Output directory for .STRINGS/.DLSTRINGS/.ILSTRINGS files.
+    /// .STRINGS/.DLSTRINGS/.ILSTRINGS 文件的输出目录。
     pub strings_output_dir: String,
-    /// Target language for strings files.
+    /// 字符串文件的目标语言。
     pub target_lang: String,
-    /// ESP base name (e.g. "Skyrim").
+    /// ESP 基准名称（例如 "Skyrim"）。
     pub base_name: String,
-    /// Optional SST output path. If None, SST is skipped.
+    /// 可选的 SST 输出路径。如果为 None 则跳过生成 SST。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sst_path: Option<String>,
-    /// Optional XML output path. If None, XML export is skipped.
+    /// 可选的 XML 导出路径。如果为 None 则跳过导出 XML。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub xml_path: Option<String>,
 }
 
-/// Finalize workflow response — paths of all generated output files.
+/// 最终导出工作流响应，包含所有生成输出文件的路径。
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct FinalizeResponse {
-    /// .STRINGS file path (empty if skipped/failed).
+    /// .STRINGS 文件路径（如果跳过/失败则为空）。
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub strings_path: String,
-    /// .DLSTRINGS file path (empty if skipped/failed or no entries).
+    /// .DLSTRINGS 文件路径（如果跳过/失败或无条目则为空）。
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub dlstrings_path: String,
-    /// .ILSTRINGS file path (empty if skipped/failed or no entries).
+    /// .ILSTRINGS 文件路径（如果跳过/失败或无条目则为空）。
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub ilstrings_path: String,
-    /// SST dictionary path (empty if skipped).
+    /// SST 字典路径（如果跳过则为空）。
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub sst_path: String,
-    /// XML export path (empty if skipped).
+    /// XML 导出路径（如果跳过则为空）。
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub xml_path: String,
-    /// Number of translated strings written.
+    /// 写入的已翻译字符串数量。
     pub translated_count: u32,
-    /// Total strings in the file.
+    /// 文件中的总字符串数量。
     pub total_count: u32,
 }
 
@@ -808,33 +875,33 @@ pub struct AppConfigDto {
     pub proxy_username: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub proxy_password: Option<String>,
-    /// ESP mode: when true, save operations write back to the ESP file directly.
+    /// ESP 模式：为 true 时，保存操作将直接写回 ESP 文件。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub esp_mode: Option<bool>,
-    /// Last used spell check dictionary name.
+    /// 上次使用的拼写检查词典名称。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub spellcheck_dictionary: Option<String>,
-    /// Whether spell check was active when last saved.
-    /// false = loaded but inactive (toggled off), or unloaded (see spellcheck_loaded).
+    /// 上次保存时拼写检查是否处于活动状态。
+    /// false = 已加载但未激活（被关闭），或未加载（见 spellcheck_loaded）。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub spellcheck_active: Option<bool>,
-    /// Whether Hunspell dictionary was loaded when last saved.
-    /// true = auto-restore on startup; false = don't load until user manually Loads.
+    /// 上次保存时是否已加载 Hunspell 词典。
+    /// true = 启动时自动恢复加载；false = 除非用户手动加载，否则不加载。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub spellcheck_loaded: Option<bool>,
-    /// Exception words list for toolbox TitleCase (newline-separated string).
+    /// 工具箱 TitleCase 转换的例外词列表（换行符分隔的字符串）。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub word_exception_list: Option<String>,
 }
 
 // ── ESP Write-back DTOs ──────────────────────────────────────────────
 
-/// Request for saving ESP directly (delocalized ESP write-back).
+/// 直接保存 ESP 的请求（去本地化 ESP 回写）。
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SaveEspRequest {
-    /// Path to save the ESP file.
+    /// 保存 ESP 文件的路径。
     pub path: String,
-    /// Whether to create a backup before writing.
+    /// 是否在写入前创建备份。
     #[serde(default = "default_true")]
     pub create_backup: bool,
 }
@@ -843,119 +910,138 @@ fn default_true() -> bool {
     true
 }
 
-/// Response from saving ESP.
+/// 保存 ESP 的响应。
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SaveEspResponse {
-    /// Total bytes written.
+    /// 写入的总字节数。
     pub bytes_written: u64,
-    /// Number of records that were modified.
+    /// 修改的记录数量。
     pub records_modified: u32,
 }
 
-/// Request for finalizing ESP (apply SST → rebuild → serialize → export Strings).
+/// 导出最终生成 ESP 的请求（应用 SST → 重构 → 序列化 → 导出 Strings）。
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct FinalizeEspRequest {
-    /// Path to save the ESP file.
+    /// 保存 ESP 文件的路径。
     pub esp_path: String,
-    /// Directory to export .STRINGS files.
+    /// 导出 .STRINGS 文件的目录。
     pub strings_dir: String,
-    /// Base name for strings files (e.g., "Skyrim").
+    /// 字符串文件的基准名称（例如 "Skyrim"）。
     pub base_name: String,
-    /// Language (e.g., "english").
+    /// 语言（例如 "english"）。
     pub language: String,
-    /// Whether to create a backup before writing.
+    /// 是否在写入前创建备份。
     #[serde(default = "default_true")]
     pub create_backup: bool,
 }
 
-/// Response from finalizing ESP.
+/// 导出最终生成 ESP 的响应。
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct FinalizeEspResponse {
-    /// Path to the saved ESP file.
+    /// 保存的 ESP 文件路径。
     pub esp_path: String,
-    /// Paths to exported strings files.
+    /// 导出的字符串文件路径。
     pub strings_files: Vec<String>,
-    /// Number of records modified.
+    /// 修改的记录数量。
     pub records_modified: u32,
 }
 
-/// Request for delocalizing ESP (localized → delocalized conversion).
+/// 去本地化 ESP 的请求（本地化 → 去本地化转换）。
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct DelocalizeEspRequest {
-    /// Path to save the delocalized ESP file.
+    /// 保存去本地化 ESP 文件的路径。
     pub esp_path: String,
-    /// Directory to export .STRINGS files.
+    /// 导出 .STRINGS 文件的目录。
     pub strings_dir: String,
-    /// Base name for strings files.
+    /// 字符串文件的基准名称。
     pub base_name: String,
-    /// Language.
+    /// 语言。
     pub language: String,
-    /// Whether to create a backup before writing.
+    /// 是否在写入前创建备份。
     #[serde(default = "default_true")]
     pub create_backup: bool,
 }
 
-/// Response from delocalizing ESP.
+/// 去本地化 ESP 的响应。
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct DelocalizeEspResponse {
-    /// Number of strings delocalized.
+    /// 被去本地化的字符串数量。
     pub new_string_count: u32,
-    /// Paths to exported strings files.
+    /// 导出的字符串文件路径。
     pub strings_files_paths: Vec<String>,
 }
 
-/// Response for checking pending translation cache.
+/// 检查未决翻译缓存的响应。
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CheckPendingCacheResponse {
-    /// null if no pending cache, or the recovery details.
+    /// 如果没有未决缓存则为 null，否则返回恢复的详细信息。
     pub recovery: Option<RecoveryInfo>,
 }
 
-/// Recovery info for pending translation cache.
+/// 未决翻译缓存的恢复信息。
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RecoveryInfo {
+    /// ESP 文件名称
     pub esp_name: String,
+    /// 待恢复的未决翻译数量
     pub pending_count: u32,
+    /// 缓存文件路径
     pub cache_file_path: String,
 }
 
-/// Spell check fault word with byte positions.
+/// 拼写错误单词及其字节位置。
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SpellFaultDto {
+    /// 拼写错误的单词
     pub word: String,
+    /// 单词在原文中的起始字节偏移
     pub start_byte: usize,
+    /// 单词在原文中的结束字节偏移（不含）
     pub end_byte: usize,
 }
 
-/// Spell check analysis result.
+/// 拼写检查分析结果。
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SpellCheckResultDto {
+    /// 汉语检测到的错误列表
     pub faults: Vec<SpellFaultDto>,
+    /// 检测到的单词总数
     pub total_words: usize,
+    /// 错误比率锁定标志（true 表示该居所已达锃误阈值）
     pub fault_ratio_locked: bool,
+    /// 拼写检查功能是否已激活
     pub active: bool,
 }
 
-/// Spell check configuration.
+/// 拼写检查配置。
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SpellCheckConfigDto {
+    /// 当前可用的词典文件名列表
     pub available_dictionaries: Vec<String>,
+    /// 当前选中的词典
     pub current_dictionary: Option<String>,
+    /// 拼写检查是否已激活
     pub active: bool,
+    /// 词典是否已载入内存
     pub loaded: bool,
 }
 
-/// SST merge statistics.
+/// SST 合并统计信息。
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct MergeStatsDto {
+    /// 新增的条目数
     pub added: usize,
+    /// 更新的条目数
     pub updated: usize,
+    /// 被强制覆盖的条目数
     pub overwritten: usize,
+    /// 因冲突而跳过的条目数
     pub conflicts_skipped: usize,
 }
 
-/// Response for applying translation cache recovery.
+/// 应用翻译缓存恢复的响应。
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ApplyCacheResponse {
+    /// 成功应用的翻译条目数
     pub applied_count: u32,
 }

@@ -480,17 +480,17 @@ fn e2e_esp_compare_self_benchmark() {
         .unwrap_or_else(|| std::path::Path::new("."));
     let project_data = workspace_root.join("Data");
 
-    // Phase 1: SHA-256 hash
+    // 阶段 1: SHA-256 哈希
     let t0 = std::time::Instant::now();
     let _hash = xt_core::cache::hash_file(skyrim);
     println!("  SHA-256 hash: {}ms", t0.elapsed().as_millis());
 
-    // Phase 2: record_defs loading
+    // 阶段 2: record_defs 加载
     let t1 = std::time::Instant::now();
     let _parser = EspParser::with_game(&project_data, GameId::SkyrimSE).unwrap();
     println!("  Record defs: {}ms", t1.elapsed().as_millis());
 
-    // Phase 3: strings file loading
+    // 阶段 3: strings 文件加载
     let t2 = std::time::Instant::now();
     let mut parser2 = EspParser::with_game(&project_data, GameId::SkyrimSE).unwrap();
     parser2.load_strings_files(DATA_DIR, "skyrim");
@@ -501,7 +501,7 @@ fn e2e_esp_compare_self_benchmark() {
         t2.elapsed().as_millis()
     );
 
-    // Phase 4: ESP parse only (no strings)
+    // 阶段 4: 仅 ESP 解析（无 strings）
     let t3 = std::time::Instant::now();
     let mut parser3 = EspParser::with_game(&project_data, GameId::SkyrimSE).unwrap();
     let mut file = std::fs::File::open(SKYRIM_ESM).unwrap();
@@ -513,7 +513,7 @@ fn e2e_esp_compare_self_benchmark() {
         t3.elapsed().as_millis()
     );
 
-    // Phase 5: Full compare (self)
+    // 阶段 5: 完整自对比 (self)
     let t4 = std::time::Instant::now();
     let result = compare_esp_files(
         SKYRIM_ESM,
@@ -535,7 +535,7 @@ fn e2e_esp_compare_self_benchmark() {
         Err(e) => panic!("Compare failed: {}", e),
     }
 
-    // Phase 6: Second compare (cache hit)
+    // 阶段 6: 二次对比（缓存命中）
     let t5 = std::time::Instant::now();
     let _ = compare_esp_files(
         SKYRIM_ESM,

@@ -8,9 +8,9 @@
 //! - 最长公共子串（LCS）：衡量局部连续匹配  
 //! - 最长公共前缀（LCP）：衡量开头部分匹配
 //!
-//! ## Delphi Scoring (delphi_scoring.rs)
-//! Ports the original Delphi multi-dimensional scoring system including
-//! word-level hashing, proxy penalties, and dynamic thresholds.
+//! ## Delphi 评分系统 (delphi_scoring.rs)
+//! 移植了原始 Delphi 的多维评分系统，包括
+//! 单词级哈希、代理惩罚项以及动态阈值。
 
 pub mod delphi_scoring;
 

@@ -1,10 +1,10 @@
-//! Microsoft Azure Translator provider
+//! Microsoft Azure Translator 翻译服务商
 //!
-//! Implements the Azure Cognitive Services Translator API v3.0.
+//! 实现 Azure Cognitive Services Translator API v3.0。
 //!
 //! Auth: Ocp-Apim-Subscription-Key header
 //! Endpoint: https://api.cognitive.microsofttranslator.com/translate?api-version=3.0
-//! Method: POST with JSON body [{"Text": "..."}]
+//! Method: POST 带 JSON 体 [{"Text": "..."}]
 //! Response: [{"translations": [{"text": "..."}]}]
 
 use anyhow::Result;

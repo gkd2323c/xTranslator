@@ -150,7 +150,7 @@ mod tests {
     use std::path::PathBuf;
 
     fn get_test_bsa_path() -> Option<PathBuf> {
-        // Interface.bsa contains strings files needed for testing
+        // Interface.bsa 包含测试所需的 strings 文件
         let paths = [
             r"D:\SteamLibrary\steamapps\common\Skyrim Special Edition\Data\Skyrim - Interface.bsa",
             r"C:\Program Files (x86)\Steam\steamapps\common\Skyrim Special Edition\Data\Skyrim - Interface.bsa",
@@ -167,13 +167,13 @@ mod tests {
     #[test]
     fn test_hash_against_known_bsa_values() {
         use crate::bsa::directory::bsa_hash64;
-        // Known hashes from Skyrim - Interface.bsa
+        // 来自 Skyrim - Interface.bsa 的已知哈希值
         assert_eq!(
             bsa_hash64("strings", ""),
             0x4DA2984373076773,
             "folder hash mismatch for 'strings'"
         );
-        // Verify skyrim_english files (all share lower 32 bits 0x730E7368)
+        // 验证 skyrim_english 文件（所有文件共享低 32 位 0x730E7368）
         assert_eq!(
             bsa_hash64("skyrim_english", ".strings"),
             0x195E35F8730E7368,
@@ -189,7 +189,7 @@ mod tests {
             0xEB4C61F0730E7368,
             "file hash mismatch for 'skyrim_english.dlstrings'"
         );
-        // Verify skyrim_german.strings
+        // 验证 skyrim_german.strings
         assert_eq!(
             bsa_hash64("skyrim_german", ".strings"),
             0x05A6AE04730D616E,
@@ -264,7 +264,7 @@ mod tests {
             let entries = bsa.list_all_files();
             assert!(!entries.is_empty(), "list_all_files should return entries");
             assert!(entries.len() as u32 == bsa.file_count(), "count mismatch");
-            // Verify entries are sorted by path
+            // 验证条目是否按路径排序
             for i in 1..entries.len() {
                 assert!(
                     entries[i - 1].path <= entries[i].path,
@@ -273,7 +273,7 @@ mod tests {
                     entries[i].path
                 );
             }
-            // Check that known file exists and has metadata
+            // 检查已知文件是否存在并具有元数据
             let strings_file = entries
                 .iter()
                 .find(|e| e.path == "strings/skyrim_english.strings");

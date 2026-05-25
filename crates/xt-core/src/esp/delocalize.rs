@@ -1,8 +1,7 @@
-//! Localized → delocalized ESP conversion.
+//! 本地化 → 去本地化 ESP 转换。
 //!
-//! Converts a localized ESP (where strings are referenced by 4-byte IDs in
-//! external .STRINGS files) to a delocalized ESP (where strings are inline
-//! text in record field buffers).
+//! 将本地化 ESP（其中字符串由外部 .STRINGS 文件中的 4 字节 ID 引用）
+//! 转换为去本地化 ESP（其中字符串是记录字段缓冲区中的内联文本）。
 
 use super::record_tree::{EspFile, EspGrup, EspRecord};
 use crate::normalization;
@@ -11,29 +10,29 @@ use crate::types::sky_string::SkyString;
 use std::collections::HashMap;
 use std::path::Path;
 
-/// Result of a delocalization operation.
+/// 去本地化操作的结果。
 #[derive(Debug)]
 pub struct DelocalizeResult {
-    /// Number of strings that were delocalized.
+    /// 已去本地化的字符串数量。
     pub string_count: usize,
-    /// Paths to the exported strings files.
+    /// 导出的 strings 文件的路径。
     pub strings_files: Vec<std::path::PathBuf>,
 }
 
-/// Delocalize an ESP file: replace 4-byte string IDs with inline text,
-/// reassign sequential IDs, and export .STRINGS files.
+/// 去本地化 ESP 文件：将 4 字节字符串 ID 替换为内联文本，
+/// 重新分配顺序 ID，并导出 .STRINGS 文件。
 ///
-/// Uses 2-pass SST matching:
-/// 1. Strict: (form_id, field_sig, occurrence_index) triple
-/// 2. Relaxed: normalized source text + field_sig (for fields missed in pass 1)
+/// 使用两遍 SST 匹配：
+/// 1. 严格匹配：(form_id, field_sig, occurrence_index) 三元组
+/// 2. 宽松匹配：规范化源文本 + field_sig（用于第一遍匹配中遗漏的字段）
 ///
-/// # Arguments
-/// * `esp` - The in-memory ESP file (must have been parsed with ESP mode)
-/// * `strings` - The loaded SkyString entries with translations
-/// * `output_dir` - Directory to write .STRINGS files
-/// * `base_name` - Base filename (e.g., "Skyrim")
-/// * `language` - Language name (e.g., "english")
-/// * `codepage` - Codepage config for encoding
+/// # 参数
+/// * `esp` - 内存中的 ESP 文件（必须使用 ESP 模式解析）
+/// * `strings` - 已加载的包含翻译的 SkyString 条目
+/// * `output_dir` - 写入 .STRINGS 文件的目录
+/// * `base_name` - 基础文件名（例如 "Skyrim"）
+/// * `language` - 语言名称（例如 "english"）
+/// * `codepage` - 用于编码的 Codepage 配置
 pub fn delocalize_esp(
     esp: &mut EspFile,
     strings: &[SkyString],
@@ -117,11 +116,11 @@ fn delocalize_grup(
     count
 }
 
-/// Delocalize a single record: replace 4-byte string IDs with inline text.
+/// 去本地化单个记录：将 4 字节的字符串 ID 替换为内联文本。
 ///
-/// Uses 2-pass matching:
-/// 1. Strict: (form_id, field_sig, occurrence_index)
-/// 2. Relaxed: normalized source text + field_sig
+/// 使用两遍匹配：
+/// 1. 严格匹配：(form_id, field_sig, occurrence_index)
+/// 2. 宽松匹配：规范化源文本 + field_sig
 fn delocalize_record(
     record: &mut EspRecord,
     string_map: &HashMap<(u32, [u8; 4], u16), &SkyString>,
@@ -198,9 +197,9 @@ fn delocalize_record(
     count
 }
 
-/// Reassign sequential string IDs (1..N) to all strings in the delocalized ESP.
+/// 在去本地化的 ESP 中为所有字符串重新分配顺序字符串 ID (1..N)。
 ///
-/// Returns a vector of (new_id, text, list_index) for export.
+/// 返回一个用于导出的 (new_id, text, list_index) 向量。
 fn reassign_string_ids(esp: &EspFile) -> Vec<(u32, String, u8)> {
     let mut result = Vec::new();
     let mut next_id = 1u32;
@@ -249,7 +248,7 @@ fn reassign_record(record: &EspRecord, next_id: &mut u32, result: &mut Vec<(u32,
     }
 }
 
-/// Export .STRINGS, .DLSTRINGS, and .ILSTRINGS files.
+/// 导出 .STRINGS、.DLSTRINGS 和 .ILSTRINGS 文件。
 fn export_strings(
     entries: &[(u32, String, u8)],
     output_dir: &Path,
@@ -334,7 +333,7 @@ mod tests {
 
     #[test]
     fn test_delocalize_minimal() {
-        // Create a record with inline text
+        // 创建一个带有内联文本的记录
         let record = make_test_record(
             0x1234,
             vec![
@@ -378,7 +377,7 @@ mod tests {
             top_level_grups: vec![grup],
         };
 
-        // Verify the record has inline text
+        // 验证该记录包含内联文本
         assert_eq!(
             esp.top_level_grups[0].records[0].fields[1].buffer,
             b"Hello World\0"
@@ -399,7 +398,7 @@ mod tests {
     fn test_2pass_normalized_match() {
         use crate::strings::CodepageConfig;
 
-        // Create a SkyString with a translation
+        // 创建一个带有翻译的 SkyString
         let mut sk = SkyString::new(
             0,
             "Hello World".to_string(),
@@ -413,8 +412,8 @@ mod tests {
         let string_map = build_string_map(&entries);
         let normalized_index = build_normalized_index(&entries);
 
-        // Create a record where the field text matches the SkyString source
-        // but with different form_id (so strict match fails)
+        // 创建一个记录，其字段文本与 SkyString 源文本匹配
+        // 但具有不同的 form_id（因此严格匹配失败）
         let record = make_test_record(
             0x9999, // different form_id
             vec![
@@ -443,10 +442,10 @@ mod tests {
         let codepage = CodepageConfig::utf8();
         let count = delocalize_grup(&mut grup, &string_map, &normalized_index, &codepage);
 
-        // Should have matched via normalized text (pass 2)
+        // 应该通过规范化文本匹配成功（第二阶段）
         assert_eq!(count, 1);
 
-        // The field should now contain the translation
+        // 该字段现在应该包含翻译内容
         let full_field = &grup.records[0].fields[1];
         let text = std::str::from_utf8(&full_field.buffer).unwrap();
         assert_eq!(text, "你好世界");

@@ -31,10 +31,10 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
   const handleSave = async () => {
     setSaving(true);
     try {
-      // Save proxy settings to config
+      // 保存代理设置到配置
       await saveConfig(config);
 
-      // Save API keys via IPC (in-memory)
+      // 通过 IPC（内存中）保存 API 密钥
       if (config.openai_api_key !== undefined) {
         await setOpenAiApiKey(config.openai_api_key);
       }
@@ -80,7 +80,7 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
         </>
       }
     >
-      {/* API Keys */}
+      {/* API 密钥 */}
       <div className="dialog-section">
         <h4>{t("settings.apiKeys", { defaultValue: "Translation API" })}</h4>
 
@@ -174,7 +174,7 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
         />
       </div>
 
-      {/* Proxy */}
+      {/* 代理 */}
       <div className="dialog-section">
         <h4>{t("settings.proxy", { defaultValue: "HTTP Proxy" })}</h4>
 
@@ -222,7 +222,7 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
         </p>
       </div>
 
-      {/* ESP Mode */}
+      {/* ESP 模式 */}
       <div className="dialog-section">
         <h4>{t("settings.espMode", { defaultValue: "ESP Mode" })}</h4>
 

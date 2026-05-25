@@ -438,9 +438,11 @@ pub fn parse_xml_file(path: &Path) -> Result<(XmlExportParams, Vec<XmlStringEntr
     parse_xml_export(reader)
 }
 
-/// 按 Delphi xTranslator 兼容格式写出 XML
+/// 按 Delphi xTranslator 兼容格式将 XML 内容写入任意写入器
 ///
-/// 仅导出 `translation` 非空的条目。
+/// 导出传入的所有 `entries`，调用方负责在传入前将数据过滤（
+/// 例如通过 `sky_strings_to_xml_entries` 只传入已翻译的条目）。
+/// 写入成功后返回 `Ok(())`。
 pub fn write_xml_export<W: Write>(
     writer: &mut W,
     params: &XmlExportParams,
@@ -796,7 +798,7 @@ mod tests {
                 *b"HELO",
                 *b"TXT ",
             ),
-            SkyString::new(1, "World".to_string(), String::new(), *b"WORL", *b"TXT "), // empty translation
+            SkyString::new(1, "World".to_string(), String::new(), *b"WORL", *b"TXT "), // 空翻译
         ];
         strings[0].esp_ptr.str_id = 1;
         strings[0].esp_ptr.record_sig = *b"LCTN";

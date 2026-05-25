@@ -10,8 +10,8 @@
 //! - 清理：`prune()` 移除超过 max_entries 的旧缓存
 //!
 //! 缓存位置：
-//! - Windows: `%LOCALAPPDATA%/xTranslator/cache/`
-//! - Unix: `~/.cache/xTranslator/`
+//! - Windows 平台: `%LOCALAPPDATA%/xTranslator/cache/`
+//! - Unix 平台: `~/.cache/xTranslator/`
 //!
 //! 缓存文件命名：`{sha256}.cache`
 //!
@@ -209,11 +209,11 @@ pub fn hash_file(path: &Path) -> std::io::Result<String> {
     Ok(format!("{:x}", hasher.finalize()))
 }
 
-/// A reader wrapper that computes SHA-256 hash while reading.
+/// 在读取时计算 SHA-256 哈希值的读取器包装。
 ///
-/// Place this around the file before passing to the parser.
-/// After parsing, call `.finalize()` to get the hash.
-/// This eliminates the separate `hash_file` pass — file is read only once.
+/// 在将文件传递给解析器之前，将其包裹在文件周围。
+/// 解析完成后，调用 `.finalize()` 获取哈希值。
+/// 这消除了单独的 `hash_file` 传递 — 文件仅被读取一次。
 pub struct HashingReader<R> {
     inner: R,
     hasher: Sha256,
@@ -227,7 +227,7 @@ impl<R> HashingReader<R> {
         }
     }
 
-    /// Consume and return the computed SHA-256 hash (hex string).
+    /// 消费并返回计算出的 SHA-256 哈希值（十六进制字符串）。
     pub fn finalize(self) -> String {
         format!("{:x}", self.hasher.finalize())
     }
@@ -324,7 +324,7 @@ mod tests {
         let cache = EsmCache::new(cache_dir.clone(), 10);
 
         let esp_path1 = temp_file("a.esp", b"content A");
-        let esp_path2 = temp_file("b.esp", b"content B"); // different content
+        let esp_path2 = temp_file("b.esp", b"content B"); // 不同的内容
 
         let payload = CachePayload {
             version: CACHE_VERSION,
@@ -335,7 +335,7 @@ mod tests {
 
         cache.store(&esp_path1, &payload).unwrap();
 
-        // Different file → cache miss
+        // 不同的文件 → 缓存未命中
         assert!(cache.lookup(&esp_path2).is_none());
     }
 
@@ -355,11 +355,11 @@ mod tests {
         cache.store(&esp_path, &payload).unwrap();
         assert!(cache.lookup(&esp_path).is_some());
 
-        // Modify file content
+        // 修改文件内容
         let mut f = std::fs::File::create(&esp_path).unwrap();
         f.write_all(b"modified content").unwrap();
 
-        // Modified file → cache miss
+        // 修改后的文件 → 缓存未命中
         assert!(cache.lookup(&esp_path).is_none());
     }
 
@@ -368,7 +368,7 @@ mod tests {
         let cache_dir = temp_dir().join("cache_prune");
         let cache = EsmCache::new(cache_dir.clone(), 2); // max 2 entries
 
-        // Create 3 different ESP files to generate 3 cache entries
+        // 创建 3 个不同的 ESP 文件以生成 3 个缓存条目
         for i in 0..3 {
             let esp_path = temp_file(
                 &format!("prune{}.esp", i),
@@ -384,7 +384,7 @@ mod tests {
             std::thread::sleep(std::time::Duration::from_millis(10));
         }
 
-        // Should have at most 2 cache files
+        // 应最多只有 2 个缓存文件
         let count = std::fs::read_dir(&cache_dir)
             .unwrap()
             .filter(|e| {

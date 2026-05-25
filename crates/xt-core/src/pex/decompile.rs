@@ -1,4 +1,4 @@
-//! PEX decompiler — parses PEX binary into structured types and emits Papyrus-like pseudocode.
+//! PEX 反编译器 — 将 PEX 二进制文件解析为结构化类型，并输出类似于 Papyrus 的伪代码。
 
 use byteorder::{LittleEndian, ReadBytesExt};
 use std::fmt::Write;
@@ -6,16 +6,16 @@ use std::io::{self, Cursor, Read};
 
 use super::types::PexStringEntry;
 
-// ── Structured types ──────────────────────────────────────────────────────
+// ── 结构化类型 ──────────────────────────────────────────────────────
 
-/// Decoded PEX instruction
+/// 解码后的 PEX 指令
 #[derive(Clone, Debug)]
 pub struct Instruction {
     pub opcode: Opcode,
     pub args: Vec<u16>,
 }
 
-/// All known Papyrus opcodes
+/// 所有已知的 Papyrus 操作码
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u8)]
 pub enum Opcode {
@@ -171,10 +171,10 @@ impl Opcode {
         }
     }
 
-    /// Number of u16 arguments this opcode takes (based on PEX binary format).
+    /// 此操作码接受的 u16 参数数量（基于 PEX 二进制格式）。
     pub fn arg_count(self) -> usize {
         match self {
-            // 0-arg instructions
+            // 0 参数指令
             Self::Nop
             | Self::Iadd
             | Self::Fadd
@@ -195,7 +195,7 @@ impl Opcode {
             | Self::ArrayClear
             | Self::FloatToInt => 0,
 
-            // 1-arg instructions
+            // 1 参数指令
             Self::Cmplt
             | Self::CmpEq
             | Self::CmpLte
@@ -214,7 +214,7 @@ impl Opcode {
             | Self::ArrayRemovelast
             | Self::IntToFloat => 1,
 
-            // 2-arg instructions
+            // 2 参数指令
             Self::Jump
             | Self::Jnz
             | Self::Callmethod
@@ -229,7 +229,7 @@ impl Opcode {
     }
 }
 
-/// Variable definition
+/// 变量定义
 #[derive(Clone, Debug)]
 pub struct PexVariable {
     pub name: String,
@@ -240,7 +240,7 @@ pub struct PexVariable {
     pub default_value: VarValue,
 }
 
-/// Variable default value
+/// 变量默认值
 #[derive(Clone, Debug)]
 pub enum VarValue {
     None,
@@ -251,7 +251,7 @@ pub enum VarValue {
     Array(Vec<VarValue>),
 }
 
-/// Property definition
+/// 属性定义
 #[derive(Clone, Debug)]
 pub struct PexProperty {
     pub name: String,
@@ -263,7 +263,7 @@ pub struct PexProperty {
     pub default_value: VarValue,
 }
 
-/// Property group
+/// 属性组
 #[derive(Clone, Debug)]
 pub struct PexPropertyGroup {
     pub name: String,
@@ -272,21 +272,21 @@ pub struct PexPropertyGroup {
     pub properties: Vec<PexProperty>,
 }
 
-/// Function parameter
+/// 函数参数
 #[derive(Clone, Debug)]
 pub struct PexParam {
     pub name: String,
     pub type_name: String,
 }
 
-/// Local variable in a function
+/// 函数中的局部变量
 #[derive(Clone, Debug)]
 pub struct PexLocal {
     pub name: String,
     pub type_name: String,
 }
 
-/// Function definition
+/// 函数定义
 #[derive(Clone, Debug)]
 pub struct PexFunction {
     pub name: String,
@@ -299,21 +299,21 @@ pub struct PexFunction {
     pub instructions: Vec<Instruction>,
 }
 
-/// State definition
+/// 状态定义
 #[derive(Clone, Debug)]
 pub struct PexState {
     pub name: String,
     pub functions: Vec<PexFunction>,
 }
 
-/// Guard definition
+/// Guard 定义
 #[derive(Clone, Debug)]
 pub struct PexGuard {
     pub name: String,
     pub user_flags: Vec<u32>,
 }
 
-/// Fully parsed object
+/// 完全解析的对象
 #[derive(Clone, Debug)]
 pub struct PexObject {
     pub name: String,
@@ -327,14 +327,14 @@ pub struct PexObject {
     pub states: Vec<PexState>,
 }
 
-/// Fully decompiled PEX script
+/// 完全反编译的 PEX 脚本
 #[derive(Clone, Debug)]
 pub struct DecompiledPex {
     pub objects: Vec<PexObject>,
     pub string_table: Vec<PexStringEntry>,
 }
 
-// ── Parser ────────────────────────────────────────────────────────────────
+// ── 解析器 ────────────────────────────────────────────────────────────────
 
 type StrTab = Vec<PexStringEntry>;
 
@@ -414,7 +414,7 @@ fn parse_instruction(cur: &mut Cursor<&[u8]>) -> io::Result<Instruction> {
     Ok(Instruction { opcode, args })
 }
 
-/// Fully decompile a PEX binary into structured types.
+/// 将 PEX 二进制文件完全反编译为结构化类型。
 pub fn decompile_pex(data: &[u8]) -> io::Result<DecompiledPex> {
     let mut cur = Cursor::new(data);
 
@@ -433,7 +433,7 @@ pub fn decompile_pex(data: &[u8]) -> io::Result<DecompiledPex> {
     let _game_id = cur.read_u16::<LittleEndian>()?;
     let _compile_time = cur.read_u64::<LittleEndian>()?;
 
-    // String table
+    // 字符串表
     let st_count = cur.read_u16::<LittleEndian>()? as usize;
     let mut string_table = Vec::with_capacity(st_count);
     for i in 0..st_count {
@@ -446,7 +446,7 @@ pub fn decompile_pex(data: &[u8]) -> io::Result<DecompiledPex> {
         });
     }
 
-    // Debug info (skip — we don't need it for decompilation)
+    // 调试信息（跳过 — 反编译不需要它）
     let _debug_mod_time = cur.read_u64::<LittleEndian>()?;
     let debug_count = cur.read_u16::<LittleEndian>()? as usize;
     for _ in 0..debug_count {
@@ -455,14 +455,14 @@ pub fn decompile_pex(data: &[u8]) -> io::Result<DecompiledPex> {
         cur.set_position(pos + len as u64);
     }
 
-    // User flags (skip header-level)
+    // 用户标志（跳过文件头级别）
     let uf_count = cur.read_u16::<LittleEndian>()? as usize;
     for _ in 0..uf_count {
         let _n = cur.read_u16::<LittleEndian>()?;
         let _f = cur.read_u8()?;
     }
 
-    // Objects
+    // 对象
     let obj_count = cur.read_u16::<LittleEndian>()? as usize;
     let st = &string_table;
     let mut objects = Vec::with_capacity(obj_count);
@@ -492,7 +492,7 @@ fn parse_object_body_full(body: &[u8], obj_name: &str, st: &StrTab) -> io::Resul
     let doc_idx = cur.read_u16::<LittleEndian>()?;
     let doc = lookup(st, doc_idx);
 
-    // User flags
+    // 用户标志
     let uf_count = cur.read_u16::<LittleEndian>()? as usize;
     let mut user_flags = Vec::with_capacity(uf_count);
     for _ in 0..uf_count {
@@ -504,7 +504,7 @@ fn parse_object_body_full(body: &[u8], obj_name: &str, st: &StrTab) -> io::Resul
     let auto_state_idx = cur.read_u16::<LittleEndian>()?;
     let auto_state_name = lookup(st, auto_state_idx);
 
-    // Variables
+    // 变量
     let var_count = cur.read_u16::<LittleEndian>()? as usize;
     let mut variables = Vec::with_capacity(var_count);
     for _ in 0..var_count {
@@ -537,7 +537,7 @@ fn parse_object_body_full(body: &[u8], obj_name: &str, st: &StrTab) -> io::Resul
         guards.push(PexGuard { name, user_flags });
     }
 
-    // Property groups
+    // 属性组
     let pg_count = cur.read_u16::<LittleEndian>()? as usize;
     let mut property_groups = Vec::with_capacity(pg_count);
     for _ in 0..pg_count {
@@ -559,7 +559,7 @@ fn parse_object_body_full(body: &[u8], obj_name: &str, st: &StrTab) -> io::Resul
         });
     }
 
-    // States
+    // 状态
     let state_count = cur.read_u16::<LittleEndian>()? as usize;
     let mut states = Vec::with_capacity(state_count);
     for _ in 0..state_count {
@@ -664,9 +664,9 @@ fn parse_function(cur: &mut Cursor<&[u8]>, st: &StrTab) -> io::Result<PexFunctio
     })
 }
 
-// ── Pseudocode Emitter ────────────────────────────────────────────────────
+// ── 伪代码发射器 ────────────────────────────────────────────────────
 
-/// Emit Papyrus-like pseudocode from a decompiled PEX.
+/// 从反编译的 PEX 发射类似于 Papyrus 的伪代码。
 pub fn emit_pseudocode(pex: &DecompiledPex) -> String {
     let mut out = String::with_capacity(4096);
 
@@ -678,7 +678,7 @@ pub fn emit_pseudocode(pex: &DecompiledPex) -> String {
 }
 
 fn emit_object(out: &mut String, obj: &PexObject, st: &StrTab) {
-    // Script header
+    // 脚本头
     let _ = write!(out, "ScriptName {}", obj.name);
     if !obj.parent_class.is_empty() {
         let _ = write!(out, " Extends {}", obj.parent_class);
@@ -690,7 +690,7 @@ fn emit_object(out: &mut String, obj: &PexObject, st: &StrTab) {
         out.push('\n');
     }
 
-    // Variables
+    // 变量
     for var in &obj.variables {
         if !var.doc.is_empty() {
             let _ = writeln!(out, "; {}", var.doc);
@@ -720,7 +720,7 @@ fn emit_object(out: &mut String, obj: &PexObject, st: &StrTab) {
         out.push('\n');
     }
 
-    // Property groups
+    // 属性组
     for pg in &obj.property_groups {
         if !pg.name.is_empty() {
             let _ = writeln!(out, "; Group {}", pg.name);
@@ -734,13 +734,13 @@ fn emit_object(out: &mut String, obj: &PexObject, st: &StrTab) {
         out.push('\n');
     }
 
-    // Standalone properties (not in groups)
-    // Properties in groups are already emitted above
+    // 独立属性（不在组中）
+    // 组中的属性已在上方发射
 
-    // States
+    // 状态
     for state in &obj.states {
         if state.name.is_empty() {
-            // Default state — emit functions directly
+            // 默认状态 — 直接发射函数
             for func in &state.functions {
                 emit_function(out, func, st);
                 out.push('\n');
@@ -786,7 +786,7 @@ fn emit_function(out: &mut String, func: &PexFunction, st: &StrTab) {
         let _ = writeln!(out, "    ; {}", func.doc);
     }
 
-    // Signature
+    // 签名
     let ret = if func.return_type.is_empty() {
         String::from("Function")
     } else {
@@ -803,7 +803,7 @@ fn emit_function(out: &mut String, func: &PexFunction, st: &StrTab) {
     out.push(')');
     out.push('\n');
 
-    // Local variables
+    // 局部变量
     for local in &func.locals {
         let _ = writeln!(out, "        {} {}", local.type_name, local.name);
     }
@@ -811,7 +811,7 @@ fn emit_function(out: &mut String, func: &PexFunction, st: &StrTab) {
         out.push('\n');
     }
 
-    // Instructions
+    // 指令
     for inst in &func.instructions {
         emit_instruction(out, inst, st);
     }
@@ -1124,8 +1124,8 @@ fn emit_instruction(out: &mut String, inst: &Instruction, st: &StrTab) {
 }
 
 fn arg_name(arg: u16, st: &StrTab) -> String {
-    // Arguments in PEX are typically variable/temp indices encoded as string table refs
-    // We look up the string table for readability
+    // PEX 中的参数通常是编码为字符串表引用的变量/临时变量索引
+    // 我们查找字符串表以提高可读性
     lookup(st, arg)
 }
 
@@ -1155,7 +1155,7 @@ mod tests {
 
     #[test]
     fn test_decompile_minimal_pex() {
-        // Construct a minimal PEX with one object and one function
+        // 构造一个包含单个对象和单个函数的最小 PEX
         // String table:
         // 0: ""
         // 1: "TestScript"
@@ -1207,7 +1207,7 @@ mod tests {
         data.extend_from_slice(&1u16.to_le_bytes());
         data.extend_from_slice(&2u16.to_le_bytes()); // name=idx2 "TestScript"
 
-        // Build body
+        // 构建对象体
         let mut body = Vec::new();
         // parent class = "" (idx 0)
         body.extend_from_slice(&0u16.to_le_bytes());
@@ -1247,21 +1247,21 @@ mod tests {
         body.extend_from_slice(&6u16.to_le_bytes()); // type=idx6 "Int"
                                                      // instructions = 3
         body.extend_from_slice(&3u16.to_le_bytes());
-        // inst 0: Jump (0x15), 2 args
+        // inst 0: Jump (0x15), 2 个参数
         body.push(0x15u8);
         body.extend_from_slice(&1u16.to_le_bytes());
         body.extend_from_slice(&2u16.to_le_bytes());
-        // inst 1: Cast (0x0E), 1 arg
+        // inst 1: Cast (0x0E), 1 个参数
         body.push(0x0Eu8);
         body.extend_from_slice(&5u16.to_le_bytes());
-        // inst 2: Return (0x1B), 0 args
+        // inst 2: Return (0x1B), 0 个参数
         body.push(0x1Bu8);
 
-        // Write body size and data
+        // 写入对象体大小和数据
         data.extend_from_slice(&(body.len() as u32).to_le_bytes());
         data.extend_from_slice(&body);
 
-        // Decompile
+        // 反编译
         let result = decompile_pex(&data);
         assert!(result.is_ok(), "Decompile failed: {:?}", result.err());
         let decompiled = result.unwrap();
@@ -1280,7 +1280,7 @@ mod tests {
         assert_eq!(func.instructions[1].opcode, Opcode::Cast);
         assert_eq!(func.instructions[2].opcode, Opcode::Return);
 
-        // Emit pseudocode and verify key parts
+        // 发射伪代码并验证关键部分
         let pseudo = emit_pseudocode(&decompiled);
         println!("=== PSEUDOCODE ===\n{}", pseudo);
         assert!(pseudo.contains("ScriptName TestScript"));
@@ -1305,11 +1305,11 @@ mod tests {
         data.push(10);
         data.extend_from_slice(&1u16.to_le_bytes());
         data.extend_from_slice(&0u64.to_le_bytes());
-        data.extend_from_slice(&0u16.to_le_bytes()); // empty string table
-        data.extend_from_slice(&0u64.to_le_bytes()); // debug mod time
-        data.extend_from_slice(&0u16.to_le_bytes()); // debug count
-        data.extend_from_slice(&0u16.to_le_bytes()); // user flags
-        data.extend_from_slice(&0u16.to_le_bytes()); // 0 objects
+        data.extend_from_slice(&0u16.to_le_bytes()); // 空字符串表
+        data.extend_from_slice(&0u64.to_le_bytes()); // 调试修改时间
+        data.extend_from_slice(&0u16.to_le_bytes()); // 调试计数
+        data.extend_from_slice(&0u16.to_le_bytes()); // 用户标志
+        data.extend_from_slice(&0u16.to_le_bytes()); // 0 个对象
 
         let result = decompile_pex(&data);
         assert!(result.is_ok());

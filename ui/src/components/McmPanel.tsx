@@ -25,7 +25,7 @@ const STATUS_CONFIG: Record<EntryStatus, { labelKey: string; color: string; icon
   untranslated:  { labelKey: "mcm.statusUntranslated",  color: "#6b7280", icon: "○" },
 };
 
-// ── Compare Result Dialog ──────────────────────────────────────────
+// ── 对比结果对话框 ──────────────────────────────────────────
 
 interface CompareResultDialogProps {
   result: McmCompareResult;
@@ -64,7 +64,7 @@ function CompareResultDialog({ result, entries, onClose }: CompareResultDialogPr
       }
     >
       <div className="mcm-compare-result">
-        {/* Summary stats */}
+        {/* 摘要统计 */}
         <div className="mcm-compare-summary">
           <div className="mcm-compare-stat">
             <span className="mcm-compare-stat-value" style={{ color: "#22c55e" }}>{result.matched}</span>
@@ -80,7 +80,7 @@ function CompareResultDialog({ result, entries, onClose }: CompareResultDialogPr
           </div>
         </div>
 
-        {/* Changed entries list */}
+        {/* 变更条目列表 */}
         {changedEntries.length > 0 && (
           <div className="mcm-compare-changes">
             <h4>{t("mcm.changesList", { defaultValue: "Changes applied" })}</h4>
@@ -116,7 +116,7 @@ function CompareResultDialog({ result, entries, onClose }: CompareResultDialogPr
   );
 }
 
-// ── Main Component ─────────────────────────────────────────────────
+// ── 主组件 ─────────────────────────────────────────────────
 
 export function McmPanel() {
   const { t } = useTranslation();
@@ -192,7 +192,7 @@ export function McmPanel() {
       };
       const result = await mcmCompare(request);
 
-      // Merge updated entries back into state
+      // 将更新的条目合并回状态中
       if (result.updated_entries.length > 0) {
         const updatedMap = new Map(
           result.updated_entries.map((e) => [e.line_index, e])
@@ -203,7 +203,7 @@ export function McmPanel() {
         setModified(true);
       }
 
-      // Show result dialog instead of just toast
+      // 显示结果对话框而不是仅显示 toast 提示
       setCompareResult(result);
       setCompareDialogOpen(false);
 
@@ -220,7 +220,7 @@ export function McmPanel() {
     }
   };
 
-  // ── Batch operations ──────────────────────────────────────────────
+  // ── 批量操作 ──────────────────────────────────────────────
 
   const handleCopyAllSources = useCallback(() => {
     const updated = entries.map((e) => ({
@@ -253,7 +253,7 @@ export function McmPanel() {
   const hasAnyTranslation = entries.some((e) => e.translation.length > 0);
   const canCopySources = entries.some((e) => e.translation.length === 0 && e.source.length > 0);
 
-  // ── Filtered entries ──────────────────────────────────────────────
+  // ── 过滤后的条目 ──────────────────────────────────────────────
 
   const filteredEntries = filter
     ? entries.filter(
@@ -268,7 +268,7 @@ export function McmPanel() {
   const partialCount = entries.filter((e) => getEntryStatus(e) === "partial").length;
   const untranslatedCount = entries.filter((e) => getEntryStatus(e) === "untranslated").length;
 
-  // ── Stats breakdown ───────────────────────────────────────────────
+  // ── 统计细分 ───────────────────────────────────────────────
 
   const statsBreakdown = useMemo(() => {
     const total = entries.length;
@@ -293,7 +293,7 @@ export function McmPanel() {
         </div>
       ) : (
         <>
-          {/* ── File info ─────────────────────────────────────────── */}
+          {/* ── 文件信息 ─────────────────────────────────────────── */}
           <div className="sidepanel-section">
             <h3>{t("mcm.fileInfo")}</h3>
             <div className="sidepanel-row">
@@ -313,7 +313,7 @@ export function McmPanel() {
               </span>
             </div>
 
-            {/* Progress bar */}
+            {/* 进度条 */}
             <div className="mcm-progress-bar-track">
               <div
                 className="mcm-progress-bar-fill"
@@ -321,7 +321,7 @@ export function McmPanel() {
               />
             </div>
 
-            {/* Stats breakdown */}
+            {/* 统计细分 */}
             <div className="mcm-stats-breakdown">
               <span className="mcm-stat-chip mcm-stat-translated" title={t("mcm.translated", { defaultValue: "Translated" })}>
                 ✓ {statsBreakdown.translated}
@@ -334,7 +334,7 @@ export function McmPanel() {
               </span>
             </div>
 
-            {/* Action buttons */}
+            {/* 操作按钮 */}
             <div className="mcm-action-buttons">
               <Button variant="default" size="sm" onClick={handleOpen} icon={<FileUp size={12} />}>
                 {t("mcm.openAnother")}
@@ -347,7 +347,7 @@ export function McmPanel() {
               </Button>
             </div>
 
-            {/* Batch actions */}
+            {/* 批量操作 */}
             <div className="mcm-batch-actions">
               <Button variant="ghost" size="sm" onClick={handleCopyAllSources} disabled={!canCopySources} icon={<Copy size={11} />}>
                 {t("mcm.copySources", { defaultValue: "Copy sources" })}
@@ -366,7 +366,7 @@ export function McmPanel() {
               </div>
             )}
 
-            {/* Compare policy dialog */}
+            {/* 对比策略对话框 */}
             {compareDialogOpen && (
               <div className="mcm-compare-dialog">
                 <div className="mcm-compare-label">
@@ -396,7 +396,7 @@ export function McmPanel() {
             )}
           </div>
 
-          {/* ── Filter ────────────────────────────────────────────── */}
+          {/* ── 过滤 ────────────────────────────────────────────── */}
           <div className="sidepanel-section" style={{ padding: "8px" }}>
             <div className="mcm-filter-row">
               <input
@@ -431,7 +431,7 @@ export function McmPanel() {
             </div>
           </div>
 
-          {/* ── Entry list ────────────────────────────────────────── */}
+          {/* ── 条目列表 ────────────────────────────────────────── */}
           <div className="sidepanel-section">
             <h3>
               {t("mcm.entriesCount", { count: filteredEntries.length })}
@@ -451,7 +451,7 @@ export function McmPanel() {
                     <div className="mcm-entry-header-row">
                       <span className="mcm-entry-id">{entry.id}</span>
                       <div className="mcm-entry-header-actions">
-                        {/* Status badge */}
+                        {/* 状态徽章 */}
                         <span
                           className="mcm-entry-status-badge"
                           style={{ backgroundColor: statusCfg.color, color: "#fff" }}
@@ -460,14 +460,14 @@ export function McmPanel() {
                           {statusCfg.icon}
                         </span>
 
-                        {/* Char count ratio */}
+                        {/* 字符数比例 */}
                         {status !== "untranslated" && (
                           <span className="mcm-entry-char-count">
                             {entry.translation.length}/{entry.source.length}
                           </span>
                         )}
 
-                        {/* Copy source button */}
+                        {/* 复制源文本按钮 */}
                         <button
                           className="mcm-entry-copy-btn"
                           onClick={() => handleEntryChange(originalIndex, entry.source)}
@@ -502,7 +502,7 @@ export function McmPanel() {
         </>
       )}
 
-      {/* Compare result dialog */}
+      {/* 对比结果对话框 */}
       {compareResult && (
         <CompareResultDialog
           result={compareResult}

@@ -218,7 +218,7 @@ mod tests {
 
     #[test]
     fn test_header_parse_fo4() {
-        // BTDX + version=0x01 + GNRL + 3 files + offset=0x30
+        // BTDX + 版本=0x01 + GNRL + 3 个文件 + 偏移量=0x30
         let mut buf = Vec::new();
         buf.extend_from_slice(b"BTDX");
         buf.extend_from_slice(&0x01u32.to_le_bytes());
@@ -243,7 +243,7 @@ mod tests {
         buf.extend_from_slice(b"GNRL");
         buf.extend_from_slice(&1u32.to_le_bytes());
         buf.extend_from_slice(&0x40i64.to_le_bytes());
-        // Starfield has 2 extra u32 fields
+        // 星空 (Starfield) 额外包含 2 个 u32 字段
         buf.extend_from_slice(&0u32.to_le_bytes());
         buf.extend_from_slice(&0u32.to_le_bytes());
 

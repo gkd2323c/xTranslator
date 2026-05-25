@@ -140,17 +140,17 @@ function App() {
     return () => window.removeEventListener("keydown", handler);
   }, [setSelectedById, undo, redo, editorOpen, setEditorOpen, activePanel, setActivePanel]);
 
-// ── E2E Mock Data Auto-Init ──
-  // In Playwright test mode (VITE_E2E=true), if base.ts didn't seed yet (e.g. direct
-  // navigation without fixture), seed now so the table renders rows.
+// ── E2E 模拟数据自动初始化 ──
+  // 在 Playwright 测试模式 (VITE_E2E=true) 下，如果 base.ts 尚未植入数据（例如没有 fixture 的直接导航），
+  // 现在进行植入以便表格能够渲染行。
   useEffect(() => {
     const timeout = setTimeout(() => {
       if (typeof (window as any).__e2eAutoSeed === "function" && !(window as any).__e2eAutoSeeded) {
         (window as any).__e2eAutoSeed();
       }
-    }, 300); // delay so base.ts seeding (if any) wins the race
+    }, 300); // 延迟执行以让 base.ts 的植入（若有）优先完成
     return () => clearTimeout(timeout);
-  }, []); // run once on mount
+  }, []); // 仅在挂载时运行一次
 
   // 应用启动时加载配置
   ///
@@ -261,7 +261,7 @@ function App() {
             );
           }
         } catch {
-          /* silent */
+          /* 静默处理 */
         }
       }
     }, AUTO_BACKUP_INTERVAL_MS);

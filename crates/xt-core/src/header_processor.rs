@@ -1,10 +1,10 @@
-//! Header Processor — rule-based text transformation pipeline.
+//! 头部处理器 — 基于规则的文本转换流程。
 //!
-//! Corresponds to Delphi TESVT_FormData.pas + TESVT_Templates.pas.
+//! 对应 Delphi TESVT_FormData.pas + TESVT_Templates.pas。
 
 use serde::{Deserialize, Serialize};
 
-// ── DTOs for IPC ──────────────────────────────────────────────────
+// ── 用于 IPC 的 DTO ──────────────────────────────────────────────────
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct HeaderRuleDto {
@@ -404,8 +404,8 @@ pub struct TemplateInfo {
 pub struct TemplateManager;
 
 impl TemplateManager {
-    /// List available templates in the given directory.
-    /// Templates are .txt files containing valid Header Processor INI.
+    /// 列出给定目录中可用的模板。
+    /// 模板是包含有效头部处理器 INI 的 .txt 文件。
     pub fn list_templates(dir: &str) -> Result<Vec<TemplateInfo>, String> {
         let path = std::path::Path::new(dir);
         if !path.exists() {
@@ -434,7 +434,7 @@ impl TemplateManager {
         Ok(templates)
     }
 
-    /// Save current rules as a named template.
+    /// 将当前规则保存为命名模板。
     pub fn save_template(dir: &str, name: &str, rule_set: &HeaderRuleSet) -> Result<(), String> {
         let path = std::path::Path::new(dir);
         std::fs::create_dir_all(path)
@@ -444,7 +444,7 @@ impl TemplateManager {
         std::fs::write(&file_path, text).map_err(|e| format!("Failed to save template: {}", e))
     }
 
-    /// Load a named template.
+    /// 加载命名模板。
     pub fn load_template(dir: &str, name: &str) -> Result<HeaderRuleSet, String> {
         let path = std::path::Path::new(dir).join(format!("{}.txt", name));
         let text = std::fs::read_to_string(&path)
@@ -452,7 +452,7 @@ impl TemplateManager {
         Ok(HeaderRuleSet::from_ini_text(&text))
     }
 
-    /// Delete a named template.
+    /// 删除命名模板。
     pub fn delete_template(dir: &str, name: &str) -> Result<(), String> {
         let path = std::path::Path::new(dir).join(format!("{}.txt", name));
         std::fs::remove_file(&path).map_err(|e| format!("Failed to delete template: {}", e))
@@ -461,8 +461,8 @@ impl TemplateManager {
 
 // ── Pre-Processing Options ──────────────────────────────────────────
 
-/// Key-value store for batch wizard pre-processing options.
-/// Corresponds to Delphi TESVT_preProcessingOpts.pas.
+/// 批量向导预处理选项的键值存储。
+/// 对应 Delphi TESVT_preProcessingOpts.pas。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PreProcessingOpts {
     pub options: std::collections::HashMap<String, String>,
@@ -477,7 +477,7 @@ impl Default for PreProcessingOpts {
 }
 
 impl PreProcessingOpts {
-    /// Parse options from INI text. Expected format:
+    /// 从 INI 文本中解析选项。预期的格式：
     /// ```ini
     /// [PreProcessingOpts]
     /// key1=value1
@@ -503,7 +503,7 @@ impl PreProcessingOpts {
         opts
     }
 
-    /// Serialize options to INI text.
+    /// 将选项序列化为 INI 文本。
     pub fn to_ini_text(&self) -> String {
         let mut out = String::from("[PreProcessingOpts]\n");
         for (key, value) in &self.options {

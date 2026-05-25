@@ -1,45 +1,45 @@
-//! DeepL translation provider
+//! DeepL 翻译服务商
 //!
-//! Implements the DeepL API for text translation.
-//! Supports both free and pro API endpoints.
+//! 实现用于文本翻译的 DeepL API。
+//! 支持免费和专业版 API 端点。
 //!
-//! The DeepL API expects:
-//! - POST https://api-free.deepl.com/v2/translate (free) or https://api.deepl.com/v2/translate (pro)
+//! DeepL API 预期：
+//! - POST https://api-free.deepl.com/v2/translate（免费）或 https://api.deepl.com/v2/translate（专业）
 //! - Headers: "Authorization: DeepL-Auth-Key <key>"
 //! - Form data: text=<source_text>&target_lang=<target_lang>[&source_lang=<source_lang>]
-//! - Returns JSON with translations array containing {detected_source_language, text}
+//! - 返回包含 {detected_source_language, text} 的 translations 数组 JSON
 
-//! DeepL translation provider
+//! DeepL 翻译服务商
 //!
-//! Supports both free and pro DeepL API endpoints.
-//! Automatically detects free vs pro based on API key ending with ':fx'
-//! (matching Delphi TESVT_TranslatorApi.pas behavior).
+//! 支持免费和专业版 DeepL API 端点。
+//! 根据 API 密钥是否以 ':fx' 结尾，自动检测免费版与专业版
+//! （与 Delphi TESVT_TranslatorApi.pas 行为一致）。
 use anyhow::Result;
 use serde::Deserialize;
 
 #[derive(Clone)]
 pub struct DeepLProvider {
-    /// DeepL API key
+    /// DeepL API 密钥
     api_key: String,
-    /// Whether to use the free API (true) or pro API (false)
-    /// Determined by whether the api_key ends with ":fx"
+    /// 是否使用免费版 API（true）或专业版 API（false）
+    /// 由 api_key 是否以 ":fx" 结尾决定
     use_free_api: bool,
-    /// Optional custom API endpoint (overrides free/pro detection)
+    /// 可选的自定义 API 端点（覆盖免费/专业检测）
     endpoint: Option<String>,
 }
 
 impl DeepLProvider {
-    /// Create a new DeepL provider from an API key.
+    /// 从 API 密钥创建一个新的 DeepL 服务商。
     ///
-    /// Automatically detects whether to use free or pro API:
-    /// - If key ends with ":fx", uses free API
-    /// - Otherwise, uses pro API
+    /// 自动检测是否使用免费或专业版 API：
+    /// - 如果密钥以 ":fx" 结尾，使用免费版 API
+    /// - 否则，使用专业版 API
     ///
-    /// # Arguments
-    /// * `api_key` - DeepL API key
+    /// # 参数
+    /// * `api_key` - DeepL API 密钥
     ///
-    /// # Returns
-    /// New DeepLProvider instance
+    /// # 返回
+    /// 新的 DeepLProvider 实例
     pub fn new(api_key: String) -> Self {
         let use_free_api = api_key.ends_with(":fx");
         Self {
@@ -49,13 +49,13 @@ impl DeepLProvider {
         }
     }
 
-    /// Set a custom API endpoint (overrides free/pro detection)
+    /// 设置自定义 API 端点（覆盖免费/专业检测）
     pub fn with_endpoint(mut self, endpoint: String) -> Self {
         self.endpoint = Some(endpoint);
         self
     }
 
-    /// Get the appropriate DeepL API endpoint
+    /// 获取合适的 DeepL API 端点
     fn get_endpoint(&self) -> String {
         if let Some(ref endpoint) = self.endpoint {
             endpoint.clone()
@@ -66,7 +66,7 @@ impl DeepLProvider {
         }
     }
 
-    /// Get the authorization header value
+    /// 获取授权 header 值
     fn get_auth_header(&self) -> String {
         format!("DeepL-Auth-Key {}", self.api_key)
     }
@@ -90,12 +90,12 @@ impl super::TranslationProvider for DeepLProvider {
 
         let mut params = vec![("text", protected.as_str()), ("target_lang", target_lang)];
 
-        // Add source language if specified and not empty
+        // 如果指定了源语言且不为空，则添加源语言
         if !source_lang.is_empty() {
             params.push(("source_lang", source_lang));
         }
 
-        // Send request
+        // 发送请求
         let response = client
             .post(&url)
             .header("Authorization", self.get_auth_header())
@@ -105,20 +105,20 @@ impl super::TranslationProvider for DeepLProvider {
             .await
             .map_err(|e| anyhow::anyhow!("Failed to send request to DeepL API: {}", e))?;
 
-        // Handle HTTP errors
+        // 处理 HTTP 错误
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
             return Err(anyhow::anyhow!("DeepL API error ({}): {}", status, body));
         }
 
-        // Parse response
+        // 解析响应
         let response_json: DeepLResponse = response
             .json()
             .await
             .map_err(|e| anyhow::anyhow!("Failed to parse DeepL API response: {}", e))?;
 
-        // Extract translated text
+        // 提取翻译文本
         response_json
             .translations
             .first()
@@ -127,17 +127,17 @@ impl super::TranslationProvider for DeepLProvider {
     }
 }
 
-/// DeepL API response structure
+/// DeepL API 响应结构
 #[derive(Debug, Deserialize)]
 struct DeepLResponse {
-    /// Array of translation results
+    /// 翻译结果数组
     translations: Vec<DeepLTranslation>,
 }
 
-/// Individual translation result from DeepL API
+/// 来自 DeepL API 的单个翻译结果
 #[derive(Debug, Deserialize)]
 struct DeepLTranslation {
-    /// Translated text
+    /// 翻译后的文本
     text: String,
 }
 

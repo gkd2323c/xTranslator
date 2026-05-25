@@ -1,35 +1,34 @@
-//! Delphi-style heuristic search scoring  
+//! Delphi 风格的启发式搜索评分
 //!
-//! Ported from Delphi `TESVT_HeuristicSearch.pas` and `TESVT_TranslateFunc.pas`.
-//! Replaces the previous simple `normalized_similarity` with Delphi's
-//! 6-dimensional composite scoring that considers:
-//! - Word-level hashing and matching
-//! - Longest common substring (LCS)
-//! - Longest common prefix (LCP)
-//! - Alias tag proxy penalties
-//! - Dynamic word-count thresholding
+//! 移植自 Delphi 的 `TESVT_HeuristicSearch.pas` 和 `TESVT_TranslateFunc.pas`。
+//! 用 Delphi 的六维复合评分替代了之前简单的 `normalized_similarity`，评分考虑了：
+//! - 词级哈希与匹配
+//! - 最长公共子串 (LCS)
+//! - 最长公共前缀 (LCP)
+//! - 别名标签 proxy 惩罚项
+//! - 动态字数阈值
 //!
-//! # Delphi Scoring Principles
-//! - Lower score = better match (0.0 = identical)
-//! - Score >= threshold = rejected
-//! - Default threshold: varies by word count
+//! # Delphi 评分原则
+//! - 分数越低 = 匹配度越高 (0.0 = 完全相同)
+//! - 分数 >= 阈值 = 被拒绝
+//! - 默认阈值：根据字数而变化
 
 use crate::types::esp_pointer::string_hash;
 
-/// Proxy base ratio from Delphi `TESVT_Const.pas:188`
+/// 来自 Delphi `TESVT_Const.pas:188` 的 Proxy 基础比例
 const PROXYBASE_RATIO: f32 = 0.05;
 
-/// Maximum word count threshold cap (Delphi `iLDMaxBreak`)
+/// 最大字数阈值上限 (Delphi `iLDMaxBreak`)
 const LD_MAX_BREAK: u32 = 25;
 
-/// Maximum words extracted per string (Delphi `iWordThreshold`)
+/// 每个字符串提取的最大单词数 (Delphi `iWordThreshold`)
 const WORD_THRESHOLD: usize = 1000;
 
-// ── Word tokenization ──────────────────────────────────────────────────
+// ── 单词分词 ──────────────────────────────────────────────────
 
-/// Split text into words (matching Delphi `getWordsMatchHash` tokenization).
+/// 将文本拆分为单词（与 Delphi `getWordsMatchHash` 的分词匹配）。
 ///
-/// Words are lowercase, non-alphanumeric characters act as delimiters.
+/// 单词为小写，非字母数字字符用作分隔符。
 fn tokenize_words(text: &str) -> Vec<String> {
     let mut words = Vec::new();
     let mut current = String::new();
@@ -59,14 +58,14 @@ fn tokenize_words(text: &str) -> Vec<String> {
     words
 }
 
-/// Compute word hashes (FNV-1a, matching Delphi `StringHash`).
+/// 计算单词哈希（FNV-1a，与 Delphi `StringHash` 匹配）。
 fn word_hashes(words: &[String]) -> Vec<u32> {
     words.iter().map(|w| string_hash(w)).collect()
 }
 
-// ── Proxy penalty ──────────────────────────────────────────────────────
+// ── Proxy 惩罚 ──────────────────────────────────────────────────────
 
-/// Count `<alias=...>` tags in a string (Delphi `GetStringProxy`).
+/// 计算字符串中 `<alias=...>` 标签的数量 (Delphi `GetStringProxy`)。
 fn count_alias_tags(text: &str) -> u32 {
     let lower = text.to_lowercase();
     let mut count = 0u32;
@@ -85,10 +84,10 @@ fn count_alias_tags(text: &str) -> u32 {
     count
 }
 
-/// Compute proxy penalty: difference in alias tag counts between two strings.
+/// 计算 proxy 惩罚项：两个字符串之间别名标签数量的差值。
 ///
-/// Delphi `GetStringProxy`: returns proxy * proxybaseRatio.
-/// Higher proxy = more penalty = worse match score.
+/// Delphi `GetStringProxy`：返回 proxy * proxybaseRatio。
+/// 别名标签差异越大 = 惩罚越大 = 匹配分数越差。
 fn alias_proxy_penalty(s1: &str, s2: &str) -> f32 {
     let a1 = count_alias_tags(s1);
     let a2 = count_alias_tags(s2);
@@ -96,14 +95,14 @@ fn alias_proxy_penalty(s1: &str, s2: &str) -> f32 {
     diff as f32 * PROXYBASE_RATIO
 }
 
-// ── Threshold computation ──────────────────────────────────────────────
+// ── 阈值计算 ──────────────────────────────────────────────
 
-/// Delphi `defineHeuristicThreshold` (TESVT_RegexUtils.pas:53-65).
+/// Delphi `defineHeuristicThreshold` (TESVT_RegexUtils.pas:53-65)。
 ///
-/// Dynamic threshold based on word count:
-/// - 0 words: 0
-/// - 1 word:  1
-/// - N words: ceil(N/3) + 1, capped at 25
+/// 基于字数的动态阈值：
+/// - 0 个单词：0
+/// - 1 个单词：1
+/// - N 个单词：ceil(N/3) + 1，上限为 25
 pub fn heuristic_threshold(word_count: usize) -> f32 {
     match word_count {
         0 => 0.0,
@@ -115,10 +114,10 @@ pub fn heuristic_threshold(word_count: usize) -> f32 {
     }
 }
 
-/// Delphi `adjustHeuristicResult` (TESVT_RegexUtils.pas:67-78).
+/// Delphi `adjustHeuristicResult` (TESVT_RegexUtils.pas:67-78)。
 ///
-/// Adjusts raw Levenshtein distance to a normalized score.
-/// If LD is small relative to word count, boost the similarity.
+/// 将原始 Levenshtein 距离调整为归一化分数。
+/// 如果相对字数而言 LD 较小，则提升相似度。
 pub fn adjust_heuristic_result(word_count: usize, ld_distance: f32) -> f32 {
     if ld_distance == 0.0 {
         return 0.0;
@@ -131,11 +130,11 @@ pub fn adjust_heuristic_result(word_count: usize, ld_distance: f32) -> f32 {
     }
 }
 
-// ── Word-level matching ────────────────────────────────────────────────
+// ── 词级匹配 ────────────────────────────────────────────────
 
-/// Compute word-level Levenshtein distance between two word hash lists.
+/// 计算两个单词哈希列表之间的词级 Levenshtein 距离。
 ///
-/// Uses hash comparison instead of string comparison (Delphi does the same).
+/// 使用哈希比较而不是字符串比较（Delphi 也是如此）。
 fn word_hash_levenshtein(hashes1: &[u32], hashes2: &[u32]) -> u32 {
     let n = hashes1.len();
     let m = hashes2.len();
@@ -170,15 +169,15 @@ fn word_hash_levenshtein(hashes1: &[u32], hashes2: &[u32]) -> u32 {
     prev[m]
 }
 
-/// Delphi `getWordsMatchHash` (TESVT_TranslateFunc.pas:608-668).
+/// Delphi `getWordsMatchHash` (TESVT_TranslateFunc.pas:608-668)。
 ///
-/// Hierarchical word-level matching:
-/// 1. Exact word set match → 0.01 + proxy
-/// 2. Same length, case-insensitive match in source → 0.3 + proxy
-/// 3. Word hash LD = 0 → 0.5
-/// 4. Final: adjusted LD + proxy
+/// 分层词级匹配：
+/// 1. 单词集合精确匹配 → 0.01 + proxy
+/// 2. 长度相同，源字符串中不区分大小写匹配 → 0.3 + proxy
+/// 3. 单词哈希 LD = 0 → 0.5
+/// 4. 最终：调整后的 LD + proxy
 ///
-/// Returns (score, accepted), where accepted = score <= result_threshold.
+/// 返回 (score, accepted)，其中 accepted = score <= result_threshold。
 pub fn words_match_score(source: &str, candidate: &str, result_threshold: f32) -> (f32, bool) {
     let src_words = tokenize_words(source);
     let cand_words = tokenize_words(candidate);
@@ -220,13 +219,13 @@ pub fn words_match_score(source: &str, candidate: &str, result_threshold: f32) -
     (score, score <= result_threshold)
 }
 
-// ── Substring matching ─────────────────────────────────────────────────
+// ── 子串匹配 ─────────────────────────────────────────────────
 
-/// Delphi `getSubStringMatch` (TESVT_TranslateFunc.pas:581-596).
+/// Delphi `getSubStringMatch` (TESVT_TranslateFunc.pas:581-596)。
 ///
-/// Scores similarity using longest common substring:
+/// 使用最长公共子串评分相似度：
 /// - sSize = max(len1, len2) - lcs_size
-/// - score = sSize * 0.1 + (0.1 if sSize == 0 else 0.55) + proxy * 0.05
+/// - score = sSize * 0.1 + (如果 sSize == 0 则为 0.1 否则为 0.55) + proxy * 0.05
 pub fn substring_match_score(source: &str, candidate: &str) -> f32 {
     let lcs_len = crate::heuristic::longest_common_substring_len(source, candidate);
     let max_len = source.len().max(candidate.len());
@@ -238,12 +237,12 @@ pub fn substring_match_score(source: &str, candidate: &str) -> f32 {
     base + bonus + proxy
 }
 
-// ── Longest common prefix matching ─────────────────────────────────────
+// ── 最长公共前缀匹配 ─────────────────────────────────────
 
-/// Delphi `getLongestCommonStrInt_Header` variant scoring.
+/// Delphi `getLongestCommonStrInt_Header` 变体评分。
 ///
-/// Scores similarity using longest common prefix:
-/// - Higher LCP = lower score = better match
+/// 使用最长公共前缀评分相似度：
+/// - 较高的 LCP = 较低的分数 = 较好的匹配
 pub fn prefix_match_score(source: &str, candidate: &str) -> f32 {
     let lcp_len = crate::heuristic::longest_common_prefix_len(source, candidate);
     if lcp_len == 0 {
@@ -282,25 +281,25 @@ pub fn delphi_heuristic_score(source: &str, candidate: &str, threshold: f32) -> 
     best
 }
 
-// ── Public API ─────────────────────────────────────────────────────────
+// ── 公共 API ─────────────────────────────────────────────────────────
 
-/// Delphi-style heuristic match result.
+/// Delphi 风格的启发式匹配结果。
 #[derive(Clone, Debug)]
 pub struct DelphiHeuristicMatch {
     pub source: String,
     pub translation: String,
-    pub score: f32,        // lower = better
-    pub word_score: f32,   // word-level score
-    pub sub_score: f32,    // substring score
-    pub prefix_score: f32, // prefix score
+    pub score: f32,        // 越低 = 越好
+    pub word_score: f32,   // 词级分数
+    pub sub_score: f32,    // 子串分数
+    pub prefix_score: f32, // 前缀分数
 }
 
-/// Search for similar translations using Delphi-style scoring.
+/// 使用 Delphi 风格的评分搜索相似翻译。
 ///
-/// Matches the behavior of Delphi `TESVT_HeuristicSearch.pas`:
-/// - Uses word-level, substring, and prefix matching
-/// - Returns results sorted by score (lowest = best)
-/// - Filters by result threshold (Delphi default ~0.5)
+/// 匹配 Delphi `TESVT_HeuristicSearch.pas` 的行为：
+/// - 使用词级、子串和前缀匹配
+/// - 返回按分数排序的结果（最低 = 最好）
+/// - 按结果阈值过滤（Delphi 默认 ~0.5）
 pub fn delphi_find_similar(
     source: &str,
     candidates: &[(String, String)],
@@ -369,12 +368,12 @@ mod tests {
 
     #[test]
     fn test_alias_proxy_penalty() {
-        // Same alias count = 0 penalty
+        // 相同的别名数量 = 0 惩罚项
         assert_eq!(alias_proxy_penalty("<Alias=Player>", "<Alias=Player>"), 0.0);
-        // Different counts = penalty
+        // 不同的数量 = 惩罚项
         let penalty = alias_proxy_penalty("<Alias=Player>", "No alias");
         assert!(penalty > 0.0);
-        // Proxied
+        // Proxied 惩罚
         assert!((penalty - 0.05).abs() < 0.001);
     }
 
@@ -389,11 +388,11 @@ mod tests {
 
     #[test]
     fn test_adjust_heuristic_result() {
-        // LD=0 stays 0
+        // LD=0 保持为 0
         assert_eq!(adjust_heuristic_result(5, 0.0), 0.0);
-        // LD=0.5 with 15 words: floor(15/15)=1, LD<=1=true, result=0.55+0.5/10=0.6
+        // LD=0.5 且有 15 个单词：floor(15/15)=1，LD<=1=true，结果=0.55+0.5/10=0.6
         assert!((adjust_heuristic_result(15, 0.5) - 0.6).abs() < 0.01);
-        // LD=5 with 3 words: floor(3/15)=0, LD>tmp, returns LD unchanged
+        // LD=5 且有 3 个单词：floor(3/15)=0，LD>tmp，返回未改变的 LD
         assert_eq!(adjust_heuristic_result(3, 5.0), 5.0);
     }
 
@@ -401,42 +400,42 @@ mod tests {
     fn test_words_match_exact() {
         let (score, accepted) = words_match_score("Hello World", "Hello World", 0.5);
         assert!(accepted);
-        assert!(score < 0.1); // exact match = 0.01
+        assert!(score < 0.1); // 精确匹配 = 0.01
     }
 
     #[test]
     fn test_words_match_similar() {
         let (score, _) = words_match_score("Hello World", "Hello Earth", 0.5);
-        // Should be reasonably low since "Hello" matches
+        // 应该相当低，因为 "Hello" 匹配
         assert!(score < 5.0);
     }
 
     #[test]
     fn test_words_match_different() {
         let (score, _) = words_match_score("Hello World", "Goodbye Universe", 0.5);
-        // Different words = higher score
+        // 不同的单词 = 更高的分数
         assert!(score > 0.5);
     }
 
     #[test]
     fn test_words_match_case_insensitive() {
         let (score, _) = words_match_score("hello world", "HELLO WORLD", 0.5);
-        // Same length, case-insensitive match
-        assert!(score <= 0.35); // 0.3 + possible proxy penalty
+        // 长度相同，不区分大小写匹配
+        assert!(score <= 0.35); // 0.3 + 可能的 proxy 惩罚项
     }
 
     #[test]
     fn test_substring_match_score() {
         let score = substring_match_score("Hello World", "Hello Earth");
         let score2 = substring_match_score("Hello World", "Goodbye Universe");
-        assert!(score < score2); // "Hello" is common substring
+        assert!(score < score2); // "Hello" 是公共子串
     }
 
     #[test]
     fn test_prefix_match_score() {
         let good = prefix_match_score("Hello World", "Hello Earth");
         let bad = prefix_match_score("Hello World", "Goodbye Universe");
-        assert!(good < bad); // common prefix "Hello " gives lower score
+        assert!(good < bad); // 公共前缀 "Hello " 产生更低的分数
     }
 
     #[test]
@@ -451,7 +450,7 @@ mod tests {
         let results = delphi_find_similar("Retrieve the axe", &candidates, 3);
         assert!(!results.is_empty());
 
-        // "Retrieve the sword" should be first (most similar)
+        // "Retrieve the sword" 应该是第一个（最相似）
         assert_eq!(results[0].source, "Retrieve the sword");
         assert_eq!(results[0].translation, "取回剑");
     }
@@ -463,6 +462,6 @@ mod tests {
         assert_eq!(word_hash_levenshtein(&h1, &h2), 0);
 
         let h3 = word_hashes(&tokenize_words("a b d"));
-        assert_eq!(word_hash_levenshtein(&h1, &h3), 1); // one substitution
+        assert_eq!(word_hash_levenshtein(&h1, &h3), 1); // 一次替换
     }
 }

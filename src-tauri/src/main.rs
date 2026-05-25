@@ -72,29 +72,29 @@ fn main() {
             import_xml,
             get_is_dirty,
             save_strings,
-            // Batch commands
+            // 批量命令
             start_batch_translate,
             start_batch_export,
             get_batch_status,
             cancel_batch_job,
             list_esp_files,
-            // BSA browser commands
+            // BSA 浏览器命令
             list_bsa_files,
             list_ba2_files,
             extract_bsa_file,
             extract_ba2_file,
             extract_bsa_folder,
             extract_ba2_folder,
-            // PEX commands
+            // PEX 命令
             parse_pex_strings,
             compile_pex,
             decompile_pex,
             compare_esp_files,
-            // MCM commands
+            // MCM 命令
             load_mcm_file,
             save_mcm_file,
             mcm_compare,
-            // Config commands
+            // 配置命令
             load_config,
             save_config,
             get_api_config,
@@ -113,20 +113,20 @@ fn main() {
             rtl_reverse,
             shape_arabic,
             deshape_arabic,
-            // ESP write-back commands
+            // ESP 回写命令
             save_esp,
             finalize_esp,
             delocalize_esp,
             get_esp_header,
-            // Translation cache commands
+            // 翻译缓存命令
             check_pending_cache,
             apply_translation_cache,
             discard_translation_cache,
-            // String-level batch translation
+            // 字符串级批量翻译
             start_string_batch_translate,
             cancel_string_batch_translate,
             write_text_file,
-            // Spell check
+            // 拼写检查
             spell_check_load,
             spell_check_unload,
             spell_check_toggle,
@@ -141,7 +141,7 @@ fn main() {
             colab_set_label,
             colab_assign,
             colab_filter,
-            // Header Processor
+            // 头部处理器
             header_rules_load,
             header_rules_list,
             header_rules_toggle,
@@ -151,20 +151,20 @@ fn main() {
             header_rules_move,
             header_rules_update,
             header_rules_add,
-            // Templates
+            // 模板
             header_templates_list,
             header_templates_save,
             header_templates_load,
             header_templates_delete,
-            // Pre-processing options
+            // 预处理选项
             preproc_opts_load,
             preproc_opts_list,
             preproc_opts_set,
             preproc_opts_delete,
             preproc_opts_save,
-            // Header batch wizard
+            // 头部批量向导
             header_batch_process,
-            // Toolbox exception words
+            // 工具箱例外词
             toolbox_load_exception_words,
             toolbox_get_exception_words,
         ])

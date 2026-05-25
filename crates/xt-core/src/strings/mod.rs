@@ -41,7 +41,7 @@ impl StringsFile {
         }
     }
 
-    /// Create a StringsFile from a vector of (id, text) entries.
+    /// 从 (id, text) 条目向量中创建 StringsFile。
     pub fn from_entries(entries: Vec<(u32, String)>, codepage: CodepageConfig) -> Self {
         let mut strings = HashMap::new();
         for (id, text) in entries {
@@ -535,7 +535,7 @@ mod tests {
         // 去重后的文件应比不区分的更小
         let size = std::fs::metadata(&tmp).unwrap().len();
         // 3 entries: header(8) + directory(3*8=24) + data(Duplicate\0=10 + Unique\0=7) = 49
-        // Without dedup it would be: 8 + 24 + 10 + 7 + 10 = 59
+        // 如果不进行去重，大小应为: 8 + 24 + 10 + 7 + 10 = 59
         assert!(
             size < 55,
             "Dedup should produce smaller file, got {size} bytes"

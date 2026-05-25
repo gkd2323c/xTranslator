@@ -1,10 +1,10 @@
-//! Baidu translation provider
+//! 百度翻译服务商
 //!
-//! Implements the Baidu Translate API (https://fanyi-api.baidu.com).
+//! 实现百度翻译 API (https://fanyi-api.baidu.com)。
 //!
-//! Authentication: MD5(appId + text + salt + key) signature.
+//! Authentication: MD5(appId + text + salt + key) 签名。
 //! Endpoint: http://api.fanyi.baidu.com/api/trans/vip/translate
-//! Response JSON field: dst
+//! Response JSON 字段: dst
 
 use anyhow::Result;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -121,7 +121,7 @@ mod tests {
         let provider = BaiduProvider::new("20200101000399999".to_string(), "abcdefg".to_string());
         let sign = provider.compute_sign("apple", "1435660288");
         assert!(!sign.is_empty());
-        assert_eq!(sign.len(), 32); // MD5 hex
+        assert_eq!(sign.len(), 32); // MD5 十六进制
     }
 
     #[test]

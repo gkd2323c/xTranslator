@@ -19,6 +19,11 @@ pub struct SqliteCache {
 }
 
 impl SqliteCache {
+    /// 创建 SQLite 缓存管理器
+    ///
+    /// # 参数
+    /// * `cache_dir` - 缓存目录，通常为 `%LOCALAPPDATA%/xTranslator/cache/`（Windows）
+    ///                 或 `~/.cache/xTranslator/`（Unix）
     pub fn new(cache_dir: PathBuf) -> Self {
         Self { cache_dir }
     }
@@ -54,7 +59,7 @@ impl SqliteCache {
         self.write_payload(&conn, esp_hash, payload)?;
         self.prune()?;
 
-        // Touch file so prune keeps recently used
+        // 更新文件修改时间，以便清理算法保留最近使用的文件
         let _ =
             std::fs::File::open(&path).and_then(|f| f.set_modified(std::time::SystemTime::now()));
 
@@ -268,7 +273,11 @@ impl SqliteCache {
     }
 }
 
-/// 缓存载荷（与 bincode cache 的 CachePayload 兼容）
+/// SQLite 缓存的数据载荷
+///
+/// 对应数据库中 `cache_meta` 表（元数据）和 `strings` 表（字符串行）的组合内容。
+/// 注意：此类型与旧 `cache::CachePayload`（bincode 文件格式）**不存在序列化级别的兼容性**，
+/// 两者字段相似但存储后端完全独立。
 pub struct CachePayload {
     pub version: u32,
     pub strings: Vec<SkyString>,

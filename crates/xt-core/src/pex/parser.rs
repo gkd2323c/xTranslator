@@ -84,10 +84,10 @@ pub fn parse_pex<R: Read>(reader: &mut R) -> Result<PexScript> {
         let mut body_bytes = vec![0u8; body_size];
         reader.read_exact(&mut body_bytes)?;
 
-        // Preserve raw body bytes for recompile
+        // 保留原始主体字节以便重新编译
         object_bodies_raw.push(body_bytes.clone());
 
-        // Parse body for translatable strings
+        // 解析主体以提取可翻译字符串
         let mut cur = Cursor::new(&body_bytes[..]);
         parse_object_body(&mut cur, &obj_name, st, &mut translatable)?;
     }

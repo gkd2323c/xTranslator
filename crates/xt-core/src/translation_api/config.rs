@@ -30,7 +30,7 @@ pub struct ApiProviderConfig {
     pub pro_api_url: Option<String>,
     pub default_query: Option<String>,
     pub models: Vec<String>,
-    pub lang_codes: HashMap<String, String>, // key -> API-specific lang code
+    pub lang_codes: HashMap<String, String>, // 键 -> API 特定的语言代码
 }
 
 #[derive(Clone, Debug, Default)]
@@ -61,7 +61,7 @@ impl ApiTranslatorConfig {
 
         let mut providers: HashMap<String, ApiProviderConfig> = HashMap::new();
 
-        // Collect all unique provider prefixes
+        // 收集所有唯一的服务商前缀
         let mut prefixes: Vec<&str> = Vec::new();
         for key in raw.keys() {
             if let Some(us) = key.find('_') {
@@ -114,7 +114,7 @@ impl ApiTranslatorConfig {
             cfg.pro_api_url = raw.get(&format!("{}_ProApiUrl", prefix)).cloned();
             cfg.default_query = raw.get(&format!("{}_DefaultQuery", prefix)).cloned();
 
-            // Models: OpenAI_Model0..9
+            // 模型: OpenAI_Model0..9
             for i in 0..10u8 {
                 let model_key = format!("{}_Model{}", prefix, i);
                 if let Some(model) = raw.get(&model_key) {
@@ -122,12 +122,12 @@ impl ApiTranslatorConfig {
                 }
             }
 
-            // Language codes: {prefix}_{lang}=code
+            // 语言代码: {prefix}_{lang}=code
             let prefix_underscore = format!("{}_", prefix);
             for (key, value) in &raw {
                 if key.starts_with(&prefix_underscore) {
                     let suffix = &key[prefix_underscore.len()..];
-                    // Skip known config keys
+                    // 跳过已知的配置键
                     if matches!(
                         suffix,
                         "enabled"
@@ -145,7 +145,7 @@ impl ApiTranslatorConfig {
                     ) {
                         continue;
                     }
-                    // Skip model keys
+                    // 跳过模型键
                     if suffix.starts_with("Model") && suffix.len() > 5 {
                         continue;
                     }
@@ -163,26 +163,26 @@ impl ApiTranslatorConfig {
         self.providers.get(provider)
     }
 
-    /// Resolve a language name to the API-specific language code
+    /// 将语言名称解析为特定于 API 的语言代码
     pub fn resolve_lang(&self, provider: &str, lang: &str) -> String {
         if let Some(cfg) = self.get(provider) {
-            // Try exact match first (e.g. "english")
+            // 首先尝试精确匹配（例如 "english"）
             if let Some(code) = cfg.lang_codes.get(lang) {
                 return code.clone();
             }
-            // Try short form (e.g. "en")
+            // 尝试缩写形式（例如 "en"）
             let short = lang_to_short(lang);
             if let Some(code) = cfg.lang_codes.get(&short) {
                 return code.clone();
             }
-            // Try simplified chinese variants
+            // 尝试简体中文变体
             if lang == "chinese" || lang == "cn" {
                 if let Some(code) = cfg.lang_codes.get("zhhans") {
                     return code.clone();
                 }
             }
         }
-        // Fallback: use lang as-is
+        // 回退：直接按原样使用语言
         lang.to_string()
     }
 }
@@ -279,7 +279,7 @@ DeepL_russian=ru
         let config = ApiTranslatorConfig::parse(content);
         assert_eq!(config.resolve_lang("DeepL", "english"), "en");
         assert_eq!(config.resolve_lang("DeepL", "french"), "fr");
-        // Fallback
+        // 回退
         assert_eq!(config.resolve_lang("DeepL", "unknown"), "unknown");
     }
 

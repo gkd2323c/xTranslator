@@ -1,17 +1,17 @@
-//! Spell check module — Hunspell-based spell checking for translated text.
+//! 拼写检查模块 —— 基于 Hunspell 的翻译文本拼写检查。
 //!
-//! Architecture matches Delphi TESVT_SpellCheck.pas:
-//! - Tag-aware word splitting (skip `<...>` content)
-//! - Parse options: ignore first-uppercase, multi-uppercase, alias tags
-//! - Hash cache for correct/faulty words (binary search, FNV-1a hashes)
-//! - Fault-ratio lockout to avoid false-positive floods
-//! - Persistent ignore list
-//! - Suggestions via Hunspell Suggest()
+//! 架构匹配 Delphi TESVT_SpellCheck.pas：
+//! - 标签感知单词拆分（跳过 `<...>` 内容）
+//! - 解析选项：忽略首字母大写、多个字母大写、别名标签
+//! - 正确/错误单词的哈希缓存（二分搜索，FNV-1a 哈希）
+//! - 错误率锁定以避免误报泛滥
+//! - 持久化忽略列表
+//! - 通过 Hunspell Suggest() 获得建议
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-/// Parse options for word extraction
+/// 单词提取的解析选项
 #[derive(Debug, Clone, Copy, Default)]
 pub struct SpellParseOptions {
     pub ignore_first_upper: bool,
@@ -47,7 +47,7 @@ pub struct SpellCheckConfig {
 const MAX_UNDERLINES: usize = 100;
 const MAX_UNDERLINE_RATIO: usize = 30; // percentage
 
-/// A runtime-loaded Hunspell instance.
+/// 运行时加载的 Hunspell 实例。
 struct HunspellHandle {
     lib: libloading::Library,
     handle: *mut std::ffi::c_void,
@@ -101,7 +101,7 @@ impl HunspellHandle {
                 ) -> std::os::raw::c_int,
             > = match self.lib.get(b"Hunspell_spell") {
                 Ok(f) => f,
-                Err(_) => return true, // assume correct if can't check
+                Err(_) => return true, // 如果无法检查，则假定正确
             };
 
             let word_c = match std::ffi::CString::new(word) {
@@ -180,7 +180,7 @@ impl Drop for HunspellHandle {
     }
 }
 
-/// Main spell checker
+/// 主拼写检查器
 pub struct SpellChecker {
     hunspell: Option<HunspellHandle>,
     correct_cache: HashMap<u64, ()>,
@@ -215,7 +215,7 @@ impl SpellChecker {
         self.config.active && self.config.loaded
     }
 
-    /// Load Hunspell DLL and dictionary.
+    /// 加载 Hunspell DLL 和词典。
     pub fn load(&mut self, dll_path: &str, dic_dir: &str, dict_name: &str) -> Result<(), String> {
         let dic_path = Path::new(dic_dir).join(format!("{}.dic", dict_name));
         let aff_path = Path::new(dic_dir).join(format!("{}.aff", dict_name));
@@ -243,7 +243,7 @@ impl SpellChecker {
         Ok(())
     }
 
-    /// Unload the Hunspell backend.
+    /// 卸载 Hunspell 后端。
     pub fn unload(&mut self) {
         self.hunspell = None;
         self.config.loaded = false;
@@ -254,7 +254,7 @@ impl SpellChecker {
         self.ignore_path = None;
     }
 
-    /// Scan a directory for available dictionaries.
+    /// 扫描目录以查找可用的词典。
     pub fn scan_dictionaries(dic_dir: &str) -> Vec<String> {
         let dir = Path::new(dic_dir);
         if !dir.exists() {
@@ -267,7 +267,7 @@ impl SpellChecker {
                 if path.extension().map_or(false, |e| e == "dic") {
                     if let Some(stem) = path.file_stem() {
                         let name = stem.to_string_lossy().to_string();
-                        // Check for matching .aff file
+                        // 检查匹配的 .aff file
                         let aff_path = dir.join(format!("{}.aff", name));
                         if aff_path.exists() {
                             dicts.push(name);
@@ -280,7 +280,7 @@ impl SpellChecker {
         dicts
     }
 
-    /// Add a word to the persistent ignore list.
+    /// 将单词添加到持久化忽略列表。
     pub fn add_ignore(&mut self, word: &str) {
         if !self
             .ignore_list
@@ -309,7 +309,7 @@ impl SpellChecker {
             .unwrap_or_else(|| PathBuf::from("SpellCheck/ignore.txt"))
     }
 
-    /// Load ignore list from file.
+    /// 从文件加载忽略列表。
     pub fn load_ignore_list(&mut self, path: &str) {
         self.ignore_list.clear();
         if let Ok(content) = std::fs::read_to_string(path) {
@@ -323,7 +323,7 @@ impl SpellChecker {
         self.rebuild_cache();
     }
 
-    /// Save ignore list to file.
+    /// 将忽略列表保存到文件。
     pub fn save_ignore_list(&self, path: &str) -> std::io::Result<()> {
         if let Some(parent) = Path::new(path).parent() {
             std::fs::create_dir_all(parent)?;
@@ -338,14 +338,14 @@ impl SpellChecker {
         }
     }
 
-    /// Check spelling of a single word.
+    /// 检查单个单词的拼写。
     fn check_word(&mut self, word: &str) -> bool {
         if word.len() <= 1 {
             return true;
         }
         let hash = hash_word(word);
 
-        // Check caches first
+        // 首先检查缓存
         if self.correct_cache.contains_key(&hash) {
             return true;
         }
@@ -353,7 +353,7 @@ impl SpellChecker {
             return false;
         }
 
-        // Check Hunspell
+        // 检查 Hunspell
         let is_correct = match &self.hunspell {
             Some(h) => h.spell(word),
             None => true,
@@ -368,7 +368,7 @@ impl SpellChecker {
         is_correct
     }
 
-    /// Analyze text and return spell check result.
+    /// 分析文本并返回拼写检查结果。
     pub fn analyze(&mut self, text: &str) -> SpellResult {
         let words = split_text_into_words(text, &self.parse_options);
 
@@ -390,7 +390,7 @@ impl SpellChecker {
             }
         }
 
-        // Fault ratio lockout
+        // 错误率锁定
         if total_words > 0 && !self.fault_ratio_locked {
             let ratio = (fault_words.len() * 100) / total_words;
             self.fault_ratio_locked =
@@ -404,7 +404,7 @@ impl SpellChecker {
         }
     }
 
-    /// Get suggestions for a misspelled word.
+    /// 获取拼写错误单词的建议。
     pub fn suggestions(&self, word: &str) -> Vec<String> {
         match &self.hunspell {
             Some(h) => h.suggest(word),
@@ -412,7 +412,7 @@ impl SpellChecker {
         }
     }
 
-    /// Reset internal caches (but keep ignore list).
+    /// 重置内部缓存（但保留忽略列表）。
     pub fn reset_caches(&mut self) {
         self.correct_cache.clear();
         self.fault_cache.clear();
@@ -421,7 +421,7 @@ impl SpellChecker {
     }
 }
 
-// ── Word splitting ───────────────────────────────────────────────
+// ── 单词拆分 ───────────────────────────────────────────────
 
 const WORD_DELIMITERS: &[char] = &[
     ' ', '\t', '\r', '\n', '.', ',', '!', '?', ':', ';', '-', '\'', '"', '(', ')', '[', ']', '{',
@@ -478,13 +478,13 @@ fn split_text_into_words(text: &str, opts: &SpellParseOptions) -> Vec<SpellWord>
             continue;
         }
 
-        // Inside tag: skip all content
+        // 在标签内部：跳过所有内容
         if in_tag {
             pos += ch_len;
             continue;
         }
 
-        // Skip delimiters outside tags
+        // 跳过标签外部的分隔符
         if is_delimiter(ch) {
             if is_end_line(ch) {
                 start_line = true;
@@ -493,7 +493,7 @@ fn split_text_into_words(text: &str, opts: &SpellParseOptions) -> Vec<SpellWord>
             continue;
         }
 
-        // Collect word
+        // 收集单词
         let word_start = pos;
         while pos < len {
             let next_ch = text[pos..].chars().next().unwrap_or(' ');
@@ -532,12 +532,12 @@ fn split_text_into_words(text: &str, opts: &SpellParseOptions) -> Vec<SpellWord>
 }
 
 fn should_delete_word(word: &str, start_line: bool, opts: &SpellParseOptions) -> bool {
-    // Words with numbers are skipped
+    // 跳过包含数字的单词
     if word.chars().any(|c| c.is_ascii_digit()) {
         return true;
     }
 
-    // Words with multiple uppercase chars (acronyms)
+    // 包含多个大写字符的单词（首字母缩写）
     if opts.ignore_multi_upper {
         let upper_count = word.chars().filter(|c| is_upper(*c)).count();
         if upper_count >= 2 && word.len() > 2 {
@@ -545,11 +545,11 @@ fn should_delete_word(word: &str, start_line: bool, opts: &SpellParseOptions) ->
         }
     }
 
-    // First uppercase at line start
+    // 行首的第一个大写字母
     if opts.ignore_first_upper && start_line && word.len() > 1 {
         if let Some(first) = word.chars().next() {
             if is_upper(first) {
-                // Only skip if rest is lowercase
+                // 仅在其余部分为小写时跳过
                 let rest_lower = word.chars().skip(1).all(|c| !is_upper(c));
                 if rest_lower {
                     return true;
@@ -603,7 +603,7 @@ mod tests {
 
     #[test]
     fn test_split_skip_numbers() {
-        // Digits are delimiters; "Test123" splits to "Test" + "123"
+        // 数字是分隔符；"Test123" 拆分为 "Test" + "123"
         let words = split_text_into_words("Test123 abc", &SpellParseOptions::default());
         assert_eq!(words.len(), 2);
         assert_eq!(words[0].word, "Test");
@@ -617,7 +617,7 @@ mod tests {
             ..Default::default()
         };
         let words = split_text_into_words("Hello world", &opts);
-        // "Hello" is at line start and has uppercase first letter → skipped
+        // "Hello" 位于行首且首字母大写 → 跳过
         assert_eq!(words.len(), 1);
         assert_eq!(words[0].word, "world");
     }
@@ -629,7 +629,7 @@ mod tests {
             ..Default::default()
         };
         let words = split_text_into_words("NPC Dialog", &opts);
-        // "NPC" has multiple uppercase → skipped
+        // "NPC" 包含多个大写字母 → 跳过
         assert_eq!(words.len(), 1);
         assert_eq!(words[0].word, "Dialog");
     }
@@ -637,7 +637,7 @@ mod tests {
     #[test]
     fn test_scan_dictionaries() {
         let dir = std::env::temp_dir();
-        // Should return empty for non-existent dict dir
+        // 对于不存在的词典目录应返回空
         let dicts = SpellChecker::scan_dictionaries(dir.to_str().unwrap());
         assert!(dicts.is_empty());
     }

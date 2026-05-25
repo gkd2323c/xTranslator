@@ -80,6 +80,7 @@ pub struct DictionaryApplyEntry {
 }
 
 impl DictionaryApplyEntry {
+    /// 从 XML 导入条目构造字典应用条目
     pub fn from_xml_entry(entry: &XmlStringEntry) -> Self {
         Self {
             source_format: DictionarySourceFormat::Xml,
@@ -98,6 +99,7 @@ impl DictionaryApplyEntry {
         }
     }
 
+    /// 从 SST SkyString 条目构造字典应用条目
     pub fn from_sst_entry(entry: &SkyString) -> Self {
         Self {
             source_format: DictionarySourceFormat::Sst,
@@ -120,6 +122,10 @@ impl DictionaryApplyEntry {
         }
     }
 
+    /// 将当前条目转换为标记了 `OLD_DATA` 的 SkyString
+    ///
+    /// 用于 SST 加载时保留不能匹配的历史条目（如 `preserve_old_data` 策略开启时）。
+    /// 返回的 SkyString 将设置 `SkyStringParams::OLD_DATA` 和 `UNUSED_IN_SST` 标志。
     pub fn to_old_data_sky_string(&self) -> SkyString {
         let mut sk = SkyString::new(
             0,
@@ -144,15 +150,21 @@ impl DictionaryApplyEntry {
     }
 }
 
+/// 字典应用策略（控制匹配行为的多个选项）
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ApplyPolicy {
+    /// 同语言模式：为 true 时仅应用来自相同语言的条目
     pub same_language: bool,
+    /// 仅打标模式：为 true 时不写入翻译文本，仅标记匹配状态
     pub tag_only: bool,
+    /// 替换 str_id：为 true 时用来源条目的 str_id 覆盖目标条目的 str_id
     pub replace_string_id: bool,
+    /// 保留旧数据：为 true 时将未匹配/歧义条目以 OLD_DATA 标志保存，用于 SST 加载时保留历史数据
     pub preserve_old_data: bool,
 }
 
 impl ApplyPolicy {
+    /// 创建 SST 加载模式的策略：开启 `preserve_old_data`，将未匹配的 SST 条目保存为 OLD_DATA
     pub fn sst_load() -> Self {
         Self {
             preserve_old_data: true,
@@ -172,50 +184,50 @@ impl Default for ApplyPolicy {
     }
 }
 
-/// Matching tiers.
+/// 匹配层级（Tier）枚举
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MatchTier {
-    /// Exact triple match.
+    /// T1 精确三元组匹配 (str_id, record_sig, field_sig)。
     Exact,
-    /// EDID hash match.
+    /// EDID 哈希匹配。
     Edid,
-    /// Normalized source match.
+    /// 规范化源文本匹配。
     Normalized,
-    /// Vocabulary overlap match.
+    /// 词汇重叠匹配。
     Vocab,
 }
 
-/// Shared dictionary application result.
+/// 共享字典应用的结果。
 #[derive(Debug, Clone, Default)]
 pub struct MatchResult {
-    /// Tier 1 exact match count.
+    /// Tier 1 精确匹配数。
     pub tier_exact: u32,
-    /// Tier 2 EDID match count.
+    /// Tier 2 EDID 匹配数。
     pub tier_edid: u32,
-    /// Tier 3 normalized source match count.
+    /// Tier 3 规范化源文本匹配数。
     pub tier_normalized: u32,
-    /// Tier 4 vocabulary match count.
+    /// Tier 4 词汇重叠匹配数。
     pub tier_vocab: u32,
-    /// Ambiguous entries that were not auto-applied.
+    /// 未自动应用的歧义条目数。
     pub ambiguous: u32,
-    /// Unmatched entries.
+    /// 未匹配的条目数。
     pub unmatched: u32,
-    /// Matched entries skipped because they are pending.
+    /// 因处于 pending 状态而被跳过的已匹配条目数。
     pub pending_skipped: u32,
-    /// SST entries preserved as old data for future saves.
+    /// 保存为旧数据以备后用且保留的 SST 条目数。
     pub old_data_preserved: u32,
-    /// Targets marked with warning because index cardinality was suspicious.
+    /// 因索引基数可疑而被标记为警告（warning）的目标数。
     pub warning: u32,
-    /// Targets marked with bigWarning because index cardinality differed.
+    /// 因索引基数不一致而被标记为大警告（bigWarning）的目标数。
     pub big_warning: u32,
-    /// Updated SkyString IDs.
+    /// 更新后的 SkyString ID。
     pub updated_ids: Vec<u32>,
-    /// Unapplied SST entries retained for later save.
+    /// 为以后保存而保留的未应用 SST 条目。
     pub old_data_entries: Vec<DictionaryApplyEntry>,
 }
 
 impl MatchResult {
-    /// Total applied matches.
+    /// 返回所有层级命中数之和（T1+T2+T3+T4）。
     pub fn total_matched(&self) -> u32 {
         self.tier_exact + self.tier_edid + self.tier_normalized + self.tier_vocab
     }
@@ -324,7 +336,7 @@ impl MatchIndex {
     }
 }
 
-/// Apply dictionary entries through the shared matcher.
+/// 通过共享匹配器应用字典条目。
 pub fn apply_dictionary_entries(
     strings: &mut [SkyString],
     entries: &[DictionaryApplyEntry],
@@ -332,6 +344,17 @@ pub fn apply_dictionary_entries(
     apply_dictionary_entries_with_policy(strings, entries, ApplyPolicy::default())
 }
 
+/// 应用字典条目，支持自定义策略
+///
+/// 相比 `apply_dictionary_entries`，此函数额外支持策略控制。
+///
+/// # 参数
+/// * `strings` - 待应用翻译的 SkyString 切片
+/// * `entries` - 要应用的字典条目列表
+/// * `policy` - 应用策略，控制匹配行为和旧数据处理方式
+///
+/// # 返回
+/// [`MatchResult`] 包含各层级命中数、歧义数、未匹配数等统计信息
 pub fn apply_dictionary_entries_with_policy(
     strings: &mut [SkyString],
     entries: &[DictionaryApplyEntry],
@@ -372,7 +395,7 @@ pub fn apply_dictionary_entries_with_policy(
     result
 }
 
-/// Convert XML entries and apply them through the shared matcher.
+/// 转换 XML 条目并通过共享匹配器应用它们。
 pub fn apply_xml_dictionary_entries(
     strings: &mut [SkyString],
     xml_entries: &[XmlStringEntry],
@@ -384,7 +407,7 @@ pub fn apply_xml_dictionary_entries(
     apply_dictionary_entries(strings, &entries)
 }
 
-/// Backward-compatible XML import entry point.
+/// 保持向下兼容的 XML 导入入口点。
 pub fn enhanced_import_match(
     strings: &mut [SkyString],
     xml_entries: &[XmlStringEntry],
@@ -425,7 +448,7 @@ fn match_entry(
     }
 }
 
-/// Tier 1: exact triple match.
+/// Tier 1: 精确的三元组匹配。
 fn find_tier1(
     strings: &[SkyString],
     index: &MatchIndex,
@@ -439,7 +462,7 @@ fn find_tier1(
     )
 }
 
-/// Tier 2: EDID hash match.
+/// Tier 2: EDID 哈希匹配。
 fn find_tier2(
     strings: &[SkyString],
     index: &MatchIndex,
@@ -468,7 +491,7 @@ fn find_tier2(
     }
 }
 
-/// Tier 3: normalized source match.
+/// Tier 3: 规范化源文本匹配。
 fn find_tier3(
     strings: &[SkyString],
     index: &MatchIndex,
@@ -488,7 +511,7 @@ fn find_tier3(
     )
 }
 
-/// Tier 4: vocabulary overlap.
+/// Tier 4：词汇重叠匹配（Jaccard ≥ 0.5）。
 fn find_tier4(
     strings: &[SkyString],
     index: &MatchIndex,
@@ -568,7 +591,7 @@ fn single_unmatched_candidate(
     }
 }
 
-/// Apply a match to the target string.
+/// 将匹配应用到目标字符串。
 fn apply_match(
     strings: &mut [SkyString],
     idx: usize,
@@ -683,7 +706,7 @@ fn clear_warning_flags(params: &mut SkyStringInternalParams) {
     params.set(SkyStringInternalParams::N_TRANS, false);
 }
 
-/// Disambiguate EDID candidates using normalized source.
+/// 使用规范化后的源文本来消除 EDID 候选的歧义。
 fn disambiguate_by_normalized(
     strings: &[SkyString],
     candidates: &[usize],
@@ -934,8 +957,8 @@ mod tests {
         )];
 
         // "the" 出现两次但去重后仍然是 "the"
-        // strings: {Retrieve, the, ancient, sword, from, tomb} = 6
-        // entry:   {Retrieve, the, sword} = 3
+        // strings 集合: {Retrieve, the, ancient, sword, from, tomb} = 6
+        // entry 集合:   {Retrieve, the, sword} = 3
         // Jaccard = 3/6 = 0.5 ≥ 0.5 ✓
         let entries = vec![make_entry(
             1,
@@ -1019,7 +1042,7 @@ mod tests {
 
         let result = enhanced_import_match(&mut strings, &entries);
 
-        // Tier 3 normalized should win before vocabulary overlap.
+        // Tier 3 规范化匹配应在词汇重叠匹配之前胜出。
         assert_eq!(result.tier_normalized, 1);
         assert_eq!(result.total_matched(), 1);
         assert_eq!(strings[0].translation, "你好");

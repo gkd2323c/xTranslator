@@ -27,9 +27,9 @@ interface CompareRowData {
 
 const ROW_HEIGHT = 94;
 
-// ── Simple text diff ────────────────────────────────────────────────
-// Marks differing segments between old and new text.
-// Returns a list of {text, type} segments for rendering.
+// ── 简单的文本差异对比 ──────────────────────────────────────────────
+// 标记旧文本和新文本之间的不同部分。
+// 返回用于渲染的 {text, type} 段列表。
 interface DiffSegment {
   text: string;
   type: "same" | "del" | "add";
@@ -40,13 +40,13 @@ function computeDiff(oldText: string, newText: string): DiffSegment[] {
 
   const minLen = Math.min(oldText.length, newText.length);
 
-  // Find common prefix
+  // 寻找公共前缀
   let prefixEnd = 0;
   while (prefixEnd < minLen && oldText[prefixEnd] === newText[prefixEnd]) {
     prefixEnd++;
   }
 
-  // Find common suffix
+  // 寻找公共后缀
   let suffixStart = 0;
   while (
     suffixStart < minLen - prefixEnd &&
@@ -57,12 +57,12 @@ function computeDiff(oldText: string, newText: string): DiffSegment[] {
 
   const segments: DiffSegment[] = [];
 
-  // Prefix (same)
+  // 前缀（相同）
   if (prefixEnd > 0) {
     segments.push({ text: oldText.slice(0, prefixEnd), type: "same" });
   }
 
-  // Middle — deleted in old, added in new
+  // 中间部分 — 在旧文本中被删除，在新文本中被添加
   const oldMid = oldText.slice(prefixEnd, oldText.length - suffixStart);
   const newMid = newText.slice(prefixEnd, newText.length - suffixStart);
 
@@ -73,7 +73,7 @@ function computeDiff(oldText: string, newText: string): DiffSegment[] {
     segments.push({ text: newMid, type: "add" });
   }
 
-  // Suffix (same)
+  // 后缀（相同）
   if (suffixStart > 0) {
     segments.push({ text: oldText.slice(oldText.length - suffixStart), type: "same" });
   }
@@ -81,7 +81,7 @@ function computeDiff(oldText: string, newText: string): DiffSegment[] {
   return segments;
 }
 
-// ── Row component ───────────────────────────────────────────────────
+// ── 行组件 ───────────────────────────────────────────────────
 
 function CompareRow(props: {
   ariaAttributes: {
@@ -101,7 +101,7 @@ function CompareRow(props: {
   const oldId = activeTab === "added" ? "-" : `#${entry.old_id.toString(16).toUpperCase()}`;
   const newId = activeTab === "removed" ? "-" : `#${entry.new_id.toString(16).toUpperCase()}`;
 
-  // Diff for modified entries
+  // 已修改条目的差异对比
   const diffSegments = activeTab === "modified"
     ? computeDiff(entry.old_source, entry.new_source)
     : null;
@@ -125,7 +125,7 @@ function CompareRow(props: {
           </span>
         </div>
 
-        {/* Old/Current source */}
+        {/* 旧的/当前的源文本 */}
         {activeTab !== "added" && (
           <div className="esp-compare-row-source" title={entry.old_source || entry.source}>
             <span className="esp-compare-row-label">OLD: </span>
@@ -133,7 +133,7 @@ function CompareRow(props: {
           </div>
         )}
 
-        {/* New/Modified source or diff */}
+        {/* 新的/修改后的源文本或差异 */}
         {activeTab === "modified" && diffSegments ? (
           <div className="esp-compare-row-new" title={entry.new_source}>
             <span className="esp-compare-row-label-new">NEW: </span>
@@ -162,7 +162,7 @@ function CompareRow(props: {
   );
 }
 
-// ── Sort helpers ──────────────────────────────────────────────────
+// ── 排序辅助函数 ──────────────────────────────────────────────────
 
 function sortEntries(
   entries: EspComparePairDto[],
@@ -179,7 +179,7 @@ function sortEntries(
   return sorted;
 }
 
-// ── Export ──────────────────────────────────────────────────────────
+// ── 导出 ──────────────────────────────────────────────────────────
 
 async function exportCompareReport(
   result: EspCompareResultDto,
@@ -228,7 +228,7 @@ async function exportCompareReport(
 
   const reportContent = reportLines.join("\n");
 
-  // Write via Tauri invoke — calls the Rust write_text_file command
+  // 通过 Tauri invoke 写入 — 调用 Rust 的 write_text_file 命令
   try {
     await invoke("write_text_file", { path: savePath, content: reportContent });
     toast.success(`Report saved to ${savePath.split(/[/\\]/).pop()}`);
@@ -237,7 +237,7 @@ async function exportCompareReport(
   }
 }
 
-// ── Main component ──────────────────────────────────────────────────
+// ── 主组件 ──────────────────────────────────────────────────
 
 export function EspComparePanel() {
   const { t } = useTranslation();
@@ -370,7 +370,7 @@ export function EspComparePanel() {
         </div>
       ) : (
         <>
-          {/* Header */}
+          {/* 头部 */}
           <div className="sidepanel-section esp-compare-header">
             <div className="esp-compare-header-row">
               <h3 style={{ margin: 0 }}>{t("espCompare.title")}</h3>
@@ -387,7 +387,7 @@ export function EspComparePanel() {
             </div>
           </div>
 
-          {/* Summary bar */}
+          {/* 摘要栏 */}
           <div className="esp-compare-summary-bar">
             <span className="esp-compare-summary-identical">{t("espCompare.tabs.identical")}: {tabCounts.identical.toLocaleString()}</span>
             <span className="esp-compare-summary-added">+{tabCounts.added.toLocaleString()}</span>
@@ -396,7 +396,7 @@ export function EspComparePanel() {
             <span className="esp-compare-summary-total">/ {totalEntries.toLocaleString()}</span>
           </div>
 
-          {/* Tab bar */}
+          {/* 标签栏 */}
           <div className="esp-compare-tabs">
             {(["identical", "added", "removed", "modified"] as Tab[]).map((tab) => (
               <button
@@ -409,7 +409,7 @@ export function EspComparePanel() {
             ))}
           </div>
 
-          {/* Sort + Filter bar */}
+          {/* 排序 + 过滤栏 */}
           <div className="esp-compare-filter">
             <div className="esp-compare-sort-row">
               <button
@@ -435,12 +435,12 @@ export function EspComparePanel() {
             />
           </div>
 
-          {/* Results count */}
+          {/* 结果计数 */}
           <div className="esp-compare-result-count">
             {t("espCompare.showing", { count: entries.length, total: tabCounts[activeTab].toLocaleString() })}
           </div>
 
-          {/* Entry list */}
+          {/* 条目列表 */}
           <div style={{ height: "calc(100vh - 290px)", minHeight: 200 }}>
             {entries.length === 0 ? (
               <div className="esp-compare-empty">

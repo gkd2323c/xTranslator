@@ -1,20 +1,20 @@
-//! Cache index — maps ESP file paths to their SHA-256 hashes via mtime+size.
+//! 缓存索引 — 通过修改时间 mtime 和大小 size 将 ESP 文件路径映射到其 SHA-256 哈希值。
 //!
-//! Avoids reading the entire file to compute SHA-256 on every load.
-//! Stored as a small JSON file alongside the cache databases.
+//! 避免在每次加载时读取整个文件来计算 SHA-256。
+//! 作为一个小型 JSON 文件与缓存数据库一起存储。
 //!
-//! Flow:
-//! 1. Read cache_index.json (microseconds)
-//! 2. Check path's (mtime, size) → get SHA-256
-//! 3. Look up SQLite cache with SHA-256
-//! 4. On miss: parse + hash simultaneously via HashingReader, then store in index
+//! 流程：
+//! 1. 读取 cache_index.json（微秒级）
+//! 2. 检查路径的 (mtime, size) → 获取 SHA-256
+//! 3. 使用 SHA-256 查询 SQLite 缓存
+//! 4. 未命中时：通过 HashingReader 同时进行解析与哈希计算，然后存储在索引中。
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::io::Read as _;
 use std::path::Path;
 
-/// Maps `path_key` → `CacheIndexEntry`
+/// 将 `path_key` 映射到 `CacheIndexEntry`
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct CacheIndex {
     entries: HashMap<String, CacheIndexEntry>,
@@ -28,7 +28,7 @@ struct CacheIndexEntry {
 }
 
 impl CacheIndex {
-    /// Load the index from disk (returns empty if file doesn't exist).
+    /// 从磁盘加载索引（如果文件不存在，则返回空索引）。
     pub fn load(dir: &Path) -> Self {
         let path = dir.join("cache_index.json");
         match std::fs::File::open(&path) {
@@ -41,7 +41,7 @@ impl CacheIndex {
         }
     }
 
-    /// Save the index to disk.
+    /// 将索引保存到磁盘。
     pub fn save(&self, dir: &Path) {
         let _ = std::fs::create_dir_all(dir);
         if let Ok(json) = serde_json::to_string(self) {
@@ -50,8 +50,8 @@ impl CacheIndex {
         }
     }
 
-    /// Look up SHA-256 for a file by its path + mtime + size.
-    /// Returns None if the file metadata doesn't match.
+    /// 根据路径 + mtime + size 查找文件的 SHA-256 值。
+    /// 如果文件的元数据不匹配，则返回 None。
     pub fn lookup(&self, file_path: &Path) -> Option<String> {
         let meta = file_path.metadata().ok()?;
         let key = file_path.to_string_lossy().to_string().to_lowercase();
@@ -70,7 +70,7 @@ impl CacheIndex {
         }
     }
 
-    /// Store a file's sha256 hash, keyed by path + mtime + size.
+    /// 存储文件的 SHA-256 哈希值，以路径 + mtime + size 作为键。
     pub fn store(&mut self, file_path: &Path, sha256: &str) {
         if let Ok(meta) = file_path.metadata() {
             let key = file_path.to_string_lossy().to_string().to_lowercase();
@@ -110,17 +110,17 @@ mod tests {
         let mut index = CacheIndex::default();
         index.store(&test_file, "abc123");
 
-        // Should find it (mtime + size match)
+        // 应该能找到它（mtime + size 匹配）
         let found = index.lookup(&test_file);
         assert_eq!(found, Some("abc123".to_string()));
 
-        // Save and reload
+        // 保存并重新加载
         index.save(&dir);
         let loaded = CacheIndex::load(&dir);
         let found2 = loaded.lookup(&test_file);
         assert_eq!(found2, Some("abc123".to_string()));
 
-        // Non-existent file → None
+        // 不存在的文件 → None
         let missing = loaded.lookup(&dir.join("nonexistent.esp"));
         assert_eq!(missing, None);
 

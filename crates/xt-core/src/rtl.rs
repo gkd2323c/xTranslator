@@ -1,15 +1,15 @@
-//! RTL (Right-to-Left) text processing for Arabic/Hebrew translations.
+//! 针对阿拉伯语/希伯来语翻译的 RTL (从右到左) 文本处理。
 //!
-//! Ported from Delphi `TESVT_TranslateFunc.pas`:
+//! 移植自 Delphi `TESVT_TranslateFunc.pas`：
 //! - `IsArabicLetter` → `is_arabic_char`
 //! - `MirrorSymbol` → `mirror_symbol`
 //! - `splitBlock` → `split_blocks`
 //! - `ReverseRTLStringEx` → `reverse_rtl`
 
-/// Check if a Unicode code point is in the Arabic script range.
+/// 检查 Unicode 码点是否在阿拉伯语字符范围内。
 ///
-/// Covers: Arabic (0600-06FF), Arabic Supplement (0750-077F),
-/// Arabic Presentation Forms-A (FB50-FDFF), Arabic Presentation Forms-B (FE70-FEFF).
+/// 覆盖范围：阿拉伯语 (0600-06FF)、阿拉伯语补充 (0750-077F)、
+/// 阿拉伯语表达形式-A (FB50-FDFF)、阿拉伯语表达形式-B (FE70-FEFF)。
 pub fn is_arabic_char(ch: char) -> bool {
     let cp = ch as u32;
     (0x0600..=0x06FF).contains(&cp)
@@ -18,9 +18,9 @@ pub fn is_arabic_char(ch: char) -> bool {
         || (0xFE70..=0xFEFF).contains(&cp)
 }
 
-/// Mirror bracket-like symbols for RTL display.
+/// 镜像括号类符号以进行 RTL 显示。
 ///
-/// Note: `<` and `>` are intentionally NOT mirrored (Bethesda tags).
+/// 注意：`<` 和 `>` 有意不进行镜像（Bethesda 标签）。
 pub fn mirror_symbol(ch: char) -> char {
     match ch {
         '(' => ')',
@@ -35,7 +35,7 @@ pub fn mirror_symbol(ch: char) -> char {
     }
 }
 
-/// Block type classification for RTL segmentation.
+/// 用于 RTL 分段的块类型分类。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum BlockType {
     Arabic,
@@ -44,8 +44,8 @@ enum BlockType {
 
 fn classify_char(ch: char, prev: Option<char>, _next: Option<char>) -> BlockType {
     if ch.is_whitespace() {
-        // Whitespace after Arabic text is grouped with the Arabic block,
-        // so the trailing space moves correctly when blocks are reversed.
+        // 阿拉伯语文本后面的空格与阿拉伯语块分在同一组，
+        // 这样在反转块时，尾随空格可以正确移动。
         if prev.map_or(false, is_arabic_char) {
             BlockType::Arabic
         } else {
@@ -58,7 +58,7 @@ fn classify_char(ch: char, prev: Option<char>, _next: Option<char>) -> BlockType
     }
 }
 
-/// Split text into contiguous blocks of Arabic vs non-Arabic characters.
+/// 将文本拆分为连续的阿拉伯语与非阿拉伯语字符块。
 fn split_blocks(text: &str) -> Vec<String> {
     let chars: Vec<char> = text.chars().collect();
     if chars.is_empty() {
@@ -84,15 +84,15 @@ fn split_blocks(text: &str) -> Vec<String> {
     blocks
 }
 
-/// Reverse RTL text for proper display.
+/// 反转 RTL 文本以进行正确显示。
 ///
-/// Algorithm (matching Delphi `ReverseRTLStringEx`):
-/// 1. Split text into Arabic/non-Arabic blocks
-/// 2. Iterate blocks in reverse order
-/// 3. Arabic blocks: reverse character order
-/// 4. Non-Arabic blocks: mirror bracket symbols
+/// 算法（与 Delphi `ReverseRTLStringEx` 匹配）：
+/// 1. 将文本拆分为阿拉伯语/非阿拉伯语块
+/// 2. 按相反顺序遍历块
+/// 3. 阿拉伯语块：反转字符顺序
+/// 4. 非阿拉伯语块：镜像括号符号
 ///
-/// Returns `None` if no Arabic characters were found (pass-through).
+/// 如果未找到阿拉伯语字符，则返回 `None`（直接通过）。
 pub fn reverse_rtl(text: &str) -> Option<String> {
     let blocks = split_blocks(text);
     if blocks.is_empty() {
@@ -106,12 +106,12 @@ pub fn reverse_rtl(text: &str) -> Option<String> {
         let first = block.chars().next();
         if first.map_or(false, is_arabic_char) {
             has_arabic = true;
-            // Reverse Arabic block character by character
+            // 逐个字符反转阿拉伯语块
             for ch in block.chars().rev() {
                 result.push(ch);
             }
         } else {
-            // Mirror symbols in non-Arabic blocks
+            // 镜像非阿拉伯语块中的符号
             for ch in block.chars() {
                 result.push(mirror_symbol(ch));
             }
@@ -125,10 +125,10 @@ pub fn reverse_rtl(text: &str) -> Option<String> {
     }
 }
 
-/// Process a multi-line RTL string.
+/// 处理多行 RTL 字符串。
 ///
-/// Each line is processed independently through `reverse_rtl`.
-/// Returns `None` if no Arabic characters were found in any line.
+/// 每行都通过 `reverse_rtl` 进行独立处理。
+/// 如果在所有行中都没有找到阿拉伯语字符，则返回 `None`。
 pub fn reverse_rtl_multiline(text: &str) -> Option<String> {
     let lines: Vec<&str> = text.split('\n').collect();
     let mut has_arabic = false;
@@ -150,9 +150,9 @@ pub fn reverse_rtl_multiline(text: &str) -> Option<String> {
     }
 }
 
-// ── Arabic Shaping (Shape / Deshape) ──────────────────────────────────
+// ── 阿拉伯语整形 (Shape / Deshape) ──────────────────────────────────
 
-/// Position of an Arabic character in a word.
+/// 阿拉伯语字符在单词中的位置。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ArabicPosition {
     Isolated,
@@ -161,21 +161,21 @@ enum ArabicPosition {
     Final,
 }
 
-/// Check if an Arabic character connects to the left (i.e., allows a following character to attach).
-/// Characters like Alef, Dal, Thal, Ra, Zain, Waw do NOT connect to the left.
+/// 检查阿拉伯语字符是否向左连接（即允许后面的字符附着）。
+/// 像 Alef, Dal, Thal, Ra, Zain, Waw 这样的字符不向左连接。
 fn connects_left(ch: char) -> bool {
     match ch {
-        // Non-connecting: Alef, Alef Maksura, Dal, Thal, Ra, Zain, Waw, Teh Marbuta (final only)
+        // 不连接的字符：Alef, Alef Maksura, Dal, Thal, Ra, Zain, Waw, Teh Marbuta (仅 final)
         '\u{0627}' | '\u{0649}' | '\u{062F}' | '\u{0630}' | '\u{0631}' | '\u{0632}'
         | '\u{0648}' | '\u{0629}' => false,
         _ => is_arabic_char(ch),
     }
 }
 
-/// Mapping: (base_char, position) → presentation form char.
-/// Returns None if no shaping is needed (already isolated or no mapping).
+/// 映射：(base_char, position) → 表达形式字符。
+/// 如果不需要整形（已经是 isolated 或无映射），则返回 None。
 fn shape_char(ch: char, pos: ArabicPosition) -> Option<char> {
-    // Table: (isolated, final, initial, medial)
+    // 映射表列定义: (独立, 词尾, 词首, 词中)
     let shaped = match ch {
         '\u{0621}' => [Some('\u{FE80}'), None, None, None], // Hamza
         '\u{0622}' => [Some('\u{FE81}'), Some('\u{FE82}'), None, None], // Alef Madda
@@ -339,9 +339,9 @@ fn shape_char(ch: char, pos: ArabicPosition) -> Option<char> {
     }
 }
 
-/// Reverse lookup: find the base character for a shaped presentation form.
+/// 反向查找：查找整形后表达形式的基础字符。
 fn deshape_char(ch: char) -> Option<char> {
-    // Build reverse map from all presentation forms to base chars
+    // 从所有表达形式构建到基础字符的反向映射
     let base_chars = [
         '\u{0621}', '\u{0622}', '\u{0623}', '\u{0624}', '\u{0625}', '\u{0626}', '\u{0627}',
         '\u{0628}', '\u{0629}', '\u{062A}', '\u{062B}', '\u{062C}', '\u{062D}', '\u{062E}',
@@ -368,10 +368,10 @@ fn deshape_char(ch: char) -> Option<char> {
     None
 }
 
-/// Shape Arabic text: convert logical-order Arabic characters to presentation forms.
+/// 整形阿拉伯语文本：将逻辑顺序的阿拉伯语字符转换为表达形式。
 ///
-/// This determines each character's position in its word (isolated/initial/medial/final)
-/// and replaces it with the corresponding Unicode presentation form.
+/// 这会确定每个字符在其单词中的位置 (isolated/initial/medial/final)，
+/// 并将其替换为相应的 Unicode 表达形式。
 pub fn shape_arabic(text: &str) -> String {
     let chars: Vec<char> = text.chars().collect();
     if chars.is_empty() {
@@ -409,10 +409,10 @@ pub fn shape_arabic(text: &str) -> String {
     result
 }
 
-/// Deshape Arabic text: convert presentation forms back to logical-order base characters.
+/// 还原阿拉伯语文本：将表达形式转换回逻辑顺序的基础字符。
 ///
-/// This reverses the shaping done by `shape_arabic`, converting presentation form
-/// characters (U+FE70..U+FEFF) back to their base Arabic characters (U+0621..U+064A).
+/// 这会反转由 `shape_arabic` 执行的整形，将表达形式字符 (U+FE70..U+FEFF)
+/// 转换回其基础阿拉伯语字符 (U+0621..U+064A)。
 pub fn deshape_arabic(text: &str) -> String {
     let mut result = String::with_capacity(text.len());
     for ch in text.chars() {
@@ -431,8 +431,8 @@ mod tests {
 
     #[test]
     fn test_is_arabic_char() {
-        assert!(is_arabic_char('\u{0627}')); // Arabic Alef
-        assert!(is_arabic_char('\u{0644}')); // Arabic Lam
+        assert!(is_arabic_char('\u{0627}')); // 阿拉伯语 Alef
+        assert!(is_arabic_char('\u{0644}')); // 阿拉伯语 Lam
         assert!(!is_arabic_char('A'));
         assert!(!is_arabic_char('中'));
     }
@@ -443,8 +443,8 @@ mod tests {
         assert_eq!(mirror_symbol(')'), '(');
         assert_eq!(mirror_symbol('{'), '}');
         assert_eq!(mirror_symbol('['), ']');
-        assert_eq!(mirror_symbol('A'), 'A'); // no change
-                                             // < and > are NOT mirrored (Bethesda tags)
+        assert_eq!(mirror_symbol('A'), 'A'); // 无变化
+                                             // < 和 > 不进行镜像 (Bethesda 标签)
         assert_eq!(mirror_symbol('<'), '<');
         assert_eq!(mirror_symbol('>'), '>');
     }
@@ -453,18 +453,18 @@ mod tests {
     fn test_split_blocks_mixed() {
         let blocks = split_blocks("Hello مرحبا World");
         assert!(blocks.len() >= 3);
-        // Should have: "Hello " , "مرحبا" , " World"
+        // 应该包含："Hello " , "مرحبا" , " World"
     }
 
     #[test]
     fn test_reverse_rtl_arabic_only() {
-        let text = "مرحبا"; // "Hello" in Arabic
+        let text = "مرحبا"; // 阿拉伯语中的 "Hello"
         let result = reverse_rtl(text);
         assert!(result.is_some());
-        // Should reverse the characters
+        // 应该反转字符
         let reversed = result.unwrap();
         assert_ne!(reversed, text);
-        // Reversing twice should give back the original
+        // 反转两次应该返回原始文本
         let double = reverse_rtl(&reversed).unwrap();
         assert_eq!(double, text);
     }
@@ -473,7 +473,7 @@ mod tests {
     fn test_reverse_rtl_no_arabic() {
         let text = "Hello World";
         let result = reverse_rtl(text);
-        assert!(result.is_none()); // No Arabic, pass through
+        assert!(result.is_none()); // 无阿拉伯语，直接通过
     }
 
     #[test]
@@ -487,7 +487,7 @@ mod tests {
     fn test_reverse_rtl_with_brackets() {
         let text = "(مرحبا)";
         let result = reverse_rtl(text).unwrap();
-        // Brackets should be mirrored and Arabic reversed
+        // 括号应该被镜像，阿拉伯语被反转
         assert!(result.contains('(') || result.contains(')'));
     }
 
@@ -510,19 +510,19 @@ mod tests {
 
     #[test]
     fn test_shape_isolated() {
-        // Single Alef in isolation
+        // 单个处于 isolation 的 Alef
         let shaped = shape_arabic("\u{0627}");
         assert_eq!(shaped, "\u{FE8D}");
     }
 
     #[test]
     fn test_shape_word() {
-        // "مرحبا" (Hello) — a connected word
+        // "مرحبا" (Hello) — 一个连接的单词
         let text = "\u{0645}\u{0631}\u{062D}\u{0628}\u{0627}";
         let shaped = shape_arabic(text);
-        // Meem should be initial, Ra is non-connecting so Ha gets initial,
-        // Ba connects to Ha, Alef is final
-        // Just verify it changed and length is preserved
+        // Meem 应该是 initial，Ra 是不连接的，所以 Ha 变成 initial，
+        // Ba 连接到 Ha，Alef 是 final
+        // 只验证它已更改且长度已保留
         assert_eq!(shaped.chars().count(), text.chars().count());
         assert_ne!(shaped, text);
     }
@@ -545,18 +545,18 @@ mod tests {
 
     #[test]
     fn test_deshape_passthrough() {
-        // Non-shaped text should pass through unchanged
+        // 未整形的文本应保持原样通过
         let text = "Hello World";
         assert_eq!(deshape_arabic(text), text);
     }
 
     #[test]
     fn test_connects_left() {
-        // Alef does NOT connect left
+        // Alef 不向左连接
         assert!(!connects_left('\u{0627}'));
-        // Ba DOES connect left
+        // Ba 向左连接
         assert!(connects_left('\u{0628}'));
-        // Dal does NOT connect left
+        // Dal 不向左连接
         assert!(!connects_left('\u{062F}'));
     }
 }

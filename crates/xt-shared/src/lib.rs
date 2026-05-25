@@ -1,5 +1,5 @@
 pub mod dto;
 pub mod query;
 
-// Re-export for convenience
+// 便捷重新导出
 pub use dto::*;

@@ -6,10 +6,10 @@
 //! ## VMAD 二进制格式
 //!
 //! ```text
-//! Header: version(i16) + objType(i16) + scriptCount(i16)
-//! Scripts: scriptName(len+bytes) + propCount(i16) + properties[]
-//! Property: name(len+bytes) + type(u8) + status(u8) + value
-//! Types: 1=Null, 2=Object, 3=String, 4=Int, 5=Float, 6=Bool,
+//! 头部: version(i16) + objType(i16) + scriptCount(i16)
+//! 脚本列表: scriptName(len+bytes) + propCount(i16) + properties[]
+//! 属性列表: name(len+bytes) + type(u8) + status(u8) + value
+//! 类型: 1=Null, 2=Object, 3=String, 4=Int, 5=Float, 6=Bool,
 //!        7=Variable, 11=Struct, 12=StringArray, 13=IntArray,
 //!        14=FloatArray, 15=BoolArray, 17=ArrayStruct(FO4)
 //! Fragments: version 1-5=TES5, 6=FO4
@@ -165,7 +165,7 @@ impl VmadDecoder {
                 // 根据类型读取值
                 match prop_type {
                     VmadPropType::String => {
-                        let str_start = pos; // start of u32 length prefix
+                        let str_start = pos; // u32 长度前缀的起始位置
                         if let Ok(len) = Self::read_u32(&self.buffer, &mut pos) {
                             let len = len as usize;
                             let str_end = (pos + len).min(self.buffer.len());
@@ -177,7 +177,7 @@ impl VmadDecoder {
                                 prop_name: prop_name.clone(),
                                 value,
                                 offset: str_start,
-                                length: 4 + len, // u32 length prefix + string data
+                                length: 4 + len, // u32 长度前缀 + 字符串数据
                             });
                         }
                     }
@@ -215,11 +215,11 @@ impl VmadDecoder {
                         let _ = Self::read_u8(&self.buffer, &mut pos);
                     }
                     VmadPropType::Object => {
-                        let _ = Self::read_u32(&self.buffer, &mut pos); // formid
+                        let _ = Self::read_u32(&self.buffer, &mut pos); // FormID
                     }
                     VmadPropType::Variable => {
-                        let _ = Self::read_u8(&self.buffer, &mut pos); // type hint
-                        let _ = Self::read_u8(&self.buffer, &mut pos); // flags
+                        let _ = Self::read_u8(&self.buffer, &mut pos); // 类型提示
+                        let _ = Self::read_u8(&self.buffer, &mut pos); // 标志
                     }
                     VmadPropType::Struct => {
                         // Struct 是复杂类型，需要根据具体结构解析
@@ -469,7 +469,7 @@ impl VmadDecoder {
     /// 辅助：重建 struct 数据（count + elements）
     fn rebuild_struct_data(&self, out: &mut Vec<u8>, pos: &mut usize) -> Result<(), VmadError> {
         let count = Self::read_u32(&self.buffer, pos)? as usize;
-        let byte_count = count * 12; // 每个 element: type(u32) + size(u32) + offset(u32)
+        let byte_count = count * 12; // 每个元素: type(u32) + size(u32) + offset(u32)
         Self::ensure_remaining(&self.buffer, *pos, byte_count)?;
         out.extend_from_slice(&(count as u32).to_le_bytes());
         out.extend_from_slice(&self.buffer[*pos..*pos + byte_count]);
@@ -596,7 +596,7 @@ impl VmadDecoder {
 /// Bethesda VMAD 格式中，只有特定记录类型在 Header 和 Scripts 之间
 /// 嵌入 Fragment 数据块。其他类型的 Header 后直接跟随脚本。
 ///
-/// objType: 1=PERK, 2=PACK, 3=SCEN, 4=INFO, 5=QUST
+/// 对象类型 objType: 1=PERK, 2=PACK, 3=SCEN, 4=INFO, 5=QUST
 fn has_fragments(obj_type: i16) -> bool {
     matches!(obj_type, 1 | 2 | 3 | 4 | 5)
 }
@@ -660,7 +660,7 @@ pub(crate) fn decode_vmad_fast(data: &[u8], _version: i16) -> Vec<VmadString> {
         return result;
     }
 
-    // Header: version (i16, 2 bytes), objType (i16, 2 bytes), scriptCount (u16, 2 bytes)
+    // 头部: version (i16, 2 字节), objType (i16, 2 字节), scriptCount (u16, 2 字节)
     // version 由调用方在 RecordHeaderData 已读取，此处跳过以对齐 objType
     pos += 2; // skip version
 
@@ -690,7 +690,7 @@ pub(crate) fn decode_vmad_fast(data: &[u8], _version: i16) -> Vec<VmadString> {
     }
 
     for _ in 0..script_count {
-        // Read script name (u8 length prefix)
+        // 读取脚本名称 (u8 长度前缀)
         let name_len = if pos < data.len() {
             data[pos] as usize
         } else {
@@ -714,7 +714,7 @@ pub(crate) fn decode_vmad_fast(data: &[u8], _version: i16) -> Vec<VmadString> {
         pos += 2;
 
         for _ in 0..prop_count {
-            // Property name (u8 length prefix)
+            // 属性名称 (u8 长度前缀)
             let pname_len = if pos < data.len() {
                 data[pos] as usize
             } else {
@@ -739,10 +739,10 @@ pub(crate) fn decode_vmad_fast(data: &[u8], _version: i16) -> Vec<VmadString> {
             }
             pos += 1;
 
-            // Read value based on type
+            // 根据类型读取值
             match prop_type_byte {
                 3 => {
-                    // String type
+                    // 字符串类型
                     if pos + 4 > data.len() {
                         break;
                     }
@@ -773,12 +773,12 @@ pub(crate) fn decode_vmad_fast(data: &[u8], _version: i16) -> Vec<VmadString> {
                 } // Null, Int (u8), Bool, Variable
                 2 => {
                     pos += 4;
-                } // Object (u32 formid)
+                } // Object (u32 FormID)
                 5 => {
                     pos += 4;
                 } // Float (f32)
                 11 => {
-                    // Struct
+                    // 结构体
                     if pos + 4 > data.len() {
                         break;
                     }
@@ -788,7 +788,7 @@ pub(crate) fn decode_vmad_fast(data: &[u8], _version: i16) -> Vec<VmadString> {
                         data[pos + 2],
                         data[pos + 3],
                     ]) as usize;
-                    pos += 4 + count * 12; // 3 × u32 per element
+                    pos += 4 + count * 12; // 每个元素 3 × u32
                 }
                 12 | 14 => {
                     // StringArray, FloatArray
@@ -842,10 +842,10 @@ pub(crate) fn decode_vmad_fast(data: &[u8], _version: i16) -> Vec<VmadString> {
                     ]) as usize;
                     pos += 4;
                     for _ in 0..count {
-                        pos += 12; // 3 × u32 per struct element
+                        pos += 12; // 每个结构体元素 3 × u32
                     }
                 }
-                _ => {} // Unknown type, skip
+                _ => {} // 未知类型，跳过
             }
         }
     }
@@ -871,18 +871,18 @@ mod tests {
         data.extend_from_slice(&1i16.to_le_bytes()); // objType
         data.extend_from_slice(&1u16.to_le_bytes()); // scriptCount
 
-        // Fragment data (PERK objType=1 always has fragment section)
+        // 代码片段数据 (PERK objType=1 总是包含代码片段部分)
         data.extend_from_slice(&0i16.to_le_bytes()); // fragmentVersion = 0
         data.extend_from_slice(&0u16.to_le_bytes()); // fragmentCount = 0
 
-        // Script name (1-byte len prefix)
+        // 脚本名称 (1 字节长度前缀)
         data.push(10); // len
         data.extend_from_slice(b"TestScript");
 
         // propCount
         data.extend_from_slice(&1u16.to_le_bytes());
 
-        // Property name (1-byte len prefix)
+        // 属性名称 (1 字节长度前缀)
         data.push(4); // len
         data.extend_from_slice(b"Text");
 
@@ -890,7 +890,7 @@ mod tests {
         data.push(3u8);
         data.push(0u8);
 
-        // String value (u32 length prefix)
+        // 字符串值 (u32 长度前缀)
         data.extend_from_slice(&11u32.to_le_bytes()); // length = 11
         data.extend_from_slice(b"Hello World");
 
@@ -919,7 +919,7 @@ mod tests {
         data.extend_from_slice(&1i16.to_le_bytes());
         data.extend_from_slice(&2u16.to_le_bytes()); // 2 scripts
 
-        // Fragment data (PERK objType=1 always has fragment section)
+        // 代码片段数据 (PERK objType=1 总是包含代码片段部分)
         data.extend_from_slice(&0i16.to_le_bytes()); // fragmentVersion = 0
         data.extend_from_slice(&0u16.to_le_bytes()); // fragmentCount = 0
 
@@ -957,18 +957,18 @@ mod tests {
 
     #[test]
     fn test_write_back() {
-        // VMAD strings use u32 (4-byte) length prefix
-        // After type=3, status=0 at positions 18-19:
-        // String length (4 bytes) at 19-22 = 2
-        // String data (2 bytes) at 23-24 = "Hi"
+        // VMAD 字符串使用 u32（4 字节）长度前缀
+        // 在位置 18-19 的 type=3, status=0 之后：
+        // 字符串长度（4 字节）在位置 19-22 = 2
+        // 字符串数据（2 字节）在位置 23-24 = "Hi"
 
-        // Build minimal VMAD data
+        // 构建最小的 VMAD 数据
         let mut data = Vec::new();
         data.extend_from_slice(&5i16.to_le_bytes()); // version
         data.extend_from_slice(&1i16.to_le_bytes()); // objType
         data.extend_from_slice(&1u16.to_le_bytes()); // scriptCount=1
 
-        // Fragment data (PERK objType=1 always has fragment section)
+        // 代码片段数据 (PERK objType=1 总是包含代码片段部分)
         data.extend_from_slice(&0i16.to_le_bytes()); // fragmentVersion = 0
         data.extend_from_slice(&0u16.to_le_bytes()); // fragmentCount = 0
 
@@ -979,7 +979,7 @@ mod tests {
         data.extend_from_slice(b"Prp"); // propName
         data.push(3u8); // type=String
         data.push(0u8); // status
-                        // String: u32 length = 2 (4 bytes: 02 00 00 00), then "Hi"
+                        // 字符串: u32 长度 = 2 (4 字节: 02 00 00 00)，然后是 "Hi"
         data.extend_from_slice(&2u32.to_le_bytes());
         data.extend_from_slice(b"Hi");
 
@@ -991,11 +991,11 @@ mod tests {
         assert_eq!(strings[0].prop_name, "Prp");
         assert_eq!(strings[0].value, "Hi");
 
-        // write_back at the offset of the u32 length prefix
+        // 在 u32 长度前缀的偏移处进行写回
         decoder.write_back(strings[0].offset, "OK").unwrap();
 
         let buf = decoder.buffer();
-        // String data starts 4 bytes after the length prefix offset
+        // 字符串数据在长度前缀偏移量之后 4 字节处开始
         let str_start = strings[0].offset + 4;
         let result = std::str::from_utf8(&buf[str_start..str_start + 2]).unwrap();
         assert_eq!(result, "OK");
@@ -1009,7 +1009,7 @@ mod tests {
         data.extend_from_slice(&1i16.to_le_bytes()); // objType
         data.extend_from_slice(&1u16.to_le_bytes()); // scriptCount=1
 
-        // Fragment data (PERK objType=1 always has fragment section)
+        // 代码片段数据 (PERK objType=1 总是包含代码片段部分)
         data.extend_from_slice(&0i16.to_le_bytes()); // fragmentVersion = 0
         data.extend_from_slice(&0u16.to_le_bytes()); // fragmentCount = 0
 
@@ -1049,7 +1049,7 @@ mod tests {
         data.extend_from_slice(&1i16.to_le_bytes());
         data.extend_from_slice(&1u16.to_le_bytes());
 
-        // Fragment data (PERK objType=1 always has fragment section)
+        // 代码片段数据 (PERK objType=1 总是包含代码片段部分)
         data.extend_from_slice(&0i16.to_le_bytes());
         data.extend_from_slice(&0u16.to_le_bytes());
 
@@ -1083,11 +1083,11 @@ mod tests {
         data.extend_from_slice(&1i16.to_le_bytes());
         data.extend_from_slice(&2u16.to_le_bytes()); // 2 scripts
 
-        // Fragment data (PERK objType=1 always has fragment section)
+        // 代码片段数据 (PERK objType=1 总是包含代码片段部分)
         data.extend_from_slice(&0i16.to_le_bytes());
         data.extend_from_slice(&0u16.to_le_bytes());
 
-        // Script 1: "Scp1" -> prop "P1" = "Val1"
+        // 脚本 1: "Scp1" -> 属性 "P1" = "Val1"
         data.push(4);
         data.extend_from_slice(b"Scp1");
         data.extend_from_slice(&1u16.to_le_bytes());
@@ -1098,7 +1098,7 @@ mod tests {
         data.extend_from_slice(&4u32.to_le_bytes());
         data.extend_from_slice(b"Val1");
 
-        // Script 2: "Scp2" -> prop "P2" = "Val2"
+        // 脚本 2: "Scp2" -> 属性 "P2" = "Val2"
         data.push(4);
         data.extend_from_slice(b"Scp2");
         data.extend_from_slice(&1u16.to_le_bytes());
@@ -1135,7 +1135,7 @@ mod tests {
         data.extend_from_slice(&1i16.to_le_bytes()); // objType
         data.extend_from_slice(&1u16.to_le_bytes()); // scriptCount=1
 
-        // Fragment data (PERK objType=1 always has fragment section)
+        // 代码片段数据 (PERK objType=1 总是包含代码片段部分)
         data.extend_from_slice(&0i16.to_le_bytes()); // fragmentVersion = 0
         data.extend_from_slice(&0u16.to_le_bytes()); // fragmentCount = 0
 
@@ -1146,7 +1146,7 @@ mod tests {
         data.extend_from_slice(b"Arr"); // propName
         data.push(12u8); // type=StringArray
         data.push(0u8); // status
-                        // StringArray: count(u32) + strings with u8 len prefix
+                        // StringArray: 数量(u32) + 带有 u8 长度前缀的字符串列表
         data.extend_from_slice(&3u32.to_le_bytes()); // count=3
         data.push(3); // len
         data.extend_from_slice(b"Foo"); // "Foo"

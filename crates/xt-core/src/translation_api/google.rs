@@ -1,9 +1,9 @@
-//! Google Translate provider
+//! Google Translate 翻译服务商
 //!
-//! Uses the public (keyless) Google Translate API.
+//! 使用公开（无密钥）的 Google Translate API。
 //! Endpoint: https://translate.googleapis.com/translate_a/single
 //!
-//! Response format: [[["translated_text", "original", null, null, ...], ...], null, "src_lang"]
+//! Response 格式: [[["translated_text", "original", null, null, ...], ...], null, "src_lang"]
 
 use anyhow::Result;
 
@@ -56,7 +56,7 @@ impl super::TranslationProvider for GoogleProvider {
             .await
             .map_err(|e| anyhow::anyhow!("Google API invalid JSON: {}", e))?;
 
-        // Google response: [[["text", "orig", ...], ...], null, "src"]
+        // Google 响应: [[["text", "orig", ...], ...], null, "src"]
         let segments = json[0]
             .as_array()
             .ok_or_else(|| anyhow::anyhow!("Google API: unexpected response format"))?;

@@ -1,51 +1,51 @@
-//! PEX type definitions
+//! PEX 类型定义
 
-/// PEX file header (starts after magic 0xFA57C0DE)
+/// PEX 文件头（在 magic 0xFA57C0DE 之后开始）
 #[derive(Clone, Debug)]
 pub struct PexHeader {
     pub major_version: u8,
     pub minor_version: u8,
     pub game_id: u16,
-    /// Compilation time (mod_time from debug info section)
+    /// 编译时间（来自调试信息部分的 mod_time）
     pub compile_time: u64,
 }
 
-/// A string reference in the PEX string table
+/// PEX 字符串表中的字符串引用
 #[derive(Clone, Debug)]
 pub struct PexStringEntry {
     pub index: u16,
     pub text: String,
 }
 
-/// Extracted translatable string
+/// 提取的待翻译字符串
 #[derive(Clone, Debug, PartialEq)]
 pub struct PexTranslatableString {
-    /// Name of the containing script object
+    /// 包含该字符串的脚本对象名称
     pub object_name: String,
-    /// State name (empty for default state)
+    /// 状态名称（默认状态为空）
     pub state_name: String,
-    /// Function name (empty for object-level docs)
+    /// 函数名称（对象级文档为空）
     pub function_name: String,
-    /// Type of string: "DebugString", "PropertyName", or "StringLiteral"
+    /// 字符串类型："DebugString", "PropertyName" 或 "StringLiteral"
     pub string_type: String,
-    /// The original text to translate
+    /// 要翻译的原始文本
     pub source_text: String,
-    /// The translated text (empty if not yet translated)
+    /// 翻译后的文本（如果尚未翻译则为空）
     pub translation: String,
 }
 
-/// Parsed PEX script information
+/// 解析后的 PEX 脚本信息
 #[derive(Clone, Debug)]
 pub struct PexScript {
     pub header: PexHeader,
-    /// The full string table (index -> text)
+    /// 完整的字符串表（索引 -> 文本）
     pub string_table: Vec<PexStringEntry>,
-    /// All extracted translatable strings
+    /// 所有提取的待翻译字符串
     pub translatable: Vec<PexTranslatableString>,
-    /// Raw debug info section bytes (for preservation during recompile)
+    /// 原始调试信息部分字节（用于在重编译期间保留）
     pub debug_info_raw: Vec<u8>,
-    /// Raw user flags section bytes (for preservation during recompile)
+    /// 原始用户标志部分字节（用于在重编译期间保留）
     pub user_flags_raw: Vec<u8>,
-    /// Raw object body bytes per object (for preservation during recompile)
+    /// 每个对象的原始对象体字节（用于在重编译期间保留）
     pub object_bodies_raw: Vec<Vec<u8>>,
 }

@@ -742,7 +742,7 @@ export function MenuBar() {
 
   const handleSaveStrings = async () => {
     if (espMode && espPath) {
-      // ESP mode: save directly to the ESP file
+      // ESP 模式：直接保存到 ESP 文件
       setLoading(true);
       try {
         const result = await saveEsp({
@@ -759,7 +759,7 @@ export function MenuBar() {
       return;
     }
 
-    // Strings mode: save to external .STRINGS files
+    // Strings 模式：保存到外部 .STRINGS 文件
     const outputDir = await open({
       multiple: false,
       directory: true,

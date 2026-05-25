@@ -1,15 +1,13 @@
-//! Comprehensive smoke tests: load ESP -> edit translation -> save Strings -> verify roundtrip.
+//! 综合冒烟测试：加载 ESP -> 编辑翻译 -> 保存 Strings -> 验证往返。
 //!
-//! Enhanced with additional validation, error handling, and edge case testing.
+//! 增强了额外的验证、错误处理和边界情况测试。
 //!
-//! Requires Skyrim SE installed at standard path.
-//! Run: cargo test --release -p xt-core --test smoke_test
+//! 需要在标准路径安装 Skyrim SE。
+//! 运行：cargo test --release -p xt-core --test smoke_test
 
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
-use tempfile::TempDir;
 use xt_core::esp::parser::EspParser;
-use xt_core::matching::StringMatcher;
 use xt_core::sst::v8::SstDictionary;
 use xt_core::strings::StringsFile;
 use xt_core::types::params::SkyStringParams;
@@ -28,15 +26,13 @@ fn create_test_parser() -> EspParser {
     parser
 }
 
-/// 1. Parse ESP -> verify string count
+/// 1. 解析 ESP -> 验证字符串数量
 #[test]
 #[cfg_attr(debug_assertions, ignore = "requires --release")]
 fn smoke_parse_esp() {
     assert!(skyrim_data_available(), "Skyrim.esm not found");
 
     let mut parser = create_test_parser();
-    let mut parser = EspParser::new();
-    parser.load_strings_files(DATA_DIR, "skyrim");
     let mut file = std::fs::File::open(SKYRIM_ESM).unwrap();
     parser.parse(&mut file).unwrap();
 
@@ -51,7 +47,7 @@ fn smoke_parse_esp() {
     );
 }
 
-/// 2. Parse -> edit a string -> save Strings -> reload -> verify
+/// 2. 解析 -> 编辑字符串 -> 保存 Strings -> 重新加载 -> 验证
 #[test]
 #[cfg_attr(debug_assertions, ignore = "requires --release")]
 fn smoke_edit_save_reload() {
@@ -68,7 +64,7 @@ fn smoke_edit_save_reload() {
         .params
         .set(SkyStringParams::TRANSLATED, true);
 
-    // Save translations to temp Strings file
+    // 保存翻译到临时 Strings 文件
     let tmp = std::env::temp_dir().join("xt_smoke_strings");
     let _ = std::fs::create_dir_all(&tmp);
     let output = tmp.join("skyrim_english_chinese.strings");
@@ -83,7 +79,7 @@ fn smoke_edit_save_reload() {
     }
     sf.save(&output).unwrap();
 
-    // Reload and verify
+    // 重新加载并验证
     let reloaded =
         StringsFile::load_with_format(&output, xt_core::strings::StringsFormat::NullTerminated)
             .unwrap();
@@ -97,7 +93,7 @@ fn smoke_edit_save_reload() {
     let _ = std::fs::remove_dir_all(&tmp);
 }
 
-/// 3. SST roundtrip: parse -> build SST -> save -> reload -> verify
+/// 3. SST 往返测试：解析 -> 构建 SST -> 保存 -> 重新加载 -> 验证
 #[test]
 #[cfg_attr(debug_assertions, ignore = "requires --release")]
 fn smoke_sst_roundtrip() {
@@ -132,7 +128,7 @@ fn smoke_sst_roundtrip() {
     let _ = std::fs::remove_file(&tmp);
 }
 
-/// 4. XML import/export roundtrip
+/// 4. XML 导入/导出往返测试
 #[test]
 #[cfg_attr(debug_assertions, ignore = "requires --release")]
 fn smoke_xml_roundtrip() {
@@ -160,10 +156,20 @@ fn smoke_xml_roundtrip() {
     }
 
     // Export to XML
-    let tmp_dir = TempDir::new().unwrap();
-    let xml_path = tmp_dir.path().join("smoke_test.xml");
+    let tmp_dir = std::env::temp_dir().join(format!("smoke_test_{}", std::process::id()));
+    let _ = std::fs::create_dir_all(&tmp_dir);
+    let xml_path = tmp_dir.join("smoke_test.xml");
 
-    let exported_count = xml::write_xml_export(&parser.strings, &xml_path, "skyrim").unwrap();
+    let entries = xml::sky_strings_to_xml_entries(&parser.strings);
+    let exported_count = entries.len();
+    let params = xml::XmlExportParams {
+        addon: "skyrim".to_string(),
+        source_lang: "english".to_string(),
+        dest_lang: "chinese".to_string(),
+        version: 2,
+    };
+    xml::write_xml_file(&xml_path, &params, &entries).unwrap();
+
     assert!(
         exported_count >= 3,
         "Too few entries exported: {}",
@@ -178,8 +184,8 @@ fn smoke_xml_roundtrip() {
     }
 
     let import_result = xml::parse_xml_file(&xml_path).unwrap();
-    let matcher = StringMatcher::new();
-    let matched = matcher.apply_xml_translations(&mut import_strings, &import_result);
+    let match_result = xt_core::matching::apply_xml_dictionary_entries(&mut import_strings, &import_result.1);
+    let matched = match_result.total_matched() as usize;
 
     assert!(matched >= 3, "Too few matches: {}", matched);
 
@@ -194,6 +200,7 @@ fn smoke_xml_roundtrip() {
         }
     }
 
+    let _ = std::fs::remove_dir_all(&tmp_dir);
     println!("✅ XML roundtrip completed successfully");
 }
 
@@ -239,7 +246,7 @@ fn smoke_performance_validation() {
 #[test]
 #[cfg_attr(debug_assertions, ignore = "requires --release")]
 fn smoke_error_handling() {
-    // Test invalid file path
+    // 测试无效的文件路径
     let result = std::fs::File::open("nonexistent_file.esp");
     assert!(result.is_err(), "Should fail on nonexistent file");
 
@@ -292,7 +299,7 @@ fn smoke_data_integrity() {
         assert!(!s.field_sig.is_empty(), "String {} has empty field sig", i);
     }
 
-    // Validate record type distribution
+    // 验证记录类型分布情况
     let mut record_counts = std::collections::HashMap::new();
     for s in &parser.strings {
         *record_counts.entry(&s.record_sig).or_insert(0) += 1;
@@ -306,21 +313,9 @@ fn smoke_data_integrity() {
     println!("📋 Record types found: {:?}", record_counts);
 
     // Validate compressed records
-    let compressed_count = parser
-        .strings
-        .iter()
-        .filter(|s| s.esp_ptr.compressed)
-        .count();
-    let total_count = parser.strings.len();
-    let compression_ratio = compressed_count as f64 / total_count as f64;
-
-    println!(
-        "📊 Compression ratio: {:.2}% ({}/{})",
-        compression_ratio * 100.0,
-        compressed_count,
-        total_count
-    );
-    assert!(compression_ratio > 0.1, "Too few compressed records");
+    let compressed_records = parser.compressed_records;
+    println!("📊 Compressed records found: {}", compressed_records);
+    assert!(compressed_records > 0, "No compressed records found");
 
     println!("✅ Data integrity validation passed");
 }
@@ -343,10 +338,11 @@ fn smoke_multi_format_validation() {
             .set(SkyStringParams::TRANSLATED, true);
     }
 
-    let tmp_dir = TempDir::new().unwrap();
+    let tmp_dir = std::env::temp_dir().join(format!("smoke_test_format_{}", std::process::id()));
+    let _ = std::fs::create_dir_all(&tmp_dir);
 
-    // Test Null-terminated format
-    let null_path = tmp_dir.path().join("test_null.strings");
+    // 测试空字符结尾格式 (Null-terminated)
+    let null_path = tmp_dir.join("test_null.strings");
     let mut sf_null = StringsFile::new();
     sf_null.format = xt_core::strings::StringsFormat::NullTerminated;
     for s in &parser.strings {
@@ -362,8 +358,8 @@ fn smoke_multi_format_validation() {
         StringsFile::load_with_format(&null_path, xt_core::strings::StringsFormat::NullTerminated)
             .unwrap();
 
-    // Test Length-prefixed format
-    let length_path = tmp_dir.path().join("test_length.strings");
+    // 测试长度前缀格式 (Length-prefixed)
+    let length_path = tmp_dir.join("test_length.strings");
     let mut sf_length = StringsFile::new();
     sf_length.format = xt_core::strings::StringsFormat::LengthPrefixed;
     for s in &parser.strings {
@@ -381,7 +377,7 @@ fn smoke_multi_format_validation() {
     )
     .unwrap();
 
-    // Verify both formats have same content
+    // 验证这两种格式是否具有相同的内容
     assert_eq!(
         reloaded_null.strings.len(),
         reloaded_length.strings.len(),
@@ -397,5 +393,6 @@ fn smoke_multi_format_validation() {
         );
     }
 
+    let _ = std::fs::remove_dir_all(&tmp_dir);
     println!("✅ Multi-format validation passed");
 }

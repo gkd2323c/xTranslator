@@ -5,13 +5,13 @@
 use std::collections::HashSet;
 use std::sync::{LazyLock, RwLock};
 
-/// Global exception words set for TitleCase.
-/// Loaded from config.json `word_exception_list` field.
-/// Case-insensitive matching (normalized to lowercase for lookup).
+/// 用于 TitleCase 的全局例外词集合。
+/// 从 config.json 的 `word_exception_list` 字段加载。
+/// 不区分大小写的匹配（规范化为小写进行查找）。
 static EXCEPTION_WORDS: LazyLock<RwLock<HashSet<String>>> =
     LazyLock::new(|| RwLock::new(HashSet::new()));
 
-/// Load exception words from a newline-separated string.
+/// 从换行符分隔的字符串中加载例外词。
 pub fn load_exception_words(words: &str) {
     let mut set = EXCEPTION_WORDS.write().unwrap();
     set.clear();
@@ -23,12 +23,12 @@ pub fn load_exception_words(words: &str) {
     }
 }
 
-/// Check if a word is in the exception list (case-insensitive).
+/// 检查单词是否在例外列表中（不区分大小写）。
 pub fn is_exception_word(word: &str) -> bool {
     EXCEPTION_WORDS.read().unwrap().contains(&word.to_lowercase())
 }
 
-/// Get all exception words as a sorted vector.
+/// 获取所有已排序的例外词向量。
 pub fn get_exception_words() -> Vec<String> {
     let set = EXCEPTION_WORDS.read().unwrap();
     let mut words: Vec<String> = set.iter().cloned().collect();
@@ -74,10 +74,10 @@ impl ToolType {
     }
 }
 
-/// Apply a toolbox transformation to a text string.
+/// 对文本字符串应用工具箱转换。
 ///
-/// `source` — the original source text (needed for FixAlias to extract tags)
-/// `header_text` — header to prepend (only for AddHeader)
+/// `source` — 原始源文本（FixAlias 提取标签所需）
+/// `header_text` — 要添加的前缀（仅用于 AddHeader）
 pub fn apply_tool(tool: ToolType, text: &str, source: &str, header_text: Option<&str>) -> String {
     match tool {
         ToolType::UppercaseAll => uppercase_all(text),
@@ -120,10 +120,10 @@ fn title_case(text: &str) -> String {
     })
 }
 
-/// Fix `<Alias=...>` and similar tags: copy tag patterns from source into translation.
+/// 修复 `<Alias=...>` 及类似标签：将源文本中的标签模式复制到翻译中。
 ///
-/// Extracts all `<...>` sequences from the source, then replaces corresponding
-/// `<...>` sequences in the translation. If tags counts differ, returns unchanged.
+/// 从源文本中提取所有 `<...>` 序列，然后替换翻译中对应的
+/// `<...>` 序列。如果标签数量不一致，则返回未修改的文本。
 fn fix_alias(translation: &str, source: &str) -> String {
     let tag_re = regex::Regex::new(r"<[^>]+>").unwrap();
     let source_tags: Vec<&str> = tag_re.find_iter(source).map(|m| m.as_str()).collect();
@@ -147,7 +147,7 @@ fn fix_alias(translation: &str, source: &str) -> String {
     result
 }
 
-/// Add a header prefix to text. If header is empty, strips any existing header.
+/// 为文本添加头部前缀。如果头部为空，则返回原文本。
 fn add_header(text: &str, header: &str) -> String {
     if header.is_empty() {
         text.to_string()
@@ -171,11 +171,11 @@ fn first_char_upper_rest_lower(s: &str) -> String {
     }
 }
 
-/// Split text into words (delimited by whitespace and punctuation),
-/// apply a transformation function, and reassemble.
+/// 将文本分割为单词（以空格和标点符号分隔），
+/// 应用转换函数，然后重新组合。
 ///
-/// Content inside `<...>` tags is passed through unchanged.
-/// The transform receives: the word, its 0-based index, and whether currently inside `<>` tags.
+/// `<...>` 标签内的内容保持不变。
+/// 转换函数接收：单词、其从 0 开始的索引以及当前是否在 `<>` 标签内。
 fn split_and_transform<F>(text: &str, transform: F) -> String
 where
     F: Fn(&str, usize, bool) -> String,
@@ -188,7 +188,7 @@ where
     for ch in text.chars() {
         match ch {
             '<' => {
-                // Flush any pending word before entering tag
+                // 在进入标签之前刷新任何挂起的单词
                 if !buf.is_empty() && !in_tag {
                     result.push_str(&transform(&buf, word_count, false));
                     word_count += 1;
@@ -200,7 +200,7 @@ where
             '>' => {
                 buf.push('>');
                 if in_tag {
-                    // Tag content passes through as-is
+                    // 标签内容原样通过
                     result.push_str(&buf);
                     buf.clear();
                     in_tag = false;
@@ -210,7 +210,7 @@ where
                 buf.push(ch);
             }
             _ if is_delimiter(ch) => {
-                // Flush current word, then push delimiter
+                // 刷新当前单词，然后推送分隔符
                 if !buf.is_empty() {
                     result.push_str(&transform(&buf, word_count, false));
                     word_count += 1;
@@ -224,7 +224,7 @@ where
         }
     }
 
-    // Flush last word
+    // 刷新最后一个单词
     if !buf.is_empty() {
         if in_tag {
             result.push_str(&buf);
@@ -355,7 +355,7 @@ mod tests {
 
     #[test]
     fn test_fix_alias_count_mismatch() {
-        // Should leave unchanged if tag count differs
+        // 如果标签数量不一致，应保持不变
         let source = "X <A> Y <B>";
         let trans = "X <C>";
         assert_eq!(apply_tool(ToolType::FixAlias, trans, source, None), "X <C>");

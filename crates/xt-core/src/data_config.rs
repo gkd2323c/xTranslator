@@ -33,10 +33,10 @@ pub struct FieldSizeInfo {
 ///
 /// 格式：`ID=FuncName:{Params}`
 /// 示例：
-/// ```
+/// ```text
 /// 000=GetWantBlocking
 /// 001=GetDistance:{1}
-/// ACAC=ActorCollidewithActor  (0x prefix for hex)
+/// ACAC=ActorCollidewithActor  （十六进制的前缀为 0x）
 /// ```
 pub fn parse_ctda_func(path: &Path) -> HashMap<u32, CtdaFunc> {
     let content = match fs::read_to_string(path) {
@@ -81,7 +81,7 @@ pub fn parse_ctda_func(path: &Path) -> HashMap<u32, CtdaFunc> {
 ///
 /// 格式：`REC:FIELD:AuthCR=MaxSize`
 /// 示例：
-/// ```
+/// ```text
 /// ACTI:FULL:0=47
 /// ACTI:RNAM:0=36
 /// ALCH:FULL:0=43
@@ -127,7 +127,7 @@ pub fn parse_field_size_ref(path: &Path) -> HashMap<String, FieldSizeInfo> {
 ///
 /// 格式：`FormID=SubTypeName`
 /// 示例：
-/// ```
+/// ```text
 /// 00000001=Anger
 /// 00000002=Disgust
 /// FFFFFFFF=Undefined
@@ -140,7 +140,7 @@ pub fn parse_dial_sub_type(path: &Path) -> HashMap<u32, String> {
 ///
 /// 格式：`FormID=EmoteName`
 /// 示例：
-/// ```
+/// ```text
 /// 0018E866=Awed
 /// 0018E865=Impressed
 /// FFFFFFFF=Undefined

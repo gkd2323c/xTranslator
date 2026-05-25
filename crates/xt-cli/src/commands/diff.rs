@@ -2,7 +2,7 @@ use anyhow::Result;
 use std::path::Path;
 use xt_core::xml::{parse_xml_file, XmlStringEntry};
 
-/// Compare Rust ESP parsing output with Delphi xTranslator XML export
+/// 对比 Rust ESP 解析输出与 Delphi xTranslator XML 导出
 pub fn diff_esp_with_xml(esp_path: &str, xml_path: &str) -> Result<()> {
     println!("=== Rust ESP vs Delphi XML Diff ===\n");
 
@@ -14,7 +14,7 @@ pub fn diff_esp_with_xml(esp_path: &str, xml_path: &str) -> Result<()> {
     let (_, xml_entries) = parse_xml_file(Path::new(xml_path))?;
     println!("Delphi XML entries: {}", xml_entries.len());
 
-    // Build lookup map for Rust strings
+    // 为 Rust 字符串构建查找表
     let mut rust_map: std::collections::HashMap<String, &xt_core::types::sky_string::SkyString> =
         std::collections::HashMap::new();
     for sk in &esp_strings {
@@ -42,7 +42,7 @@ pub fn diff_esp_with_xml(esp_path: &str, xml_path: &str) -> Result<()> {
 
         if let Some(rust_sk) = rust_map.get(&key) {
             matched += 1;
-            // Check source string match (case sensitive)
+            // 检查源字符串匹配（区分大小写）
             if rust_sk.source != xml_entry.source {
                 source_mismatch.push(DiffEntry {
                     str_id: xml_entry.str_id,
@@ -115,7 +115,7 @@ struct DiffEntry {
     xml_source: String,
 }
 
-/// Parse ESP and return strings (simplified for diff)
+/// 解析 ESP 并返回字符串列表（简化版用于对比）
 fn parse_esp_strings(esp_path: &str) -> Result<Vec<xt_core::types::sky_string::SkyString>> {
     use std::fs::File;
     use std::io::BufReader;
@@ -127,7 +127,7 @@ fn parse_esp_strings(esp_path: &str) -> Result<Vec<xt_core::types::sky_string::S
 
     let mut parser = EspParser::new();
 
-    // Try to load Strings files
+    // 尝试加载 Strings 文件
     if let Some(parent) = path.parent() {
         let strings_dir = parent.join("Strings");
         if strings_dir.exists() {
@@ -144,7 +144,7 @@ fn parse_esp_strings(esp_path: &str) -> Result<Vec<xt_core::types::sky_string::S
     Ok(parser.strings)
 }
 
-/// Compare two XML exports (Delphi vs Rust if we implement XML export)
+/// 对比两个 XML 导出文件（Delphi vs Rust 如果我们实现了 XML 导出）
 pub fn diff_xml_with_xml(xml1_path: &str, xml2_path: &str) -> Result<()> {
     println!("=== XML vs XML Diff ===\n");
 

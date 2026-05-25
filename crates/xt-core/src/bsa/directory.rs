@@ -48,7 +48,7 @@ impl BsaDirectory {
             let file_count = reader.read_u32::<LittleEndian>()?;
 
             let offset = if header.version == BSAHEADER_VERSION_SSE {
-                reader.read_u32::<LittleEndian>()?; // skip unk32
+                reader.read_u32::<LittleEndian>()?; // 跳过 unk32
                 reader.read_u64::<LittleEndian>()?
             } else {
                 reader.read_u32::<LittleEndian>()? as u64
@@ -193,8 +193,8 @@ pub fn bsa_hash64(name: &str, ext: &str) -> u64 {
     }
 
     // 特殊扩展名处理（.nif/.kf/.dds/.wav）
-    // Delphi TESVT_bsa.pas:248-286 — bit manipulation for known extensions
-    // This modifies the result for specific file types to match Bethesda's own hash.
+    // Delphi TESVT_bsa.pas:248-286 — 对已知扩展名的位操作
+    // 这修改了特定文件类型的结果，以匹配 Bethesda 自身的哈希。
     let ext_flag: u32 = match ext {
         ".nif" => 1,
         ".kf" => 2,
@@ -245,31 +245,31 @@ mod tests {
 
     #[test]
     fn test_bsa_hash64_special_extensions() {
-        // .nif extension triggers flag=1, modifying the hash
+        // .nif 扩展名触发 flag=1，修改哈希
         let h_nif = bsa_hash64("meshes\\test", ".nif");
         let h_generic = bsa_hash64("meshes\\test", ".xxx");
         assert_ne!(h_nif, h_generic);
 
-        // .kf extension
+        // .kf 扩展名
         let h_kf = bsa_hash64("animations\\test", ".kf");
         assert_ne!(h_kf, 0);
 
-        // .dds extension
+        // .dds 扩展名
         let h_dds = bsa_hash64("textures\\test", ".dds");
         assert_ne!(h_dds, 0);
 
-        // .wav extension
+        // .wav 扩展名
         let h_wav = bsa_hash64("sound\\test", ".wav");
         assert_ne!(h_wav, 0);
 
-        // Deterministic: same inputs = same hash
+        // 确定性：相同输入 = 相同哈希
         assert_eq!(
             bsa_hash64("meshes\\test", ".nif"),
             bsa_hash64("meshes\\test", ".nif")
         );
 
-        // Extension matching is case-sensitive for str_to_num part,
-        // so use lowercase consistently (Bethesda uses lowercase in BSAs).
+        // 对于 str_to_num 部分，扩展名匹配是区分大小写的，
+        // 因此一致使用小写（Bethesda 在 BSA 中使用小写）。
         assert_eq!(bsa_hash64("test", ".kf"), bsa_hash64("test", ".kf"));
     }
 

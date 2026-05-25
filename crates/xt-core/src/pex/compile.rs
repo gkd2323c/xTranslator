@@ -1,46 +1,46 @@
-//! PEX binary compiler — writes translated strings back to PEX files
+//! PEX 二进制编译器 — 将翻译后的字符串写回 PEX 文件
 //!
-//! This module rebuilds PEX files with updated string tables, preserving
-//! all original structure while replacing string text with translations.
+//! 此模块重建具有更新字符串表的 PEX 文件，保留
+//! 所有原始结构，同时将字符串文本替换为翻译。
 //!
-//! Strategy: parse preserves ALL raw bytes (debug info, user flags, object bodies).
-//! Compile only modifies string table entries IN-PLACE, keeping indices stable
-//! so opcode references in object bodies remain valid. This is the same approach
-//! Delphi xTranslator uses.
+//! 策略：解析会保留所有原始字节（调试信息、用户标志、对象体）。
+//! 编译仅在原地修改字符串表条目，保持索引稳定，
+//! 以便对象体中的操作码引用保持有效。这与
+//! Delphi xTranslator 使用的方法相同。
 
 use super::types::{PexScript, PexStringEntry, PexTranslatableString};
 use std::collections::HashMap;
 use std::io::{self, Cursor, Write};
 
-/// Compilation result
+/// 编译结果
 #[derive(Debug)]
 pub struct CompileResult {
-    /// Path to compiled file
+    /// 编译后文件的路径
     pub path: String,
-    /// Number of strings updated
+    /// 更新的字符串数量
     pub updated_count: usize,
-    /// Warnings encountered
+    /// 遇到的警告
     pub warnings: Vec<String>,
 }
 
-/// Build updated string table preserving original indices
+/// 重建已更新的字符串表并保留原始索引
 ///
-/// Key guarantee: indices are NEVER changed, only the text at each index.
-/// This ensures all opcode references in object bodies remain valid.
+/// 关键保证：索引绝不会改变，只会改变每个索引对应的文本。
+/// 这确保了对象体中的所有操作码引用保持有效。
 pub fn build_string_table(
     original: &[PexStringEntry],
     translations: &[PexTranslatableString],
 ) -> (Vec<PexStringEntry>, HashMap<String, u16>, usize) {
-    // Clone table so we can modify in-place
+    // 克隆表以便我们可以原地修改
     let mut table: Vec<PexStringEntry> = original.to_vec();
 
-    // Build original text -> index mapping
+    // 构建原始文本到索引的映射
     let mut text_to_index: HashMap<String, u16> = HashMap::new();
     for entry in &table {
         text_to_index.insert(entry.text.clone(), entry.index);
     }
 
-    // Apply translations in-place (indices never change)
+    // 原地应用翻译（索引绝不改变）
     let mut updated_count = 0;
     for trans in translations {
         if !trans.source_text.is_empty() && !trans.translation.is_empty() {
@@ -53,7 +53,7 @@ pub fn build_string_table(
         }
     }
 
-    // Rebuild mapping for caller reference
+    // 重建映射以供调用者参考
     let mut new_map = HashMap::new();
     for entry in &table {
         new_map.insert(entry.text.clone(), entry.index);
@@ -62,14 +62,14 @@ pub fn build_string_table(
     (table, new_map, updated_count)
 }
 
-/// Write PEX file with updated strings
+/// 写入带有更新字符串的 PEX 文件
 ///
-/// Preserves ALL original binary data except string table text:
-/// - Magic, Header: verbatim
-/// - String table: updated text at existing indices
-/// - Debug info: verbatim from original
-/// - User flags: verbatim from original
-/// - Object bodies: verbatim from original (indices unchanged)
+/// 除了字符串表文本之外，保留所有原始二进制数据：
+/// - Magic, Header: 逐字保留
+/// - 字符串表：现有索引处更新的文本
+/// - 调试信息：逐字保留自原始文件
+/// - 用户标志：逐字保留自原始文件
+/// - 对象体：逐字保留自原始文件（索引不变）
 pub fn compile_pex(
     original_script: &PexScript,
     translations: &[PexTranslatableString],
@@ -77,11 +77,11 @@ pub fn compile_pex(
 ) -> io::Result<CompileResult> {
     let mut warnings = Vec::new();
 
-    // Build updated string table (indices preserved)
+    // 重建已更新的字符串表（保留索引）
     let (new_string_table, _, updated_count) =
         build_string_table(&original_script.string_table, translations);
 
-    // Warn if translations reference strings not found in table
+    // 如果翻译引用了表中未找到的字符串，则发出警告
     let mut found_indices = HashMap::new();
     for entry in &original_script.string_table {
         found_indices.insert(entry.text.clone(), entry.index);
@@ -111,7 +111,7 @@ pub fn compile_pex(
     buffer.write_all(&original_script.header.game_id.to_le_bytes())?;
     buffer.write_all(&original_script.header.compile_time.to_le_bytes())?;
 
-    // String table (updated text, same indices)
+    // 字符串表（更新的文本，相同的索引）
     buffer.write_all(&(new_string_table.len() as u16).to_le_bytes())?;
     for entry in &new_string_table {
         let text_bytes = entry.text.as_bytes();
@@ -119,29 +119,29 @@ pub fn compile_pex(
         buffer.write_all(text_bytes)?;
     }
 
-    // Debug info — verbatim from original
+    // 调试信息 — 逐字保留自原始文件
     buffer.write_all(&original_script.debug_info_raw)?;
 
-    // User flags — verbatim from original
+    // 用户标志 — 逐字保留自原始文件
     buffer.write_all(&original_script.user_flags_raw)?;
 
-    // Object bodies — verbatim from original (same count, same sizes)
+    // 对象体 — 逐字保留自原始文件（相同的数量，相同的大小）
     buffer.write_all(&(original_script.object_bodies_raw.len() as u16).to_le_bytes())?;
     for body in original_script.object_bodies_raw.iter() {
-        // Object name index (read from original body at offset 0)
+        // 对象名称索引（从原始对象的偏移量 0 处读取）
         if body.len() >= 2 {
             let name_idx = u16::from_le_bytes([body[0], body[1]]);
             buffer.write_all(&name_idx.to_le_bytes())?;
         } else {
             buffer.write_all(&0u16.to_le_bytes())?;
         }
-        // Body size
+        // 对象体大小
         buffer.write_all(&(body.len() as u32).to_le_bytes())?;
-        // Body data verbatim
+        // 对象体数据逐字保留
         buffer.write_all(body)?;
     }
 
-    // Write to file
+    // 写入文件
     let data = buffer.into_inner();
     std::fs::write(output_path, &data)?;
 
@@ -152,9 +152,9 @@ pub fn compile_pex(
     })
 }
 
-/// Convenience: compile a single PEX file
+/// 便捷函数：编译单个 PEX 文件
 ///
-/// Opens the file, parses it, applies translations, and writes result.
+/// 打开文件，解析，应用翻译并写入结果。
 pub fn compile_pex_file(
     input_path: &str,
     output_path: &str,
@@ -182,7 +182,7 @@ mod tests {
         data.extend_from_slice(&1u16.to_le_bytes()); // game_id
         data.extend_from_slice(&0u64.to_le_bytes()); // compile_time
 
-        // String table
+        // 字符串表
         data.extend_from_slice(&(strings.len() as u16).to_le_bytes());
         for (text, _) in strings {
             let bs = text.as_bytes();
@@ -190,17 +190,17 @@ mod tests {
             data.extend_from_slice(bs);
         }
 
-        // Debug info (empty)
+        // 调试信息（空）
         data.extend_from_slice(&0u64.to_le_bytes());
         data.extend_from_slice(&0u16.to_le_bytes());
 
-        // User flags (empty)
+        // 用户标志（空）
         data.extend_from_slice(&0u16.to_le_bytes());
 
-        // Objects
+        // 对象
         data.extend_from_slice(&object_count.to_le_bytes());
         if object_count > 0 {
-            // Minimum valid empty body needs 14 bytes:
+            // 最小的有效空对象体需要 14 字节：
             // parent(2) + doc_idx(2) + uf_count(2) + auto_state(2)
             // + var_count(2) + guard_count(2) + pg_count(2) + state_count(2)
             let min_body = [0u8; 16];
@@ -271,10 +271,10 @@ mod tests {
         assert_eq!(updated[1].index, 5);
     }
 
-    /// Roundtrip test: parse → compile → re-parse, verify string table unchanged
+    /// 往返测试：解析 → 编译 → 重新解析，验证字符串表不变
     #[test]
     fn test_compile_preserves_binary_structure() {
-        let body = [0u8; 16]; // minimal valid empty body (14 bytes min)
+        let body = [0u8; 16]; // 最小有效空对象体（最少 14 字节）
         let original_bytes = build_test_pex_bytes(
             &[
                 ("TestObject", 0),
@@ -285,7 +285,7 @@ mod tests {
             &body,
         );
 
-        // Parse
+        // 解析
         let mut cur = Cursor::new(&original_bytes[..]);
         let script = super::super::parser::parse_pex(&mut cur).unwrap();
         assert_eq!(script.string_table.len(), 3);
@@ -293,7 +293,7 @@ mod tests {
         assert_eq!(script.object_bodies_raw.len(), 1);
         assert_eq!(script.object_bodies_raw[0].len(), 16);
 
-        // Apply translation
+        // 应用翻译
         let translations = vec![PexTranslatableString {
             object_name: "TestObject".to_string(),
             state_name: String::new(),
@@ -303,14 +303,14 @@ mod tests {
             translation: "英文文本".to_string(),
         }];
 
-        // Compile to temp file
+        // 编译到临时文件
         let tmp_path = std::env::temp_dir().join("xt_pex_roundtrip_test.pex");
         compile_pex(&script, &translations, tmp_path.to_str().unwrap()).unwrap();
 
         let mut reparse_cur = Cursor::new(std::fs::read(&tmp_path).unwrap());
         let reparsed = super::super::parser::parse_pex(&mut reparse_cur).unwrap();
 
-        // Verify: string table text updated, indices unchanged, bodies preserved
+        // 验证：字符串表文本已更新，索引未改变，对象体已保留
         assert_eq!(reparsed.string_table.len(), 3);
         assert_eq!(reparsed.string_table[0].text, "TestObject");
         assert_eq!(reparsed.string_table[1].text, "英文文本");

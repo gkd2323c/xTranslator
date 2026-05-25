@@ -156,8 +156,8 @@ impl AppState {
 
 /// 获取缓存目录路径
 ///
-/// Windows: `%LOCALAPPDATA%/xTranslator/cache/`
-/// Unix: `~/.cache/xTranslator/`
+/// Windows 平台: `%LOCALAPPDATA%/xTranslator/cache/`
+/// Unix 平台: `~/.cache/xTranslator/`
 fn cache_dir() -> std::path::PathBuf {
     if cfg!(windows) {
         std::env::var("LOCALAPPDATA")
@@ -180,6 +180,10 @@ fn get_esp_cache_hash(state: &AppState) -> Option<String> {
     xt_core::cache::hash_file(std::path::Path::new(&info.esp_path)).ok()
 }
 
+/// 获取配置目录路径
+///
+/// Windows 平台: `%LOCALAPPDATA%/xTranslator/`
+/// Unix 平台: `~/.config/xTranslator/`
 pub fn config_dir() -> std::path::PathBuf {
     if cfg!(windows) {
         std::env::var("LOCALAPPDATA")
@@ -1416,6 +1420,12 @@ pub async fn set_translation_provider(
 }
 
 /// 获取当前翻译提供方和可用列表。
+///
+/// # 返回元组序列语义
+/// `(current_provider, providers_list, openai_set, deepl_set, baidu_set, youdao_set, azure_set, google_set)`
+/// - `current_provider`: 当前选中的提供方名称
+/// - `providers_list`: 所有可用提供方名称列表
+/// - `*_set`: 各提供方是否已配置密钥（`true` = 已配置）
 #[tauri::command]
 pub async fn get_translation_providers(
     state: tauri::State<'_, Arc<AppState>>,
@@ -1448,7 +1458,7 @@ pub async fn get_translation_providers(
             .map_err(|e| e.to_string())?
             .is_some();
     let azure_set = state.azure_key.lock().map_err(|e| e.to_string())?.is_some();
-    let google_set = true; // Google is keyless
+    let google_set = true; // Google 无需密钥，始终返回 true
 
     Ok((
         current.to_string(),
@@ -1465,8 +1475,9 @@ pub async fn get_translation_providers(
     ))
 }
 
-/// 将当前已翻译内容导出为 Delphi 兼容 XML。
+/// 向前端广播 XML 导出进度事件
 ///
+/// `stage` 为阶段名称（如 "preparing"、"exporting"），全体广播到前端的 `xml-progress` 事件通道。
 fn emit_xml_progress(window: &tauri::Window, stage: &str, current: u64, total: u64, message: &str) {
     let percentage = if total > 0 {
         ((current as f64 / total as f64) * 100.0) as u8
@@ -2119,7 +2130,7 @@ pub async fn extract_ba2_folder(
 
 // ── PEX Commands ────────────────────────────────────────────────────
 
-/// Parse a PEX file and extract translatable strings
+/// 解析 PEX 文件并提取可翻译的字符串
 #[tauri::command]
 pub async fn parse_pex_strings(
     pex_path: String,
@@ -2173,7 +2184,7 @@ pub async fn parse_pex_strings(
     })
 }
 
-/// Decompile a PEX file into Papyrus-like pseudocode
+/// 反编译 PEX 文件为类 Papyrus 的伪代码
 #[tauri::command]
 pub async fn decompile_pex(
     pex_path: String,
@@ -2220,8 +2231,8 @@ pub async fn decompile_pex(
     })
 }
 
-/// Load pexNoTransProc.txt for the given game, returning a set of
-/// lowercase procedure names that should be excluded from translation.
+/// 加载指定游戏的 pexNoTransProc.txt 过滤器，返回一个
+/// 应排除在翻译之外的小写过程（procedure）名称集合。
 fn load_no_trans_procs(game: Option<&str>) -> std::collections::HashSet<String> {
     let game_subdir = match game.unwrap_or("SkyrimSE") {
         "Skyrim" => "Skyrim",
@@ -2255,10 +2266,10 @@ fn load_no_trans_procs(game: Option<&str>) -> std::collections::HashSet<String> 
         .collect()
 }
 
-/// Compile a PEX file with updated translations
+/// 使用更新后的翻译编译 PEX 文件
 ///
-/// Takes the original PEX script and a list of translated strings,
-/// writes a new PEX file with the updated string table.
+/// 接受原始 PEX 脚本和翻译字符串列表，
+/// 写入一个带有更新后字符串表的新 PEX 文件。
 #[tauri::command]
 pub async fn compile_pex(
     pex_path: String,
@@ -2297,7 +2308,7 @@ pub async fn compile_pex(
 
 use xt_core::esp::compare::{self, CompareEntry, EspComparison};
 
-/// Convert internal comparison result to DTO
+/// 将内部对比结果转换为 DTO
 fn comparison_to_dto(comp: EspComparison) -> EspCompareResultDto {
     let sig_to_str = |sig: &[u8; 4]| String::from_utf8_lossy(sig).to_string();
 
@@ -2369,7 +2380,7 @@ fn comparison_to_dto(comp: EspComparison) -> EspCompareResultDto {
     }
 }
 
-/// Compare two ESP/ESM files and return string pair mappings
+/// 对比两个 ESP/ESM 文件并返回字符串对映射
 #[tauri::command]
 pub async fn compare_esp_files(
     old_esp_path: String,
@@ -2401,7 +2412,7 @@ pub async fn compare_esp_files(
 
 use xt_core::mcm::{self, types::McmEncoding};
 
-/// Convert internal McmFile to DTO
+/// 将内部 McmFile 转换为 DTO
 fn mcm_file_to_dto(file: &xt_core::mcm::McmFile) -> McmFileDto {
     McmFileDto {
         path: file.path.clone(),
@@ -2426,7 +2437,7 @@ fn mcm_file_to_dto(file: &xt_core::mcm::McmFile) -> McmFileDto {
     }
 }
 
-/// Load and parse an MCM translation file
+/// 加载并解析 MCM 翻译文件
 #[tauri::command]
 pub async fn load_mcm_file(mcm_path: String) -> Result<McmFileDto, String> {
     let file =
@@ -2434,7 +2445,7 @@ pub async fn load_mcm_file(mcm_path: String) -> Result<McmFileDto, String> {
     Ok(mcm_file_to_dto(&file))
 }
 
-/// Save an MCM file with updated translations
+/// 保存带有更新翻译的 MCM 文件
 #[tauri::command]
 pub async fn save_mcm_file(request: McmSaveRequest) -> Result<(), String> {
     // 需要原始 McmFile 以保留编码和 normalized_lines。
@@ -2457,8 +2468,7 @@ pub async fn save_mcm_file(request: McmSaveRequest) -> Result<(), String> {
     Ok(())
 }
 
-/// Compare current MCM entries with a reference MCM file and apply translations
-/// based on the specified overwrite policy.
+/// 将当前的 MCM 条目与参考 MCM 文件进行对比，并根据指定的覆盖策略应用翻译。
 #[tauri::command]
 pub async fn mcm_compare(request: McmCompareRequest) -> Result<McmCompareResult, String> {
     use std::collections::HashMap;
@@ -2534,7 +2544,7 @@ use xt_core::data_config::{
     parse_ctda_func, parse_dial_sub_type, parse_emote_definition, parse_field_size_ref,
 };
 
-/// Map game string to Data/<Game> subdirectory name
+/// 将游戏标识字符串映射到 Data/<Game> 子目录名称
 fn game_to_data_dir(game: &str) -> &'static str {
     match game.to_lowercase().as_str() {
         "skyrim" => "Skyrim",
@@ -2806,10 +2816,9 @@ pub async fn build_dialog_tree(
 
 use xt_core::tcsc;
 
-/// Load vocabulary from vocabulary.txt and game Strings files.
+/// 从 vocabulary.txt 以及游戏 Strings 文件中加载词汇表。
 ///
-/// Returns source→translation pairs count and makes them available
-/// for heuristic search enrichment.
+/// 返回源文本→翻译对的数量，并使它们可用于启发式搜索增强。
 #[tauri::command]
 pub async fn load_vocabulary(
     state: tauri::State<'_, Arc<AppState>>,
@@ -2893,7 +2902,7 @@ pub struct VocabularyInfo {
     pub base_names: Vec<String>,
 }
 
-/// Convert text between Simplified and Traditional Chinese
+/// 在简体中文与繁体中文之间转换文本
 #[tauri::command]
 pub async fn tcsc_convert(text: String, direction: String) -> Result<String, String> {
     let result = match direction.as_str() {
@@ -2904,32 +2913,31 @@ pub async fn tcsc_convert(text: String, direction: String) -> Result<String, Str
     Ok(result)
 }
 
-/// Reverse RTL text for Arabic/Hebrew display.
+/// 翻转从右到左（RTL）的文本，用于阿拉伯语/希伯来语的显示。
 ///
-/// Processes text line-by-line: reverses Arabic character blocks and mirrors
-/// bracket symbols. Returns the reversed text, or an error if no Arabic found.
+/// 逐行处理文本：翻转阿拉伯字符块并镜像括号符号。返回翻转后的文本，如果未找到阿拉伯字符则返回错误。
 #[tauri::command]
 pub async fn rtl_reverse(text: String) -> Result<String, String> {
     xt_core::rtl::reverse_rtl_multiline(&text)
         .ok_or_else(|| "No Arabic characters found in text".into())
 }
 
-/// Shape Arabic text: convert logical-order characters to presentation forms.
+/// 整形阿拉伯语文本：将逻辑顺序的字符转换为呈现形式。
 #[tauri::command]
 pub async fn shape_arabic(text: String) -> Result<String, String> {
     Ok(xt_core::rtl::shape_arabic(&text))
 }
 
-/// Deshape Arabic text: convert presentation forms back to logical base characters.
+/// 还原阿拉伯语文本：将呈现形式重新转换为逻辑基础字符。
 #[tauri::command]
 pub async fn deshape_arabic(text: String) -> Result<String, String> {
     Ok(xt_core::rtl::deshape_arabic(&text))
 }
 
-/// Batch convert translations for all (or specified) strings.
+/// 批量转换所有（或指定的）字符串的译文。
 ///
-/// Converts the `translation` field of each matching string in-place.
-/// Returns the list of updated string IDs.
+/// 原地转换每个匹配字符串的 `translation` 字段。
+/// 返回更新后的字符串 ID 列表。
 #[tauri::command]
 pub async fn tcsc_batch_convert(
     state: tauri::State<'_, Arc<AppState>>,
@@ -2970,14 +2978,14 @@ pub async fn tcsc_batch_convert(
     Ok(updated)
 }
 
-/// Compare source vs destination (translation) strings.
+/// 对比源文本与目标（翻译）文本字符串。
 ///
-/// Modes:
-/// - "diff": mark strings where source != translation (hash mismatch) as incomplete
-/// - "same": mark strings where source == translation (hash match) as incomplete
+/// 模式：
+/// - "diff"：将源文本 != 翻译文本（哈希不匹配）的字符串标记为未完成
+/// - "same"：将源文本 == 翻译文本（哈希匹配）的字符串标记为未完成
 ///
-/// Only affects strings that are currently translated or validated.
-/// Returns the count of tagged strings.
+/// 仅影响当前已翻译或已验证的字符串。
+/// 返回被标记的字符串数量。
 #[tauri::command]
 pub async fn compare_source_dest(
     state: tauri::State<'_, Arc<AppState>>,
@@ -3017,13 +3025,13 @@ pub async fn compare_source_dest(
     Ok(count)
 }
 
-/// Apply a toolbox text transformation to selected strings.
+/// 对选定的字符串应用工具箱文本转换。
 ///
-/// `tool`: One of "uppercase_all", "lowercase_all", "uppercase_first", "title_case",
-///         "fix_alias", "add_header", "trim"
-/// `target`: "source" | "translation" | "both"
-/// `ids`: String IDs to operate on (empty = all strings)
-/// `header_text`: Header prefix for "add_header" tool
+/// `tool`：其一为 "uppercase_all"、"lowercase_all"、"uppercase_first"、"title_case"、
+///         "fix_alias"、"add_header"、"trim"
+/// `target`："source" | "translation" | "both"
+/// `ids`：要操作的字符串 ID（为空 = 所有字符串）
+/// `header_text`："add_header" 工具的前缀文本
 #[tauri::command]
 pub async fn toolbox_transform(
     state: tauri::State<'_, Arc<AppState>>,
@@ -3103,8 +3111,8 @@ pub async fn toolbox_transform(
 
 use xt_core::toolbox::{get_exception_words, load_exception_words};
 
-/// Load toolbox exception words from config and apply to runtime.
-/// Called during app startup after loading config.
+/// 从配置中加载工具箱例外词，并应用到运行时。
+/// 在应用程序启动且加载配置后调用。
 #[tauri::command]
 pub async fn toolbox_load_exception_words(
     words: Option<String>,
@@ -3115,7 +3123,7 @@ pub async fn toolbox_load_exception_words(
     Ok("ok".to_string())
 }
 
-/// Get exception words list.
+/// 获取例外词列表。
 #[tauri::command]
 pub async fn toolbox_get_exception_words() -> Result<Vec<String>, String> {
     Ok(get_exception_words())
@@ -3125,7 +3133,7 @@ pub async fn toolbox_get_exception_words() -> Result<Vec<String>, String> {
 
 use xt_shared::dto::{MergeStatsDto, SpellCheckConfigDto, SpellCheckResultDto, SpellFaultDto};
 
-/// Load Hunspell DLL and dictionary for spell checking.
+/// 加载 Hunspell DLL 和词典以进行拼写检查。
 #[tauri::command]
 pub async fn spell_check_load(
     state: tauri::State<'_, Arc<AppState>>,
@@ -3146,7 +3154,7 @@ pub async fn spell_check_load(
     })
 }
 
-/// Unload the spell checker.
+/// 卸载拼写检查器。
 #[tauri::command]
 pub async fn spell_check_unload(state: tauri::State<'_, Arc<AppState>>) -> Result<(), String> {
     let mut checker = state.spell_checker.lock().map_err(|e| e.to_string())?;
@@ -3154,7 +3162,7 @@ pub async fn spell_check_unload(state: tauri::State<'_, Arc<AppState>>) -> Resul
     Ok(())
 }
 
-/// Toggle spell check active state.
+/// 切换拼写检查的启用状态。
 #[tauri::command]
 pub async fn spell_check_toggle(state: tauri::State<'_, Arc<AppState>>) -> Result<bool, String> {
     let mut checker = state.spell_checker.lock().map_err(|e| e.to_string())?;
@@ -3162,7 +3170,7 @@ pub async fn spell_check_toggle(state: tauri::State<'_, Arc<AppState>>) -> Resul
     Ok(checker.config.active)
 }
 
-/// Get spell check configuration (available dictionaries, status).
+/// 获取拼写检查配置（可用词典、状态）。
 #[tauri::command]
 pub async fn spell_check_config(
     state: tauri::State<'_, Arc<AppState>>,
@@ -3177,7 +3185,7 @@ pub async fn spell_check_config(
     })
 }
 
-/// Analyze text for spelling errors. Returns fault word positions.
+/// 分析文本的拼写错误。返回错误单词的位置。
 #[tauri::command]
 pub async fn spell_check_text(
     state: tauri::State<'_, Arc<AppState>>,
@@ -3202,7 +3210,7 @@ pub async fn spell_check_text(
     })
 }
 
-/// Get spelling suggestions for a word.
+/// 获取单词的拼写建议。
 #[tauri::command]
 pub async fn spell_check_suggestions(
     state: tauri::State<'_, Arc<AppState>>,
@@ -3212,7 +3220,7 @@ pub async fn spell_check_suggestions(
     Ok(checker.suggestions(&word))
 }
 
-/// Add a word to the spell check ignore list.
+/// 将单词添加到拼写检查的忽略列表中。
 #[tauri::command]
 pub async fn spell_check_ignore(
     state: tauri::State<'_, Arc<AppState>>,
@@ -3231,7 +3239,7 @@ pub async fn spell_check_ignore(
 
 use xt_core::header_processor::{HeaderApplyResult, HeaderRuleDto};
 
-/// Load header processor rules from an INI file.
+/// 从 INI 文件加载头部处理规则。
 #[tauri::command]
 pub async fn header_rules_load(
     state: tauri::State<'_, Arc<AppState>>,
@@ -3254,7 +3262,7 @@ pub async fn header_rules_load(
     Ok(dtos)
 }
 
-/// Get current loaded rules.
+/// 获取当前已加载的规则。
 #[tauri::command]
 pub async fn header_rules_list(
     state: tauri::State<'_, Arc<AppState>>,
@@ -3272,7 +3280,7 @@ pub async fn header_rules_list(
         .collect())
 }
 
-/// Toggle a rule's enabled state by index.
+/// 通过索引切换规则’启用状态。
 #[tauri::command]
 pub async fn header_rules_toggle(
     state: tauri::State<'_, Arc<AppState>>,
@@ -3286,8 +3294,8 @@ pub async fn header_rules_toggle(
     Ok(())
 }
 
-/// Apply all enabled header rules to loaded strings.
-/// Returns count of strings that matched at least one rule.
+/// 将所有启用的头部规则应用到已加载的字符串中。
+/// 返回匹配了至少一条规则的字符串数量。
 #[tauri::command]
 pub async fn header_rules_apply(
     state: tauri::State<'_, Arc<AppState>>,
@@ -3392,7 +3400,7 @@ pub struct HeaderBatchComplete {
     pub errors: Vec<String>,
 }
 
-/// Process all ESP files in a directory with the currently loaded header rules.
+/// 使用当前加载的头部规则处理目录中的所有 ESP 文件。
 #[tauri::command]
 pub async fn header_batch_process(
     window: tauri::Window,
@@ -3585,7 +3593,7 @@ pub async fn header_batch_process(
     Ok(result)
 }
 
-/// Save current rules to INI file.
+/// 将当前规则保存到 INI 文件。
 #[tauri::command]
 pub async fn header_rules_save(
     state: tauri::State<'_, Arc<AppState>>,
@@ -3596,7 +3604,7 @@ pub async fn header_rules_save(
     std::fs::write(&path, text).map_err(|e| format!("Failed to save rules: {}", e))
 }
 
-/// Delete a rule at the given index. Returns updated rule list.
+/// 删除给定索引处的规则。返回更新后的规则列表。
 #[tauri::command]
 pub async fn header_rules_delete(
     state: tauri::State<'_, Arc<AppState>>,
@@ -3618,7 +3626,7 @@ pub async fn header_rules_delete(
         .collect())
 }
 
-/// Move a rule up or down. Returns updated rule list.
+/// 向上或向下移动规则。返回更新后的规则列表。
 #[tauri::command]
 pub async fn header_rules_move(
     state: tauri::State<'_, Arc<AppState>>,
@@ -3643,7 +3651,7 @@ pub async fn header_rules_move(
         .collect())
 }
 
-/// Update a rule's field at the given index. Returns updated rule list.
+/// 更新给定索引处规则的字段。返回更新后的规则列表。
 #[tauri::command]
 pub async fn header_rules_update(
     state: tauri::State<'_, Arc<AppState>>,
@@ -3689,7 +3697,7 @@ pub async fn header_rules_update(
         .collect())
 }
 
-/// Add a new blank rule. Returns updated rule list.
+/// 添加一条新的空白规则。返回更新后的规则列表。
 #[tauri::command]
 pub async fn header_rules_add(
     state: tauri::State<'_, Arc<AppState>>,
@@ -3714,13 +3722,13 @@ pub async fn header_rules_add(
 
 use xt_core::header_processor::{PreProcessingOpts, TemplateInfo, TemplateManager};
 
-/// List available templates in a directory.
+/// 列出目录中可用的模板。
 #[tauri::command]
 pub async fn header_templates_list(dir: String) -> Result<Vec<TemplateInfo>, String> {
     TemplateManager::list_templates(&dir)
 }
 
-/// Save current rules as a named template.
+/// 将当前规则保存为命名模板。
 #[tauri::command]
 pub async fn header_templates_save(
     state: tauri::State<'_, Arc<AppState>>,
@@ -3731,7 +3739,7 @@ pub async fn header_templates_save(
     TemplateManager::save_template(&dir, &name, &rules)
 }
 
-/// Load a named template (replaces current rules). Returns updated rule list.
+/// 加载命名模板（替换当前规则）。返回更新后的规则列表。
 #[tauri::command]
 pub async fn header_templates_load(
     state: tauri::State<'_, Arc<AppState>>,
@@ -3766,7 +3774,7 @@ pub struct PreProcOptsDto {
     pub options: Vec<(String, String)>,
 }
 
-/// Load pre-processing options from INI file.
+/// 从 INI 文件加载预处理选项。
 #[tauri::command]
 pub async fn preproc_opts_load(
     state: tauri::State<'_, Arc<AppState>>,
@@ -3786,7 +3794,7 @@ pub async fn preproc_opts_load(
     Ok(PreProcOptsDto { options: sorted })
 }
 
-/// Get current pre-processing options.
+/// 获取当前预处理选项。
 #[tauri::command]
 pub async fn preproc_opts_list(
     state: tauri::State<'_, Arc<AppState>>,
@@ -3804,7 +3812,7 @@ pub async fn preproc_opts_list(
     Ok(PreProcOptsDto { options: sorted })
 }
 
-/// Update a pre-processing option key-value pair.
+/// 更新预处理选项的键值对。
 #[tauri::command]
 pub async fn preproc_opts_set(
     state: tauri::State<'_, Arc<AppState>>,
@@ -3825,7 +3833,7 @@ pub async fn preproc_opts_set(
     Ok(PreProcOptsDto { options: sorted })
 }
 
-/// Delete a pre-processing option key.
+/// 删除预处理选项的键。
 #[tauri::command]
 pub async fn preproc_opts_delete(
     state: tauri::State<'_, Arc<AppState>>,
@@ -3845,7 +3853,7 @@ pub async fn preproc_opts_delete(
     Ok(PreProcOptsDto { options: sorted })
 }
 
-/// Save pre-processing options to INI file.
+/// 保存预处理选项到 INI 文件。
 #[tauri::command]
 pub async fn preproc_opts_save(
     state: tauri::State<'_, Arc<AppState>>,
@@ -3859,10 +3867,10 @@ pub async fn preproc_opts_save(
     std::fs::write(&path, text).map_err(|e| format!("Failed to save opts: {}", e))
 }
 
-/// Check alias integrity between source and translation.
+/// 检查源文本与译文之间的别名一致性。
 ///
-/// Extracts `<Alias=...>` style tags from both source and translation,
-/// returns mismatch info for the frontend to display.
+/// 从源文本和译文中提取 `<Alias=...>` 样式的标签，
+/// 返回不匹配的信息以便前端展示。
 #[tauri::command]
 pub async fn check_aliases(
     state: tauri::State<'_, Arc<AppState>>,
@@ -3902,7 +3910,7 @@ pub async fn check_aliases(
     })
 }
 
-/// Result of an alias integrity check
+/// 别名一致性检查的结果
 #[derive(serde::Serialize)]
 pub struct AliasCheckResult {
     pub source_aliases: Vec<String>,
@@ -3912,9 +3920,9 @@ pub struct AliasCheckResult {
     pub has_mismatch: bool,
 }
 
-/// Extract alias-style tags from text.
-/// Matches Delphi's rxPatternAliasStrict: `<alias...>`, `<global...>`, `<relat...>`,
-/// `<basename...>`, `<token...>`, `<repetitions>`, `</?font...>`, `<mag>`, `<dur>`
+/// 从文本中提取别名样式标签。
+/// 匹配 Delphi 的 rxPatternAliasStrict：`<alias...>`、`<global...>`、`<relat...>`、
+/// `<basename...>`、`<token...>`、`<repetitions>`、`</?font...>`、`<mag>`、`<dur>`
 fn extract_aliases(text: &str) -> Vec<String> {
     let re = regex::Regex::new(
         r"<alias[^>]*>|<global[^>]*>|<relat[^>]*>|<basename[^>]*>|<token[^>]*>|<repetitions>|</?font[^>]*>|<mag>|<dur>"
@@ -3994,10 +4002,7 @@ pub async fn save_config(config: AppConfigDto) -> Result<(), String> {
 
 // ── ESP Write-back Commands ──────────────────────────────────────────
 
-/// Save ESP directly (delocalized ESP write-back).
-///
-/// When in ESP mode, writes translations back into the ESP file's field buffers,
-/// Get parsed TES4 header information from the loaded ESP file.
+/// 从加载的 ESP 文件中获取解析后的 TES4 文件头信息。
 #[tauri::command]
 pub async fn get_esp_header(
     state: tauri::State<'_, Arc<AppState>>,
@@ -4022,7 +4027,10 @@ pub async fn get_esp_header(
     })
 }
 
-/// rebuilds records, recompresses, and serializes to disk.
+/// 直接保存 ESP（去本地化的 ESP 回写）。
+///
+/// 当处于 ESP 模式时，将翻译写回 ESP 文件的字段缓冲区中，
+/// 重建记录、重新压缩并序列化到磁盘。
 #[tauri::command]
 pub async fn save_esp(
     state: tauri::State<'_, Arc<AppState>>,
@@ -4159,7 +4167,7 @@ pub async fn save_esp(
     })
 }
 
-/// Finalize ESP: apply SST → rebuild → serialize → export Strings.
+/// 最终导出生成 ESP：应用 SST -> 重构 -> 序列化 -> 导出 Strings 文件。
 #[tauri::command]
 pub async fn finalize_esp(
     state: tauri::State<'_, Arc<AppState>>,
@@ -4278,8 +4286,7 @@ pub async fn finalize_esp(
     })
 }
 
-/// Export .STRINGS/.DLSTRINGS/.ILSTRINGS files from translated strings
-/// using proper binary format (compatible with Bethesda games).
+/// 使用标准的二进制格式（与 Bethesda 游戏兼容），从已翻译的字符串中导出 .STRINGS/.DLSTRINGS/.ILSTRINGS 文件。
 fn export_strings_files(
     strings: &[xt_core::types::sky_string::SkyString],
     strings_dir: &str,
@@ -4310,7 +4317,7 @@ fn export_strings_files_for_delocalize(
     })
 }
 
-/// Common implementation for exporting strings files in binary format.
+/// 导出二进制格式 Strings 文件的通用实现。
 fn export_strings_files_inner(
     strings: &[xt_core::types::sky_string::SkyString],
     strings_dir: &str,
@@ -4367,7 +4374,7 @@ fn export_strings_files_inner(
     Ok(exported_files)
 }
 
-/// Delocalize ESP: convert localized ESP to delocalized format.
+/// 去本地化 ESP：将本地化 ESP 转换为非本地化格式。
 #[tauri::command]
 pub async fn delocalize_esp(
     state: tauri::State<'_, Arc<AppState>>,
@@ -4484,7 +4491,7 @@ pub async fn delocalize_esp(
     })
 }
 
-/// Return API translator config info (providers, models, limits)
+/// 返回 API 翻译器配置信息（服务商、模型、限制等）。
 #[tauri::command]
 pub async fn get_api_config(
     state: tauri::State<'_, Arc<AppState>>,

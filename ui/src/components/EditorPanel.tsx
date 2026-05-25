@@ -544,7 +544,7 @@ export function EditorDialog({ open, onClose }: EditorDialogProps) {
       const end = textarea.selectionEnd;
       const newValue = localTrans.substring(0, start) + "  " + localTrans.substring(end);
       setLocalTrans(newValue);
-      // Restore cursor position after state update
+      // 状态更新后恢复光标位置
       requestAnimationFrame(() => {
         textarea.selectionStart = textarea.selectionEnd = start + 2;
       });
@@ -714,7 +714,7 @@ export function EditorDialog({ open, onClose }: EditorDialogProps) {
             </div>
           </div>
 
-          {/* ── Spell Check Section ── */}
+          {/* ── 拼写检查部分 ── */}
           {spellResult && spellResult.active && (
             <div className="editor-spellcheck">
               <div className="spellcheck-summary">
@@ -748,7 +748,7 @@ export function EditorDialog({ open, onClose }: EditorDialogProps) {
                 </div>
               )}
 
-              {/* Suggestions panel */}
+              {/* 建议面板 */}
               {selectedFaultIdx !== null && spellResult.faults[selectedFaultIdx] && (
                 <div className="spellcheck-suggestions">
                   <div className="spellcheck-suggestions-header">

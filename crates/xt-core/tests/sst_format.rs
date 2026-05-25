@@ -34,11 +34,11 @@ fn test_sst_byte_level_structure() {
     sk.params.set(SkyStringParams::TRANSLATED, true);
     dict.entries.push(sk);
 
-    // Write
+    // 写入
     let mut buf = Vec::new();
     dict.write_to(&mut buf).unwrap();
 
-    // Verify byte-level structure
+    // 验证字节级结构
     let mut cursor = Cursor::new(&buf);
 
     // 1. Magic

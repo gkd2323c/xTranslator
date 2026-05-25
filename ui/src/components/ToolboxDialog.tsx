@@ -37,14 +37,14 @@ export function ToolboxDialog({ open, onClose, selectedIds, onApplied }: Toolbox
   const [exceptionWords, setExceptionWords] = useState<string[]>([]);
   const [exceptionText, setExceptionText] = useState("");
 
-  // Load exception words when dialog opens
+  // 当对话框打开时加载例外词汇
   useEffect(() => {
     if (open) {
       toolboxGetExceptionWords().then(setExceptionWords).catch(() => setExceptionWords([]));
     }
   }, [open]);
 
-  // Sync exception words text with list
+  // 同步例外词汇文本与列表
   useEffect(() => {
     setExceptionText(exceptionWords.join("\n"));
   }, [exceptionWords]);
@@ -68,7 +68,7 @@ export function ToolboxDialog({ open, onClose, selectedIds, onApplied }: Toolbox
       await toolboxLoadExceptionWords(words.join("\n"));
       setExceptionWords(words);
 
-      // Save to config
+      // 保存到配置
       const currentConfig = await loadConfig();
       await saveConfig({ ...currentConfig, word_exception_list: words.join("\n") });
       toast.success(t("toolbox.exceptionWordsSaved", { count: words.length }));
@@ -80,7 +80,7 @@ export function ToolboxDialog({ open, onClose, selectedIds, onApplied }: Toolbox
 
   if (!open) return null;
 
-  // Exception words editor modal
+  // 例外词汇编辑器模态框
   if (showExceptionEditor) {
     return (
       <Modal

@@ -257,7 +257,7 @@ impl ProviderType {
 #[async_trait::async_trait]
 pub trait TranslationProvider: Send + Sync {
     /// 翻译文本（异步）
-    /// proxy: Optional AppConfig with proxy settings
+    /// `proxy` — 包含代理设置的可选 AppConfig
     async fn translate(
         &self,
         text: &str,

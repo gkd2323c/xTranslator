@@ -29,7 +29,7 @@ export function SpellCheckSettingsDialog({ open, onClose, dllPath, dictDir, onCo
       }
       onConfigChanged(cfg);
     } catch (e: any) {
-      // silently fail - dictionaries dir might not exist yet
+      // 静默失败 - 字典目录可能还不存在
       setConfig(null);
     }
   }, [dictDir, onConfigChanged]);
@@ -166,7 +166,7 @@ export function SpellCheckSettingsDialog({ open, onClose, dllPath, dictDir, onCo
       }
     >
       <div className="spellcheck-settings">
-        {/* Status */}
+        {/* 状态 */}
         <div className="spellcheck-status-row">
           <span className="spellcheck-label">{t("spellcheck.status", { defaultValue: "Status" })}:</span>
           <span className={`spellcheck-status-value ${isLoaded ? (isActive ? "spellcheck-active" : "spellcheck-loaded") : "spellcheck-inactive"}`}>
@@ -178,7 +178,7 @@ export function SpellCheckSettingsDialog({ open, onClose, dllPath, dictDir, onCo
           </span>
         </div>
 
-        {/* Dictionary Selection */}
+        {/* 字典选择 */}
         <div className="spellcheck-field">
           <label className="spellcheck-label">{t("spellcheck.dictionary", { defaultValue: "Dictionary" })}:</label>
           <div className="spellcheck-field-row">
@@ -194,7 +194,7 @@ export function SpellCheckSettingsDialog({ open, onClose, dllPath, dictDir, onCo
           </div>
         </div>
 
-        {/* Paths (read-only info) */}
+        {/* 路径（只读信息） */}
         <div className="spellcheck-field">
           <label className="spellcheck-label">{t("spellcheck.dllPath", { defaultValue: "Hunspell DLL" })}:</label>
           <code className="spellcheck-path">{dllPath}</code>
@@ -204,7 +204,7 @@ export function SpellCheckSettingsDialog({ open, onClose, dllPath, dictDir, onCo
           <code className="spellcheck-path">{dictDir}</code>
         </div>
 
-        {/* Actions */}
+        {/* 操作 */}
         <div className="spellcheck-actions">
           {!isLoaded ? (
             <Button variant="primary" size="sm" onClick={handleLoad} loading={loading} icon={<BookOpen size={14} />}>
@@ -229,7 +229,7 @@ export function SpellCheckSettingsDialog({ open, onClose, dllPath, dictDir, onCo
           )}
         </div>
 
-        {/* Help text */}
+        {/* 帮助文本 */}
         <p className="spellcheck-help">
           {t("spellcheck.helpText", {
             defaultValue:

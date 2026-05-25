@@ -27,7 +27,7 @@ export function FinalizePanel() {
   const [result, setResult] = useState<FinalizeResponse | null>(null);
   const [espResult, setEspResult] = useState<FinalizeEspResponse | null>(null);
 
-  // Compute stats from all items
+  // 从所有项计算统计数据
   const stats = {
     total: allItems.length,
     translated: allItems.filter((s) => s.status === "translated").length,
@@ -142,7 +142,7 @@ export function FinalizePanel() {
         </p>
       </div>
 
-      {/* Translation Summary */}
+      {/* 翻译摘要 */}
       <div className="sidepanel-section">
         <h4>{t("finalize.summary")}</h4>
         <div className="finalize-stats">
@@ -165,7 +165,7 @@ export function FinalizePanel() {
         </div>
       </div>
 
-      {/* Output Options — ESP mode vs Strings mode */}
+      {/* 输出选项 — ESP 模式 vs Strings 模式 */}
       {espMode ? (
         <>
           <div className="sidepanel-section">
@@ -273,7 +273,7 @@ export function FinalizePanel() {
         </>
       )}
 
-      {/* Result Output Files — Strings mode */}
+      {/* 结果输出文件 — Strings 模式 */}
       {!espMode && result && (
         <div className="sidepanel-section">
           <h4>{t("finalize.outputFiles")}</h4>
@@ -322,7 +322,7 @@ export function FinalizePanel() {
         </div>
       )}
 
-      {/* Result — ESP mode */}
+      {/* 结果 — ESP 模式 */}
       {espMode && espResult && (
         <div className="sidepanel-section">
           <h4>{t("finalize.outputFiles")}</h4>

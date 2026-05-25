@@ -37,7 +37,7 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
     };
   }, [handleClickOutside]);
 
-  // Adjust position to stay within viewport
+  // 调整位置以保持在视口内
   useEffect(() => {
     if (!ref.current) return;
     const rect = ref.current.getBoundingClientRect();

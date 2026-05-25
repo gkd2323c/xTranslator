@@ -576,13 +576,13 @@ mod tests {
 
     #[test]
     fn test_parse_fields_basic() {
-        // Create a minimal field buffer: 2 fields
+        // 创建一个最小字段缓冲区：2 个字段
         let mut data = Vec::new();
-        // Field 1: EDID, 5 bytes
+        // 字段 1：EDID，5 字节
         data.extend_from_slice(b"EDID");
         data.extend_from_slice(&5u16.to_le_bytes());
         data.extend_from_slice(b"Hello");
-        // Field 2: FULL, 3 bytes
+        // 字段 2：FULL，3 字节
         data.extend_from_slice(b"FULL");
         data.extend_from_slice(&3u16.to_le_bytes());
         data.extend_from_slice(b"Bob");
@@ -597,15 +597,15 @@ mod tests {
 
     #[test]
     fn test_parse_fields_with_xxxx() {
-        // XXXX field followed by a large field
+        // XXXX 字段后跟一个大字段
         let mut data = Vec::new();
-        // XXXX field
+        // XXXX 字段
         data.extend_from_slice(b"XXXX");
-        data.extend_from_slice(&4u16.to_le_bytes()); // dsize=4 for XXXX itself
-        data.extend_from_slice(&70000u32.to_le_bytes()); // next field size
-                                                         // Large field
+        data.extend_from_slice(&4u16.to_le_bytes()); // XXXX 自身 dsize=4
+        data.extend_from_slice(&70000u32.to_le_bytes()); // 下一个字段大小
+                                                         // 大字段
         data.extend_from_slice(b"DESC");
-        // dsize in header is 0 (overridden by XXXX)
+        // 头部中的 dsize 为 0（被 XXXX 覆盖）
         data.extend_from_slice(&0u16.to_le_bytes());
         data.extend_from_slice(&vec![0xAA; 70000]);
 
@@ -622,7 +622,7 @@ mod tests {
         let original = b"Hello, World! This is a test of zlib compression.";
         let compressed = compress_zlib(original).unwrap();
 
-        // Decompress and verify
+        // 解压并验证
         use flate2::read::ZlibDecoder;
         let mut decoder = ZlibDecoder::new(&compressed[..]);
         let mut decompressed = Vec::new();
@@ -675,7 +675,7 @@ mod tests {
 
         record.rebuild_data().unwrap();
 
-        // dsize should remain the same since nothing changed
+        // 由于没有任何改变，dsize 应当保持不变
         assert_eq!(record.header.dsize, original_dsize);
         assert_eq!(record.fields.len(), 2);
         assert_eq!(record.fields[0].buffer, b"TestNPC");
@@ -691,13 +691,13 @@ mod tests {
         let mut record = make_test_record(fields, false);
         let original_dsize = record.header.dsize;
 
-        // Simulate translation: update FULL field
+        // 模拟翻译：更新 FULL 字段
         record.fields[1].buffer = b"Translated Greeting in Chinese".to_vec();
         record.fields[1].header.dsize = record.fields[1].buffer.len() as u16;
 
         record.rebuild_data().unwrap();
 
-        // dsize should increase
+        // dsize 应当增加
         assert!(record.header.dsize > original_dsize);
         assert_eq!(record.fields[1].buffer, b"Translated Greeting in Chinese");
     }
@@ -712,10 +712,10 @@ mod tests {
 
         record.rebuild_data().unwrap();
 
-        // Should have compressed data in original_raw_data
+        // 在 original_raw_data 中应当有压缩数据
         assert!(!record.original_raw_data.is_empty());
 
-        // Verify compressed format: first 4 bytes = decompressed size LE
+        // 验证压缩格式：前 4 字节 = 解压后的大小 LE
         assert!(record.original_raw_data.len() >= 4);
         let decompressed_size = u32::from_le_bytes([
             record.original_raw_data[0],
@@ -724,14 +724,14 @@ mod tests {
             record.original_raw_data[3],
         ]);
 
-        // Decompress and verify
+        // 解压并验证
         use flate2::read::ZlibDecoder;
         let mut decoder = ZlibDecoder::new(&record.original_raw_data[4..]);
         let mut decompressed = Vec::new();
         std::io::Read::read_to_end(&mut decoder, &mut decompressed).unwrap();
         assert_eq!(decompressed.len() as u32, decompressed_size);
 
-        // The decompressed data should contain our field data
+        // 解压后的数据应当包含我们的字段数据
         assert!(decompressed.windows(4).any(|w| w == b"EDID"));
         assert!(decompressed.windows(4).any(|w| w == b"FULL"));
     }
@@ -750,11 +750,11 @@ mod tests {
 
         record.rebuild_data().unwrap();
 
-        // Should have inserted a XXXX field before DESC
+        // 应当在 DESC 之前插入了一个 XXXX 字段
         assert_eq!(record.fields.len(), 3);
         assert!(record.fields[0].is_size_xxxx || record.fields[1].is_size_xxxx);
 
-        // Find the XXXX field and verify its value
+        // 查找 XXXX 字段并验证其值
         let xxxx_idx = record.fields.iter().position(|f| f.is_size_xxxx).unwrap();
         assert!(xxxx_idx < record.fields.len() - 1);
         let xxxx_value = u32::from_le_bytes([
@@ -765,7 +765,7 @@ mod tests {
         ]);
         assert_eq!(xxxx_value, 70000);
 
-        // The DESC field should still be 70000 bytes
+        // DESC 字段仍应当为 70000 字节
         let desc_idx = record
             .fields
             .iter()
@@ -776,22 +776,22 @@ mod tests {
 
     #[test]
     fn test_rebuild_xxxx_remove_when_shrink() {
-        // Start with a large field that needs XXXX
+        // 从一个需要 XXXX 的大字段开始
         let fields = vec![make_field(b"DESC", &vec![0xBB; 70000])];
         let mut record = make_test_record(fields, false);
 
         record.rebuild_data().unwrap();
-        // XXXX should be inserted
+        // 应当插入了 XXXX
         assert_eq!(record.fields.len(), 2);
         assert!(record.fields[0].is_size_xxxx);
 
-        // Now shrink the field below 65536
+        // 现在将字段缩小至 65536 字节以下
         record.fields[1].buffer = vec![0xCC; 100];
         record.fields[1].header.dsize = 100;
 
         record.rebuild_data().unwrap();
 
-        // XXXX should be removed
+        // XXXX 应当被移除
         assert_eq!(record.fields.len(), 1);
         assert!(!record.fields[0].is_size_xxxx);
         assert_eq!(record.fields[0].header.name, *b"DESC");
@@ -822,7 +822,7 @@ mod tests {
 
         record.rebuild_data().unwrap();
 
-        // Raw records should pass through unchanged
+        // Raw 记录应当直接透传而不作任何修改
         assert_eq!(record.original_raw_data, raw_data);
         assert_eq!(record.header.dsize, 4);
     }
@@ -831,7 +831,7 @@ mod tests {
     fn test_serialize_roundtrip() {
         use std::io::Cursor;
 
-        // Build a minimal EspFile
+        // 构建一个最小的 EspFile
         let fields = vec![
             make_field(b"EDID", b"TestNPC"),
             make_field(b"FULL", b"Hello World"),
@@ -873,14 +873,14 @@ mod tests {
             top_level_grups: vec![grup],
         };
 
-        // Serialize
+        // 序列化
         let mut buf = Vec::new();
         esp_file.serialize(&mut Cursor::new(&mut buf)).unwrap();
 
-        // Verify the output starts with TES4
+        // 验证输出以 TES4 开头
         assert_eq!(&buf[0..4], b"TES4");
 
-        // Find GRUP in the output
+        // 在输出中查找 GRUP
         let mut found_grup = false;
         for i in 0..buf.len() - 3 {
             if &buf[i..i + 4] == b"GRUP" {
@@ -890,7 +890,7 @@ mod tests {
         }
         assert!(found_grup, "GRUP not found in serialized output");
 
-        // Find EDID and FULL in the output
+        // 在输出中查找 EDID 和 FULL
         let has_edid = buf.windows(4).any(|w| w == b"EDID");
         let has_full = buf.windows(4).any(|w| w == b"FULL");
         assert!(has_edid, "EDID not found in serialized output");
@@ -901,14 +901,14 @@ mod tests {
     fn test_serialize_roundtrip_with_rebuild() {
         use std::io::Cursor;
 
-        // Build record with translation
+        // 构建带有翻译的记录
         let fields = vec![
             make_field(b"EDID", b"TestNPC"),
             make_field(b"FULL", b"Original"),
         ];
         let mut record = make_test_record(fields, false);
 
-        // Simulate translation
+        // 模拟翻译
         record.fields[1].buffer = b"Translated Text Here".to_vec();
         record.fields[1].header.dsize = 20;
 
@@ -929,13 +929,13 @@ mod tests {
             children: Vec::new(),
         };
 
-        // Rebuild the GRUP (which rebuilds records and recalculates sizes)
+        // 重建 GRUP（它会重建记录并重新计算大小）
         for r in &mut grup.records {
             r.rebuild_data().unwrap();
         }
         grup.recalculate_size();
 
-        // Verify GRUP dsize includes the 24-byte header
+        // 验证 GRUP dsize 包含了 24 字节的头部
         let records_size: usize = grup.records.iter().map(|r| r.serialized_size()).sum();
         assert_eq!(grup.header.dsize as usize, 24 + records_size);
 
@@ -961,7 +961,7 @@ mod tests {
         let mut buf = Vec::new();
         esp_file.serialize(&mut Cursor::new(&mut buf)).unwrap();
 
-        // Verify the translated text appears in the output
+        // 验证翻译文本出现在输出中
         let has_translated = buf.windows(20).any(|w| w == b"Translated Text Here");
         assert!(
             has_translated,
@@ -971,7 +971,7 @@ mod tests {
 
     #[test]
     fn test_grup_recalculate_size_nested() {
-        // Test nested GRUP size calculation
+        // 测试嵌套的 GRUP 大小计算
         let inner_grup = EspGrup {
             header: GenericHeader {
                 name: *b"GRUP",
@@ -1008,7 +1008,7 @@ mod tests {
 
         outer_grup.recalculate_size();
 
-        // Outer GRUP dsize = 24 (own header) + record_size + inner_grup_dsize
+        // 外层 GRUP dsize = 24（自身头部）+ record_size + inner_grup_dsize
         let outer_record_size = outer_grup.records[0].serialized_size();
         let inner_dsize = outer_grup.children[0].header.dsize;
         let expected = 24 + outer_record_size as u32 + inner_dsize;

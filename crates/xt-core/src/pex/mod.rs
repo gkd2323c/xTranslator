@@ -1,12 +1,12 @@
-//! PEX (Papyrus Executable) script binary format parser
+//! PEX (Papyrus Executable) 脚本二进制格式解析器
 //!
-//! Bethesda's Papyrus scripting language compiles source scripts (.psc) into
-//! compiled binary .pex files. This module parses PEX files and extracts
-//! translatable strings: DebugString (documentation), PropertyName, StringLiteral.
+//! Bethesda 的 Papyrus 脚本语言将源脚本 (.psc) 编译为
+//! 编译后的二进制 .pex 文件。此模块解析 PEX 文件并提取
+//! 待翻译字符串：DebugString（文档）、PropertyName、StringLiteral。
 //!
-//! Based on Delphi TESVT_scriptPex.pas and community format documentation.
+//! 基于 Delphi TESVT_scriptPex.pas 和社区格式文档。
 //!
-//! Scope: string extraction + v1.5 write-back support (string table reconstruction).
+//! 范围：字符串提取 + v1.5 写回支持（字符串表重建）。
 
 pub mod compile;
 pub mod decompile;

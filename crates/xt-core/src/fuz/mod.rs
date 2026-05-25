@@ -1,8 +1,8 @@
-//! FUZ file parser — Bethesda voice line container (LIP + WAV)
+//! FUZ 文件解析器 — Bethesda 语音行容器 (LIP + WAV)
 //!
-//! Skyrim/Fallout voice lines are stored as .fuz files containing:
-//! - LIP (lip-sync) data - 唇形同步关键帧
-//! - WAV audio data - 音频数据
+//! Skyrim/Fallout 语音行存储为包含以下内容的 .fuz 文件：
+//! - LIP (唇形同步) 数据 - 唇形同步关键帧
+//! - WAV 音频数据 - 音频数据
 //!
 //! LIP 格式说明：
 //! - 版本号 (4 bytes)
@@ -12,12 +12,12 @@
 //! 口型形状索引对应游戏中的面部动画：
 //! 0 = 静音, 1 = A, 2 = E, 3 = I, 4 = O, 5 = U, 6 = F, 7 = V, 8 = 无声等
 //!
-//! Based on Delphi TESVT_Fuz.pas and xEdit wbFUZ.pas.
+//! 基于 Delphi TESVT_Fuz.pas 和 xEdit wbFUZ.pas。
 
 use byteorder::{LittleEndian, ReadBytesExt};
 use std::io::{Cursor, Read, Result};
 
-/// FUZ magic bytes: "FUZE"
+/// FUZ magic 字节："FUZE"
 const FUZ_MAGIC: &[u8; 4] = b"FUZE";
 
 /// LIP 关键帧 - 唇形同步数据点
@@ -63,13 +63,13 @@ impl FuzFile {
             ));
         }
 
-        // LIP format version
+        // LIP 格式版本
         let lip_version = reader.read_u32::<LittleEndian>()?;
 
-        // Read LIP data size
+        // 读取 LIP 数据大小
         let lip_size = reader.read_u32::<LittleEndian>()?;
 
-        // Parse LIP data
+        // 解析 LIP 数据
         let lip_data = if lip_size > 0 {
             let mut lip_buf = vec![0u8; lip_size as usize];
             reader.read_exact(&mut lip_buf)?;
@@ -78,7 +78,7 @@ impl FuzFile {
             None
         };
 
-        // Read remaining WAV data
+        // 读取剩余的 WAV 数据
         let mut wav_data = Vec::new();
         reader.read_to_end(&mut wav_data)?;
 
@@ -118,7 +118,7 @@ fn parse_wav_header(data: &[u8]) -> (f32, u32, u16) {
 
     let mut cur = Cursor::new(data);
 
-    // Parse RIFF/WAV header
+    // 解析 RIFF/WAV 头
     let _riff = cur.read_u32::<LittleEndian>();
     let _file_size = cur.read_u32::<LittleEndian>();
     let _wave = cur.read_u32::<LittleEndian>();
@@ -132,7 +132,7 @@ fn parse_wav_header(data: &[u8]) -> (f32, u32, u16) {
     let _block_align = cur.read_u16::<LittleEndian>();
     let _bits = cur.read_u16::<LittleEndian>();
 
-    // Find "data" chunk to get data size
+    // 寻找 "data" 块以获取数据大小
     let pos = cur.position() as usize;
     let mut data_size = data.len() - pos;
     if let Some(dp) = data[pos..].windows(4).position(|w| w == b"data") {
@@ -160,40 +160,40 @@ mod tests {
     fn build_test_fuz_with_lip() -> Vec<u8> {
         let mut data = Vec::new();
 
-        // FUZE header
+        // FUZE 头
         data.extend_from_slice(b"FUZE");
-        // LIP version = 1
+        // LIP 版本 = 1
         data.extend_from_slice(&1u32.to_le_bytes());
 
-        // LIP data: 4 bytes (keyframe count) + 2 keyframes * 5 bytes each = 14 bytes
+        // LIP 数据：4 字节（关键帧计数）+ 2 个关键帧 * 每个 5 字节 = 14 字节
         let lip_size = 14u32;
         data.extend_from_slice(&lip_size.to_le_bytes());
 
-        // LIP data content
+        // LIP 数据内容
         let keyframe_count = 2u32;
         data.extend_from_slice(&keyframe_count.to_le_bytes());
-        // Keyframe 1: time=0.0, shape=1 (A)
+        // 关键帧 1：时间=0.0, 口型=1 (A)
         data.extend_from_slice(&0.0f32.to_le_bytes());
         data.push(1);
-        // Keyframe 2: time=0.5, shape=2 (E)
+        // 关键帧 2：时间=0.5, 口型=2 (E)
         data.extend_from_slice(&0.5f32.to_le_bytes());
         data.push(2);
 
-        // Minimal WAV header (44 bytes)
+        // 最小 WAV 头 (44 字节)
         data.extend_from_slice(b"RIFF");
-        data.extend_from_slice(&50u32.to_le_bytes()); // file_size - 8
+        data.extend_from_slice(&50u32.to_le_bytes()); // 文件大小 - 8
         data.extend_from_slice(b"WAVE");
         data.extend_from_slice(b"fmt ");
-        data.extend_from_slice(&16u32.to_le_bytes()); // fmt chunk size
+        data.extend_from_slice(&16u32.to_le_bytes()); // fmt 块大小
         data.extend_from_slice(&1u16.to_le_bytes()); // PCM
-        data.extend_from_slice(&2u16.to_le_bytes()); // channels
-        data.extend_from_slice(&44100u32.to_le_bytes()); // sample_rate
-        data.extend_from_slice(&176400u32.to_le_bytes()); // byte_rate
-        data.extend_from_slice(&4u16.to_le_bytes()); // block_align
-        data.extend_from_slice(&16u16.to_le_bytes()); // bits_per_sample
+        data.extend_from_slice(&2u16.to_le_bytes()); // 声道数
+        data.extend_from_slice(&44100u32.to_le_bytes()); // 采样率
+        data.extend_from_slice(&176400u32.to_le_bytes()); // 字节率
+        data.extend_from_slice(&4u16.to_le_bytes()); // 块对齐
+        data.extend_from_slice(&16u16.to_le_bytes()); // 每个采样位数
         data.extend_from_slice(b"data");
-        data.extend_from_slice(&10u32.to_le_bytes()); // data_size
-        data.extend_from_slice(&[0u8; 10]); // PCM silence
+        data.extend_from_slice(&10u32.to_le_bytes()); // 数据大小
+        data.extend_from_slice(&[0u8; 10]); // PCM 静音
 
         data
     }
@@ -201,28 +201,28 @@ mod tests {
     fn build_test_fuz_no_lip() -> Vec<u8> {
         let mut data = Vec::new();
 
-        // FUZE header
+        // FUZE 头
         data.extend_from_slice(b"FUZE");
-        // LIP version = 0
+        // LIP 版本 = 0
         data.extend_from_slice(&0u32.to_le_bytes());
-        // lip_size = 0 (no LIP data)
+        // lip_size = 0 (无 LIP 数据)
         data.extend_from_slice(&0u32.to_le_bytes());
 
-        // Minimal WAV header (44 bytes)
+        // 最小 WAV 头 (44 字节)
         data.extend_from_slice(b"RIFF");
-        data.extend_from_slice(&50u32.to_le_bytes()); // file_size - 8
+        data.extend_from_slice(&50u32.to_le_bytes()); // 文件大小 - 8
         data.extend_from_slice(b"WAVE");
         data.extend_from_slice(b"fmt ");
-        data.extend_from_slice(&16u32.to_le_bytes()); // fmt chunk size
+        data.extend_from_slice(&16u32.to_le_bytes()); // fmt 块大小
         data.extend_from_slice(&1u16.to_le_bytes()); // PCM
-        data.extend_from_slice(&2u16.to_le_bytes()); // channels
-        data.extend_from_slice(&44100u32.to_le_bytes()); // sample_rate
-        data.extend_from_slice(&176400u32.to_le_bytes()); // byte_rate
-        data.extend_from_slice(&4u16.to_le_bytes()); // block_align
-        data.extend_from_slice(&16u16.to_le_bytes()); // bits_per_sample
+        data.extend_from_slice(&2u16.to_le_bytes()); // 声道数
+        data.extend_from_slice(&44100u32.to_le_bytes()); // 采样率
+        data.extend_from_slice(&176400u32.to_le_bytes()); // 字节率
+        data.extend_from_slice(&4u16.to_le_bytes()); // 块对齐
+        data.extend_from_slice(&16u16.to_le_bytes()); // 每个采样位数
         data.extend_from_slice(b"data");
-        data.extend_from_slice(&10u32.to_le_bytes()); // data_size
-        data.extend_from_slice(&[0u8; 10]); // PCM silence
+        data.extend_from_slice(&10u32.to_le_bytes()); // 数据大小
+        data.extend_from_slice(&[0u8; 10]); // PCM 静音
 
         data
     }
@@ -238,7 +238,7 @@ mod tests {
         assert!(fuz.duration_secs > 0.0);
         assert!(!fuz.wav_data.is_empty());
 
-        // Check LIP data
+        // 检查 LIP 数据
         assert!(fuz.lip_data.is_some());
         let lip_data = fuz.lip_data.unwrap();
         assert_eq!(lip_data.version, 1);
@@ -264,7 +264,7 @@ mod tests {
     #[test]
     fn test_parse_invalid_magic() {
         let mut data = Vec::new();
-        data.extend_from_slice(b"XXXX"); // Invalid magic
+        data.extend_from_slice(b"XXXX"); // 无效的 magic
         data.extend_from_slice(&0u32.to_le_bytes());
         data.extend_from_slice(&0u32.to_le_bytes());
 

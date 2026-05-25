@@ -1,7 +1,7 @@
-//! Delphi vs Rust cross-validation tool
+//! Delphi vs Rust 交叉验证工具
 //!
-//! Compares Rust ESP parsing + export output against Delphi golden files.
-//! Produces a structured diff report for each data format.
+//! 对比 Rust ESP 解析与导出输出同 Delphi 黄金参考文件的差异。
+//! 为每种数据格式生成结构化的 diff 报告。
 
 use anyhow::{Context, Result};
 use std::collections::HashMap;
@@ -15,7 +15,7 @@ use xt_core::sqlite_cache::SqliteCache;
 use xt_core::strings::{StringsFile, StringsFormat};
 use xt_core::xml::parse_xml_file;
 
-/// Run a complete golden-diff: parse ESP, compare against Delphi reference files.
+/// 运行完整的黄金对比测试：解析 ESP 并同 Delphi 参考文件进行对比。
 pub fn run_golden_diff(delphi_dir: &str, esp_path: &str) -> Result<()> {
     let delphi_dir = Path::new(delphi_dir);
     let esp_path = Path::new(esp_path);
@@ -35,19 +35,19 @@ pub fn run_golden_diff(delphi_dir: &str, esp_path: &str) -> Result<()> {
     println!("Delphi dir:  {}", delphi_dir.display());
     println!();
 
-    // Step 1: Parse ESP with Rust (uses cache)
+    // 步骤 1: 使用 Rust 解析 ESP（使用缓存）
     println!("[1/5] Parsing ESP with Rust (cached)...");
     let esp_strings = parse_esp_cached(esp_path)?;
     println!("  => {} strings extracted from ESP", esp_strings.len());
 
-    // Step 2: Load Delphi XML and SST stats
+    // 步骤 2: 加载 Delphi XML 与 SST 统计数据
     println!("[2/5] Reading Delphi golden files...");
 
-    // Step 3: Compare XML exports
+    // 步骤 3: 对比 XML 导出
     println!("[3/5] Comparing XML exports...");
     let xml_result = compare_xml(&esp_strings, delphi_dir)?;
 
-    // Step 4: Compare SST file if present
+    // 步骤 4: 对比 SST 文件（如果存在）
     println!("[4/5] Comparing SST files...");
     let sst_result = compare_sst(delphi_dir)?;
 
@@ -60,7 +60,7 @@ pub fn run_golden_diff(delphi_dir: &str, esp_path: &str) -> Result<()> {
 
 // ── ESP parsing ────────────────────────────────────────────────────────
 
-/// Parse ESP using SQLite cache (same cache the Tauri app uses).
+/// 使用 SQLite 缓存解析 ESP（与 Tauri 应用所使用的缓存相同）。
 fn parse_esp_cached(esp_path: &Path) -> Result<Vec<xt_core::types::sky_string::SkyString>> {
     let cache_dir = if cfg!(windows) {
         std::env::var("LOCALAPPDATA")
@@ -76,14 +76,14 @@ fn parse_esp_cached(esp_path: &Path) -> Result<Vec<xt_core::types::sky_string::S
     let _ = fs::create_dir_all(&cache_dir);
     let cache = SqliteCache::new(cache_dir);
 
-    // Try SQLite cache first
+    // 首先尝试 SQLite 缓存
     let hash = hash_file(esp_path)?;
     if let Some(payload) = cache.lookup(&hash) {
         println!("  (using SQLite cache: {} strings)", payload.strings.len());
         return Ok(payload.strings);
     }
 
-    // Cache miss - parse from scratch
+    // 缓存未命中 - 从头解析
     println!("  (cache miss, parsing... this may take a while)");
     let file = fs::File::open(esp_path)?;
     let mut reader = BufReader::new(file);
@@ -141,7 +141,7 @@ fn compare_xml(
     result.delphi_count = delphi_entries.len();
     println!("  Delphi XML: {} entries", result.delphi_count);
 
-    // Build Rust lookup: "strId:recordSIG:fieldSIG" -> SkyString
+    // 构建 Rust 查找表: "strId:recordSIG:fieldSIG" -> SkyString
     let mut rust_map: HashMap<String, &xt_core::types::sky_string::SkyString> = HashMap::new();
     for sk in esp_strings {
         let key = format!(
@@ -255,7 +255,7 @@ fn compare_strings_files(
                 Ok(delphi_strs) => {
                     result.formats_compared.push(ext.to_string());
 
-                    // Build map from Delphi: strId -> source
+                    // 从 Delphi 构建映射表: strId -> source
                     let delphi_map: HashMap<u32, String> = delphi_strs
                         .strings
                         .iter()

@@ -35,22 +35,22 @@ pub struct AppConfig {
     pub proxy_username: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub proxy_password: Option<String>,
-    /// ESP mode: when true, save operations write back to the ESP file directly.
+    /// ESP 模式：为 true 时，保存操作直接写回 ESP 文件。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub esp_mode: Option<bool>,
-    /// Last used spell check dictionary name (without .dic/.aff extension).
+    /// 上次使用的拼写检查词典名称（不带 .dic/.aff 后缀）。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub spellcheck_dictionary: Option<String>,
-    /// Whether spell check was active when last saved.
-    /// false = loaded but inactive (toggled off), or unloaded (see spellcheck_loaded).
+    /// 上次保存时拼写检查是否处于活动状态。
+    /// false = 已加载但未激活（被关闭），或未加载（见 spellcheck_loaded）。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub spellcheck_active: Option<bool>,
-    /// Whether Hunspell dictionary was loaded when last saved.
-    /// true = auto-restore on startup; false = don't load until user manually Loads.
+    /// 上次保存时是否已加载 Hunspell 词典。
+    /// true = 启动时自动恢复加载；false = 除非用户手动加载，否则不加载。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub spellcheck_loaded: Option<bool>,
-    /// Exception words list for toolbox TitleCase (e.g., "is", "a", "the" - words that should not be capitalized).
-    /// Stored as newline-separated string, persisted in config.json.
+    /// 工具箱 TitleCase 转换的例外词列表（例如，"is", "a", "the" 等不应大写的单词）。
+    /// 存储为换行符分隔的字符串，持久化在 config.json 中。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub word_exception_list: Option<String>,
 }

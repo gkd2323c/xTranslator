@@ -148,7 +148,13 @@ impl StringsFiles {
         Self::load_from_dir_with_config(dir, base_name, "english", Some(table), None)
     }
 
-    /// 从目录加载 strings 文件，使用指定的语言和 codepage 配置
+    /// 从目录加载 strings 文件，使用指定语言和 codepage 配置
+    ///
+    /// # 参数
+    /// * `dir` - Strings 文件所在目录
+    /// * `base_name` - 基础文件名（如 "Skyrim"）
+    /// * `language` - 语言名（如 "english", "chinese"），用于拼接实际文件名
+    /// * `table` - Codepage 配置表，用于处理非 UTF-8 编码的 Strings 文件
     pub fn load_from_dir_with_language<P: AsRef<Path>>(
         dir: P,
         base_name: &str,
@@ -158,7 +164,7 @@ impl StringsFiles {
         Self::load_from_dir_with_config(dir, base_name, language, Some(table), None)
     }
 
-    /// 统一加载入口
+    /// 内部统一加载入口：直接从磁盘读取，如果磁盘文件不存在则尝试从同目录 BSA/BA2 内提取
     fn load_from_dir_with_config<P: AsRef<Path>>(
         dir: P,
         base_name: &str,
@@ -269,7 +275,7 @@ impl StringsFiles {
                         } else {
                             crate::strings::CodepageConfig::utf8()
                         };
-                        // detect format from extension
+                        // 根据扩展名检测格式
                         let fmt = match *ext {
                             "DLSTRINGS" | "ILSTRINGS" => StringsFormat::LengthPrefixed,
                             _ => StringsFormat::NullTerminated,
@@ -438,22 +444,31 @@ pub fn load_game_record_defs(
     Ok(parse_record_defs(&content))
 }
 
-/// 简单的 ESP 解析器 PoC
+/// ESP/ESM 二进制格式解析器
+///
+/// 支持解析压缩记录、VMAD 脚本字段、多层级 GRUP 嵌套结构、
+/// BSA/BA2 内置 Strings 文件回退加载，以及 ESP 写回模式（`enable_esp_mode`）。
+/// 解析完成后，SkyString 列表存放于 `strings` 字段中。
 pub struct EspParser {
+    /// 可翻译字段定义列表，控制解析器会提取哪些字段
     pub record_defs: Vec<TranslatableField>,
+    /// 解析得到的字符串列表
     pub strings: Vec<SkyString>,
+    /// 已加载的 Strings 文件集合
     pub strings_files: StringsFiles,
+    /// 解析过程中遇到的压缩记录总数
     pub compressed_records: u32,
     current_parent_form_id: u32,
     progress_callback: Option<Box<dyn Fn(u64) + Send>>,
-    /// Pre-built HashMap for O(1) field def lookup: (record_sig, field_sig) -> index
+    /// 预构建的 HashMap，用于 O(1) 字段定义查找：(record_sig, field_sig) -> index
     def_map: HashMap<([u8; 4], [u8; 4]), usize>,
+    /// 是否构建全文搜索索引（规范化哈希和词索引）
     build_search_index: bool,
-    /// Whether to build the full record tree (ESP mode).
+    /// 是否构建完整的记录树（ESP 模式）。
     esp_mode: bool,
-    /// The in-memory record tree, populated when esp_mode is true.
+    /// 内存中的记录树，在 esp_mode 为 true 时填充。
     pub record_tree: Vec<EspGrup>,
-    /// TES4 header data, stored when esp_mode is true.
+    /// TES4 头部数据，在 esp_mode 为 true 时存储。
     pub tes4_header: Option<Tes4Header>,
 }
 
@@ -468,6 +483,10 @@ impl EspParser {
         map
     }
 
+    /// 使用内置默认 record_defs 创建 ESP 解析器
+    ///
+    /// 内置定义从 `esp_default_defs.txt` 加载，涵盖 Skyrim SE 常见的
+    /// 可翻译字段（INFO:NAM1, NPC_:FULL, QUST:FULL 等）。
     pub fn new() -> Self {
         let default_defs = include_str!("../esp_default_defs.txt");
         let record_defs = parse_record_defs(default_defs);
@@ -487,6 +506,10 @@ impl EspParser {
         }
     }
 
+    /// 使用自定义 record_defs 创建 ESP 解析器
+    ///
+    /// 适用于从游戏特定的 `Data/` 目录动态加载字段定义的场景。
+    /// 推荐通过 [`Self::with_game`] 间接使用。
     pub fn with_defs(defs: Vec<TranslatableField>) -> Self {
         let def_map = Self::build_def_map(&defs);
         Self {
@@ -510,27 +533,27 @@ impl EspParser {
         Ok(Self::with_defs(defs))
     }
 
-    /// Disable normalization/word indexes when callers only need raw parsed strings.
+    /// 当调用者只需要原始解析字符串时，禁用规范化/词索引。
     pub fn set_build_search_index(&mut self, build_search_index: bool) {
         self.build_search_index = build_search_index;
     }
 
-    /// Enable ESP mode — triggers full record tree build on next parse.
+    /// 启用 ESP 模式 —— 在下次解析时触发构建完整的记录树。
     ///
-    /// When ESP mode is active, the parser retains the full in-memory record tree
-    /// alongside the extracted strings, enabling write-back to the ESP file.
+    /// 当 ESP 模式激活时，解析器在提取字符串的同时保留内存中完整的记录树，
+    /// 以允许写回至 ESP 文件。
     pub fn enable_esp_mode(&mut self) {
         self.esp_mode = true;
     }
 
-    /// Check if ESP mode is enabled.
+    /// 检查是否启用了 ESP 模式。
     pub fn is_esp_mode(&self) -> bool {
         self.esp_mode
     }
 
-    /// Build an EspFile from the current state (TES4 header + record tree).
+    /// 从当前状态（TES4 头部 + 记录树）构建 EspFile。
     ///
-    /// Returns None if ESP mode was not active during parsing.
+    /// 如果解析期间未激活 ESP 模式，则返回 None。
     pub fn build_esp_file(&self) -> Option<EspFile> {
         let tes4 = self.tes4_header.clone()?;
         Some(EspFile {
@@ -600,7 +623,7 @@ impl EspParser {
         let mut tes4_data = vec![0u8; tes4_generic.dsize as usize];
         reader.read_exact(&mut tes4_data)?;
 
-        // Store TES4 header if in ESP mode
+        // 如果处于 ESP 模式，则存储 TES4 头部
         if self.esp_mode {
             self.tes4_header = Some(Tes4Header {
                 generic: tes4_generic.clone(),
@@ -694,14 +717,10 @@ impl EspParser {
         Ok(())
     }
 
-    /// Parse a record (or nested GRUP) and optionally build the record tree.
+    /// 解析一条记录（或嵌套的 GRUP）并选择性地构建记录树。
     ///
-    /// When `grup` is Some, parsed records are added to the GRUP's records vector.
-    /// Translatable strings are extracted and SkyString.field_ref is set.
-    /// Parse a record (or nested GRUP) and optionally build the record tree.
-    ///
-    /// When `grup` is Some, parsed records are added to the GRUP's records vector.
-    /// Translatable strings are extracted and SkyString.field_ref is set.
+    /// 当 `parent_grup` 为 Some 时，解析后的记录将被添加到该 GRUP 的 records 向量中。
+    /// 提取可翻译的字符串，并设置 SkyString.field_ref。
     fn parse_record_debug_for_tree<R: Read>(
         &mut self,
         reader: &mut R,
@@ -715,7 +734,7 @@ impl EspParser {
         };
 
         if header.is_grup() {
-            // Nested GRUP
+            // 嵌套的 GRUP
             *record_count = record_count.saturating_sub(1);
             let grup_header = GrupHeader::read_from(reader)?;
             let saved_parent = self.current_parent_form_id;
@@ -766,7 +785,7 @@ impl EspParser {
             return Ok(());
         }
 
-        // Normal record
+        // 普通记录
         *record_count += 1;
         let record_header_data = RecordHeaderData::read_from(reader)?;
         let data_size = header.dsize as usize;
@@ -780,7 +799,7 @@ impl EspParser {
             self.compressed_records += 1;
         }
 
-        // Fast path for non-ESP mode: skip EspField parsing entirely
+        // 非 ESP 模式的快速路径：完全跳过 EspField 解析
         if !self.esp_mode {
             if is_compressed {
                 match decompress_bethesda_record(&record_data) {
@@ -797,7 +816,7 @@ impl EspParser {
             return Ok(());
         }
 
-        // ESP mode: build full EspRecord with parsed fields
+        // ESP 模式：构建包含已解析字段的完整 EspRecord
         let (fields, original_raw_data, raw) = if is_compressed {
             match decompress_bethesda_record(&record_data) {
                 Ok(decompressed) => {
@@ -812,11 +831,11 @@ impl EspParser {
             }
         } else {
             let fields = EspField::parse_fields(&record_data).unwrap_or_default();
-            // Move record_data directly; no need to clone for uncompressed records
+            // 直接移动 record_data；未压缩的记录无需克隆
             (fields, record_data, false)
         };
 
-        // Extract editor ID from fields
+        // 从字段中提取编辑器 ID
         let editor_id = fields
             .iter()
             .find(|f| f.header.name == *b"EDID")
@@ -829,7 +848,7 @@ impl EspParser {
                 String::from_utf8(f.buffer[..len].to_vec()).ok()
             });
 
-        // Extract translatable strings and set field_ref
+        // 提取可翻译字符串并设置 field_ref
         if !raw {
             self.extract_strings_from_fields(
                 &header.name,
@@ -841,7 +860,7 @@ impl EspParser {
             );
         }
 
-        // Build EspRecord
+        // 构建 EspRecord
         let esp_record = EspRecord {
             header: header.clone(),
             record_header_data,
@@ -860,7 +879,7 @@ impl EspParser {
         Ok(())
     }
 
-    /// Extract translatable strings from parsed fields and set field_ref.
+    /// 从已解析的字段中提取可翻译字符串并设置 field_ref。
     fn extract_strings_from_fields(
         &mut self,
         record_sig: &[u8; 4],
@@ -877,7 +896,7 @@ impl EspParser {
                 continue;
             }
 
-            // Check if this is a translatable field
+            // 检查是否为可翻译字段
             if let Some(def) = self.find_def(record_sig, &field.header.name) {
                 // GMST:DATA filter
                 if record_sig == b"GMST" && &field.header.name == b"DATA" {
@@ -888,7 +907,7 @@ impl EspParser {
                     }
                 }
 
-                // Extract string ID from field buffer
+                // 从字段缓冲区中提取字符串 ID
                 if field.buffer.len() >= 4 {
                     let string_id = u32::from_le_bytes([
                         field.buffer[0],
@@ -935,7 +954,7 @@ impl EspParser {
                         sk.params.set(SkyStringParams::INCOMPLETE_TRANS, true);
                         sk.list_index = def.list_index;
                         sk.parent_form_id = self.current_parent_form_id;
-                        // Set field_ref for ESP mode write-back
+                        // 为 ESP 模式写回设置 field_ref
                         sk.field_ref = Some(field_vec_idx);
 
                         self.strings.push(sk);
@@ -943,7 +962,7 @@ impl EspParser {
                 }
             }
 
-            // Handle VMAD fields
+            // 处理 VMAD 字段
             if &field.header.name == b"VMAD" && !field.buffer.is_empty() {
                 self.parse_vmad_strings(record_sig, form_id, &field.buffer, field_index);
             }
@@ -969,7 +988,7 @@ impl EspParser {
             // GRUP 本身不计入 record；空计数时避免 unsigned underflow。
             *record_count = record_count.saturating_sub(1);
             let grup_header = GrupHeader::read_from(reader)?;
-            // s_type contains the parent FormID for child GRUPs or record type for type GRUPs
+            // s_type 包含子 GRUP 的父 FormID 或类型 GRUP 的记录类型
             let saved_parent = self.current_parent_form_id;
             if grup_header.s_type != 0 {
                 self.current_parent_form_id = grup_header.s_type;
@@ -1256,7 +1275,7 @@ impl EspParser {
     }
 
     fn find_def(&self, record_sig: &[u8; 4], field_sig: &[u8; 4]) -> Option<&TranslatableField> {
-        // O(1) HashMap lookup, with wildcard record_sig fallback
+        // O(1) 复杂度的 HashMap 查找，支持通配符 record_sig 回退
         let key = (*record_sig, *field_sig);
         if let Some(&idx) = self.def_map.get(&key) {
             return Some(&self.record_defs[idx]);
@@ -1407,8 +1426,8 @@ Def_:CNAM=DOOR=0-proc5
 
     #[test]
     fn test_load_strings_from_bsa_fallback() {
-        // Skyrim SE strings files are inside Skyrim - Interface.bsa
-        // This test verifies BSA fallback when standalone files don't exist
+        // Skyrim SE 的 strings 文件位于 Skyrim - Interface.bsa 内
+        // 此测试验证当独立文件不存在时，BSA 的回退加载机制
         let data_dir = Path::new(r"D:\SteamLibrary\steamapps\common\Skyrim Special Edition\Data");
         if !data_dir.exists() {
             return; // Skip if Skyrim SE is not installed
@@ -1416,7 +1435,7 @@ Def_:CNAM=DOOR=0-proc5
 
         let sf = StringsFiles::load_from_dir(data_dir, "skyrim");
 
-        // At least one strings file should be loaded (from BSA)
+        // 应该至少加载了一个 strings 文件（从 BSA 中）
         let loaded = sf.loaded_count();
         println!("Loaded {} strings files from BSA fallback", loaded);
         assert!(
@@ -1425,8 +1444,8 @@ Def_:CNAM=DOOR=0-proc5
             loaded
         );
 
-        // Verify we can look up a known string ID
-        // Skyrim.esm has many GMST records that reference strings by ID
+        // 验证我们是否可以查找已知的字符串 ID
+        // Skyrim.esm 包含许多通过 ID 引用字符串的 GMST 记录
         if let Some(s) = sf.get(0, 1) {
             println!("String ID 1 (list 0): {}", s);
         }

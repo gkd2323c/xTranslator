@@ -297,10 +297,10 @@ interface AppState {
 function getInitialTheme(): Theme {
   try {
     const stored = localStorage.getItem(THEME_STORAGE_KEY);
-    if (stored === "dark") return "obsidian"; // migrate legacy
+    if (stored === "dark") return "obsidian"; // 迁移旧版主题
     if (stored === "obsidian" || stored === "light" || stored === "slate" || stored === "auto") return stored;
-    if (stored === "gray") return "slate"; // legacy migration
-  } catch { /* localStorage unavailable */ }
+    if (stored === "gray") return "slate"; // 旧版主题迁移
+  } catch { /* localStorage 不可用 */ }
   return "obsidian";
 }
 
@@ -320,27 +320,27 @@ function applyFilterAndSort(
 ): SkyStringDTO[] {
   let result = allItems;
 
-  // List index filter (STRINGS/DLSTRINGS/ILSTRINGS)
+  // 列表索引过滤 (STRINGS/DLSTRINGS/ILSTRINGS)
   if (listIndex !== null) {
     result = result.filter((item) => item.list_index === listIndex);
   }
 
-  // Record type filter
+  // 记录类型过滤
   if (recordFilter) {
     result = result.filter((item) => item.record_sig === recordFilter);
   }
 
-  // Status filter
+  // 状态过滤
   if (statusFilter) {
     result = result.filter((item) => item.status === statusFilter);
   }
 
-  // VMAD filter
+  // VMAD 过滤
   if (vmadFilter) {
     result = result.filter((item) => item.is_vmad);
   }
 
-  // Text filter
+  // 文本过滤
   if (filter) {
     if (useRegex) {
       try {
@@ -352,7 +352,7 @@ function applyFilterAndSort(
             regex.test(item.record_sig)
         );
       } catch {
-        // Invalid regex — treat as no match
+        // 无效的正则表达式 — 视为不匹配
         return [];
       }
     } else {
@@ -366,7 +366,7 @@ function applyFilterAndSort(
     }
   }
 
-  // Sort
+  // 排序
   const isAsc = sortDir === "asc";
   result = [...result].sort((a, b) => {
     let cmp = 0;
@@ -395,20 +395,20 @@ export function computeTranslationProgress(allItems: SkyStringDTO[]): { translat
   return { translated, total };
 }
 
-// Debounce timer for filter input (shared across store instances)
+// 用于过滤器输入的防抖定时器（在 store 实例间共享）
 let filterDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 const FILTER_DEBOUNCE_MS = 150;
 
-// In E2E test mode, the auto-init effect sets a synthetic espPath so loadAllStrings
-// can proceed even without a real file on disk.
+// 在 E2E 测试模式下，自动初始化副作用会设置一个合成的 espPath，
+// 这样即使磁盘上没有真实文件，loadAllStrings 也可以继续进行。
 const E2E_SENTINEL_ESP = "http://localhost/e2e-test.esp";
 
 export const useAppStore = create<AppState>((set, get) => ({
-  // E2E mode only: inject mock data directly into the store.
-  // Called by App.tsx on mount in E2E test mode.
+  // 仅限 E2E 模式：直接向 store 注入模拟数据。
+  // 在 E2E 测试模式下由 App.tsx 在挂载时调用。
   __e2eInjectMock: (mockItems: SkyStringDTO[]) => {
     const state = get();
-    if (state.allItems.length > 0) return; // already injected
+    if (state.allItems.length > 0) return; // 已经注入过
     console.log("[E2E __e2eInjectMock] called, items count:", mockItems.length);
     const items = applyFilterAndSort(
       mockItems,
@@ -529,7 +529,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   setTargetLang: (targetLang) => set({ targetLang }),
 
   setFilter: (filter) => {
-    // Debounced: update filter text immediately for responsive input, defer re-filter
+    // 防抖处理：立即更新过滤文本以保证输入响应，延迟进行重新过滤
     set({ filter });
     if (filterDebounceTimer) clearTimeout(filterDebounceTimer);
     filterDebounceTimer = setTimeout(() => {
@@ -620,7 +620,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     const toastId = toast.loading(i18n.t("toast.replacingCount", { count: candidates.length }));
 
-    // Build batch updates: collect all replacements first
+    // 构建批量更新：首先收集所有替换项
     const updates: [number, string][] = [];
     for (const item of candidates) {
       const target = item.translation || item.source;
@@ -642,7 +642,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
     }
 
-    // Update local state directly (no full reload needed)
+    // 直接更新本地状态（无需完整重新加载）
     if (changed > 0) {
       const updatedMap = new Map(updates);
       const newAllItems = state.allItems.map((item) => {
@@ -683,7 +683,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const entry = state.undoStack[0];
     const newUndo = state.undoStack.slice(1);
 
-    // Record current state in redo
+    // 在重做栈中记录当前状态
     const currentItem = state.allItems.find((i) => i.id === entry.id);
     const redoEntry: UndoEntry = {
       id: entry.id,
@@ -692,7 +692,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     };
     const newRedo = [redoEntry, ...state.redoStack];
 
-    // Revert via IPC
+    // 通过 IPC 撤销
     try {
       await updateTranslation(entry.id, entry.oldTranslation);
     } catch {
@@ -700,7 +700,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       return;
     }
 
-    // Apply locally without recording another undo
+    // 在本地应用，不记录另一个撤销
     const newAllItems = state.allItems.map((item) =>
       item.id === entry.id
         ? { ...item, translation: entry.oldTranslation, status: entry.oldStatus }
@@ -732,7 +732,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const entry = state.redoStack[0];
     const newRedo = state.redoStack.slice(1);
 
-    // Record current state in undo
+    // 在撤销栈中记录当前状态
     const currentItem = state.allItems.find((i) => i.id === entry.id);
     const undoEntry: UndoEntry = {
       id: entry.id,
@@ -741,7 +741,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     };
     const newUndo = [undoEntry, ...state.undoStack].slice(0, MAX_UNDO_STACK);
 
-    // Revert via IPC
+    // 通过 IPC 撤销
     try {
       await updateTranslation(entry.id, entry.oldTranslation);
     } catch {
@@ -749,7 +749,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       return;
     }
 
-    // Apply locally without recording another undo
+    // 在本地应用，不记录另一个撤销
     const newAllItems = state.allItems.map((item) =>
       item.id === entry.id
         ? { ...item, translation: entry.oldTranslation, status: entry.oldStatus }
@@ -873,7 +873,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   updateItemTranslation: (id, translation) => {
     const state = get();
 
-    // Record undo entry before mutation
+    // 在修改前记录撤销条目
     const oldItem = state.allItems.find((i) => i.id === id);
     if (oldItem && oldItem.translation !== translation) {
       const entry: UndoEntry = {
@@ -885,7 +885,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       set({ undoStack: newUndo, redoStack: [] });
     }
 
-    // Apply translation mutation
+    // 应用翻译修改
     const newAllItems = state.allItems.map((item) =>
       item.id === id
         ? { ...item, translation, status: translation ? "translated" : "incomplete" }
@@ -909,10 +909,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   applyIncrementalUpdate: (_updatedIds) => {
-    // After XML import, fetch fresh data for the updated IDs from allItems
-    // Since the backend already mutated the strings, we need to reload all
-    // (incremental would require a get_strings_by_ids command)
-    // For now, full reload is simpler and reliable
+    // XML 导入后，从 allItems 获取更新后的 ID 的最新数据
+    // 由于后端已经修改了字符串，我们需要重新加载全部
+    // （增量更新需要 get_strings_by_ids 命令）
+    // 目前来说，完整重新加载更简单且可靠
     get().loadAllStrings();
     set({ isDirty: true });
   },
@@ -921,7 +921,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   setActivePanel: (panel) => {
     const current = get().activePanel;
-    // Toggle off if clicking the same panel
+    // 如果点击相同的面板，则关闭它
     set({ activePanel: current === panel ? null : panel });
   },
   setActiveBottomTab: (tab) => set({ activeBottomTab: tab, showBottomPanel: true }),
@@ -958,7 +958,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       (e) => !existingPaths.has(e.esp_path.toLowerCase().replace(/\\/g, "/"))
     );
 
-    // Conflict check: warn if batch entry matches currently loaded ESP
+    // 冲突检查：如果批处理条目与当前加载 of ESP 匹配，则发出警告
     if (state.espPath) {
       const loadedEspNorm = state.espPath.replace(/\\/g, "/").toLowerCase();
       const hasConflict = newEntries.some(
@@ -986,7 +986,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   setBatchStatus: (batchStatus) => set({ batchStatus }),
 
   setTheme: (theme) => {
-    try { localStorage.setItem(THEME_STORAGE_KEY, theme); } catch { /* ok */ }
+    try { localStorage.setItem(THEME_STORAGE_KEY, theme); } catch { /* 忽略错误 */ }
     document.documentElement.setAttribute("data-theme", resolveTheme(theme));
     set({ theme, themeLabel: THEME_LABELS[theme] });
     saveConfig({ theme }).catch(() => {});
@@ -995,7 +995,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   cycleTheme: () => {
     const current = get().theme;
     const next = THEME_NEXT[current];
-    try { localStorage.setItem(THEME_STORAGE_KEY, next); } catch { /* ok */ }
+    try { localStorage.setItem(THEME_STORAGE_KEY, next); } catch { /* 忽略错误 */ }
     document.documentElement.setAttribute("data-theme", resolveTheme(next));
     set({ theme: next, themeLabel: THEME_LABELS[next] });
   },
@@ -1030,17 +1030,17 @@ export const useAppStore = create<AppState>((set, get) => ({
   loadAllStrings: async () => {
     const state = get();
     if (!state.espPath) {
-      // E2E test mode: check if E2E auto-seed has run (flag set as 'true' boolean)
+      // E2E 测试模式：检查 E2E 自动植入是否已运行（标志设置为 'true' 布尔值）
       const e2eSeeded = (window as any).__e2eAutoSeeded === true;
       if (e2eSeeded) {
         set({ espPath: E2E_SENTINEL_ESP });
       } else {
-        return; // real usage: no path, not in E2E mode → bail
+        return; // 实际使用：无路径，且不在 E2E 模式 → 退出
       }
     }
     set({ isLoading: true });
 
-    // E2E mode: use the real mock Tauri API to get data, then inject into store
+    // E2E 模式：使用真实的模拟 Tauri API 获取数据，然后注入到 store
     if ((window as any).__e2eAutoSeeded === true) {
       try {
         const count = await getStringsCount();
@@ -1048,7 +1048,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         const CHUNK_SIZE = 25000;
         const totalChunks = Math.ceil(count / CHUNK_SIZE);
 
-        // Fetch all chunks via mock Tauri IPC (synchronous in E2E mode)
+        // 通过模拟 Tauri IPC 获取所有分块（在 E2E 模式下是同步的）
         for (let i = 0; i < totalChunks; i++) {
           const offset = i * CHUNK_SIZE;
           const limit = Math.min(CHUNK_SIZE, count - offset);
@@ -1114,7 +1114,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     } catch (e: any) {
       console.error("Chunked loading failed:", e);
       toast.error(i18n.t("toast.loadingFailed") + ": " + e);
-      // Fallback 1: try single-shot (may work for small datasets)
+      // 回退方案 1：尝试单次请求（对小数据集可能有效）
       try {
         const allItems = await getAllStrings();
         get().setAllItems(allItems);
@@ -1209,7 +1209,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       const result = await applyTranslationCache(state.espHash);
       toast.success(`Recovered ${result.applied_count} translations`);
       set({ showRecoveryModal: false, recoveryInfo: null });
-      // Reload strings to reflect recovered translations
+      // 重新加载字符串以反映恢复的翻译
       await get().loadAllStrings();
     } catch (e: any) {
       toast.error(`Recovery failed: ${e}`);
@@ -1264,7 +1264,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     }),
 }));
 
-// E2E helper: expose the raw zustand store so tests can inject state directly
+// E2E 辅助：公开原始 zustand store，以便测试可以直接注入状态
 if (typeof window !== "undefined") {
   (window as any).__zustandStore = useAppStore;
 }

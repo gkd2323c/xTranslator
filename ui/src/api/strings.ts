@@ -301,7 +301,7 @@ export async function toolboxTransform(
   return invoke("toolbox_transform", { tool, target, ids, headerText });
 }
 
-// ── Spell Check ────────────────────────────────────────────────────
+// ── 拼写检查 ────────────────────────────────────────────────────
 
 export interface SpellFaultDto {
   word: string;
@@ -351,13 +351,13 @@ export async function spellCheckIgnore(word: string, ignorePath = ""): Promise<v
   return invoke("spell_check_ignore", { word, ignorePath });
 }
 
-// ── RTL Preview ───────────────────────────────────────────────────
+// ── RTL 预览 ───────────────────────────────────────────────────
 
 export async function rtlPreview(text: string, applyReverse: boolean, applyShape: boolean, lineWidth: number): Promise<string[]> {
   return invoke("rtl_preview", { text, applyReverse, applyShape, lineWidth });
 }
 
-// ── Collab Tags ───────────────────────────────────────────────────
+// ── 协作标签 ───────────────────────────────────────────────────
 
 export async function colabGetLabels(): Promise<[number, string][]> {
   return invoke("colab_get_labels");
@@ -371,7 +371,7 @@ export async function colabFilter(slotId: number, mode: number): Promise<number[
   return invoke("colab_filter", { slotId, mode });
 }
 
-// ── Header Processor ──────────────────────────────────────────────
+// ── 头部处理器 ──────────────────────────────────────────────
 
 export interface HeaderRuleDto {
   index: number;
@@ -442,7 +442,7 @@ export async function headerRulesAdd(): Promise<HeaderRuleDto[]> {
   return invoke("header_rules_add");
 }
 
-// ── Template Manager ──────────────────────────────────────────────
+// ── 模板管理器 ──────────────────────────────────────────────
 
 export interface TemplateInfo {
   name: string;
@@ -466,7 +466,7 @@ export async function headerTemplatesDelete(dir: string, name: string): Promise<
   return invoke("header_templates_delete", { dir, name });
 }
 
-// ── Pre-Processing Options ─────────────────────────────────────────
+// ── 预处理选项 ─────────────────────────────────────────
 
 export interface PreProcOptsDto {
   options: [string, string][];
@@ -492,7 +492,7 @@ export async function preprocOptsSave(path: string): Promise<void> {
   return invoke("preproc_opts_save", { path });
 }
 
-// ── Header Batch Wizard ───────────────────────────────────────────
+// ── 头部批量向导 ───────────────────────────────────────────
 
 export interface HeaderBatchConfig {
   source_dir: string;
@@ -535,7 +535,7 @@ export async function getTranslationProviders(): Promise<TranslationProvidersRes
   return { current, available, openaiConfigured, deeplConfigured, baiduConfigured, youdaoConfigured, azureConfigured, googleConfigured };
 }
 
-/** @deprecated Use setOpenAiApiKey instead */
+/** @deprecated 请改用 setOpenAiApiKey */
 export async function setApiKey(apiKey: string): Promise<void> {
   return setOpenAiApiKey(apiKey);
 }
@@ -602,7 +602,7 @@ export async function saveStrings(request: SaveStringsRequest): Promise<SaveStri
   return invoke("save_strings", { request });
 }
 
-// ── Batch Processor Types ──────────────────────────────────────────
+// ── 批处理器类型 ──────────────────────────────────────────
 
 export interface BatchEntry {
   esp_path: string;
@@ -674,7 +674,7 @@ export interface BatchComplete {
   errors: BatchFileError[];
 }
 
-// ── Batch Processor API Wrappers ───────────────────────────────────
+// ── 批处理器 API 包装函数 ───────────────────────────────────
 
 export async function startBatchTranslate(config: BatchConfig): Promise<string> {
   return invoke("start_batch_translate", { config });
@@ -700,7 +700,7 @@ export async function listEspFiles(dir: string): Promise<string[]> {
   return invoke("list_esp_files", { dir });
 }
 
-// ── Auto Backup Types ──────────────────────────────────────────────
+// ── 自动备份类型 ──────────────────────────────────────────────
 
 export interface AutoBackupRequest {
   sst_path: string;
@@ -716,7 +716,7 @@ export async function autoBackupSst(request: AutoBackupRequest): Promise<AutoBac
   return invoke("auto_backup_sst", { request });
 }
 
-// ── BSA Browser Types ──────────────────────────────────────────────
+// ── BSA 浏览器类型 ──────────────────────────────────────────────
 
 export interface BsaFileEntryDto {
   path: string;
@@ -757,7 +757,7 @@ export async function extractBa2Folder(ba2Path: string, folder: string, outputDi
   return invoke("extract_ba2_folder", { ba2Path, folder, outputDir });
 }
 
-// ── PEX Types ───────────────────────────────────────────────────────
+// ── PEX 类型 ───────────────────────────────────────────────────────
 
 export interface PexTranslatableDto {
   object_name: string;
@@ -792,7 +792,7 @@ export async function decompilePex(pexPath: string): Promise<DecompilePexRespons
   return invoke("decompile_pex", { pexPath });
 }
 
-// ── FUZ Types ───────────────────────────────────────────────────────
+// ── FUZ 类型 ───────────────────────────────────────────────────────
 
 export interface FuzMapping {
   response_id: number;
@@ -838,7 +838,7 @@ export async function getFuzLipData(fuzPath: string): Promise<FuzLipDataResponse
 }
 
 
-// ── Dialog Tree Types ───────────────────────────────────────────────
+// ── 对话树类型 ───────────────────────────────────────────────
 
 export interface DialogInfoDto {
   id: number;
@@ -861,7 +861,7 @@ export async function buildDialogTree(): Promise<DialogTreeDto> {
   return invoke("build_dialog_tree");
 }
 
-// ── ESP Compare Types ───────────────────────────────────────────────
+// ── ESP 对比类型 ───────────────────────────────────────────────
 
 export interface EspComparePairDto {
   new_id: number;
@@ -898,7 +898,7 @@ export async function compareEspFiles(
   });
 }
 
-// ── MCM Types ───────────────────────────────────────────────────────
+// ── MCM 类型 ───────────────────────────────────────────────────────
 
 export interface McmEntryDto {
   id: string;
@@ -920,7 +920,7 @@ export interface McmSaveRequest {
   entries: McmEntryDto[];
 }
 
-// ── Config ──────────────────────────────────────────────────────────
+// ── 配置 ──────────────────────────────────────────────────────────
 
 export interface AppConfigDto {
   openai_api_key?: string;
@@ -944,7 +944,7 @@ export interface AppConfigDto {
   word_exception_list?: string;
 }
 
-// ── API Config ──────────────────────────────────────────────────────
+// ── API 配置 ──────────────────────────────────────────────────────
 
 export interface ApiProviderInfo {
   name: string;
@@ -1020,7 +1020,7 @@ export async function deshapeArabic(text: string): Promise<string> {
   return invoke("deshape_arabic", { text });
 }
 
-// ── Vocabulary Types ────────────────────────────────────────────────
+// ── 词汇表类型 ────────────────────────────────────────────────
 
 export interface VocabularyInfo {
   pair_count: number;
@@ -1036,7 +1036,7 @@ export async function loadVocabulary(
   return invoke("load_vocabulary", { stringsDir, sourceLang, targetLang, game });
 }
 
-// ── Finalize Types ──────────────────────────────────────────────────
+// ── 最终化类型 ──────────────────────────────────────────────────
 
 export interface FinalizeRequest {
   strings_output_dir: string;
@@ -1060,13 +1060,13 @@ export async function finalize(request: FinalizeRequest): Promise<FinalizeRespon
   return invoke("finalize", { request });
 }
 
-// ── Source/Dest Compare Types ────────────────────────────────────────
+// ── 源/目标对比类型 ────────────────────────────────────────
 
 export async function compareSourceDest(mode: "diff" | "same"): Promise<number> {
   return invoke("compare_source_dest", { mode });
 }
 
-// ── Alias Check Types ────────────────────────────────────────────────
+// ── 别名检查类型 ────────────────────────────────────────────────
 
 export interface AliasCheckResult {
   source_aliases: string[];
@@ -1080,7 +1080,7 @@ export async function checkAliases(id: number): Promise<AliasCheckResult> {
   return invoke("check_aliases", { id });
 }
 
-// ── Data Config Types ────────────────────────────────────────────────
+// ── 数据配置类型 ────────────────────────────────────────────────
 
 export interface CtdaFuncDto {
   id: number;
@@ -1104,7 +1104,7 @@ export async function loadDataConfigs(game: string): Promise<DataConfigsDto> {
   return invoke("load_data_configs", { game });
 }
 
-// ── ESP Write-back Types ─────────────────────────────────────────────
+// ── ESP 回写类型 ─────────────────────────────────────────────
 
 export interface SaveEspRequest {
   path: string;
@@ -1205,7 +1205,7 @@ export async function cancelStringBatchTranslate(): Promise<void> {
   return invoke("cancel_string_batch_translate");
 }
 
-// ── SST Merge ────────────────────────────────────────────────────────────
+// ── SST 合并 ────────────────────────────────────────────────────────────
 
 export interface MergeStatsDto {
   added: number;
@@ -1228,16 +1228,16 @@ export async function sstMerge(
   return invoke("sst_merge", { sourcePath, overwrite });
 }
 
-// ── Toolbox Exception Words ────────────────────────────────────────────
+// ── 工具箱例外词汇 ────────────────────────────────────────────
 
-/// Load toolbox exception words from config into runtime state.
+/// 从配置加载工具箱例外词汇到运行状态。
 export async function toolboxLoadExceptionWords(
   words: string | undefined,
 ): Promise<void> {
   return invoke("toolbox_load_exception_words", { words });
 }
 
-/// Get exception words list.
+/// 获取例外词汇列表。
 export async function toolboxGetExceptionWords(): Promise<string[]> {
   return invoke("toolbox_get_exception_words");
 }

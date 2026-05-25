@@ -104,7 +104,7 @@ export function BatchPanel() {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const unlistenersRef = useRef<UnlistenFn[]>([]);
 
-  // Poll batch status while running
+  // 运行时轮询批处理状态
   useEffect(() => {
     if (batchStatus?.is_running) {
       pollRef.current = setInterval(async () => {
@@ -124,7 +124,7 @@ export function BatchPanel() {
     };
   }, [batchStatus?.is_running, setBatchStatus]);
 
-  // Event listeners for real-time progress
+  // 实时进度的事件监听器
   useEffect(() => {
     let active = true;
     const setup = async () => {
@@ -145,7 +145,7 @@ export function BatchPanel() {
       const c = await listen<BatchComplete>("batch-complete", (event) => {
         if (!active) return;
         setBatchResult(event.payload);
-        // Re-fetch status for definitive state
+        // 重新获取状态以获取最终状态
         getBatchStatus().then((status) => {
           if (active && status) setBatchStatus(status);
         });
@@ -163,7 +163,7 @@ export function BatchPanel() {
     };
   }, [setBatchStatus]);
 
-  // Reset local state when entries clear
+  // 当条目清空时重置本地状态
   useEffect(() => {
     if (batchEntries.length === 0 && view !== "running") {
       setProgressDetail(null);
@@ -230,12 +230,12 @@ export function BatchPanel() {
         skip_translated: skipTranslated ? true : undefined,
       };
 
-      // Pre-fill target language from store
+      // 从 store 预填目标语言
       const storeTargetLang = useAppStore.getState().targetLang;
       if (storeTargetLang) config.target_lang = storeTargetLang;
 
       await startBatchTranslate(config);
-      // Immediately fetch status to get is_running=true
+      // 立即获取状态以使 is_running=true
       const status = await getBatchStatus();
       if (status) setBatchStatus(status);
     } catch (e: any) {
@@ -253,7 +253,7 @@ export function BatchPanel() {
     });
     if (!outDir) return;
 
-    // Simple format selection via confirm dialog
+    // 通过确认对话框进行简单格式选择
     const formatXml = confirm("OK = XML format, Cancel = SST format");
     const exportFormat = formatXml ? "xml" : "sst";
 
@@ -302,7 +302,7 @@ export function BatchPanel() {
         </h3>
       </div>
 
-      {/* ─── Empty State ─── */}
+      {/* ─── 空状态 ─── */}
       {view === "empty" && (
         <div className="batch-empty">
           <EmptyState
@@ -321,7 +321,7 @@ export function BatchPanel() {
         </div>
       )}
 
-      {/* ─── Idle State ─── */}
+      {/* ─── 空闲状态 ─── */}
       {view === "idle" && !status?.is_running && (
         <>
           <div className="batch-file-list">
@@ -417,10 +417,10 @@ export function BatchPanel() {
         </>
       )}
 
-      {/* ─── Running State ─── */}
+      {/* ─── 运行状态 ─── */}
       {view === "running" && status && (
         <>
-          {/* Overall progress */}
+          {/* 整体进度 */}
           <div className="batch-progress-overall">
             <div className="batch-progress-header">
               <span className="batch-progress-label">
@@ -457,7 +457,7 @@ export function BatchPanel() {
             </div>
           </div>
 
-          {/* Current file detail */}
+          {/* 当前文件详情 */}
           {progress && (
             <div className="batch-current-file">
               <div className="batch-current-file-header">
@@ -489,7 +489,7 @@ export function BatchPanel() {
             </div>
           )}
 
-          {/* Completed files */}
+          {/* 已完成的文件 */}
           {completedFiles.length > 0 && (
             <div className="batch-completed-files">
               <div className="batch-section-label">{t("batch.completed")}</div>
@@ -514,7 +514,7 @@ export function BatchPanel() {
           </Button>
         </>
       )}
-      {/* ─── Complete State ─── */}
+      {/* ─── 完成状态 ─── */}
       {view === "complete" && (status || result) && (
         <>
           <div className="batch-result-summary">
@@ -541,7 +541,7 @@ export function BatchPanel() {
               </>
             )}
 
-            {/* Enhanced stats cards */}
+            {/* 增强版统计卡片 */}
             <div className="batch-stats-cards">
               <div className="batch-stat-card batch-stat-ok">
                 <span className="batch-stat-value">{result?.success ?? status?.completed_files ?? 0}</span>
@@ -561,13 +561,13 @@ export function BatchPanel() {
               </div>
             </div>
 
-            {/* Per-file result details */}
+            {/* 每个文件的结果详情 */}
             {completedFiles.length > 0 && (
               <div className="batch-file-results">
                 <div className="batch-section-title">{t("batch.fileResults", { defaultValue: "File Results" })}</div>
                 {completedFiles.map((cf, idx) => {
                   const fileErrors = (result?.errors || []).filter((e) => e.file_path === cf.file_path);
-                  const isExpanded = showErrorList; // reuse existing boolean for simplicity
+                  const isExpanded = showErrorList; // 为求简便，复用现有的布尔值
                   return (
                     <div key={idx} className={`batch-file-result-row ${fileErrors.length > 0 ? "batch-file-result-fail" : "batch-file-result-ok"}`}>
                       <div className="batch-file-result-header" onClick={() => fileErrors.length > 0 && setShowErrorList(!showErrorList)}>
@@ -603,7 +603,7 @@ export function BatchPanel() {
             )}
 
 
-            {/* Legacy flat error list */}
+            {/* 遗留的扁平错误列表 */}
             {(status?.errors?.length ?? 0) > 0 && completedFiles.length === 0 && (
               <div className="batch-errors-section">
                 <div
@@ -628,13 +628,13 @@ export function BatchPanel() {
               </div>
             )}
 
-            {/* Retry failed button */}
+            {/* 重试失败项按钮 */}
             {(result?.failed ?? status?.failed_files ?? 0) > 0 && (
               <Button
                 variant="default"
                 size="sm"
                 onClick={() => {
-                  // Remove successful entries and re-start
+                  // 移除成功的条目并重新启动
                   const failedPaths = new Set(
                     completedFiles.filter((cf) =>
                       (result?.errors || []).some((e) => e.file_path === cf.file_path)
@@ -642,8 +642,8 @@ export function BatchPanel() {
                   );
                   const failedEntries = batchEntries.filter((e) => failedPaths.has(e.esp_path));
                   if (failedEntries.length > 0) {
-                    // Clear and re-add failed entries
-                    // This is simplified: in practice, would need to re-invoke batch with specific files
+                    // 清空并重新添加失败的条目
+                    // 这里进行了简化：在实践中，需要使用特定文件重新调用批处理
                     toast(t("batch.retryHint", { defaultValue: "Removed successful files. Click Translate to retry failed ones." }));
                   }
                 }}

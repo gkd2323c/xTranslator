@@ -399,7 +399,7 @@ impl SstDictionary {
                         stats.conflicts_skipped += 1;
                     }
                 }
-                // source has no translation: skip
+                // 来源没有译文：跳过
             } else {
                 // 条目仅在来源中存在 → 添加
                 self.entries.push(other_entry.clone());
@@ -475,14 +475,14 @@ mod tests {
             dict.entries.push(sk);
         }
 
-        // Write
+        // 写入
         let mut buf = Vec::new();
         dict.write_to(&mut buf).unwrap();
 
-        // Read back
+        // 读回
         let dict2 = SstDictionary::read_from(&mut buf.as_slice()).unwrap();
 
-        // Verify
+        // 验证
         assert_eq!(dict2.version, Some(SstVersion::V8));
         assert_eq!(dict.master_list, dict2.master_list);
         assert_eq!(dict.colab_labels.len(), dict2.colab_labels.len());
@@ -643,13 +643,13 @@ mod tests {
     fn test_read_sst_v4_format() {
         use crate::sst::encoding::write_delphi_string;
 
-        // v4 format structure (based on Delphi loadVocabUserCache):
+        // v4 格式结构（基于 Delphi loadVocabUserCache）：
         // - list_index(1)
         // - str_id(4), form_id(4) [v2+]
         // - record_sig(4), field_sig(4) [v4+]
         // - index(2), index_max(2), edid_hash(4) [v4+]
         // - sparams(1)
-        // - source, translation [Delphi strings]
+        // - source, translation [Delphi 字符串]
         let mut buf = Vec::new();
         buf.extend_from_slice(&0x35555353u32.to_le_bytes()); // v4 magic
         buf.push(0); // v4 placeholder flag
@@ -679,7 +679,7 @@ mod tests {
     fn test_read_sst_v7_format() {
         use crate::sst::encoding::write_delphi_string;
 
-        // v7: adds Colab Label List (file-level)
+        // v7: 添加 Colab Label List（文件级别）
         let mut buf = Vec::new();
         buf.extend_from_slice(&0x38555353u32.to_le_bytes()); // v7 magic
         buf.push(0); // v4 placeholder flag
@@ -689,7 +689,7 @@ mod tests {
         write_delphi_string(&mut buf, "Alice").unwrap();
         buf.extend_from_slice(&2i32.to_le_bytes()); // label 2 id
         write_delphi_string(&mut buf, "Bob").unwrap();
-        // Entry
+        // 条目
         buf.push(0); // list_index
         buf.extend_from_slice(&5i32.to_le_bytes()); // str_id
         buf.extend_from_slice(&0x02000005u32.to_le_bytes()); // form_id

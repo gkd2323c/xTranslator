@@ -1,18 +1,16 @@
-//! ESP file comparison — build string pairs between two plugin files
+//! ESP 文件对比 —— 构建两个插件文件之间的字符串对
 //!
-//! Compares two ESP/ESM files and produces a mapping of string pairs:
-//! - identical: strings match exactly
-//! - modified: same match location but different text
-//! - added: present in new but not in old
-//! - removed: present in old but not in new
+//! 对比两个 ESP/ESM 文件并生成字符串对的映射：
+//! - identical: 字符串完全匹配
+//! - modified: 匹配位置相同但文本不同
+//! - added: 存在于新文件中但不存在于旧文件中
+//! - removed: 存在于旧文件中但不存在于新文件中
 //!
-//! The comparison follows the original Delphi xTranslator ESPCompare path:
-//! stream records, keep only string fields, and match by FormID + field
-//! occurrence where possible. Synthetic/no-FormID data falls back to the
-//! legacy (str_id, record_sig, field_sig) triple used by existing tests.
+//! 该对比遵循原版 Delphi xTranslator ESPCompare 的路径：
+//! 流式读取记录，仅保留字符串字段，并尽可能通过 FormID + 字段出现次数进行匹配。
+//! 缺少 FormID 的合成/无 FormID 数据将回退到现有测试中使用的传统 (str_id, record_sig, field_sig) 三元组。
 //!
-//! Uses a lightweight compare-specific cache (avoids storing full SkyString
-//! with normalization/hashes/etc.) for fast deserialization.
+//! 使用轻量级的对比专用缓存（避免存储带有规范化/哈希等的完整 SkyString），以实现快速反序列化。
 
 use std::collections::{HashMap, HashSet};
 use std::io::{BufReader, Cursor, ErrorKind, Read, Result as IoResult};
@@ -30,11 +28,10 @@ use crate::types::game_id::GameId;
 use crate::types::sky_string::SkyString;
 use crate::vmad::VmadDecoder;
 
-/// Lightweight entry for comparison.
+/// 用于对比的轻量级条目。
 ///
-/// Stores only the location and source text needed by ESPCompare. The
-/// extractor creates these directly from ESP fields instead of allocating full
-/// SkyString values and their search indexes.
+/// 仅存储 ESPCompare 所需的位置和源文本。
+/// 提取器直接从 ESP 字段中创建这些条目，而不是分配完整的 SkyString 值及其搜索索引。
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CompareEntry {
     pub id: u32,
@@ -70,31 +67,30 @@ impl CompareEntry {
     }
 }
 
-/// Comparison result between two ESP files
+/// 两个 ESP 文件之间的对比结果
 #[derive(Debug, Clone)]
 pub struct EspComparison {
-    /// All strings from old ESP (by internal ID)
+    /// 来自旧 ESP 的所有字符串（按内部 ID）
     pub old_strings: Vec<CompareEntry>,
-    /// All strings from new ESP (by internal ID)
+    /// 来自新 ESP 的所有字符串（按内部 ID）
     pub new_strings: Vec<CompareEntry>,
-    /// Mapping: new internal ID -> old internal ID for matching entries
+    /// 映射：匹配条目的新内部 ID -> 旧内部 ID
     pub matched_pairs: HashMap<u32, u32>,
-    /// Strings in new but not in old (HashSet for O(1) lookup)
+    /// 存在于新文件中但不在旧文件中的字符串（使用 HashSet 进行 O(1) 查找）
     pub added: HashSet<u32>,
-    /// Strings in old but not in new (HashSet for O(1) lookup)
+    /// 存在于旧文件中但不在新文件中的字符串（使用 HashSet 进行 O(1) 查找）
     pub removed: HashSet<u32>,
-    /// Strings with same key but different text (HashSet for O(1) lookup)
+    /// 键相同但文本不同的字符串（使用 HashSet 进行 O(1) 查找）
     pub modified: HashSet<u32>,
-    /// Mapping: new ID -> old ID for modified entries (same key, different text)
+    /// 映射：已修改条目的新 ID -> 旧 ID（相同键，不同文本）
     pub modified_pairs: HashMap<u32, u32>,
 }
 
-/// Key used for matching strings between ESP files.
+/// 用于匹配 ESP 文件之间字符串的键。
 ///
-/// Original xTranslator sorts compare records by pure FormID, then matches the
-/// first unused string field with the same field signature. `field_index`
-/// models that duplicate-field occurrence. When FormID is absent (unit tests,
-/// imported synthetic sets), we keep the previous string-id triple behavior.
+/// 原版 xTranslator 按纯 FormID 对对比记录进行排序，然后匹配第一个未使用的具有相同字段签名的字符串字段。
+/// `field_index` 模拟了这种重复字段的出现情况。当缺失 FormID 时（单元测试、导入的合成集），
+/// 我们保持之前的 string-id 三元组行为。
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct StringKey {
     pub str_id: i32,
@@ -195,7 +191,7 @@ fn cache_path(hash: &str, game: GameId) -> PathBuf {
     compare_cache_dir().join(format!("{}_{}.compare", hash, game_cache_key(game)))
 }
 
-/// Load cached CompareEntries from disk (if available and valid)
+/// 从磁盘加载缓存的 CompareEntries（如果可用且有效）
 fn load_cached_entries(hash: &str, game: GameId) -> Option<Vec<CompareEntry>> {
     let path = cache_path(hash, game);
     if !path.exists() {
@@ -216,7 +212,7 @@ fn load_cached_entries(hash: &str, game: GameId) -> Option<Vec<CompareEntry>> {
     Some(payload.entries)
 }
 
-/// Store CompareEntries to disk for future fast loading
+/// 将 CompareEntries 写入磁盘以便未来快速加载
 fn store_cached_entries(hash: &str, game: GameId, entries: &[CompareEntry]) {
     let dir = compare_cache_dir();
     let _ = std::fs::create_dir_all(&dir);
@@ -659,7 +655,7 @@ fn extract_compare_entries(
     Ok(extractor.entries)
 }
 
-/// Parse ESP and load strings, using lightweight compare cache
+/// 解析 ESP 并加载字符串，使用轻量级对比缓存
 fn parse_esp_with_entries(
     esp_path: &str,
     data_dir: &Path,
@@ -684,10 +680,10 @@ fn parse_esp_with_entries(
     Ok(entries)
 }
 
-/// Compare two ESP files
+/// 对比两个 ESP 文件
 ///
-/// Returns an EspComparison with matched and unmatched string IDs.
-/// Strings files are loaded from each ESP's parent directory for accurate source display.
+/// 返回包含已匹配和未匹配字符串 ID 的 EspComparison。
+/// 从每个 ESP 的父目录加载 Strings 文件，以确保准确的源文本显示。
 pub fn compare_esp_files(
     old_esp_path: &str,
     new_esp_path: &str,
@@ -710,7 +706,7 @@ pub fn compare_esp_files(
     Ok(build_comparison_from_entries(old_entries, new_entries))
 }
 
-/// Check if two paths refer to the same file (canonicalize or fallback to string eq)
+/// 检查两个路径是否指向同一个文件（规范化路径或回退到字符串相等性比较）
 fn paths_same(a: &str, b: &str) -> bool {
     if a == b {
         return true;
@@ -721,10 +717,9 @@ fn paths_same(a: &str, b: &str) -> bool {
     }
 }
 
-/// Compare two sets of SkyStrings (already parsed)
+/// 对比两组 SkyString（已解析）
 ///
-/// Useful for comparing an ESP with a loaded SST/XML dictionary, or
-/// for unit testing.
+/// 适用于将 ESP 与加载的 SST/XML 词典进行对比，或用于单元测试。
 pub fn compare_string_sets(old_strings: &[SkyString], new_strings: &[SkyString]) -> EspComparison {
     let old_entries: Vec<CompareEntry> = old_strings
         .iter()
@@ -737,7 +732,7 @@ pub fn compare_string_sets(old_strings: &[SkyString], new_strings: &[SkyString])
     build_comparison_from_entries(old_entries, new_entries)
 }
 
-/// Build comparison from two CompareEntry vectors (lightweight)
+/// 从两个 CompareEntry 向量构建对比结果（轻量级）
 fn build_comparison_from_entries(
     old_entries: Vec<CompareEntry>,
     new_entries: Vec<CompareEntry>,
@@ -802,27 +797,27 @@ fn build_comparison_from_entries(
 }
 
 impl EspComparison {
-    /// Get the count of identical strings
+    /// 获取完全相同字符串的数量
     pub fn identical_count(&self) -> usize {
         self.matched_pairs.len()
     }
 
-    /// Get the count of added strings
+    /// 获取新增字符串的数量
     pub fn added_count(&self) -> usize {
         self.added.len()
     }
 
-    /// Get the count of removed strings
+    /// 获取已删除字符串的数量
     pub fn removed_count(&self) -> usize {
         self.removed.len()
     }
 
-    /// Get the count of modified strings
+    /// 获取已修改字符串的数量
     pub fn modified_count(&self) -> usize {
         self.modified.len()
     }
 
-    /// Get all unique string IDs in the comparison
+    /// 获取对比中所有唯一的字符串 ID
     pub fn all_ids(&self) -> Vec<u32> {
         let mut ids: Vec<u32> = self.new_strings.iter().map(|s| s.id).collect();
         ids.sort();
@@ -830,22 +825,22 @@ impl EspComparison {
         ids
     }
 
-    /// Get matching pair (new_id, old_id) for a given new string ID
+    /// 获取给定新字符串 ID 的匹配对 (new_id, old_id)
     pub fn get_match(&self, new_id: u32) -> Option<u32> {
         self.matched_pairs.get(&new_id).copied()
     }
 
-    /// Check if a string ID is new (added) — O(1) via HashSet
+    /// 检查字符串 ID 是否为新增 (added) — 通过 HashSet 达到 O(1) 复杂度
     pub fn is_added(&self, new_id: u32) -> bool {
         self.added.contains(&new_id)
     }
 
-    /// Check if a string ID was removed — O(1) via HashSet
+    /// 检查字符串 ID 是否已被删除 — 通过 HashSet 达到 O(1) 复杂度
     pub fn is_removed(&self, old_id: u32) -> bool {
         self.removed.contains(&old_id)
     }
 
-    /// Check if a string ID was modified — O(1) via HashSet
+    /// 检查字符串 ID 是否已被修改 — 通过 HashSet 达到 O(1) 复杂度
     pub fn is_modified(&self, new_id: u32) -> bool {
         self.modified.contains(&new_id)
     }
@@ -1102,7 +1097,7 @@ mod tests {
         assert_eq!(comp.added_count(), 0);
         assert_eq!(comp.removed_count(), 0);
 
-        // 验证查询性能 (should be O(1) with HashSet)
+        // 验证查询性能（使用 HashSet 应当达到 O(1) 复杂度）
         let query_start = std::time::Instant::now();
         for i in 0..count as u32 {
             let _ = comp.is_added(i);
