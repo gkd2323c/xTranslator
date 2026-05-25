@@ -4,7 +4,7 @@ import path from "path";
 
 // E2E mode: detected from env var (set by Playwright) or NODE_ENV=test
 const isE2E =
-  process.env.VITE_E2E === "true" ||
+  process.env.VITE_E2E?.trim() === "true" ||
   process.env.NODE_ENV === "test";
 
 // https://vitejs.dev/config/

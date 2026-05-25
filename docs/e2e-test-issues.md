@@ -177,13 +177,18 @@ async function openToolPanel(page: any, panelName: string) {
 }
 ```
 
-### 待验证项
+### 2026-05-25 验证结果 ✅
 
-以下修复已提交，需在真实浏览器环境中运行 `npm run test:e2e` 验证：
+在真实浏览器环境中运行 `npm run test:e2e`，**64/64 全部通过**。
 
-- [ ] `workflows.spec.ts` — `@menu` tag 测试
-- [ ] `panels-advanced.spec.ts` — `@esp-tree` tag 测试
-- [ ] `panels.spec.ts` — `@mcm`, `@esp-compare`, `@fuz`, `@bsa`, `@pex` tag 测试
+根因：`vite.config.ts` 中 `process.env.VITE_E2E` 在 Windows 上带有前导空格，`=== "true"` 匹配失败 → `isE2E = false` → mock alias 未生效。修复为 `process.env.VITE_E2E?.trim() === "true"`。
+
+验证通过清单：
+- [x] `workflows.spec.ts` — `@menu` tag 测试
+- [x] `panels-advanced.spec.ts` — `@esp-tree`, `@dialogs`, `@quests`, `@header-proc` tag 测试
+- [x] `panels.spec.ts` — `@mcm`, `@esp-compare`, `@fuz`, `@bsa`, `@pex` tag 测试
+- [x] `app.spec.ts` — `@search`, `@edit`, `@esp`, `@batch`, `@spell` tag 测试
+- [x] `components.spec.ts` — `@nav`, `@bottom`, `@theme`, `@stats`, `@filter`, `@context` tag 测试
 
 ---
 
