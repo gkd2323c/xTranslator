@@ -1,8 +1,8 @@
 # xTranslator 发布流程
 
 ## 当前版本
-- **版本**: 1.1.0 (正式版)
-- **测试**: `cargo test -p xt-core --lib` → 299 passed
+- **版本**: 1.2.0 (正式版)
+- **测试**: `cargo test -p xt-core --lib` → 299 passed | `npm run test:e2e` → 64 passed
 - **构建**: `./build.bat` 一键 release
 
 ## 发布步骤

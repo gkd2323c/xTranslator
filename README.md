@@ -1,12 +1,12 @@
 # xTranslator - Rust Rewrite
 
-[![Version: 1.1.0](https://img.shields.io/badge/Version-1.1.0-blue.svg)](RELEASE.md)
+[![Version: 1.2.0](https://img.shields.io/badge/Version-1.2.0-blue.svg)](RELEASE.md)
 [![License: MPL-2.0](https://img.shields.io/badge/License-MPL--2.0-brightgreen.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/Tests-299_passing-brightgreen.svg)](CHANGELOG.md)
+[![Tests](https://img.shields.io/badge/Tests-299_+_64_E2E_passing-brightgreen.svg)](CHANGELOG.md)
 
 [中文版](README_zh-CN.md)
 
-A modern Rust-based translator for Bethesda game mods (Skyrim, Skyrim SE, Fallout 4, Starfield). This is a complete rewrite of the original Delphi xTranslator tool, featuring a Tauri-based desktop UI with React frontend.
+A modern Rust-based translator for Bethesda game mods (Skyrim, Skyrim SE, Fallout 4, Starfield). This is a complete rewrite of the original Delphi xTranslator tool, featuring a Tauri 2.x desktop UI with React frontend.
 
 ## Features
 
@@ -98,11 +98,13 @@ All core functionality is implemented and tested:
 
 **Skyrim SE validation hardened** — golden snapshot locked (75,754 strings, 118 top GRUPs), regression script available. Delphi cross-check still pending (requires Delphi 1.6.0 runtime).
 
-Recent additions in v1.1.0:
-- Toolbox exception words list (P6) — Title Case exception word editor with persistence
-- SST v1-v7 backward read compatibility (P5.1) — auto-detect version magic
+Recent additions in v1.2.0:
+- FUZ LIP keyframe visualization — colored bar chart preview with shape legend and timeline
 - Skyrim SE validation hardening — L1/L2/L3 validation + golden snapshot + regression script
-- Delphi-style heuristic scoring (6-dimension composite)
+- Toolbox exception words list (P6) — Title Case exception word editor with persistence
+- SST v1-v8 version enum — auto-detect magic for legacy format support
+- E2E test suite fully green — 64 tests passing (12.4s)
+- Windows env var whitespace fix — E2E mock alias loading on Windows
 
 ## Documentation
 

@@ -8,21 +8,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-05-25
+
 ### Added
 - **Skyrim SE 验证硬化**
   - golden snapshot 锁存：`docs/skyrim-se-golden-2026-05-24.md`（75,754 strings, 118 top GRUPs, 50,376 sub GRUPs）
   - 验证报告：`docs/skyrim-se-validation-report.md`（L1/L2/L3 全部通过）
   - 回归检查脚本：`scripts/validate_skyrim_se.ps1`（一键运行 L1/L2/编译检查，可选 golden snapshot 对比）
   - xt-cli 新增 `stats` 命令：加载 ESP/ESM 输出 golden snapshot 格式统计
+- **FUZ LIP 关键帧可视化预览**
+  - 新增 `get_fuz_lip_data` IPC 命令，解析 LIP 同步数据
+  - 前端 LIP 柱状图：关键帧彩色可视化 + 形状图例 + 时间轴
+- **工具箱例外词 + SST 版本枚举**
+  - Title Case 工具支持例外词列表（如 "is", "a", "the" 保留小写）
+  - 例外词编辑器 UI：编辑、持久化到 config.json
+  - SST v1-v8 版本枚举，自动检测魔数识别版本
+- **E2E 测试覆盖完善**：64 个测试全部通过
+- **文档同步**：SPEC.md 补全缺失接口/DTO/任务/不变量，新增 FORMAT.md
 
 ### Fixed
 - Tauri 后端编译错误：`toolbox_load_exception_words` never-type fallback（Rust 2024 兼容性）
 - `main.rs` 漏 import `toolbox_load_exception_words` / `toolbox_get_exception_words`
 - TypeScript 编译错误：`appStore.ts` `file_id` 类型不匹配
+- **E2E mock alias 加载**（Windows）：`process.env.VITE_E2E` 在 Windows 上带有前导空格，导致 `=== "true"` 匹配失败，mock 模块未加载
 
 ### Technical Details
-- **测试**: 299 单元测试全部通过
-- **Rust**: 1.95.0, Tauri 2.x 后端零 warning 编译
+- **测试**: 299 单元测试 + 64 E2E 测试全部通过
+- **Rust**: 1.95.0, Tauri 2.x 后端编译通过
 - **前端**: TypeScript 零错误，Vite 构建通过
 
 ---
