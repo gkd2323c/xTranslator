@@ -938,6 +938,7 @@ export interface AppConfigDto {
   proxy_username?: string;
   proxy_password?: string;
   esp_mode?: boolean;
+  editor_mode?: string;
   spellcheck_dictionary?: string;
   spellcheck_active?: boolean;
   spellcheck_loaded?: boolean;

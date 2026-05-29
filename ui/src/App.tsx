@@ -134,6 +134,18 @@ function App() {
         // Ctrl+Y / Cmd+Y / Ctrl+Shift+Z - 重做
         e.preventDefault();
         redo();
+      } else if (e.ctrlKey && e.key === "1") {
+        // Ctrl+1 - 切换到模态编辑器模式
+        e.preventDefault();
+        useAppStore.getState().setEditorMode("modal");
+      } else if (e.ctrlKey && e.key === "2") {
+        // Ctrl+2 - 切换到侧边栏编辑器模式
+        e.preventDefault();
+        useAppStore.getState().setEditorMode("sidebar");
+      } else if (e.ctrlKey && e.key === "3") {
+        // Ctrl+3 - 切换到内联编辑器模式
+        e.preventDefault();
+        useAppStore.getState().setEditorMode("inline");
       }
     };
     window.addEventListener("keydown", handler);
@@ -171,6 +183,7 @@ function App() {
       if (cfg.azure_key) setAzureApiKey(cfg.azure_key);
       if (cfg.current_provider) setTranslationProvider(cfg.current_provider);
       if (cfg.esp_mode !== undefined) useAppStore.getState().setEspMode(cfg.esp_mode);
+      if (cfg.editor_mode) useAppStore.getState().setEditorMode(cfg.editor_mode as any);
     }).catch(() => {});
   }, []);
 

@@ -35,6 +35,8 @@ export type BottomTabId =
   | "headerProc"   // 头部处理器
   | "headerWizard";// 头部向导
 
+// 编辑器模式类型
+export type EditorMode = "modal" | "sidebar" | "inline";
 
 // 日志级别
 export type LogLevel = "info" | "warn" | "error";
@@ -212,6 +214,8 @@ interface AppState {
   showBottomPanel: boolean;
   // 编辑对话框是否打开
   editorOpen: boolean;
+  // 当前编辑器模式（modal / sidebar / inline）
+  editorMode: EditorMode;
 
   // ── 批处理 ──
   // 批处理文件列表
@@ -283,6 +287,7 @@ interface AppState {
 
   toggleBottomPanel: () => void;
   setEditorOpen: (open: boolean) => void;
+  setEditorMode: (mode: EditorMode) => void;
   openEditorForItem: (id: number) => void;
   setDataConfigs: (configs: DataConfigsDto | null) => void;
   setEspMode: (espMode: boolean) => void;
@@ -485,6 +490,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   activeBottomTab: "home",
   showBottomPanel: true,
   editorOpen: false,
+  editorMode: "modal" as EditorMode,
   batchEntries: [],
   batchStatus: null,
   selectedIds: new Set<number>(),
@@ -855,6 +861,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   setEditorOpen: (open) => set({ editorOpen: open }),
+  setEditorMode: (editorMode) => {
+    set({ editorMode });
+    saveConfig({ editor_mode: editorMode }).catch(() => {});
+  },
   openEditorForItem: (id) => {
     const state = get();
     const item = state.allItems.find((i) => i.id === id) || null;
@@ -1260,6 +1270,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       targetLang: "chinese",
       dataConfigs: null,
       activePanel: null,
+      editorMode: "modal" as EditorMode,
       activeBottomTab: "home",
     }),
 }));

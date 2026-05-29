@@ -305,6 +305,7 @@ export function GroupedMenuBar() {
   const reset = useAppStore((s) => s.reset);
   const setActivePanel = useAppStore((s) => s.setActivePanel);
   const toggleBottomPanel = useAppStore((s) => s.toggleBottomPanel);
+  const setEditorMode = useAppStore((s) => s.setEditorMode);
   const setDataConfigs = useAppStore((s) => s.setDataConfigs);
   const setFilter = useAppStore((s) => s.setFilter);
   const setUseRegex = useAppStore((s) => s.setUseRegex);
@@ -1007,31 +1008,22 @@ export function GroupedMenuBar() {
             label: t("menu.editorModeModal", {
               defaultValue: "Editor Mode: Modal",
             }),
-            onClick: () => {
-              /* TODO(Task 8): useAppStore.getState().setEditorMode("modal") */
-            },
+            onClick: () => setEditorMode("modal"),
             shortcut: "Ctrl+1",
-            disabled: true,
           },
           {
             label: t("menu.editorModeSidebar", {
               defaultValue: "Editor Mode: Sidebar",
             }),
-            onClick: () => {
-              /* TODO(Task 8): useAppStore.getState().setEditorMode("sidebar") */
-            },
+            onClick: () => setEditorMode("sidebar"),
             shortcut: "Ctrl+2",
-            disabled: true,
           },
           {
             label: t("menu.editorModeInline", {
               defaultValue: "Editor Mode: Inline",
             }),
-            onClick: () => {
-              /* TODO(Task 8): useAppStore.getState().setEditorMode("inline") */
-            },
+            onClick: () => setEditorMode("inline"),
             shortcut: "Ctrl+3",
-            disabled: true,
           },
         ],
       },
@@ -1051,6 +1043,7 @@ export function GroupedMenuBar() {
       openSelectedEditor,
       setActivePanel,
       toggleBottomPanel,
+      setEditorMode,
     ]
   );
 
