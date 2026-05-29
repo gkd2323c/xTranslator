@@ -6,7 +6,7 @@ import { useTranslation } from "react-i18next";
 import { listen } from "@tauri-apps/api/event";
 import { setI18nLanguage } from "./i18n";
 import { useAppStore } from "./stores/appStore";
-import { MenuBar } from "./components/MenuBar";
+import { GroupedMenuBar } from "./components/GroupedMenuBar";
 import { SidePanel } from "./components/SidePanel";
 import { VocabularyPanel } from "./components/bottom/VocabularyPanel";
 import { HeuristicPanel } from "./components/bottom/HeuristicPanel";
@@ -16,7 +16,7 @@ import { LogPanel } from "./components/bottom/LogPanel";
 import { HeaderProcessorPanel } from "./components/bottom/HeaderProcessorPanel";
 import { HeaderWizardPanel } from "./components/bottom/HeaderWizardPanel";
 import { StringTable } from "./components/StringTable";
-import { EditorDialog } from "./components/EditorPanel";
+import { EditorDialog } from "./components/EditorPanel/index";
 import { BatchTranslateBar } from "./components/BatchTranslateBar";
 import { RecoveryPromptModal } from "./components/RecoveryPromptModal";
 import { StatusBar } from "./components/StatusBar";
@@ -56,7 +56,7 @@ const AUTO_BACKUP_INTERVAL_MS = 5 * 60 * 1000;
 // ├── RecoveryPromptModal (恢复提示)
 // ├── EditorDialog (编辑对话框)
 // ├── 9× Modal (工具面板)
-// ├── MenuBar (菜单栏)
+// ├── GroupedMenuBar (分组菜单栏)
 // ├── BatchTranslateBar (批处理进度条)
 // ├── app-body
 // │   └── app-main
@@ -332,8 +332,8 @@ function App() {
         </Modal>
       )}
       
-      {/* 菜单栏（文件、翻译、选项、工具、向导） */}
-      <MenuBar />
+      {/* 菜单栏（分组下拉菜单 + 工具栏） */}
+      <GroupedMenuBar />
       
       {/* 字符串级批量翻译进度条 */}
       <BatchTranslateBar />
