@@ -10,6 +10,8 @@ import { GroupedMenuBar } from "./components/GroupedMenuBar";
 import { SidePanel } from "./components/SidePanel";
 import { VocabularyPanel } from "./components/bottom/VocabularyPanel";
 import { LogPanel } from "./components/bottom/LogPanel";
+import { ExplorerTab } from "./components/bottom/ExplorerTab";
+import { HeaderTab } from "./components/bottom/HeaderTab";
 import { StringTable } from "./components/StringTable";
 import { EditorDialog } from "./components/EditorPanel/index";
 import { BatchTranslateBar } from "./components/BatchTranslateBar";
@@ -353,8 +355,8 @@ function App() {
                     {activeBottomTab === "overview" && <SidePanel />}
                     {activeBottomTab === "vocabulary" && <VocabularyPanel />}
                     {activeBottomTab === "log" && <LogPanel />}
-                    {activeBottomTab === "explorer" && <div>ExplorerTab placeholder (Task 14)</div>}
-                    {activeBottomTab === "header" && <div>HeaderTab placeholder (Task 14)</div>}
+                    {activeBottomTab === "explorer" && <ExplorerTab />}
+                    {activeBottomTab === "header" && <HeaderTab />}
                   </div>
                 </div>
               ) : null
