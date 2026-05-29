@@ -7,10 +7,14 @@
 $ErrorActionPreference = "Stop"
 $Root = $PSScriptRoot
 
-# Kill any existing Vite or Tauri processes
+# Kill any existing Vite or Tauri processes (skip if access denied)
 $processes = @("node", "xtranslator-tauri")
 foreach ($p in $processes) {
-    Get-Process -Name $p -ErrorAction SilentlyContinue | Stop-Process -Force
+    try {
+        Get-Process -Name $p -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction Stop
+    } catch {
+        # Ignore access denied errors (e.g., Claude Code's own node process)
+    }
 }
 
 Write-Host "Starting xTranslator dev environment..." -ForegroundColor Green
