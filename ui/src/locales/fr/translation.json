@@ -34,6 +34,8 @@
     "searching": "Searching...",
     "translating": "Translating...",
     "exporting": "Exporting...",
+    "undo": "Annuler",
+    "redo": "Rétablir",
     "noDataLoaded": "(No data loaded)",
     "clearFilter": "Clear filter",
     "yes": "Yes",

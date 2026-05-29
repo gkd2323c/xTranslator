@@ -37,6 +37,8 @@
     "searching": "Searching...",
     "translating": "Translating...",
     "exporting": "Exporting...",
+    "undo": "Undo",
+    "redo": "Redo",
     "noDataLoaded": "(No data loaded)"
   },
   "app": {

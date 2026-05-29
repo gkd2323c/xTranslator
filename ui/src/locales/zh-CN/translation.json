@@ -37,6 +37,8 @@
     "searching": "搜索中...",
     "translating": "翻译中...",
     "exporting": "导出中...",
+    "undo": "撤销",
+    "redo": "重做",
     "noDataLoaded": "(无数据)"
   },
   "app": {
