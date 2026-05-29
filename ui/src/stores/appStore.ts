@@ -208,6 +208,14 @@ interface AppState {
   // ── 面板系统 ──
   // 当前打开的工具面板（单选，互斥）
   activePanel: ActivePanel;
+  // 右侧面板中停靠的工具面板
+  activeRightPanel: ActivePanel | null;
+  // 面板布局状态
+  panelLayout: {
+    rightPanelSize: number;
+    bottomPanelSize: number;
+    rightPanelVisible: boolean;
+  };
   // 当前活跃的底部标签页
   activeBottomTab: BottomTabId;
   // 是否显示底部面板
@@ -280,6 +288,9 @@ interface AppState {
   selectPrevRow: () => void;
   loadAllStrings: () => Promise<void>;
   setActivePanel: (panel: ActivePanel) => void;
+  setActiveRightPanel: (panel: ActivePanel | null) => void;
+  setPanelSize: (target: "right" | "bottom", size: number) => void;
+  toggleRightPanel: () => void;
   setActiveBottomTab: (tab: BottomTabId) => void;
   // ── 日志 ──
   addLog: (level: LogLevel, message: string, source?: string) => void;
@@ -485,6 +496,12 @@ export const useAppStore = create<AppState>((set, get) => ({
   undoStack: [],
   redoStack: [],
   activePanel: null,
+  activeRightPanel: null,
+  panelLayout: {
+    rightPanelSize: 400,
+    bottomPanelSize: 300,
+    rightPanelVisible: false,
+  },
   logs: [],
 
   activeBottomTab: "home",
@@ -934,6 +951,25 @@ export const useAppStore = create<AppState>((set, get) => ({
     // 如果点击相同的面板，则关闭它
     set({ activePanel: current === panel ? null : panel });
   },
+  setActiveRightPanel: (panel) => {
+    const current = get().activeRightPanel;
+    set({
+      activeRightPanel: current === panel ? null : panel,
+      panelLayout: {
+        ...get().panelLayout,
+        rightPanelVisible: panel !== null && current !== panel,
+      },
+    });
+  },
+  setPanelSize: (target, size) => {
+    const layout = get().panelLayout;
+    if (target === "right") set({ panelLayout: { ...layout, rightPanelSize: size } });
+    else set({ panelLayout: { ...layout, bottomPanelSize: size } });
+  },
+  toggleRightPanel: () => {
+    const layout = get().panelLayout;
+    set({ panelLayout: { ...layout, rightPanelVisible: !layout.rightPanelVisible } });
+  },
   setActiveBottomTab: (tab) => set({ activeBottomTab: tab, showBottomPanel: true }),
   toggleBottomPanel: () => set((s) => ({ showBottomPanel: !s.showBottomPanel })),
   setDataConfigs: (dataConfigs) => set({ dataConfigs }),
@@ -1270,6 +1306,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       targetLang: "chinese",
       dataConfigs: null,
       activePanel: null,
+      activeRightPanel: null,
+      panelLayout: { rightPanelSize: 400, bottomPanelSize: 300, rightPanelVisible: false },
       editorMode: "modal" as EditorMode,
       activeBottomTab: "home",
     }),
