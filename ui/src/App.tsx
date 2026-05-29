@@ -1,4 +1,4 @@
-import { useEffect, useRef, Suspense, lazy, useState } from "react";
+import { useEffect, useRef, Suspense, lazy } from "react";
 import { Toaster } from "react-hot-toast";
 import toast from "react-hot-toast";
 import { Loader } from "lucide-react";
@@ -22,15 +22,13 @@ import { RecoveryPromptModal } from "./components/RecoveryPromptModal";
 import { StatusBar } from "./components/StatusBar";
 import { Modal } from "./components/ui";
 import { SplitPaneLayout } from "./components/SplitPaneLayout";
+import { RightPanelContainer } from "./components/RightPanelContainer";
 
 // 工具面板懒加载（首次打开时按需加载，减小首屏包体积）
 const BatchPanel = lazy(() => import("./components/BatchPanel").then(m => ({ default: m.BatchPanel })));
-const BsaBrowser = lazy(() => import("./components/BsaBrowser").then(m => ({ default: m.BsaBrowser })));
 const PexPanel = lazy(() => import("./components/PexPanel").then(m => ({ default: m.PexPanel })));
-const FuzPanel = lazy(() => import("./components/FuzPanel").then(m => ({ default: m.FuzPanel })));
 const DialogView = lazy(() => import("./components/DialogView").then(m => ({ default: m.DialogView })));
 const McmPanel = lazy(() => import("./components/McmPanel").then(m => ({ default: m.McmPanel })));
-const EspComparePanel = lazy(() => import("./components/EspComparePanel").then(m => ({ default: m.EspComparePanel })));
 const FinalizePanel = lazy(() => import("./components/FinalizePanel").then(m => ({ default: m.FinalizePanel })));
 const DataConfigsPanel = lazy(() => import("./components/DataConfigsPanel").then(m => ({ default: m.DataConfigsPanel })));
 import { autoBackupSst, loadConfig, setOpenAiApiKey, setDeeplApiKey, setBaiduApiKey, setYoudaoApiKey, setAzureApiKey, setTranslationProvider } from "./api/strings";
@@ -107,9 +105,11 @@ function App() {
   const undo = useAppStore((s) => s.undo);
   const redo = useAppStore((s) => s.redo);
   const reapplyTheme = useAppStore((s) => s.reapplyTheme);
+  const activeRightPanel = useAppStore((s) => s.activeRightPanel);
+  const setActiveRightPanel = useAppStore((s) => s.setActiveRightPanel);
+  const panelLayout = useAppStore((s) => s.panelLayout);
+  const setPanelSize = useAppStore((s) => s.setPanelSize);
   const backupIdRef = useRef<string | null>(null);
-  // 底部面板尺寸状态（用于 SplitPaneLayout）
-  const [bottomPanelSize, setBottomPanelSize] = useState(300);
 
   // 全局快捷键处理
   ///
@@ -122,11 +122,13 @@ function App() {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        // Escape 链：编辑对话框 → 工具面板 → 行选择
+        // Escape 链：编辑对话框 → 工具面板 → 右侧面板 → 行选择
         if (editorOpen) {
           setEditorOpen(false);
         } else if (activePanel) {
           setActivePanel(null);
+        } else if (activeRightPanel) {
+          setActiveRightPanel(null);
         } else {
           setSelectedById(null);
         }
@@ -154,7 +156,7 @@ function App() {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [setSelectedById, undo, redo, editorOpen, setEditorOpen, activePanel, setActivePanel]);
+  }, [setSelectedById, undo, redo, editorOpen, setEditorOpen, activePanel, setActivePanel, activeRightPanel, setActiveRightPanel]);
 
 // ── E2E 模拟数据自动初始化 ──
   // 在 Playwright 测试模式 (VITE_E2E=true) 下，如果 base.ts 尚未植入数据（例如没有 fixture 的直接导航），
@@ -302,25 +304,11 @@ function App() {
       
       {/* 编辑对话框（单字符串编辑） */}
       <EditorDialog open={editorOpen} onClose={() => setEditorOpen(false)} />
-      {/* 工具面板（9 个模态框，条件渲染：仅激活时挂载到 DOM） */}
+      {/* 工具面板（5 个模态框，条件渲染：仅激活时挂载到 DOM） */}
+      {/* BSA/PEX/FUZ/Compare 现在作为右侧面板显示，见 RightPanelContainer */}
       {activePanel === "batch" && (
         <Modal open onClose={() => setActivePanel(null)} title={t("batch.title")} size="lg">
           <Suspense fallback={<div className="modal-loading"><Loader size={24} /></div>}><BatchPanel /></Suspense>
-        </Modal>
-      )}
-      {activePanel === "bsa" && (
-        <Modal open onClose={() => setActivePanel(null)} title={t("bsa.title")} size="lg">
-          <Suspense fallback={<div className="modal-loading"><Loader size={24} /></div>}><BsaBrowser /></Suspense>
-        </Modal>
-      )}
-      {activePanel === "pex" && (
-        <Modal open onClose={() => setActivePanel(null)} title={t("pex.title")} size="lg">
-          <Suspense fallback={<div className="modal-loading"><Loader size={24} /></div>}><PexPanel /></Suspense>
-        </Modal>
-      )}
-      {activePanel === "fuz" && (
-        <Modal open onClose={() => setActivePanel(null)} title={t("fuz.title")} size="lg">
-          <Suspense fallback={<div className="modal-loading"><Loader size={24} /></div>}><FuzPanel /></Suspense>
         </Modal>
       )}
       {activePanel === "dialog" && (
@@ -331,11 +319,6 @@ function App() {
       {activePanel === "mcm" && (
         <Modal open onClose={() => setActivePanel(null)} title={t("mcm.title")} size="lg">
           <Suspense fallback={<div className="modal-loading"><Loader size={24} /></div>}><McmPanel /></Suspense>
-        </Modal>
-      )}
-      {activePanel === "espCompare" && (
-        <Modal open onClose={() => setActivePanel(null)} title={t("espCompare.title")} size="lg">
-          <Suspense fallback={<div className="modal-loading"><Loader size={24} /></div>}><EspComparePanel /></Suspense>
         </Modal>
       )}
       {activePanel === "finalize" && (
@@ -359,7 +342,7 @@ function App() {
       <div className="app-body">
         <main className="app-main">
           <SplitPaneLayout
-            rightPanel={null}  // 右侧面板将在 Task 11-12 中接入
+            rightPanel={activeRightPanel ? <RightPanelContainer /> : null}
             bottomPanel={
               showBottomPanel ? (
                 <div className="app-bottom-panel">
@@ -392,10 +375,12 @@ function App() {
                 </div>
               ) : null
             }
-            rightPanelVisible={false}  // 将在 Task 12 中连接
+            rightPanelVisible={!!activeRightPanel}
             bottomPanelVisible={showBottomPanel}
-            bottomPanelSize={bottomPanelSize}
-            onBottomPanelResize={setBottomPanelSize}
+            rightPanelSize={panelLayout.rightPanelSize}
+            bottomPanelSize={panelLayout.bottomPanelSize}
+            onRightPanelResize={(size) => setPanelSize("right", size)}
+            onBottomPanelResize={(size) => setPanelSize("bottom", size)}
           >
             {/* 虚拟滚动表格（主要工作区） */}
             <div className="app-table-area">

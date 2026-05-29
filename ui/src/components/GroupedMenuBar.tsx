@@ -284,6 +284,7 @@ export function GroupedMenuBar() {
   const targetLang = useAppStore((s) => s.targetLang);
   const selectedId = useAppStore((s) => s.selectedId);
   const activePanel = useAppStore((s) => s.activePanel);
+  const activeRightPanel = useAppStore((s) => s.activeRightPanel);
   const espMode = useAppStore((s) => s.espMode);
   const batchEntries = useAppStore((s) => s.batchEntries);
   const filter = useAppStore((s) => s.filter);
@@ -304,6 +305,7 @@ export function GroupedMenuBar() {
   const setTargetLang = useAppStore((s) => s.setTargetLang);
   const reset = useAppStore((s) => s.reset);
   const setActivePanel = useAppStore((s) => s.setActivePanel);
+  const setActiveRightPanel = useAppStore((s) => s.setActiveRightPanel);
   const toggleBottomPanel = useAppStore((s) => s.toggleBottomPanel);
   const setEditorMode = useAppStore((s) => s.setEditorMode);
   const setDataConfigs = useAppStore((s) => s.setDataConfigs);
@@ -738,24 +740,24 @@ export function GroupedMenuBar() {
         return;
       }
       if (ext === "bsa" || ext === "ba2") {
-        setActivePanel("bsa");
+        setActiveRightPanel("bsa");
         toast(t("menu.dragDropBsa"), { icon: "📦", duration: 3000 });
         return;
       }
       if (ext === "pex") {
-        setActivePanel("pex");
+        setActiveRightPanel("pex");
         toast(t("menu.dragDropPex"), { icon: "📜", duration: 3000 });
         return;
       }
       if (ext === "fuz") {
-        setActivePanel("fuz");
+        setActiveRightPanel("fuz");
         toast(t("menu.dragDropFuz"), { icon: "🔊", duration: 3000 });
         return;
       }
 
       toast.error(t("menu.dragDropUnsupported"));
     },
-    [importXmlFromPath, loadEspFromPath, loadSstFromPath, setActivePanel, t]
+    [importXmlFromPath, loadEspFromPath, loadSstFromPath, setActiveRightPanel, t]
   );
 
   // ========== Hook：拖放事件处理 ==========
@@ -977,9 +979,9 @@ export function GroupedMenuBar() {
             label: t("batch.title"),
             onClick: () => setActivePanel("batch"),
           },
-          { label: t("bsa.title"), onClick: () => setActivePanel("bsa") },
-          { label: t("pex.title"), onClick: () => setActivePanel("pex") },
-          { label: t("fuz.title"), onClick: () => setActivePanel("fuz") },
+          { label: t("bsa.title"), onClick: () => setActiveRightPanel("bsa") },
+          { label: t("pex.title"), onClick: () => setActiveRightPanel("pex") },
+          { label: t("fuz.title"), onClick: () => setActiveRightPanel("fuz") },
           {
             label: t("dialog.title"),
             onClick: () => setActivePanel("dialog"),
@@ -987,7 +989,7 @@ export function GroupedMenuBar() {
           { label: t("mcm.title"), onClick: () => setActivePanel("mcm") },
           {
             label: t("espCompare.title"),
-            onClick: () => setActivePanel("espCompare"),
+            onClick: () => setActiveRightPanel("espCompare"),
           },
           {
             label: t("dataConfigs.title"),
@@ -1042,6 +1044,7 @@ export function GroupedMenuBar() {
       statusFilter,
       openSelectedEditor,
       setActivePanel,
+      setActiveRightPanel,
       toggleBottomPanel,
       setEditorMode,
     ]
@@ -1482,63 +1485,74 @@ export function GroupedMenuBar() {
                 icon: <RefreshCw size={14} />,
                 openLabel: t("menu.openBatchPanel"),
                 closeLabel: t("menu.closeBatchPanel"),
+                right: false,
               },
               {
                 id: "bsa" as const,
                 icon: <FileArchive size={14} />,
                 openLabel: t("menu.openBsaBrowser"),
                 closeLabel: t("menu.closeBsaBrowser"),
+                right: true,
               },
               {
                 id: "pex" as const,
                 icon: <Braces size={14} />,
                 openLabel: t("menu.openPexPanel"),
                 closeLabel: t("menu.closePexPanel"),
+                right: true,
               },
               {
                 id: "fuz" as const,
                 icon: <Volume2 size={14} />,
                 openLabel: t("menu.openVoicePanel"),
                 closeLabel: t("menu.closeVoicePanel"),
+                right: true,
               },
               {
                 id: "dialog" as const,
                 icon: <MessagesSquare size={14} />,
                 openLabel: t("menu.openDialogView"),
                 closeLabel: t("menu.closeDialogView"),
+                right: false,
               },
               {
                 id: "mcm" as const,
                 icon: <FileText size={14} />,
                 openLabel: t("menu.openMcmPanel"),
                 closeLabel: t("menu.closeMcmPanel"),
+                right: false,
               },
               {
                 id: "espCompare" as const,
                 icon: <GitCompare size={14} />,
                 openLabel: t("menu.openEspCompare"),
                 closeLabel: t("menu.closeEspCompare"),
+                right: true,
               },
               {
                 id: "dataConfigs" as const,
                 icon: <Database size={14} />,
                 openLabel: t("menu.openDataConfigs"),
                 closeLabel: t("menu.closeDataConfigs"),
+                right: false,
               },
             ] as const
-          ).map(({ id, icon, openLabel, closeLabel }) => (
-            <Button
-              key={id}
-              variant="ghost"
-              size="sm"
-              icon={icon}
-              onClick={() => setActivePanel(id)}
-              active={activePanel === id}
-              title={activePanel === id ? closeLabel : openLabel}
-              aria-label={activePanel === id ? closeLabel : openLabel}
-              aria-pressed={activePanel === id}
-            />
-          ))}
+          ).map(({ id, icon, openLabel, closeLabel, right }) => {
+            const isActive = right ? activeRightPanel === id : activePanel === id;
+            return (
+              <Button
+                key={id}
+                variant="ghost"
+                size="sm"
+                icon={icon}
+                onClick={() => right ? setActiveRightPanel(id) : setActivePanel(id)}
+                active={isActive}
+                title={isActive ? closeLabel : openLabel}
+                aria-label={isActive ? closeLabel : openLabel}
+                aria-pressed={isActive}
+              />
+            );
+          })}
         </div>
 
         {/* 选择下拉框 */}
