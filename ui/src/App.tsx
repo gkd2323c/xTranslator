@@ -143,6 +143,23 @@ function App() {
         // Ctrl+3 - 切换到内联编辑器模式
         e.preventDefault();
         useAppStore.getState().setEditorMode("inline");
+      } else if (e.ctrlKey && e.key === "\\") {
+        // Ctrl+\ - 切换右侧面板可见性
+        e.preventDefault();
+        useAppStore.getState().toggleRightPanel();
+      } else if (e.ctrlKey && e.shiftKey && (e.key === "l" || e.key === "L")) {
+        // Ctrl+Shift+L - 聚焦底部日志标签页
+        e.preventDefault();
+        useAppStore.getState().setActiveBottomTab("log");
+      } else if (e.ctrlKey && e.shiftKey && (e.key === "b" || e.key === "B")) {
+        // Ctrl+Shift+B - 切换底部面板
+        e.preventDefault();
+        useAppStore.getState().toggleBottomPanel();
+      } else if (e.key === "F2" && useAppStore.getState().selectedId !== null) {
+        // F2 - 内联编辑当前选中行
+        e.preventDefault();
+        useAppStore.getState().setEditorMode("inline");
+        useAppStore.getState().setEditorOpen(true);
       }
     };
     window.addEventListener("keydown", handler);
