@@ -3898,6 +3898,67 @@ html, body, #root {
     .editor-char-count, .editor-field-warning, .editor-formid,
     .editor-alias-warning, .tag-highlight, .match-*, .editor-actions) */
 
+/* === EditorSidebar — 侧边栏模式编辑器 === */
+
+.editor-sidebar {
+  width: 100%;
+  min-width: 300px;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  padding: var(--space-md);
+  gap: var(--space-sm);
+  background: var(--color-surface-card, var(--color-surface-soft));
+}
+
+.editor-sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: var(--space-sm);
+  border-bottom: 1px solid var(--color-hairline);
+}
+
+.editor-sidebar-title {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--color-ink);
+  font-family: var(--font-mono);
+}
+
+.editor-sidebar-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--color-muted);
+  padding: var(--space-xs);
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s;
+}
+
+.editor-sidebar-close:hover {
+  background: var(--color-surface-dark-elevated);
+  color: var(--color-ink);
+}
+
+.editor-sidebar-actions {
+  display: flex;
+  gap: var(--space-xs);
+  flex-wrap: wrap;
+}
+
+.editor-sidebar-footer {
+  margin-top: auto;
+  padding-top: var(--space-sm);
+  border-top: 1px solid var(--color-hairline);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
 /* === Spell Check === */
 
 .editor-spellcheck {
