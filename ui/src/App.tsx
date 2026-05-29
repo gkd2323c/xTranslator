@@ -1,4 +1,4 @@
-import { useEffect, useRef, Suspense, lazy } from "react";
+import { useEffect, useRef, Suspense, lazy, useState } from "react";
 import { Toaster } from "react-hot-toast";
 import toast from "react-hot-toast";
 import { Loader } from "lucide-react";
@@ -21,6 +21,7 @@ import { BatchTranslateBar } from "./components/BatchTranslateBar";
 import { RecoveryPromptModal } from "./components/RecoveryPromptModal";
 import { StatusBar } from "./components/StatusBar";
 import { Modal } from "./components/ui";
+import { SplitPaneLayout } from "./components/SplitPaneLayout";
 
 // 工具面板懒加载（首次打开时按需加载，减小首屏包体积）
 const BatchPanel = lazy(() => import("./components/BatchPanel").then(m => ({ default: m.BatchPanel })));
@@ -60,18 +61,19 @@ const AUTO_BACKUP_INTERVAL_MS = 5 * 60 * 1000;
 // ├── BatchTranslateBar (批处理进度条)
 // ├── app-body
 // │   └── app-main
-// │       ├── app-table-area → StringTable (虚拟滚动表格)
-// │       └── app-bottom-panel (底部标签页)
-// │           ├── SidePanel (统计信息)
-// │           ├── VocabularyPanel (词汇库)
-// │           ├── HeuristicPanel (启发式搜索)
-// │           ├── EspTreePanel (记录树)
-// │           ├── PexPanel (PEX 脚本)
-// │           ├── QuestsPanel (任务)
-// │           ├── DialogView (对话)
-// │           ├── LogPanel (日志)
-// │           ├── HeaderProcessorPanel (头部处理)
-// │           └── HeaderWizardPanel (头部向导)
+// │       └── SplitPaneLayout (可拖拽分栏布局)
+// │           ├── StringTable (虚拟滚动表格，主内容区)
+// │           └── app-bottom-panel (底部标签页，可拖拽调整)
+// │               ├── SidePanel (统计信息)
+// │               ├── VocabularyPanel (词汇库)
+// │               ├── HeuristicPanel (启发式搜索)
+// │               ├── EspTreePanel (记录树)
+// │               ├── PexPanel (PEX 脚本)
+// │               ├── QuestsPanel (任务)
+// │               ├── DialogView (对话)
+// │               ├── LogPanel (日志)
+// │               ├── HeaderProcessorPanel (头部处理)
+// │               └── HeaderWizardPanel (头部向导)
 // ├── StatusBar (状态栏)
 // └── app-overlay (加载覆盖层)
 // ```
@@ -106,6 +108,8 @@ function App() {
   const redo = useAppStore((s) => s.redo);
   const reapplyTheme = useAppStore((s) => s.reapplyTheme);
   const backupIdRef = useRef<string | null>(null);
+  // 底部面板尺寸状态（用于 SplitPaneLayout）
+  const [bottomPanelSize, setBottomPanelSize] = useState(300);
 
   // 全局快捷键处理
   ///
@@ -354,48 +358,50 @@ function App() {
       {/* 主应用区域 */}
       <div className="app-body">
         <main className="app-main">
-          {/* 虚拟滚动表格（主要工作区） */}
-          <div className="app-table-area">
-            <StringTable />
-          </div>
-          
-          {/* 底部面板（10 个标签页，可折叠） */}
-          {showBottomPanel && (
-            <>
-              {/* 分割线（可拖动调整高度） */}
-              <div className="app-bottom-splitter" />
-              
-              <div className="app-bottom-panel">
-                {/* 标签页按钮 */}
-                <div className="bottom-panel-tabs">
-                  {(["home", "vocabulary", "heuristic", "espTree", "pex", "quests", "dialogs", "log", "headerProc", "headerWizard"] as const).map((tab) => (
-                    <button
-                      key={tab}
-                      className={`bottom-tab ${activeBottomTab === tab ? "bottom-tab-active" : ""}`}
-                      onClick={() => useAppStore.getState().setActiveBottomTab(tab)}
-                    >
-                      {t(`bottomTabs.${tab}`)}
-                    </button>
-                  ))}
+          <SplitPaneLayout
+            rightPanel={null}  // 右侧面板将在 Task 11-12 中接入
+            bottomPanel={
+              showBottomPanel ? (
+                <div className="app-bottom-panel">
+                  {/* 标签页按钮 */}
+                  <div className="bottom-panel-tabs">
+                    {(["home", "vocabulary", "heuristic", "espTree", "pex", "quests", "dialogs", "log", "headerProc", "headerWizard"] as const).map((tab) => (
+                      <button
+                        key={tab}
+                        className={`bottom-tab ${activeBottomTab === tab ? "bottom-tab-active" : ""}`}
+                        onClick={() => useAppStore.getState().setActiveBottomTab(tab)}
+                      >
+                        {t(`bottomTabs.${tab}`)}
+                      </button>
+                    ))}
+                  </div>
 
+                  {/* 标签页内容（条件渲染） */}
+                  <div className="bottom-panel-content">
+                    {activeBottomTab === "home" && <SidePanel />}
+                    {activeBottomTab === "vocabulary" && <VocabularyPanel />}
+                    {activeBottomTab === "heuristic" && <HeuristicPanel />}
+                    {activeBottomTab === "espTree" && <EspTreePanel />}
+                    {activeBottomTab === "pex" && <PexPanel />}
+                    {activeBottomTab === "quests" && <QuestsPanel />}
+                    {activeBottomTab === "dialogs" && <DialogView />}
+                    {activeBottomTab === "log" && <LogPanel />}
+                    {activeBottomTab === "headerProc" && <HeaderProcessorPanel />}
+                    {activeBottomTab === "headerWizard" && <HeaderWizardPanel />}
+                  </div>
                 </div>
-                
-                {/* 标签页内容（条件渲染） */}
-                <div className="bottom-panel-content">
-                  {activeBottomTab === "home" && <SidePanel />}
-                  {activeBottomTab === "vocabulary" && <VocabularyPanel />}
-                  {activeBottomTab === "heuristic" && <HeuristicPanel />}
-                  {activeBottomTab === "espTree" && <EspTreePanel />}
-                  {activeBottomTab === "pex" && <PexPanel />}
-                  {activeBottomTab === "quests" && <QuestsPanel />}
-                  {activeBottomTab === "dialogs" && <DialogView />}
-                  {activeBottomTab === "log" && <LogPanel />}
-                  {activeBottomTab === "headerProc" && <HeaderProcessorPanel />}
-                  {activeBottomTab === "headerWizard" && <HeaderWizardPanel />}
-                </div>
-              </div>
-            </>
-          )}
+              ) : null
+            }
+            rightPanelVisible={false}  // 将在 Task 12 中连接
+            bottomPanelVisible={showBottomPanel}
+            bottomPanelSize={bottomPanelSize}
+            onBottomPanelResize={setBottomPanelSize}
+          >
+            {/* 虚拟滚动表格（主要工作区） */}
+            <div className="app-table-area">
+              <StringTable />
+            </div>
+          </SplitPaneLayout>
         </main>
       </div>
       
