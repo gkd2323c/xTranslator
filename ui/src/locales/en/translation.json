@@ -223,14 +223,17 @@
     "saveStringsFailed": "Failed to save Strings"
   },
   "bottomTabs": {
-    "home": "Home",
+    "overview": "Overview",
     "vocabulary": "Vocabulary",
+    "log": "Log",
+    "explorer": "Explorer",
+    "header": "Header",
+    "home": "Home",
     "heuristic": "Heuristic",
     "espTree": "ESP Tree",
     "pex": "PEX",
     "quests": "Quests",
     "dialogs": "Dialogs",
-    "log": "Log",
     "headerProc": "Header Processor",
     "headerWizard": "Header Wizard"
   },

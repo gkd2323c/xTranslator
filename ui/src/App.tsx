@@ -9,12 +9,7 @@ import { useAppStore } from "./stores/appStore";
 import { GroupedMenuBar } from "./components/GroupedMenuBar";
 import { SidePanel } from "./components/SidePanel";
 import { VocabularyPanel } from "./components/bottom/VocabularyPanel";
-import { HeuristicPanel } from "./components/bottom/HeuristicPanel";
-import { EspTreePanel } from "./components/bottom/EspTreePanel";
-import { QuestsPanel } from "./components/bottom/QuestsPanel";
 import { LogPanel } from "./components/bottom/LogPanel";
-import { HeaderProcessorPanel } from "./components/bottom/HeaderProcessorPanel";
-import { HeaderWizardPanel } from "./components/bottom/HeaderWizardPanel";
 import { StringTable } from "./components/StringTable";
 import { EditorDialog } from "./components/EditorPanel/index";
 import { BatchTranslateBar } from "./components/BatchTranslateBar";
@@ -26,7 +21,6 @@ import { RightPanelContainer } from "./components/RightPanelContainer";
 
 // 工具面板懒加载（首次打开时按需加载，减小首屏包体积）
 const BatchPanel = lazy(() => import("./components/BatchPanel").then(m => ({ default: m.BatchPanel })));
-const PexPanel = lazy(() => import("./components/PexPanel").then(m => ({ default: m.PexPanel })));
 const DialogView = lazy(() => import("./components/DialogView").then(m => ({ default: m.DialogView })));
 const McmPanel = lazy(() => import("./components/McmPanel").then(m => ({ default: m.McmPanel })));
 const FinalizePanel = lazy(() => import("./components/FinalizePanel").then(m => ({ default: m.FinalizePanel })));
@@ -62,16 +56,11 @@ const AUTO_BACKUP_INTERVAL_MS = 5 * 60 * 1000;
 // │       └── SplitPaneLayout (可拖拽分栏布局)
 // │           ├── StringTable (虚拟滚动表格，主内容区)
 // │           └── app-bottom-panel (底部标签页，可拖拽调整)
-// │               ├── SidePanel (统计信息)
+// │               ├── SidePanel (统计信息 → overview 标签页)
 // │               ├── VocabularyPanel (词汇库)
-// │               ├── HeuristicPanel (启发式搜索)
-// │               ├── EspTreePanel (记录树)
-// │               ├── PexPanel (PEX 脚本)
-// │               ├── QuestsPanel (任务)
-// │               ├── DialogView (对话)
 // │               ├── LogPanel (日志)
-// │               ├── HeaderProcessorPanel (头部处理)
-// │               └── HeaderWizardPanel (头部向导)
+// │               ├── ExplorerTab (资源浏览器 → explorer 标签页，Task 14)
+// │               └── HeaderTab (头部工具 → header 标签页，Task 14)
 // ├── StatusBar (状态栏)
 // └── app-overlay (加载覆盖层)
 // ```
@@ -348,7 +337,7 @@ function App() {
                 <div className="app-bottom-panel">
                   {/* 标签页按钮 */}
                   <div className="bottom-panel-tabs">
-                    {(["home", "vocabulary", "heuristic", "espTree", "pex", "quests", "dialogs", "log", "headerProc", "headerWizard"] as const).map((tab) => (
+                    {(["overview", "vocabulary", "log", "explorer", "header"] as const).map((tab) => (
                       <button
                         key={tab}
                         className={`bottom-tab ${activeBottomTab === tab ? "bottom-tab-active" : ""}`}
@@ -361,16 +350,11 @@ function App() {
 
                   {/* 标签页内容（条件渲染） */}
                   <div className="bottom-panel-content">
-                    {activeBottomTab === "home" && <SidePanel />}
+                    {activeBottomTab === "overview" && <SidePanel />}
                     {activeBottomTab === "vocabulary" && <VocabularyPanel />}
-                    {activeBottomTab === "heuristic" && <HeuristicPanel />}
-                    {activeBottomTab === "espTree" && <EspTreePanel />}
-                    {activeBottomTab === "pex" && <PexPanel />}
-                    {activeBottomTab === "quests" && <QuestsPanel />}
-                    {activeBottomTab === "dialogs" && <DialogView />}
                     {activeBottomTab === "log" && <LogPanel />}
-                    {activeBottomTab === "headerProc" && <HeaderProcessorPanel />}
-                    {activeBottomTab === "headerWizard" && <HeaderWizardPanel />}
+                    {activeBottomTab === "explorer" && <div>ExplorerTab placeholder (Task 14)</div>}
+                    {activeBottomTab === "header" && <div>HeaderTab placeholder (Task 14)</div>}
                   </div>
                 </div>
               ) : null

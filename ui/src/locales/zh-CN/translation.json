@@ -223,14 +223,17 @@
     "saveStringsFailed": "保存 Strings 失败"
   },
   "bottomTabs": {
-    "home": "主页",
+    "overview": "概览",
     "vocabulary": "词汇库",
+    "log": "日志",
+    "explorer": "资源浏览器",
+    "header": "头部工具",
+    "home": "主页",
     "heuristic": "启发式建议",
     "espTree": "Esp树状表",
     "pex": "反编译脚本",
     "quests": "任务列表",
     "dialogs": "NPC/语音指向",
-    "log": "日志",
     "headerProc": "预处理器",
     "headerWizard": "向导"
   },

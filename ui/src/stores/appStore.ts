@@ -22,18 +22,13 @@ export type ActivePanel =
   | "dataConfigs"// 数据配置
   | null;        // 无面板打开
 
-// 底部标签页类型
+// 底部标签页类型（从 10 个精简为 5 个）
 export type BottomTabId =
-  | "home"         // 主页（统计信息）
-  | "vocabulary"   // 词汇库
-  | "heuristic"    // 启发式搜索
-  | "espTree"      // ESP 记录树
-  | "pex"          // PEX 脚本
-  | "quests"       // 任务
-  | "dialogs"      // 对话
-  | "log"          // 日志
-  | "headerProc"   // 头部处理器
-  | "headerWizard";// 头部向导
+  | "overview"     // 概览（原 "home"）
+  | "vocabulary"   // 词汇库（不变）
+  | "log"          // 日志（不变）
+  | "explorer"     // 资源浏览器（合并 heuristic + espTree + quests）
+  | "header";      // 头部工具（合并 headerProc + headerWizard）
 
 // 编辑器模式类型
 export type EditorMode = "modal" | "sidebar" | "inline";
@@ -504,7 +499,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   logs: [],
 
-  activeBottomTab: "home",
+  activeBottomTab: "overview",
   showBottomPanel: true,
   editorOpen: false,
   editorMode: "modal" as EditorMode,
@@ -1309,7 +1304,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       activeRightPanel: null,
       panelLayout: { rightPanelSize: 400, bottomPanelSize: 300, rightPanelVisible: false },
       editorMode: "modal" as EditorMode,
-      activeBottomTab: "home",
+      activeBottomTab: "overview",
     }),
 }));
 

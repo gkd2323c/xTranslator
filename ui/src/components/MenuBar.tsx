@@ -904,10 +904,9 @@ export function MenuBar() {
       id: "wizards",
       label: t("menu.wizards"),
       items: [
-        { label: t("bottomTabs.headerProc"), onClick: () => useAppStore.getState().setActiveBottomTab("headerProc") },
-        { label: t("bottomTabs.headerWizard"), onClick: () => useAppStore.getState().setActiveBottomTab("headerWizard") },
+        { label: t("bottomTabs.header"), onClick: () => useAppStore.getState().setActiveBottomTab("header") },
         { separator: true, label: "" },
-        { label: t("bottomTabs.home"), onClick: () => useAppStore.getState().setActiveBottomTab("home") },
+        { label: t("bottomTabs.overview"), onClick: () => useAppStore.getState().setActiveBottomTab("overview") },
       ],
     },
   ];
