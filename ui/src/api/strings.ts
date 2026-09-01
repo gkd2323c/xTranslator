@@ -217,12 +217,39 @@ export async function loadEsp(
   return invoke("load_esp", { espPath, stringsDir, language, game });
 }
 
+// SST 高级选项定义 (DP-03 Delphi 对齐)
+export type SstOverwriteScope =
+  | "all"
+  | "no_trans_exclusive"
+  | "no_trans_and_partial"
+  | "partial_only"
+  | "selection";
+
+export type SstMatchMode =
+  | "form_id_only"
+  | "form_id_strict_string"
+  | "form_id_relaxed_string"
+  | "string_only";
+
+export interface SstApplyOptions {
+  overwrite_scope?: SstOverwriteScope;
+  match_mode?: SstMatchMode;
+  tag_only?: boolean;
+  reset_state?: boolean;
+  restrict_to_filter?: boolean;
+  selected_ids?: number[];
+  filtered_ids?: number[];
+}
+
 // 加载 SST 字典
 ///
-// 使用 T1-T4 分层匹配算法将 SST 中的翻译应用到当前加载的字符串。
+// 使用 T1-T4 分层匹配算法或指定高级选项将 SST 中的翻译应用到当前加载的字符串。
 // 返回匹配统计信息。
-export async function loadSst(sstPath: string): Promise<LoadSstResponse> {
-  return invoke("load_sst", { sstPath });
+export async function loadSst(
+  sstPath: string,
+  options?: SstApplyOptions,
+): Promise<LoadSstResponse> {
+  return invoke("load_sst", { sstPath, options });
 }
 
 // 保存 SST 字典

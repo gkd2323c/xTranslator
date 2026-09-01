@@ -33,7 +33,9 @@ use xt_shared::dto::{
     LipKeyframeDto, LoadEspResponse, LoadSstResponse,
     McmComparePolicy, McmCompareRequest, McmCompareResult, McmEntryDto, McmFileDto, McmSaveRequest,
     NpcDialogDto, PexScriptDto, PexTranslatableDto, QueryRequest, QueryResponse, RecoveryInfo,
-    SaveStringsRequest, SaveStringsResponse, SkyStringDTO, TranslateRequest, XmlExportRequest,
+    SaveStringsRequest, SaveStringsResponse, SkyStringDTO,
+    SstApplyOptionsDto, SstMatchModeDto, SstOverwriteScopeDto,
+    TranslateRequest, XmlExportRequest,
     XmlImportResponse, XmlProgress,
 };
 
@@ -637,12 +639,13 @@ pub async fn load_esp(
 
 /// 加载 SST 字典并合并到当前内存字符串。
 ///
-/// 使用共享字典匹配引擎，按 exact / EDID / normalized / vocab 顺序应用。
+/// 使用共享字典匹配引擎，按 exact / EDID / normalized / vocab 顺序应用，或根据高级选项应用。
 /// 该命令仅更新匹配成功的条目，不会新增行。
 #[tauri::command]
 pub async fn load_sst(
     state: tauri::State<'_, Arc<AppState>>,
     sst_path: String,
+    options: Option<SstApplyOptionsDto>,
 ) -> Result<LoadSstResponse, String> {
     // 读取 SST 字典
     let dict = SstDictionary::load_from_file(&sst_path)
@@ -654,8 +657,49 @@ pub async fn load_sst(
         .iter()
         .map(DictionaryApplyEntry::from_sst_entry)
         .collect();
-    let result =
-        apply_dictionary_entries_with_policy(&mut strings, &apply_entries, ApplyPolicy::sst_load());
+
+    let policy = match options {
+        Some(opts) => {
+            let core_scope = match opts.overwrite_scope {
+                SstOverwriteScopeDto::All => xt_core::matching::SstOverwriteScope::All,
+                SstOverwriteScopeDto::NoTransExclusive => {
+                    xt_core::matching::SstOverwriteScope::NoTransExclusive
+                }
+                SstOverwriteScopeDto::NoTransAndPartial => {
+                    xt_core::matching::SstOverwriteScope::NoTransAndPartial
+                }
+                SstOverwriteScopeDto::PartialOnly => {
+                    xt_core::matching::SstOverwriteScope::PartialOnly
+                }
+                SstOverwriteScopeDto::Selection => {
+                    xt_core::matching::SstOverwriteScope::Selection
+                }
+            };
+            let core_mode = match opts.match_mode {
+                SstMatchModeDto::FormIdOnly => xt_core::matching::SstMatchMode::FormIdOnly,
+                SstMatchModeDto::FormIdStrictString => {
+                    xt_core::matching::SstMatchMode::FormIdStrictString
+                }
+                SstMatchModeDto::FormIdRelaxedString => {
+                    xt_core::matching::SstMatchMode::FormIdRelaxedString
+                }
+                SstMatchModeDto::StringOnly => xt_core::matching::SstMatchMode::StringOnly,
+            };
+
+            ApplyPolicy::sst_load_with_options(xt_core::matching::SstApplyOptions {
+                overwrite_scope: core_scope,
+                match_mode: core_mode,
+                tag_only: opts.tag_only,
+                reset_state: opts.reset_state,
+                restrict_to_filter: opts.restrict_to_filter,
+                selected_ids: opts.selected_ids,
+                filtered_ids: opts.filtered_ids,
+            })
+        }
+        None => ApplyPolicy::sst_load(),
+    };
+
+    let result = apply_dictionary_entries_with_policy(&mut strings, &apply_entries, policy);
 
     let old_data_entries: Vec<SkyString> = result
         .old_data_entries

@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAppStore } from "../stores/appStore";
 import { Button, Input } from "./ui";
 import { loadEsp, loadSst, saveSst, exportXml, importXml, saveStrings, saveEsp, tcscConvert, tcscBatchConvert, updateTranslation, loadVocabulary, compareSourceDest, loadDataConfigs, delocalizeEsp, loadConfig, spellCheckLoad, spellCheckToggle, spellCheckConfig, SUPPORTED_GAME_IDS, type BatchProgress } from "../api/strings";
-import type { LoadSstResponse, XmlImportResponse, SupportedGameId } from "../api/strings";
+import type { LoadSstResponse, XmlImportResponse, SupportedGameId, SstApplyOptions } from "../api/strings";
+import { ApplySstDialog } from "./ApplySstDialog";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
@@ -235,7 +236,12 @@ export function MenuBar() {
   const [showToolbox, setShowToolbox] = useState(false);          // 工具箱对话框
   const [showSpellCheck, setShowSpellCheck] = useState(false);    // 拼写检查对话框
   const [showMergeSst, setShowMergeSst] = useState(false);        // SST 合并对话框
+  const [applySstDialogOpen, setApplySstDialogOpen] = useState(false);
+  const [pendingSstPath, setPendingSstPath] = useState<string | null>(null);
   const [spellCheckCfg, setSpellCheckCfg] = useState<import("../api/strings").SpellCheckConfigDto | null>(null);
+
+  const selectedIds = useAppStore((s) => s.selectedIds);
+  const items = useAppStore((s) => s.items);
 
   // ========== 自动恢复拼写检查 ==========
   // 三种持久状态的恢复策略：
@@ -531,7 +537,7 @@ export function MenuBar() {
     await loadEspFromPath(path);
   }, [loadEspFromPath]);
 
-  const loadSstFromPath = useCallback(async (path: string) => {
+  const loadSstFromPath = useCallback(async (path: string, options?: SstApplyOptions) => {
     if (!espPath) {
       toast.error(t("menu.espBeforeSst"));
       return;
@@ -539,7 +545,7 @@ export function MenuBar() {
 
     setLoading(true);
     try {
-      const stats = await loadSst(path);
+      const stats = await loadSst(path, options);
       setSstLoaded(path, stats);
       setIsDirty(true);
       toast.success(t("toast.sstLoaded", { matched: stats.matched, unmatched: stats.unmatched }) + formatApplyStats(stats));
@@ -560,8 +566,9 @@ export function MenuBar() {
     const path = Array.isArray(selected) ? selected[0] : selected;
     if (!path) return;
 
-    await loadSstFromPath(path);
-  }, [loadSstFromPath]);
+    setPendingSstPath(path);
+    setApplySstDialogOpen(true);
+  }, []);
 
   const handleSaveSst = async () => {
     const sstPath = await save({
@@ -1426,6 +1433,28 @@ export function MenuBar() {
         onApplied={() => {
           useAppStore.getState().loadAllStrings();
           setShowToolbox(false);
+        }}
+      />
+      <ApplySstDialog
+        open={applySstDialogOpen}
+        sstPath={pendingSstPath}
+        selectedCount={selectedIds.size}
+        filteredCount={items.length}
+        onClose={() => {
+          setApplySstDialogOpen(false);
+          setPendingSstPath(null);
+        }}
+        onConfirm={(options: SstApplyOptions) => {
+          if (!pendingSstPath) return;
+          const fullOptions: SstApplyOptions = {
+            ...options,
+            selected_ids: options.overwrite_scope === "selection" ? Array.from(selectedIds) : undefined,
+            filtered_ids: options.restrict_to_filter ? items.map((i) => i.id) : undefined,
+          };
+          const path = pendingSstPath;
+          setApplySstDialogOpen(false);
+          setPendingSstPath(null);
+          void loadSstFromPath(path, fullOptions);
         }}
       />
     </div>

@@ -23,7 +23,8 @@ import {
   SUPPORTED_GAME_IDS,
   type BatchProgress,
 } from "../api/strings";
-import type { LoadSstResponse, XmlImportResponse, SupportedGameId } from "../api/strings";
+import type { LoadSstResponse, XmlImportResponse, SupportedGameId, SstApplyOptions } from "../api/strings";
+import { ApplySstDialog } from "./ApplySstDialog";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
@@ -230,9 +231,14 @@ export function GroupedMenuBar() {
   const [showToolbox, setShowToolbox] = useState(false);
   const [showSpellCheck, setShowSpellCheck] = useState(false);
   const [showMergeSst, setShowMergeSst] = useState(false);
+  const [applySstDialogOpen, setApplySstDialogOpen] = useState(false);
+  const [pendingSstPath, setPendingSstPath] = useState<string | null>(null);
   const [spellCheckCfg, setSpellCheckCfg] = useState<
     import("../api/strings").SpellCheckConfigDto | null
   >(null);
+
+  const selectedIds = useAppStore((s) => s.selectedIds);
+  const items = useAppStore((s) => s.items);
 
   // ========== 自动恢复拼写检查 ==========
   useEffect(() => {
@@ -521,7 +527,7 @@ export function GroupedMenuBar() {
   }, [loadEspFromPath]);
 
   const loadSstFromPath = useCallback(
-    async (path: string) => {
+    async (path: string, options?: SstApplyOptions) => {
       if (!espPath) {
         toast.error(t("menu.espBeforeSst"));
         return;
@@ -529,7 +535,7 @@ export function GroupedMenuBar() {
 
       setLoading(true);
       try {
-        const stats = await loadSst(path);
+        const stats = await loadSst(path, options);
         setSstLoaded(path, stats);
         setIsDirty(true);
         toast.success(
@@ -556,8 +562,9 @@ export function GroupedMenuBar() {
     });
     const path = Array.isArray(selected) ? selected[0] : selected;
     if (!path) return;
-    await loadSstFromPath(path);
-  }, [loadSstFromPath]);
+    setPendingSstPath(path);
+    setApplySstDialogOpen(true);
+  }, []);
 
   const handleSaveSst = async () => {
     const sstPath = await save({
@@ -1765,6 +1772,33 @@ export function GroupedMenuBar() {
         onApplied={() => {
           useAppStore.getState().loadAllStrings();
           setShowToolbox(false);
+        }}
+      />
+      <ApplySstDialog
+        open={applySstDialogOpen}
+        onClose={() => {
+          setApplySstDialogOpen(false);
+          setPendingSstPath(null);
+        }}
+        sstPath={pendingSstPath ?? ""}
+        selectedCount={selectedIds.size}
+        filteredCount={items.length}
+        onConfirm={(options: SstApplyOptions) => {
+          if (pendingSstPath) {
+            const finalOptions: SstApplyOptions = {
+              ...options,
+              selected_ids:
+                options.overwrite_scope === "selection"
+                  ? Array.from(selectedIds)
+                  : undefined,
+              filtered_ids: options.restrict_to_filter
+                ? items.map((i) => i.id)
+                : undefined,
+            };
+            loadSstFromPath(pendingSstPath, finalOptions);
+          }
+          setApplySstDialogOpen(false);
+          setPendingSstPath(null);
         }}
       />
     </div>

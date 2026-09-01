@@ -1061,3 +1061,74 @@ pub struct ApplyCacheResponse {
     /// 成功应用的翻译条目数
     pub applied_count: u32,
 }
+
+// ── SST 高级应用选项 (DP-03 Delphi 对齐) ──────────────────────────
+
+/// SST 覆盖范围（对齐 Delphi TESVT_ApplySSTOpts RadioGroup1）
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SstOverwriteScopeDto {
+    /// 全部项（未锁定）
+    All,
+    /// 仅未翻译项（排除已翻译/已验证）
+    NoTransExclusive,
+    /// 严格未翻译项（保留 Delphi 原名；排除已翻译/已验证/部分翻译）
+    NoTransAndPartial,
+    /// 仅部分翻译项
+    PartialOnly,
+    /// 仅选中的项
+    Selection,
+}
+
+impl Default for SstOverwriteScopeDto {
+    fn default() -> Self {
+        // SST import 使用 Mode=1；Delphi iCompareEspOpt[1] 初始值为 0 (= All)。
+        Self::All
+    }
+}
+
+/// SST 匹配模式（对齐 Delphi TESVT_ApplySSTOpts RadioGroup2）
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SstMatchModeDto {
+    /// FormID + EDID hash + field + index
+    FormIdOnly,
+    /// FormID + EDID hash + 严格源文本 + field + index
+    FormIdStrictString,
+    /// FormID + EDID hash + field + 严格源文本，忽略 index
+    FormIdRelaxedString,
+    /// 仅源文本精确匹配（忽略 FormID）
+    StringOnly,
+}
+
+impl Default for SstMatchModeDto {
+    fn default() -> Self {
+        Self::FormIdStrictString
+    }
+}
+
+/// 应用 SST 时的完整高级选项
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct SstApplyOptionsDto {
+    /// 覆盖范围
+    #[serde(default)]
+    pub overwrite_scope: SstOverwriteScopeDto,
+    /// 匹配模式
+    #[serde(default)]
+    pub match_mode: SstMatchModeDto,
+    /// 仅打标记，不修改翻译文本
+    #[serde(default)]
+    pub tag_only: bool,
+    /// 匹配前重置覆盖范围内的目标字符串状态（未命中项也会被重置）
+    #[serde(default)]
+    pub reset_state: bool,
+    /// 仅限制在当前过滤结果中应用
+    #[serde(default)]
+    pub restrict_to_filter: bool,
+    /// 选中的条目 ID 列表（当 overwrite_scope 为 Selection 时生效）
+    #[serde(default)]
+    pub selected_ids: Option<Vec<u32>>,
+    /// 当前过滤可见的条目 ID 列表（当 restrict_to_filter 为 true 时生效）
+    #[serde(default)]
+    pub filtered_ids: Option<Vec<u32>>,
+}

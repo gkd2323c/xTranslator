@@ -57,6 +57,8 @@ pub struct DictionaryApplyEntry {
     pub list_index: u8,
     /// Strings 文件中的字符串 ID（T1 匹配的关键）
     pub str_id: i32,
+    /// 记录 FormID（SST V4 匹配模式的主键；XML 导入时为 0）
+    pub form_id: u32,
     /// 记录类型签名（如 "INFO", "DIAL"）
     pub record_sig: HeaderSig,
     /// 字段签名（如 "FULL", "DESC"）
@@ -86,6 +88,7 @@ impl DictionaryApplyEntry {
             source_format: DictionarySourceFormat::Xml,
             list_index: entry.list_index,
             str_id: entry.str_id,
+            form_id: 0,
             record_sig: entry.record_sig,
             field_sig: entry.field_sig,
             index: entry.index,
@@ -105,6 +108,7 @@ impl DictionaryApplyEntry {
             source_format: DictionarySourceFormat::Sst,
             list_index: entry.list_index,
             str_id: entry.esp_ptr.str_id,
+            form_id: entry.esp_ptr.form_id,
             record_sig: entry.esp_ptr.record_sig,
             field_sig: entry.esp_ptr.field_sig,
             index: entry.esp_ptr.index,
@@ -137,6 +141,7 @@ impl DictionaryApplyEntry {
         sk.list_index = self.list_index;
         sk.colab_id = self.colab_id;
         sk.esp_ptr.str_id = self.str_id;
+        sk.esp_ptr.form_id = self.form_id;
         sk.esp_ptr.record_sig = self.record_sig;
         sk.esp_ptr.field_sig = self.field_sig;
         sk.esp_ptr.index = self.index;
@@ -150,8 +155,57 @@ impl DictionaryApplyEntry {
     }
 }
 
+/// SST 字典覆盖范围（Delphi Form12 RadioGroup1）
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SstOverwriteScope {
+    /// 0: 全部字符串（未锁定项）
+    #[default]
+    All = 0,
+    /// 1: 仅未翻译项（未翻译且未验证）
+    NoTransExclusive = 1,
+    /// 2: 严格未翻译项（保留 Delphi 原名；排除 incompleteTrans）
+    NoTransAndPartial = 2,
+    /// 3: 仅部分翻译项
+    PartialOnly = 3,
+    /// 4: 仅选中项
+    Selection = 4,
+}
+
+/// SST 字典匹配模式（Delphi Form12 RadioGroup2）
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SstMatchMode {
+    /// 0: FormID + EDID hash + field + index（Delphi V4Edid）
+    FormIdOnly = 0,
+    /// 1: FormID + EDID hash + 严格源文本 + field + index（Delphi V4Strict）
+    #[default]
+    FormIdStrictString = 1,
+    /// 2: FormID + EDID hash + field + 严格源文本，忽略 index（Delphi V4Relax）
+    FormIdRelaxedString = 2,
+    /// 3: 仅源文本精确一致（忽略 FormID；重复项按 REC/FIELD 消歧）
+    StringOnly = 3,
+}
+
+/// SST 字典应用高级选项（对齐 Delphi TESVT_ApplySSTOpts）
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct SstApplyOptions {
+    /// 覆盖范围（5 种）
+    pub overwrite_scope: SstOverwriteScope,
+    /// 匹配模式（4 种）
+    pub match_mode: SstMatchMode,
+    /// 仅打标模式（不覆盖文本，仅标记匹配状态）
+    pub tag_only: bool,
+    /// 匹配前重置候选字符串状态；未命中候选也会保持重置状态
+    pub reset_state: bool,
+    /// 限制在过滤结果范围内
+    pub restrict_to_filter: bool,
+    /// 当前选中的字符串 ID 列表（用于 Selection 范围）
+    pub selected_ids: Option<Vec<u32>>,
+    /// 当前过滤可见的字符串 ID 列表（用于 restrict_to_filter）
+    pub filtered_ids: Option<Vec<u32>>,
+}
+
 /// 字典应用策略（控制匹配行为的多个选项）
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct ApplyPolicy {
     /// 同语言模式：为 true 时仅应用来自相同语言的条目
     pub same_language: bool,
@@ -161,6 +215,8 @@ pub struct ApplyPolicy {
     pub replace_string_id: bool,
     /// 保留旧数据：为 true 时将未匹配/歧义条目以 OLD_DATA 标志保存，用于 SST 加载时保留历史数据
     pub preserve_old_data: bool,
+    /// SST 高级选项（如果提供，将覆盖默认行为）
+    pub sst_options: Option<SstApplyOptions>,
 }
 
 impl ApplyPolicy {
@@ -171,15 +227,15 @@ impl ApplyPolicy {
             ..Self::default()
         }
     }
-}
 
-impl Default for ApplyPolicy {
-    fn default() -> Self {
+    /// 创建带自定义 SST 高级选项的策略
+    pub fn sst_load_with_options(options: SstApplyOptions) -> Self {
+        let tag_only = options.tag_only;
         Self {
-            same_language: false,
-            tag_only: false,
-            replace_string_id: false,
-            preserve_old_data: false,
+            preserve_old_data: true,
+            tag_only,
+            sst_options: Some(options),
+            ..Self::default()
         }
     }
 }
@@ -256,6 +312,7 @@ enum ApplyEffect {
 type ExactKey = (i32, HeaderSig, HeaderSig);
 type HashMatchKey = (u32, HeaderSig, HeaderSig);
 type RecFieldKey = (HeaderSig, HeaderSig);
+type FormIdKey = (u32, u32);
 
 #[derive(Debug)]
 struct MatchIndex {
@@ -263,6 +320,8 @@ struct MatchIndex {
     edid: HashMap<HashMatchKey, Vec<usize>>,
     normalized: HashMap<HashMatchKey, Vec<usize>>,
     record_field: HashMap<RecFieldKey, Vec<usize>>,
+    form_id: HashMap<FormIdKey, Vec<usize>>,
+    source_hash: HashMap<u32, Vec<usize>>,
     word_sets: Vec<HashSet<u32>>,
 }
 
@@ -272,6 +331,8 @@ impl MatchIndex {
         let mut edid = HashMap::with_capacity(strings.len());
         let mut normalized = HashMap::with_capacity(strings.len());
         let mut record_field = HashMap::new();
+        let mut form_id = HashMap::with_capacity(strings.len());
+        let mut source_hash = HashMap::with_capacity(strings.len());
         let mut word_sets = Vec::with_capacity(strings.len());
 
         for (idx, sk) in strings.iter().enumerate() {
@@ -304,6 +365,19 @@ impl MatchIndex {
                 .or_insert_with(Vec::new)
                 .push(idx);
 
+            form_id
+                .entry((
+                    sanitize_form_id(sk.esp_ptr.form_id),
+                    sk.esp_ptr.edid_hash,
+                ))
+                .or_insert_with(Vec::new)
+                .push(idx);
+
+            source_hash
+                .entry(sk.hash)
+                .or_insert_with(Vec::new)
+                .push(idx);
+
             word_sets.push(sk.word_hashes.iter().copied().collect());
         }
 
@@ -312,6 +386,8 @@ impl MatchIndex {
             edid,
             normalized,
             record_field,
+            form_id,
+            source_hash,
             word_sets,
         }
     }
@@ -334,6 +410,42 @@ impl MatchIndex {
             .map(Vec::as_slice)
             .unwrap_or(&[])
     }
+
+    fn form_id_candidates(&self, key: FormIdKey) -> &[usize] {
+        self.form_id.get(&key).map(Vec::as_slice).unwrap_or(&[])
+    }
+
+    fn source_candidates(&self, hash: u32) -> &[usize] {
+        self.source_hash
+            .get(&hash)
+            .map(Vec::as_slice)
+            .unwrap_or(&[])
+    }
+}
+
+/// Delphi `sanitizeFormID(formID, $01)` 的等价实现。
+///
+/// 比较 SST V4 FormID 时会把普通 master 的高字节统一为 1；
+/// Starfield 的 light/medium master 分别规范化其索引位。
+fn sanitize_form_id(form_id: u32) -> u32 {
+    let high = (form_id >> 24) as u8;
+    if high == 0 {
+        form_id
+    } else if high == 0xFE {
+        if ((form_id >> 12) & 0xFF) == 0 {
+            form_id
+        } else {
+            (form_id & !(0xFFF << 12)) | (1 << 12)
+        }
+    } else if high == 0xFD {
+        if ((form_id >> 16) & 0xFF) == 0 {
+            form_id
+        } else {
+            (form_id & !(0xFF << 16)) | (1 << 16)
+        }
+    } else {
+        (form_id & 0x00FF_FFFF) | (1 << 24)
+    }
 }
 
 /// 通过共享匹配器应用字典条目。
@@ -342,6 +454,83 @@ pub fn apply_dictionary_entries(
     entries: &[DictionaryApplyEntry],
 ) -> MatchResult {
     apply_dictionary_entries_with_policy(strings, entries, ApplyPolicy::default())
+}
+
+/// 检查候选目标是否在覆盖范围和过滤范围内
+fn is_candidate_eligible(
+    sk: &SkyString,
+    policy: &ApplyPolicy,
+    selected_set: Option<&HashSet<u32>>,
+    filtered_set: Option<&HashSet<u32>>,
+) -> bool {
+    // Delphi findEdidMatchEx/findStrMatchEx 都会跳过 lockedTrans / pexNoTrans。
+    if sk.params.is_locked()
+        || sk
+            .internal_params
+            .is_set(SkyStringInternalParams::PEX_NO_TRANS)
+    {
+        return false;
+    }
+
+    if let Some(opts) = &policy.sst_options {
+        // Delphi VMAD 特殊保护逻辑 (getfProcCompareOptVMADString):
+        // 在 StringOnly 模式下，All / NoTransExclusive / NoTransAndPartial 对 VMAD 脚本字符串直接屏蔽 (compareOptBlock)，
+        // 仅允许在 PartialOnly 或 Selection 显式指定的目标范围内应用！
+        let is_vmad = sk.internal_params.is_set(SkyStringInternalParams::IS_VMAD_STRING);
+        if is_vmad && opts.match_mode == SstMatchMode::StringOnly {
+            match opts.overwrite_scope {
+                SstOverwriteScope::All
+                | SstOverwriteScope::NoTransExclusive
+                | SstOverwriteScope::NoTransAndPartial => {
+                    return false;
+                }
+                SstOverwriteScope::PartialOnly | SstOverwriteScope::Selection => {}
+            }
+        }
+
+        // 限制在过滤结果范围内
+        if opts.restrict_to_filter {
+            match filtered_set {
+                Some(f_set) if f_set.contains(&sk.id) => {}
+                _ => return false,
+            }
+        }
+
+        // 覆盖范围判断
+        match opts.overwrite_scope {
+            SstOverwriteScope::All => {}
+            SstOverwriteScope::NoTransExclusive => {
+                // 仅未翻译且未验证项
+                if sk.params.is_translated() || sk.params.is_validated() {
+                    return false;
+                }
+            }
+            SstOverwriteScope::NoTransAndPartial => {
+                // Delphi 名称虽叫 NoTransAndPartials，实际比较器明确排除 incompleteTrans。
+                if sk.params.is_translated() || sk.params.is_validated() || sk.params.is_incomplete() {
+                    return false;
+                }
+            }
+            SstOverwriteScope::PartialOnly => {
+                // 仅部分翻译项
+                if !sk.params.is_incomplete() {
+                    return false;
+                }
+            }
+            SstOverwriteScope::Selection => {
+                // 仅选中项
+                if let Some(s_set) = selected_set {
+                    if !s_set.contains(&sk.id) {
+                        return false;
+                    }
+                } else {
+                    return false;
+                }
+            }
+        }
+    }
+
+    true
 }
 
 /// 应用字典条目，支持自定义策略
@@ -360,15 +549,90 @@ pub fn apply_dictionary_entries_with_policy(
     entries: &[DictionaryApplyEntry],
     policy: ApplyPolicy,
 ) -> MatchResult {
+    let selected_set: Option<HashSet<u32>> = policy
+        .sst_options
+        .as_ref()
+        .and_then(|o| o.selected_ids.as_ref())
+        .map(|v| v.iter().copied().collect());
+
+    let filtered_set: Option<HashSet<u32>> = policy
+        .sst_options
+        .as_ref()
+        .and_then(|o| o.filtered_ids.as_ref())
+        .map(|v| v.iter().copied().collect());
+
+    // Delphi 的 Apply_StringOnly 走 `findStrMatchEx(vlist, dlist, ...)`：
+    // 它是逐“目标字符串”搜索词典，而不是逐“词典条目”寻找唯一目标。
+    // 因此同一条 SST 源文允许应用到多个目标行，不能复用下面 entry-centric 的 4-Tier 主循环。
+    if policy
+        .sst_options
+        .as_ref()
+        .map(|opts| opts.match_mode == SstMatchMode::StringOnly)
+        .unwrap_or(false)
+    {
+        return apply_sst_string_only_target_centric(
+            strings,
+            entries,
+            &policy,
+            selected_set.as_ref(),
+            filtered_set.as_ref(),
+        );
+    }
+
     let mut result = MatchResult::default();
     let mut matched_ids: HashSet<u32> = HashSet::new();
     let index = MatchIndex::build(strings);
 
+    // 先按原始状态冻结 SST 高级模式的候选 ID，避免应用过程中的状态变化
+    // 反过来改变 scope / filter / selection 的含义。
+    let eligible_ids: HashSet<u32> = policy
+        .sst_options
+        .as_ref()
+        .map(|_| {
+            strings
+                .iter()
+                .filter(|sk| {
+                    is_candidate_eligible(
+                        sk,
+                        &policy,
+                        selected_set.as_ref(),
+                        filtered_set.as_ref(),
+                    )
+                })
+                .map(|sk| sk.id)
+                .collect()
+        })
+        .unwrap_or_default();
+
+    // Delphi 的 Reset StringState 在匹配前作用于“当前覆盖范围内”的目标行。
+    let reset_ids: HashSet<u32> = policy
+        .sst_options
+        .as_ref()
+        .filter(|opts| opts.reset_state)
+        .map(|_| eligible_ids.clone())
+        .unwrap_or_default();
+
     for entry in entries {
-        match match_entry(strings, &index, entry, &matched_ids) {
+        match match_entry_with_policy(
+            strings,
+            &index,
+            entry,
+            &matched_ids,
+            &policy,
+            selected_set.as_ref(),
+            filtered_set.as_ref(),
+        ) {
             EntryOutcome::Matched(tier, idx) => {
-                let effect = apply_match(strings, idx, entry, tier, policy, &mut result);
                 let matched_id = strings[idx].id;
+                let effect = apply_match(
+                    strings,
+                    idx,
+                    entry,
+                    tier,
+                    &policy,
+                    reset_ids.contains(&matched_id),
+                    &mut result,
+                );
                 matched_ids.insert(matched_id);
                 if effect == ApplyEffect::Applied {
                     match tier {
@@ -383,16 +647,286 @@ pub fn apply_dictionary_entries_with_policy(
             }
             EntryOutcome::Ambiguous => {
                 result.ambiguous += 1;
-                preserve_old_data(entry, policy, &mut result);
+                preserve_old_data(entry, &policy, &mut result);
             }
             EntryOutcome::Unmatched => {
                 result.unmatched += 1;
-                preserve_old_data(entry, policy, &mut result);
+                preserve_old_data(entry, &policy, &mut result);
+            }
+        }
+    }
+
+    if !reset_ids.is_empty() {
+        for sk in strings.iter_mut() {
+            if reset_ids.contains(&sk.id) && !matched_ids.contains(&sk.id) && reset_target(sk) {
+                push_updated_id(&mut result.updated_ids, sk.id);
             }
         }
     }
 
     result
+}
+
+/// Delphi `findStrMatchEx` 的 SST StringOnly 专用路径。
+///
+/// 与通用 matcher 最大的结构差异是：这里逐目标行处理，因此同一个字典条目可以命中
+/// 多个具有相同源文的目标字符串。目标侧重复不是歧义；字典侧重复才需要 REC/FIELD 消歧。
+fn apply_sst_string_only_target_centric(
+    strings: &mut [SkyString],
+    entries: &[DictionaryApplyEntry],
+    policy: &ApplyPolicy,
+    selected_set: Option<&HashSet<u32>>,
+    filtered_set: Option<&HashSet<u32>>,
+) -> MatchResult {
+    let mut result = MatchResult::default();
+    let mut used_entries: HashSet<usize> = HashSet::new();
+    let mut by_source_hash: HashMap<u32, Vec<usize>> = HashMap::with_capacity(entries.len());
+
+    for (entry_idx, entry) in entries.iter().enumerate() {
+        by_source_hash
+            .entry(string_hash(&entry.source))
+            .or_default()
+            .push(entry_idx);
+    }
+
+    for target_idx in 0..strings.len() {
+        // VMAD 项在 Delphi 中受 `getfProcCompareOptVMADString` 控制（由 `is_candidate_eligible` 精确判定）：
+        // 在 StringOnly 模式下，All / NoTrans 自动屏蔽，仅在 PartialOnly / Selection 显式范围下允许匹配。
+        if !is_candidate_eligible(
+            &strings[target_idx],
+            policy,
+            selected_set,
+            filtered_set,
+        ) {
+            continue;
+        }
+
+        // `findStrMatchEx` 在真正搜索前执行 Reset StringState。
+        if policy
+            .sst_options
+            .as_ref()
+            .map(|opts| opts.reset_state)
+            .unwrap_or(false)
+            && reset_target(&mut strings[target_idx])
+        {
+            push_updated_id(&mut result.updated_ids, strings[target_idx].id);
+        }
+
+        // forceAutoTranslate 在同语言模式下仍会被 Delphi 的 `not TESVTSameLanguage` 关掉。
+        if policy.same_language {
+            continue;
+        }
+
+        let source = strings[target_idx].source.clone();
+        if source.is_empty() && strings[target_idx].translation.is_empty() {
+            if !policy.tag_only {
+                strings[target_idx].params = SkyStringParams::new();
+                strings[target_idx]
+                    .params
+                    .set(SkyStringParams::TRANSLATED, true);
+                push_updated_id(&mut result.updated_ids, strings[target_idx].id);
+            }
+            continue;
+        }
+
+        let source_hash = string_hash(&source);
+        let candidates: Vec<usize> = by_source_hash
+            .get(&source_hash)
+            .into_iter()
+            .flatten()
+            .copied()
+            .filter(|&entry_idx| entries[entry_idx].source == source)
+            .collect();
+
+        let Some((entry_idx, ambiguous_source)) = choose_string_only_entry(
+            &strings[target_idx],
+            entries,
+            &candidates,
+        ) else {
+            // Legacy StringOnly 的危险但真实语义：非同语言时，未命中的 eligible 行也 resetTrans。
+            // Tag Only 在 Delphi 这里本身是坏的（仍会改文本）；现代 UI 明确承诺“只打标签”，
+            // 因而 tag_only 时有意不复制这个 legacy bug。
+            if !policy.tag_only && reset_target(&mut strings[target_idx]) {
+                push_updated_id(&mut result.updated_ids, strings[target_idx].id);
+            }
+            continue;
+        };
+
+        used_entries.insert(entry_idx);
+        let effect = apply_match(
+            strings,
+            target_idx,
+            &entries[entry_idx],
+            MatchTier::Exact,
+            policy,
+            false,
+            &mut result,
+        );
+
+        if effect == ApplyEffect::PendingSkipped {
+            result.pending_skipped += 1;
+            continue;
+        }
+
+        result.tier_exact += 1;
+        if ambiguous_source && !policy.tag_only {
+            let sk = &mut strings[target_idx];
+            sk.params = SkyStringParams::new();
+            sk.params.set(SkyStringParams::INCOMPLETE_TRANS, true);
+            sk.internal_params
+                .set(SkyStringInternalParams::N_TRANS, true);
+            push_updated_id(&mut result.updated_ids, sk.id);
+            result.ambiguous += 1;
+        }
+    }
+
+    // Delphi 用 SSTApplied 标记真正被消费过的来源条目；未使用来源保留为 oldData。
+    for (entry_idx, entry) in entries.iter().enumerate() {
+        if !used_entries.contains(&entry_idx) {
+            result.unmatched += 1;
+            preserve_old_data(entry, policy, &mut result);
+        }
+    }
+
+    result
+}
+
+/// 模拟 `getStrWithRefRec`：字典侧同源文重复时优先 REC/FIELD 相符项；
+/// 若仍有多项或没有引用相符项，Delphi 会取第一项并以 nTrans/incomplete 标记不确定性。
+fn choose_string_only_entry(
+    target: &SkyString,
+    entries: &[DictionaryApplyEntry],
+    candidates: &[usize],
+) -> Option<(usize, bool)> {
+    match candidates {
+        [] => None,
+        [only] => Some((*only, false)),
+        _ => {
+            let referenced: Vec<usize> = candidates
+                .iter()
+                .copied()
+                .filter(|&entry_idx| {
+                    let entry = &entries[entry_idx];
+                    entry.record_sig == target.esp_ptr.record_sig
+                        && entry.field_sig == target.esp_ptr.field_sig
+                })
+                .collect();
+
+            match referenced.as_slice() {
+                [only] => Some((*only, false)),
+                [first, ..] => Some((*first, true)),
+                [] => Some((candidates[0], true)),
+            }
+        }
+    }
+}
+
+fn match_entry_with_policy(
+    strings: &[SkyString],
+    index: &MatchIndex,
+    entry: &DictionaryApplyEntry,
+    matched_ids: &HashSet<u32>,
+    policy: &ApplyPolicy,
+    selected_set: Option<&HashSet<u32>>,
+    filtered_set: Option<&HashSet<u32>>,
+) -> EntryOutcome {
+    if let Some(opts) = &policy.sst_options {
+        match opts.match_mode {
+            SstMatchMode::FormIdOnly => {
+                match find_sst_form_id_match(
+                    strings,
+                    index,
+                    entry,
+                    matched_ids,
+                    policy,
+                    selected_set,
+                    filtered_set,
+                    false,
+                    true,
+                ) {
+                    TierMatch::Unique(idx) => EntryOutcome::Matched(MatchTier::Exact, idx),
+                    TierMatch::Ambiguous => EntryOutcome::Ambiguous,
+                    TierMatch::None => EntryOutcome::Unmatched,
+                }
+            }
+            SstMatchMode::FormIdStrictString => {
+                match find_sst_form_id_match(
+                    strings,
+                    index,
+                    entry,
+                    matched_ids,
+                    policy,
+                    selected_set,
+                    filtered_set,
+                    true,
+                    true,
+                ) {
+                    TierMatch::Unique(idx) => EntryOutcome::Matched(MatchTier::Exact, idx),
+                    TierMatch::Ambiguous => EntryOutcome::Ambiguous,
+                    TierMatch::None => EntryOutcome::Unmatched,
+                }
+            }
+            SstMatchMode::FormIdRelaxedString => {
+                match find_sst_form_id_match(
+                    strings,
+                    index,
+                    entry,
+                    matched_ids,
+                    policy,
+                    selected_set,
+                    filtered_set,
+                    true,
+                    false,
+                ) {
+                    TierMatch::Unique(idx) => EntryOutcome::Matched(MatchTier::Exact, idx),
+                    TierMatch::Ambiguous => EntryOutcome::Ambiguous,
+                    TierMatch::None => EntryOutcome::Unmatched,
+                }
+            }
+            SstMatchMode::StringOnly => {
+                // Delphi findStrMatchEx 强制 AutoTranslate；同语言模式下 AutoTranslate=false，
+                // 因而 StringOnly 不会产生自动匹配。
+                if policy.same_language {
+                    return EntryOutcome::Unmatched;
+                }
+                match find_sst_string_only(
+                    strings,
+                    index,
+                    entry,
+                    matched_ids,
+                    policy,
+                    selected_set,
+                    filtered_set,
+                ) {
+                    TierMatch::Unique(idx) => EntryOutcome::Matched(MatchTier::Exact, idx),
+                    TierMatch::Ambiguous => EntryOutcome::Ambiguous,
+                    TierMatch::None => EntryOutcome::Unmatched,
+                }
+            }
+        }
+    } else {
+        // 标准 4-Tier 匹配流程 (T1 -> T2 -> T3 -> T4)
+        match find_tier1_filtered(strings, index, entry, matched_ids, policy, selected_set, filtered_set) {
+            TierMatch::Unique(idx) => return EntryOutcome::Matched(MatchTier::Exact, idx),
+            TierMatch::Ambiguous => return EntryOutcome::Ambiguous,
+            TierMatch::None => {}
+        }
+        match find_tier2_filtered(strings, index, entry, matched_ids, policy, selected_set, filtered_set) {
+            TierMatch::Unique(idx) => return EntryOutcome::Matched(MatchTier::Edid, idx),
+            TierMatch::Ambiguous => return EntryOutcome::Ambiguous,
+            TierMatch::None => {}
+        }
+        match find_tier3_filtered(strings, index, entry, matched_ids, policy, selected_set, filtered_set) {
+            TierMatch::Unique(idx) => return EntryOutcome::Matched(MatchTier::Normalized, idx),
+            TierMatch::Ambiguous => return EntryOutcome::Ambiguous,
+            TierMatch::None => {}
+        }
+        match find_tier4_filtered(strings, index, entry, matched_ids, policy, selected_set, filtered_set) {
+            TierMatch::Unique(idx) => EntryOutcome::Matched(MatchTier::Vocab, idx),
+            TierMatch::Ambiguous => EntryOutcome::Ambiguous,
+            TierMatch::None => EntryOutcome::Unmatched,
+        }
+    }
 }
 
 /// 转换 XML 条目并通过共享匹配器应用它们。
@@ -417,57 +951,43 @@ pub fn enhanced_import_match(
 
 // ── 各层级查找逻辑 ──
 
-fn match_entry(
+/// Tier 1: 精确的三元组匹配（带过滤）。
+fn find_tier1_filtered(
     strings: &[SkyString],
     index: &MatchIndex,
     entry: &DictionaryApplyEntry,
     matched_ids: &HashSet<u32>,
-) -> EntryOutcome {
-    match find_tier1(strings, index, entry, matched_ids) {
-        TierMatch::Unique(idx) => return EntryOutcome::Matched(MatchTier::Exact, idx),
-        TierMatch::Ambiguous => return EntryOutcome::Ambiguous,
-        TierMatch::None => {}
-    }
-
-    match find_tier2(strings, index, entry, matched_ids) {
-        TierMatch::Unique(idx) => return EntryOutcome::Matched(MatchTier::Edid, idx),
-        TierMatch::Ambiguous => return EntryOutcome::Ambiguous,
-        TierMatch::None => {}
-    }
-
-    match find_tier3(strings, index, entry, matched_ids) {
-        TierMatch::Unique(idx) => return EntryOutcome::Matched(MatchTier::Normalized, idx),
-        TierMatch::Ambiguous => return EntryOutcome::Ambiguous,
-        TierMatch::None => {}
-    }
-
-    match find_tier4(strings, index, entry, matched_ids) {
-        TierMatch::Unique(idx) => EntryOutcome::Matched(MatchTier::Vocab, idx),
-        TierMatch::Ambiguous => EntryOutcome::Ambiguous,
-        TierMatch::None => EntryOutcome::Unmatched,
-    }
-}
-
-/// Tier 1: 精确的三元组匹配。
-fn find_tier1(
-    strings: &[SkyString],
-    index: &MatchIndex,
-    entry: &DictionaryApplyEntry,
-    matched_ids: &HashSet<u32>,
+    policy: &ApplyPolicy,
+    selected_set: Option<&HashSet<u32>>,
+    filtered_set: Option<&HashSet<u32>>,
 ) -> TierMatch {
-    single_unmatched_candidate(
-        strings,
-        index.exact_candidates((entry.str_id, entry.record_sig, entry.field_sig)),
-        matched_ids,
-    )
+    let candidates = index.exact_candidates((entry.str_id, entry.record_sig, entry.field_sig));
+    let mut found = None;
+    for &idx in candidates {
+        let sk = &strings[idx];
+        if matched_ids.contains(&sk.id) || !is_candidate_eligible(sk, policy, selected_set, filtered_set) {
+            continue;
+        }
+        if found.is_some() {
+            return TierMatch::Ambiguous;
+        }
+        found = Some(idx);
+    }
+    match found {
+        Some(idx) => TierMatch::Unique(idx),
+        None => TierMatch::None,
+    }
 }
 
-/// Tier 2: EDID 哈希匹配。
-fn find_tier2(
+/// Tier 1: FormID + 严格文本一致匹配。
+fn find_tier2_filtered(
     strings: &[SkyString],
     index: &MatchIndex,
     entry: &DictionaryApplyEntry,
     matched_ids: &HashSet<u32>,
+    policy: &ApplyPolicy,
+    selected_set: Option<&HashSet<u32>>,
+    filtered_set: Option<&HashSet<u32>>,
 ) -> TierMatch {
     let edid_hash = match entry.edid_hash {
         Some(hash) => hash,
@@ -481,7 +1001,10 @@ fn find_tier2(
         .edid_candidates((edid_hash, entry.record_sig, entry.field_sig))
         .iter()
         .copied()
-        .filter(|&idx| !matched_ids.contains(&strings[idx].id))
+        .filter(|&idx| {
+            let sk = &strings[idx];
+            !matched_ids.contains(&sk.id) && is_candidate_eligible(sk, policy, selected_set, filtered_set)
+        })
         .collect();
 
     match candidates.len() {
@@ -491,32 +1014,136 @@ fn find_tier2(
     }
 }
 
-/// Tier 3: 规范化源文本匹配。
-fn find_tier3(
+/// Delphi SST V4 的三种 FormID 模式。
+///
+/// 共同键：sanitize(FormID) + EDID hash + field。
+/// - V4Edid: 还要求 index；不检查源文本。
+/// - V4Strict: 还要求精确源文本 + index。
+/// - V4Relax: 还要求精确源文本；忽略 index。
+fn find_sst_form_id_match(
     strings: &[SkyString],
     index: &MatchIndex,
     entry: &DictionaryApplyEntry,
     matched_ids: &HashSet<u32>,
+    policy: &ApplyPolicy,
+    selected_set: Option<&HashSet<u32>>,
+    filtered_set: Option<&HashSet<u32>>,
+    require_source: bool,
+    require_index: bool,
+) -> TierMatch {
+    let candidates = index.form_id_candidates((
+        sanitize_form_id(entry.form_id),
+        entry.edid_hash.unwrap_or(0),
+    ));
+    let mut found = None;
+    for &idx in candidates {
+        let sk = &strings[idx];
+        if matched_ids.contains(&sk.id)
+            || !is_candidate_eligible(sk, policy, selected_set, filtered_set)
+            || sk.esp_ptr.field_sig != entry.field_sig
+            || (require_source && (sk.hash != string_hash(&entry.source) || sk.source != entry.source))
+            || (require_index && sk.esp_ptr.index != entry.index)
+        {
+            continue;
+        }
+        if found.is_some() {
+            return TierMatch::Ambiguous;
+        }
+        found = Some(idx);
+    }
+    match found {
+        Some(idx) => TierMatch::Unique(idx),
+        None => TierMatch::None,
+    }
+}
+
+/// Delphi Apply_StringOnly：忽略 FormID，仅按源文本精确匹配。
+///
+/// 当同一源文本出现多次时，优先用 REC/FIELD 引用缩小候选；仍不唯一则视为歧义，
+/// 不使用 T3 规范化或 T4 Jaccard 模糊匹配。
+fn find_sst_string_only(
+    strings: &[SkyString],
+    index: &MatchIndex,
+    entry: &DictionaryApplyEntry,
+    matched_ids: &HashSet<u32>,
+    policy: &ApplyPolicy,
+    selected_set: Option<&HashSet<u32>>,
+    filtered_set: Option<&HashSet<u32>>,
+) -> TierMatch {
+    let source_hash = string_hash(&entry.source);
+    let candidates: Vec<usize> = index
+        .source_candidates(source_hash)
+        .iter()
+        .copied()
+        .filter(|&idx| {
+            let sk = &strings[idx];
+            !matched_ids.contains(&sk.id)
+                && is_candidate_eligible(sk, policy, selected_set, filtered_set)
+                && sk.source == entry.source
+        })
+        .collect();
+
+    match candidates.as_slice() {
+        [] => TierMatch::None,
+        [idx] => TierMatch::Unique(*idx),
+        _ => {
+            let referenced: Vec<usize> = candidates
+                .into_iter()
+                .filter(|&idx| {
+                    strings[idx].esp_ptr.record_sig == entry.record_sig
+                        && strings[idx].esp_ptr.field_sig == entry.field_sig
+                })
+                .collect();
+            match referenced.as_slice() {
+                [idx] => TierMatch::Unique(*idx),
+                _ => TierMatch::Ambiguous,
+            }
+        }
+    }
+}
+
+/// Tier 3: 规范化源文本匹配（带过滤）。
+fn find_tier3_filtered(
+    strings: &[SkyString],
+    index: &MatchIndex,
+    entry: &DictionaryApplyEntry,
+    matched_ids: &HashSet<u32>,
+    policy: &ApplyPolicy,
+    selected_set: Option<&HashSet<u32>>,
+    filtered_set: Option<&HashSet<u32>>,
 ) -> TierMatch {
     let norm = normalization::normalize(&entry.source);
     if norm.is_empty() {
         return TierMatch::None;
     }
     let norm_hash = string_hash(&norm);
-
-    single_unmatched_candidate(
-        strings,
-        index.normalized_candidates((norm_hash, entry.record_sig, entry.field_sig)),
-        matched_ids,
-    )
+    let candidates = index.normalized_candidates((norm_hash, entry.record_sig, entry.field_sig));
+    let mut found = None;
+    for &idx in candidates {
+        let sk = &strings[idx];
+        if matched_ids.contains(&sk.id) || !is_candidate_eligible(sk, policy, selected_set, filtered_set) {
+            continue;
+        }
+        if found.is_some() {
+            return TierMatch::Ambiguous;
+        }
+        found = Some(idx);
+    }
+    match found {
+        Some(idx) => TierMatch::Unique(idx),
+        None => TierMatch::None,
+    }
 }
 
-/// Tier 4：词汇重叠匹配（Jaccard ≥ 0.5）。
-fn find_tier4(
+/// Tier 4: 词汇重叠匹配（带过滤）。
+fn find_tier4_filtered(
     strings: &[SkyString],
     index: &MatchIndex,
     entry: &DictionaryApplyEntry,
     matched_ids: &HashSet<u32>,
+    policy: &ApplyPolicy,
+    selected_set: Option<&HashSet<u32>>,
+    filtered_set: Option<&HashSet<u32>>,
 ) -> TierMatch {
     let entry_words: Vec<u32> = entry
         .source
@@ -537,7 +1164,7 @@ fn find_tier4(
 
     for &i in index.record_field_candidates((entry.record_sig, entry.field_sig)) {
         let sk = &strings[i];
-        if matched_ids.contains(&sk.id) {
+        if matched_ids.contains(&sk.id) || !is_candidate_eligible(sk, policy, selected_set, filtered_set) {
             continue;
         }
         let sk_words = &index.word_sets[i];
@@ -562,34 +1189,11 @@ fn find_tier4(
     match (best_idx, best_score_count) {
         (Some(idx), 1) => TierMatch::Unique(idx),
         (Some(_), _) => TierMatch::Ambiguous,
-        _ => TierMatch::None,
+        (None, _) => TierMatch::None,
     }
 }
 
 // ── 辅助函数 ──
-
-fn single_unmatched_candidate(
-    strings: &[SkyString],
-    candidates: &[usize],
-    matched_ids: &HashSet<u32>,
-) -> TierMatch {
-    let mut found = None;
-
-    for &idx in candidates {
-        if matched_ids.contains(&strings[idx].id) {
-            continue;
-        }
-        if found.is_some() {
-            return TierMatch::Ambiguous;
-        }
-        found = Some(idx);
-    }
-
-    match found {
-        Some(idx) => TierMatch::Unique(idx),
-        None => TierMatch::None,
-    }
-}
 
 /// 将匹配应用到目标字符串。
 fn apply_match(
@@ -597,11 +1201,16 @@ fn apply_match(
     idx: usize,
     entry: &DictionaryApplyEntry,
     tier: MatchTier,
-    policy: ApplyPolicy,
+    policy: &ApplyPolicy,
+    reset_state: bool,
     result: &mut MatchResult,
 ) -> ApplyEffect {
     let sk = &mut strings[idx];
     let mut changed = false;
+
+    if reset_state {
+        changed |= reset_target(sk);
+    }
 
     if policy.replace_string_id && sk.esp_ptr.str_id != entry.str_id {
         sk.esp_ptr.str_id = entry.str_id;
@@ -610,61 +1219,105 @@ fn apply_match(
         changed = true;
     }
 
+    // Delphi doApplySst 调用 findEdidMatchEx 时 bApplytag 恒为 true；
+    // Tag Only 只控制是否写文本，不控制协作标签是否同步。
+    if entry.source_format == DictionarySourceFormat::Sst && sk.colab_id != entry.colab_id {
+        sk.colab_id = entry.colab_id;
+        changed = true;
+    }
+
     if policy.tag_only {
-        if sk.colab_id != entry.colab_id {
-            sk.colab_id = entry.colab_id;
-            changed = true;
-        }
         if changed {
-            result.updated_ids.push(sk.id);
+            push_updated_id(&mut result.updated_ids, sk.id);
         }
         return ApplyEffect::Applied;
     }
 
     if entry.params.map(|p| p.is_pending()).unwrap_or(false) {
+        if entry.source_format == DictionarySourceFormat::Sst {
+            changed |= reset_target(sk);
+        }
         if changed {
-            result.updated_ids.push(sk.id);
+            push_updated_id(&mut result.updated_ids, sk.id);
         }
         return ApplyEffect::PendingSkipped;
     }
 
-    if !entry.translation.is_empty() {
+    if !entry.translation.is_empty() && sk.translation != entry.translation {
         sk.set_translation(entry.translation.clone());
         changed = true;
     }
 
+    let old_params = sk.params;
+    let old_internal_params = sk.internal_params;
     clear_warning_flags(&mut sk.internal_params);
     apply_status(sk, entry, policy);
     apply_index_warning(sk, entry, tier, result);
+    changed |= sk.params != old_params || sk.internal_params != old_internal_params;
 
     if changed {
-        result.updated_ids.push(sk.id);
+        push_updated_id(&mut result.updated_ids, sk.id);
     }
 
     ApplyEffect::Applied
 }
 
-fn preserve_old_data(entry: &DictionaryApplyEntry, policy: ApplyPolicy, result: &mut MatchResult) {
+fn preserve_old_data(entry: &DictionaryApplyEntry, policy: &ApplyPolicy, result: &mut MatchResult) {
     if policy.preserve_old_data && entry.source_format == DictionarySourceFormat::Sst {
         result.old_data_preserved += 1;
         result.old_data_entries.push(entry.clone());
     }
 }
 
-fn apply_status(sk: &mut SkyString, entry: &DictionaryApplyEntry, policy: ApplyPolicy) {
-    clear_translation_status(&mut sk.params);
+fn apply_status(sk: &mut SkyString, entry: &DictionaryApplyEntry, policy: &ApplyPolicy) {
+    // Delphi resetStatus(v1) 会用 v1 整体替换 sparams，而不是只清四个翻译状态位。
+    sk.params = SkyStringParams::new();
     let params = entry.params.unwrap_or_default();
+    let is_sst_string_only = entry.source_format == DictionarySourceFormat::Sst
+        && policy
+            .sst_options
+            .as_ref()
+            .map(|opts| opts.match_mode == SstMatchMode::StringOnly)
+            .unwrap_or(false);
 
     if params.is_locked() {
         sk.params.set(SkyStringParams::LOCKED_TRANS, true);
     } else if params.is_incomplete() {
         sk.params.set(SkyStringParams::INCOMPLETE_TRANS, true);
+    } else if is_sst_string_only {
+        // doApplySst -> findStrMatchEx 固定传入 validatedTrans=[validated]。
+        sk.params.set(SkyStringParams::VALIDATED, true);
     } else if policy.same_language {
         sk.params.set(SkyStringParams::VALIDATED, true);
     } else if !sk.translation.is_empty() {
         sk.params.set(SkyStringParams::TRANSLATED, true);
     } else {
         sk.params.set(SkyStringParams::INCOMPLETE_TRANS, true);
+    }
+}
+
+/// Rust 端“未翻译”以空 translation 表示；写回时会回退到 source，
+/// 等价于 Delphi resetTrans 的 `sTrans := s` + 清状态位。
+fn reset_target(sk: &mut SkyString) -> bool {
+    let old_translation = sk.translation.clone();
+    let old_params = sk.params;
+    let old_internal_params = sk.internal_params;
+
+    if !sk.translation.is_empty() {
+        sk.set_translation(String::new());
+    }
+    sk.params = SkyStringParams::new();
+    clear_warning_flags(&mut sk.internal_params);
+    sk.ld_found = 0;
+
+    sk.translation != old_translation
+        || sk.params != old_params
+        || sk.internal_params != old_internal_params
+}
+
+fn push_updated_id(updated_ids: &mut Vec<u32>, id: u32) {
+    if !updated_ids.contains(&id) {
+        updated_ids.push(id);
     }
 }
 
@@ -704,6 +1357,7 @@ fn clear_warning_flags(params: &mut SkyStringInternalParams) {
     params.set(SkyStringInternalParams::WARNING, false);
     params.set(SkyStringInternalParams::BIG_WARNING, false);
     params.set(SkyStringInternalParams::N_TRANS, false);
+    params.set(SkyStringInternalParams::SPELL_CHECK_FAULT, false);
 }
 
 /// 使用规范化后的源文本来消除 EDID 候选的歧义。
@@ -1101,7 +1755,7 @@ mod tests {
     }
 
     #[test]
-    fn test_pending_sst_entry_does_not_overwrite_translation() {
+    fn test_pending_sst_entry_resets_target_like_delphi() {
         let mut strings = vec![make_sk(0, "Hello", 1, *b"LCTN", *b"FULL", 0)];
         strings[0].set_translation("old".to_string());
         strings[0].params.set(SkyStringParams::TRANSLATED, true);
@@ -1116,8 +1770,8 @@ mod tests {
 
         assert_eq!(result.pending_skipped, 1);
         assert_eq!(result.total_matched(), 0);
-        assert_eq!(strings[0].translation, "old");
-        assert!(strings[0].params.is_translated());
+        assert!(strings[0].translation.is_empty());
+        assert!(!strings[0].params.is_translated());
     }
 
     #[test]
@@ -1416,5 +2070,500 @@ mod tests {
         let a: HashSet<u32> = [1, 2].iter().copied().collect();
         let b = vec![3, 4];
         assert_eq!(jaccard(&a, &b), 0.0);
+    }
+
+    fn make_dict_entry(
+        str_id: i32,
+        edid: Option<&str>,
+        record_sig: [u8; 4],
+        field_sig: [u8; 4],
+        source: &str,
+        translation: &str,
+    ) -> DictionaryApplyEntry {
+        DictionaryApplyEntry {
+            source_format: DictionarySourceFormat::Sst,
+            list_index: 0,
+            str_id,
+            form_id: 0,
+            record_sig,
+            field_sig,
+            edid: edid.map(String::from),
+            edid_hash: edid.map(string_hash),
+            source: source.to_string(),
+            translation: translation.to_string(),
+            params: None,
+            colab_id: 0,
+            index: 0,
+            index_max: 0,
+        }
+    }
+
+    #[test]
+    fn test_sst_options_overwrite_scope_notrans_exclusive() {
+        let mut sk1 = make_sk(0, "Apple", 10, *b"INGR", *b"FULL", 0);
+        sk1.params.set(SkyStringParams::TRANSLATED, true);
+        sk1.translation = "旧苹果".to_string();
+
+        let sk2 = make_sk(1, "Banana", 11, *b"INGR", *b"FULL", 0);
+        // sk2 未翻译
+
+        let mut strings = vec![sk1, sk2];
+
+        let entries = vec![
+            make_dict_entry(10, None, *b"INGR", *b"FULL", "Apple", "新苹果"),
+            make_dict_entry(11, None, *b"INGR", *b"FULL", "Banana", "香蕉"),
+        ];
+
+        let opts = SstApplyOptions {
+            overwrite_scope: SstOverwriteScope::NoTransExclusive,
+            match_mode: SstMatchMode::FormIdStrictString,
+            ..Default::default()
+        };
+        let policy = ApplyPolicy::sst_load_with_options(opts);
+
+        let result = apply_dictionary_entries_with_policy(&mut strings, &entries, policy);
+        assert_eq!(result.tier_exact, 1);
+        assert_eq!(strings[0].translation, "旧苹果"); // 已翻译项被跳过
+        assert_eq!(strings[1].translation, "香蕉"); // 未翻译项成功覆盖
+    }
+
+    #[test]
+    fn test_sst_options_overwrite_scope_partial_only() {
+        let mut sk1 = make_sk(0, "Apple", 10, *b"INGR", *b"FULL", 0);
+        sk1.params.set(SkyStringParams::INCOMPLETE_TRANS, true);
+        sk1.translation = "部分苹果".to_string();
+
+        let sk2 = make_sk(1, "Banana", 11, *b"INGR", *b"FULL", 0);
+        // sk2 未翻译（非 partial）
+
+        let mut strings = vec![sk1, sk2];
+
+        let entries = vec![
+            make_dict_entry(10, None, *b"INGR", *b"FULL", "Apple", "完全苹果"),
+            make_dict_entry(11, None, *b"INGR", *b"FULL", "Banana", "香蕉"),
+        ];
+
+        let opts = SstApplyOptions {
+            overwrite_scope: SstOverwriteScope::PartialOnly,
+            match_mode: SstMatchMode::FormIdStrictString,
+            ..Default::default()
+        };
+        let policy = ApplyPolicy::sst_load_with_options(opts);
+
+        let result = apply_dictionary_entries_with_policy(&mut strings, &entries, policy);
+        assert_eq!(result.tier_exact, 1);
+        assert_eq!(strings[0].translation, "完全苹果"); // 仅 partial 被覆盖
+        assert_eq!(strings[1].translation, ""); // 未翻译项被跳过
+    }
+
+    #[test]
+    fn test_sst_options_overwrite_scope_selection() {
+        let sk1 = make_sk(0, "Apple", 10, *b"INGR", *b"FULL", 0);
+        let sk2 = make_sk(1, "Banana", 11, *b"INGR", *b"FULL", 0);
+
+        let mut strings = vec![sk1, sk2];
+
+        let entries = vec![
+            make_dict_entry(10, None, *b"INGR", *b"FULL", "Apple", "苹果"),
+            make_dict_entry(11, None, *b"INGR", *b"FULL", "Banana", "香蕉"),
+        ];
+
+        let opts = SstApplyOptions {
+            overwrite_scope: SstOverwriteScope::Selection,
+            match_mode: SstMatchMode::FormIdStrictString,
+            selected_ids: Some(vec![1]), // 仅选中 Banana (id=1)
+            ..Default::default()
+        };
+        let policy = ApplyPolicy::sst_load_with_options(opts);
+
+        let result = apply_dictionary_entries_with_policy(&mut strings, &entries, policy);
+        assert_eq!(result.tier_exact, 1);
+        assert_eq!(strings[0].translation, "");
+        assert_eq!(strings[1].translation, "香蕉");
+    }
+
+    #[test]
+    fn test_sst_options_match_mode_string_only() {
+        // StringOnly 忽略 FormID；FormID 模式使用真实 form_id，而不是 str_id。
+        let mut sk1 = make_sk(0, "Iron Sword", 999, *b"WEAP", *b"FULL", 0);
+        sk1.esp_ptr.form_id = 0x0100_0042;
+        let mut strings = vec![sk1];
+
+        let mut entry = make_dict_entry(10, None, *b"WEAP", *b"FULL", "Iron Sword", "铁剑");
+        entry.form_id = 0x0200_0043;
+        let entries = vec![entry];
+
+        // FormIdStrictString 因真实 FormID 不同而无法命中。
+        let opts_formid = SstApplyOptions {
+            match_mode: SstMatchMode::FormIdStrictString,
+            ..Default::default()
+        };
+        let result_formid = apply_dictionary_entries_with_policy(
+            &mut strings.clone(),
+            &entries,
+            ApplyPolicy::sst_load_with_options(opts_formid),
+        );
+        assert_eq!(result_formid.total_matched(), 0);
+
+        // StringOnly 成功命中
+        let opts_str = SstApplyOptions {
+            match_mode: SstMatchMode::StringOnly,
+            ..Default::default()
+        };
+        let result_str = apply_dictionary_entries_with_policy(
+            &mut strings,
+            &entries,
+            ApplyPolicy::sst_load_with_options(opts_str),
+        );
+        assert_eq!(result_str.total_matched(), 1);
+        assert_eq!(strings[0].translation, "铁剑");
+        assert!(strings[0].params.is_validated());
+        assert!(!strings[0].params.is_translated());
+
+        // Delphi StringOnly 不做规范化/T4 模糊匹配。
+        let fuzzy_entry = make_dict_entry(
+            11,
+            None,
+            *b"WEAP",
+            *b"FULL",
+            "iron  sword!",
+            "不应命中",
+        );
+        let fuzzy_result = apply_dictionary_entries_with_policy(
+            &mut vec![make_sk(2, "Iron Sword", 123, *b"WEAP", *b"FULL", 0)],
+            &[fuzzy_entry],
+            ApplyPolicy::sst_load_with_options(SstApplyOptions {
+                match_mode: SstMatchMode::StringOnly,
+                ..Default::default()
+            }),
+        );
+        assert_eq!(fuzzy_result.total_matched(), 0);
+    }
+
+    #[test]
+    fn test_sst_string_only_resets_unmatched_eligible_targets_like_delphi() {
+        let mut matched = make_sk(0, "Apple", 10, *b"INGR", *b"FULL", 0);
+        matched.translation = "旧苹果".to_string();
+        matched.params.set(SkyStringParams::TRANSLATED, true);
+
+        let mut unmatched = make_sk(1, "Pear", 11, *b"INGR", *b"FULL", 0);
+        unmatched.translation = "旧梨".to_string();
+        unmatched.params.set(SkyStringParams::TRANSLATED, true);
+
+        let entry = make_dict_entry(99, None, *b"MISC", *b"FULL", "Apple", "苹果");
+        let mut strings = vec![matched, unmatched];
+        let result = apply_dictionary_entries_with_policy(
+            &mut strings,
+            &[entry],
+            ApplyPolicy::sst_load_with_options(SstApplyOptions {
+                match_mode: SstMatchMode::StringOnly,
+                reset_state: false,
+                ..Default::default()
+            }),
+        );
+
+        assert_eq!(result.total_matched(), 1);
+        assert_eq!(strings[0].translation, "苹果");
+        assert!(strings[0].params.is_validated());
+        assert!(strings[1].translation.is_empty());
+        assert!(!strings[1].params.is_translated());
+        assert!(result.updated_ids.contains(&1));
+    }
+
+    #[test]
+    fn test_sst_string_only_one_dictionary_entry_can_apply_to_multiple_targets() {
+        let first = make_sk(0, "Yes.", 10, *b"INFO", *b"NAM1", 0);
+        let second = make_sk(1, "Yes.", 11, *b"INFO", *b"RNAM", 0);
+        let entry = make_dict_entry(99, None, *b"INFO", *b"NAM1", "Yes.", "是。 ");
+
+        let mut strings = vec![first, second];
+        let result = apply_dictionary_entries_with_policy(
+            &mut strings,
+            &[entry],
+            ApplyPolicy::sst_load_with_options(SstApplyOptions {
+                match_mode: SstMatchMode::StringOnly,
+                ..Default::default()
+            }),
+        );
+
+        assert_eq!(result.total_matched(), 2);
+        assert_eq!(strings[0].translation, "是。 ");
+        assert_eq!(strings[1].translation, "是。 ");
+        assert_eq!(result.old_data_preserved, 0);
+    }
+
+    #[test]
+    fn test_sst_string_only_tag_only_keeps_modern_only_tag_contract() {
+        let mut matched = make_sk(0, "Apple", 10, *b"INGR", *b"FULL", 0);
+        matched.translation = "旧苹果".to_string();
+        matched.params.set(SkyStringParams::TRANSLATED, true);
+
+        let mut unmatched = make_sk(1, "Pear", 11, *b"INGR", *b"FULL", 0);
+        unmatched.translation = "旧梨".to_string();
+        unmatched.params.set(SkyStringParams::TRANSLATED, true);
+
+        let mut entry = make_dict_entry(99, None, *b"MISC", *b"FULL", "Apple", "苹果");
+        entry.colab_id = 23;
+        let mut strings = vec![matched, unmatched];
+        let result = apply_dictionary_entries_with_policy(
+            &mut strings,
+            &[entry],
+            ApplyPolicy::sst_load_with_options(SstApplyOptions {
+                match_mode: SstMatchMode::StringOnly,
+                tag_only: true,
+                ..Default::default()
+            }),
+        );
+
+        assert_eq!(result.total_matched(), 1);
+        assert_eq!(strings[0].translation, "旧苹果");
+        assert_eq!(strings[0].colab_id, 23);
+        assert_eq!(strings[1].translation, "旧梨");
+    }
+
+    #[test]
+    fn test_sst_string_only_does_not_autotranslate_same_language() {
+        let mut strings = vec![make_sk(0, "Apple", 10, *b"INGR", *b"FULL", 0)];
+        let entry = make_dict_entry(99, None, *b"MISC", *b"FULL", "Apple", "苹果");
+        let mut policy = ApplyPolicy::sst_load_with_options(SstApplyOptions {
+            match_mode: SstMatchMode::StringOnly,
+            ..Default::default()
+        });
+        policy.same_language = true;
+
+        let result = apply_dictionary_entries_with_policy(&mut strings, &[entry], policy);
+
+        assert_eq!(result.total_matched(), 0);
+        assert!(strings[0].translation.is_empty());
+    }
+
+    #[test]
+    fn test_sst_options_tag_only_and_reset_state() {
+        let sk1 = make_sk(0, "Apple", 10, *b"INGR", *b"FULL", 0);
+        let mut strings = vec![sk1];
+
+        let mut entry = make_dict_entry(10, None, *b"INGR", *b"FULL", "Apple", "苹果");
+        entry.colab_id = 42;
+
+        // Tag Only
+        let opts_tag = SstApplyOptions {
+            tag_only: true,
+            ..Default::default()
+        };
+        let result_tag = apply_dictionary_entries_with_policy(
+            &mut strings,
+            &[entry.clone()],
+            ApplyPolicy::sst_load_with_options(opts_tag),
+        );
+        assert_eq!(result_tag.total_matched(), 1);
+        assert_eq!(strings[0].translation, ""); // 文本未变
+        assert_eq!(strings[0].colab_id, 42); // 标签已打上
+
+        // Reset State 不会把 SST 的 incomplete 强行升级为 translated。
+        let mut entry_partial = make_dict_entry(10, None, *b"INGR", *b"FULL", "Apple", "苹果");
+        let mut p = SkyStringParams::default();
+        p.set(SkyStringParams::INCOMPLETE_TRANS, true);
+        entry_partial.params = Some(p);
+
+        let opts_reset = SstApplyOptions {
+            reset_state: true,
+            ..Default::default()
+        };
+        apply_dictionary_entries_with_policy(
+            &mut strings,
+            &[entry_partial],
+            ApplyPolicy::sst_load_with_options(opts_reset),
+        );
+        assert_eq!(strings[0].translation, "苹果");
+        assert!(!strings[0].params.is_translated());
+        assert!(strings[0].params.is_incomplete());
+    }
+
+    #[test]
+    fn test_sst_reset_state_also_resets_unmatched_eligible_targets() {
+        let mut matched = make_sk(0, "Apple", 10, *b"INGR", *b"FULL", 0);
+        matched.translation = "旧苹果".to_string();
+        matched.params.set(SkyStringParams::TRANSLATED, true);
+
+        let mut unmatched = make_sk(1, "Pear", 11, *b"INGR", *b"FULL", 0);
+        unmatched.translation = "旧梨".to_string();
+        unmatched.params.set(SkyStringParams::TRANSLATED, true);
+
+        let entry = make_dict_entry(10, None, *b"INGR", *b"FULL", "Apple", "苹果");
+        let mut strings = vec![matched, unmatched];
+        let result = apply_dictionary_entries_with_policy(
+            &mut strings,
+            &[entry],
+            ApplyPolicy::sst_load_with_options(SstApplyOptions {
+                reset_state: true,
+                ..Default::default()
+            }),
+        );
+
+        assert_eq!(result.total_matched(), 1);
+        assert_eq!(strings[0].translation, "苹果");
+        assert!(strings[0].params.is_translated());
+        assert!(strings[1].translation.is_empty());
+        assert!(!strings[1].params.is_translated());
+        assert!(result.updated_ids.contains(&1));
+    }
+
+    #[test]
+    fn test_sst_normal_apply_also_syncs_colab_tag() {
+        let mut strings = vec![make_sk(0, "Apple", 10, *b"INGR", *b"FULL", 0)];
+        let mut entry = make_dict_entry(10, None, *b"INGR", *b"FULL", "Apple", "苹果");
+        entry.colab_id = 17;
+
+        let result = apply_dictionary_entries_with_policy(
+            &mut strings,
+            &[entry],
+            ApplyPolicy::sst_load_with_options(SstApplyOptions::default()),
+        );
+
+        assert_eq!(result.total_matched(), 1);
+        assert_eq!(strings[0].translation, "苹果");
+        assert_eq!(strings[0].colab_id, 17);
+    }
+
+    #[test]
+    fn test_sst_form_id_modes_use_real_form_id_and_delphi_index_rules() {
+        let mut target = make_sk(0, "Iron Sword", 999, *b"WEAP", *b"FULL", 0xAABB_CCDD);
+        target.esp_ptr.form_id = 0x0500_1234;
+        target.esp_ptr.index = 2;
+
+        let mut entry = make_dict_entry(10, None, *b"WEAP", *b"FULL", "Iron Sword", "铁剑");
+        entry.form_id = 0x0900_1234; // sanitize 后与 target 相同
+        entry.edid_hash = Some(0xAABB_CCDD);
+        entry.index = 3;
+
+        // FormIdOnly 与 Strict 都要求 index，因此不命中；str_id 的差异不参与 V4 FormID 键。
+        for mode in [SstMatchMode::FormIdOnly, SstMatchMode::FormIdStrictString] {
+            let result = apply_dictionary_entries_with_policy(
+                &mut vec![target.clone()],
+                &[entry.clone()],
+                ApplyPolicy::sst_load_with_options(SstApplyOptions {
+                    match_mode: mode,
+                    ..Default::default()
+                }),
+            );
+            assert_eq!(result.total_matched(), 0);
+        }
+
+        // V4Relax 仍要求源文本精确一致，但忽略 index。
+        let mut relaxed_target = target.clone();
+        let relaxed_result = apply_dictionary_entries_with_policy(
+            std::slice::from_mut(&mut relaxed_target),
+            &[entry.clone()],
+            ApplyPolicy::sst_load_with_options(SstApplyOptions {
+                match_mode: SstMatchMode::FormIdRelaxedString,
+                ..Default::default()
+            }),
+        );
+        assert_eq!(relaxed_result.total_matched(), 1);
+        assert_eq!(relaxed_target.translation, "铁剑");
+
+        let mut non_exact = entry;
+        non_exact.source = "iron sword".to_string();
+        let non_exact_result = apply_dictionary_entries_with_policy(
+            &mut vec![target],
+            &[non_exact],
+            ApplyPolicy::sst_load_with_options(SstApplyOptions {
+                match_mode: SstMatchMode::FormIdRelaxedString,
+                ..Default::default()
+            }),
+        );
+        assert_eq!(non_exact_result.total_matched(), 0);
+    }
+
+    #[test]
+    fn test_sst_no_trans_and_partial_name_excludes_incomplete_like_delphi() {
+        let plain = make_sk(0, "Apple", 10, *b"INGR", *b"FULL", 0);
+        let mut partial = make_sk(1, "Pear", 11, *b"INGR", *b"FULL", 0);
+        partial.params.set(SkyStringParams::INCOMPLETE_TRANS, true);
+
+        let mut strings = vec![plain, partial];
+        let entries = vec![
+            make_dict_entry(10, None, *b"INGR", *b"FULL", "Apple", "苹果"),
+            make_dict_entry(11, None, *b"INGR", *b"FULL", "Pear", "梨"),
+        ];
+        let result = apply_dictionary_entries_with_policy(
+            &mut strings,
+            &entries,
+            ApplyPolicy::sst_load_with_options(SstApplyOptions {
+                overwrite_scope: SstOverwriteScope::NoTransAndPartial,
+                ..Default::default()
+            }),
+        );
+
+        assert_eq!(result.total_matched(), 1);
+        assert_eq!(strings[0].translation, "苹果");
+        assert!(strings[1].translation.is_empty());
+    }
+
+    #[test]
+    fn test_sst_vmad_protection_in_string_only_mode() {
+        let mut vmad_item = make_sk(0, "QuestScriptVar", 10, *b"VMAD", *b"EDID", 0);
+        vmad_item.internal_params.set(SkyStringInternalParams::IS_VMAD_STRING, true);
+
+        let entry = make_dict_entry(99, None, *b"VMAD", *b"EDID", "QuestScriptVar", "任务脚本变量");
+
+        // 1. StringOnly + All: VMAD 项被 Delphi compareOptBlock 保护屏蔽，不应被覆盖
+        let mut strings_all = vec![vmad_item.clone()];
+        let res_all = apply_dictionary_entries_with_policy(
+            &mut strings_all,
+            &[entry.clone()],
+            ApplyPolicy::sst_load_with_options(SstApplyOptions {
+                overwrite_scope: SstOverwriteScope::All,
+                match_mode: SstMatchMode::StringOnly,
+                ..Default::default()
+            }),
+        );
+        assert_eq!(res_all.total_matched(), 0);
+        assert!(strings_all[0].translation.is_empty());
+
+        // 2. StringOnly + NoTransExclusive: 同样被屏蔽
+        let mut strings_notrans = vec![vmad_item.clone()];
+        let res_notrans = apply_dictionary_entries_with_policy(
+            &mut strings_notrans,
+            &[entry.clone()],
+            ApplyPolicy::sst_load_with_options(SstApplyOptions {
+                overwrite_scope: SstOverwriteScope::NoTransExclusive,
+                match_mode: SstMatchMode::StringOnly,
+                ..Default::default()
+            }),
+        );
+        assert_eq!(res_notrans.total_matched(), 0);
+        assert!(strings_notrans[0].translation.is_empty());
+
+        // 3. StringOnly + PartialOnly: 当且仅当 VMAD 项被标记为 Partial (F2) 时，允许覆盖
+        let mut vmad_partial = vmad_item.clone();
+        vmad_partial.params.set(SkyStringParams::INCOMPLETE_TRANS, true);
+        let mut strings_partial = vec![vmad_partial];
+        let res_partial = apply_dictionary_entries_with_policy(
+            &mut strings_partial,
+            &[entry.clone()],
+            ApplyPolicy::sst_load_with_options(SstApplyOptions {
+                overwrite_scope: SstOverwriteScope::PartialOnly,
+                match_mode: SstMatchMode::StringOnly,
+                ..Default::default()
+            }),
+        );
+        assert_eq!(res_partial.total_matched(), 1);
+        assert_eq!(strings_partial[0].translation, "任务脚本变量");
+
+        // 4. StringOnly + Selection: 选中项也允许覆盖
+        let mut strings_selection = vec![vmad_item.clone()];
+        let res_selection = apply_dictionary_entries_with_policy(
+            &mut strings_selection,
+            &[entry.clone()],
+            ApplyPolicy::sst_load_with_options(SstApplyOptions {
+                overwrite_scope: SstOverwriteScope::Selection,
+                match_mode: SstMatchMode::StringOnly,
+                selected_ids: Some(vec![0]),
+                ..Default::default()
+            }),
+        );
+        assert_eq!(res_selection.total_matched(), 1);
+        assert_eq!(strings_selection[0].translation, "任务脚本变量");
     }
 }

@@ -49,22 +49,22 @@ Rust/Tauri 重写已经完成了绝大多数**核心翻译引擎**：ESP/ESM 解
 
 ## 3. 优先级总表
 
-| ID    | 优先级 | 差距                              | 当前状态             | Delphi 参考                                                             | 当前实现入口                                                                   |
-| ----- | ------ | --------------------------------- | -------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| DP-01 | P0     | 多游戏上下文贯穿主流程            | ✅ **已完成**         | `TESVT_main.pas` 游戏状态                                               | `game_detect.rs`, `appStore.ts`, `GroupedMenuBar.tsx`, `commands.rs::load_esp` |
-| DP-02 | P0     | PEX opcode / 反编译语义           | ✅ **已完成**         | `TESVT_scriptPex.pas`                                                   | `crates/xt-core/src/pex/decompile.rs`                                          |
-| DP-03 | P0     | Apply SST 高级选项                | **UI/IPC 行为缺失**  | `TESVT_ApplySSTOpts.*`                                                  | `matching.rs`, `commands.rs::load_sst`                                         |
-| DP-04 | P1     | Advanced Search                   | **明显缩水**         | `TESVT_AdvSearch.*`                                                     | `ui/src/stores/appStore.ts`                                                    |
-| DP-05 | P1     | BatchProcessor 命令脚本           | **未实现**           | `TESVT_commandProcessor.*`, `TESVT_main.pas::batchCommands/runCommands` | 当前 `BatchPanel` / `src-tauri/src/batch.rs` 不是等价实现                      |
-| DP-06 | P1     | BSA/BA2 注入                      | **未实现**           | `TESVT_bsa.pas::InjectData`                                             | `crates/xt-core/src/bsa`, `ba2` 目前主要读取/提取                              |
-| DP-07 | P1     | Localized / Hybrid 加载策略       | **部分实现**         | `TESVT_delocOpts.*`, MainLoader                                         | `commands.rs::load_esp`                                                        |
-| DP-08 | P1     | XML Export 选项                   | **缩水**             | `TESVT_XMLExportOpts.*`                                                 | `XmlExportRequest`, `commands.rs::export_xml`                                  |
-| DP-09 | P2     | XML EDID 元数据完整性             | **部分缺失**         | `TESVT_XMLFunc.pas`                                                     | `SkyString`, `xml/mod.rs`                                                      |
-| DP-10 | P2     | DEFUI Component Generator         | **未实现**           | `TESVT_DefUIGen.*`, `doComponentGenerator`                              | 无对应实现                                                                     |
-| DP-11 | P2     | Codepage 手动选择/覆盖            | **底层有，工作流缺** | `TESVT_Codepage.*`, `TESVT_ChooseCP.*`                                  | `strings/codepage.rs`                                                          |
-| DP-12 | P3     | Yandex / freeApi provider         | **未实现**           | `TESVT_TranslatorApi.pas`                                               | `translation_api/`                                                             |
-| DP-13 | P3     | MS Word 拼写检查后端              | **未实现**           | `TESVT_SpellCheck.pas`                                                  | 当前仅 Hunspell                                                                |
-| DP-14 | P3     | AddId / OldDialogStyle 等低频工具 | **未实现或未等价**   | 对应 Delphi 窗体                                                        | 当前 UI 无直接等价入口                                                         |
+| ID    | 优先级 | 差距                              | 当前状态                       | Delphi 参考                                                             | 当前实现入口                                                                   |
+| ----- | ------ | --------------------------------- | ------------------------------ | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| DP-01 | P0     | 多游戏上下文贯穿主流程            | ✅ **已完成**                   | `TESVT_main.pas` 游戏状态                                               | `game_detect.rs`, `appStore.ts`, `GroupedMenuBar.tsx`, `commands.rs::load_esp` |
+| DP-02 | P0     | PEX opcode / 反编译语义           | ⏳ **真实 LE fixture 待补**     | `TESVT_scriptPex.pas`                                                   | `crates/xt-core/src/pex/decompile.rs`                                          |
+| DP-03 | P0     | Apply SST 高级选项                | ⏳ **主体完成，VMAD/L3 待闭环** | `TESVT_ApplySSTOpts.*`                                                  | `matching.rs`, `commands.rs::load_sst`                                         |
+| DP-04 | P1     | Advanced Search                   | **明显缩水**                   | `TESVT_AdvSearch.*`                                                     | `ui/src/stores/appStore.ts`                                                    |
+| DP-05 | P1     | BatchProcessor 命令脚本           | **未实现**                     | `TESVT_commandProcessor.*`, `TESVT_main.pas::batchCommands/runCommands` | 当前 `BatchPanel` / `src-tauri/src/batch.rs` 不是等价实现                      |
+| DP-06 | P1     | BSA/BA2 注入                      | **未实现**                     | `TESVT_bsa.pas::InjectData`                                             | `crates/xt-core/src/bsa`, `ba2` 目前主要读取/提取                              |
+| DP-07 | P1     | Localized / Hybrid 加载策略       | **部分实现**                   | `TESVT_delocOpts.*`, MainLoader                                         | `commands.rs::load_esp`                                                        |
+| DP-08 | P1     | XML Export 选项                   | **缩水**                       | `TESVT_XMLExportOpts.*`                                                 | `XmlExportRequest`, `commands.rs::export_xml`                                  |
+| DP-09 | P2     | XML EDID 元数据完整性             | **部分缺失**                   | `TESVT_XMLFunc.pas`                                                     | `SkyString`, `xml/mod.rs`                                                      |
+| DP-10 | P2     | DEFUI Component Generator         | **未实现**                     | `TESVT_DefUIGen.*`, `doComponentGenerator`                              | 无对应实现                                                                     |
+| DP-11 | P2     | Codepage 手动选择/覆盖            | **底层有，工作流缺**           | `TESVT_Codepage.*`, `TESVT_ChooseCP.*`                                  | `strings/codepage.rs`                                                          |
+| DP-12 | P3     | Yandex / freeApi provider         | **未实现**                     | `TESVT_TranslatorApi.pas`                                               | `translation_api/`                                                             |
+| DP-13 | P3     | MS Word 拼写检查后端              | **未实现**                     | `TESVT_SpellCheck.pas`                                                  | 当前仅 Hunspell                                                                |
+| DP-14 | P3     | AddId / OldDialogStyle 等低频工具 | **未实现或未等价**             | 对应 Delphi 窗体                                                        | 当前 UI 无直接等价入口                                                         |
 
 ---
 
@@ -131,11 +131,11 @@ Rust/Tauri 重写已经完成了绝大多数**核心翻译引擎**：ESP/ESM 解
 
 ---
 
-### DP-02 PEX opcode 与原版对齐
+### DP-02 PEX opcode 与原版对齐 (⏳ 待完成 - 等待真实 Little-Endian fixture)
 
 #### 状态
 
-🟡 **2026-09-01 主体修复完成，真实 Little-Endian fixture 待补。** 已对齐真实 Bethesda PEX 头部规范、大小端、GameID 建模、Object Body 字段顺序与字节级无损写回；仓库现已加入 Bethesda PapyrusCompiler 实际产出的 Skyrim SE Big-Endian fixture，并通过真实 parse/decompile/byte-for-byte roundtrip。FO4/FO76/Starfield Little-Endian 仍缺真实编译器产物，L3 交叉验证尚未完全闭环。
+⏳ **待完成（主体与写回层已修复，真实 Little-Endian fixture 待补）。** 已对齐真实 Bethesda PEX 头部规范、大小端、GameID 建模、Object Body 字段顺序与字节级无损写回；仓库现已加入 Bethesda PapyrusCompiler 实际产出的 Skyrim SE Big-Endian fixture，并通过真实 parse/decompile/byte-for-byte roundtrip。FO4/FO76/Starfield Little-Endian 仍缺真实编译器产物，L3 交叉验证尚未完全闭环。
 
 #### 目标
 
@@ -198,60 +198,62 @@ Rust/Tauri 重写已经完成了绝大多数**核心翻译引擎**：ESP/ESM 解
 
 ---
 
-### DP-03 恢复 Apply SST 高级选项
+### DP-03 恢复 Apply SST 高级选项 (⏳ 主体完成，VMAD/L3 待闭环)
 
 #### 原版能力
 
-`TESVT_ApplySSTOpts.dfm` 暴露了：
+`TESVT_ApplySSTOpts.dfm` / `TESVT_ApplySSTOpts.pas` 暴露了：
 
-**覆盖范围：**
+**覆盖范围 (5 种)：**
 
-- All
-- NoTrans Exclusive
-- NoTrans + Partial
-- Partial Only
-- Selection
+- All (全部未锁定项)
+- NoTrans Exclusive (仅未翻译项)
+- NoTransAndPartials（保留 Delphi 原名；实际比较器排除 `translated` / `validated` / `incompleteTrans`，即严格未翻译项）
+- Partial Only (仅部分翻译项)
+- Selection (仅选中项，按稳定 `u32 id` 集合)
 
-**匹配模式：**
+**匹配模式 (4 种)：**
 
-- FORMID only
-- FORMID + strict string control
-- FORMID + string control
-- String only
+- FORMID only (`sanitizeFormID(FormID)` + EDID hash + FIELD + index)
+- FORMID + strict string control（上述键 + 原文精确 hash/source + index）
+- FORMID + string control（上述 FormID/EDID/FIELD 键 + 原文精确 hash/source，放宽 index）
+- String only（忽略 FormID，仅按原文精确 hash/source；重复源文再按 REC/FIELD 消歧，不走规范化/T4 模糊匹配）
 
-以及：
+**附加控制 (3 个)：**
 
-- Reset String State
-- Restrict To Filter
-- Apply Tag Only
+- Apply Tag Only (仅打标签不修改译文)
+- Reset StringState（在匹配前重置覆盖范围内的目标行；即使最终未命中也保持重置；不会把 SST 的 incomplete 强制升级为 translated）
+- Restrict to Filter (仅限当前过滤可见的 `u32 id` 集合)
 
-#### 当前情况
+#### 落地成果
 
-`commands.rs::load_sst` 直接使用固定的 `ApplyPolicy::sst_load()`，统一 matcher 本身已经具备不少状态语义，但用户无法选择原版策略。
+1. **Rust 核心引擎 (`crates/xt-core/src/matching.rs`)**：
+   - 实现了 `SstOverwriteScope`、`SstMatchMode`、`SstApplyOptions` 及对应的稳定 `u32 id` 范围判定。
+   - SST V4 FormID 模式已改为使用真实 `form_id` + Delphi `sanitizeFormID` 规则，不再把 `str_id` 三元组误当 FormID。
+   - `StringOnly` 已改回 Delphi 的精确源文路径，不再借用 T3 规范化 / T4 Jaccard 模糊匹配。
+   - `reset_state` 已按 Delphi 改为候选预重置语义；未命中候选也会被重置，且 SST incomplete/locked 状态仍按来源保留。
+   - SST 正常应用与 `tag_only` 均同步 `colab_id`；`restrict_to_filter=true` 缺少 `filtered_ids` 时 fail-closed。
+   - matching 专项测试现为 35 项全绿；新增覆盖 StringOnly 未命中 reset、同语言不自动应用，以及 Tag Only 现代契约；原有 XML/通用 4-Tier 路径保持独立。
+2. **IPC DTO (`crates/xt-shared/src/dto.rs`)**：
+   - 定义 `SstOverwriteScopeDto`, `SstMatchModeDto`, `SstApplyOptionsDto`。
+3. **Tauri 后端命令 (`src-tauri/src/commands.rs`)**：
+   - `load_sst` 升级支持可选 `options: Option<SstApplyOptionsDto>` 参数。
+4. **前端交互 (`ui/src/components/ApplySstDialog.tsx` & `ui/src/api/strings.ts`)**：
+   - 新建 `ApplySstDialog`（支持 5 种覆盖范围单选、4 种匹配模式单选、3 种附加复选框、回车直接应用与 Esc 关闭）。
+   - 在 `MenuBar.tsx` 和 `GroupedMenuBar.tsx` 中全面集成，自动采集当前选中的 `selectedIds` 与过滤后的 `items` ID 列表传递给后端。
+   - 增加前端 Vitest 单元测试 `ApplySstDialog.test.tsx`。
 
-#### 目标
+#### 当前验收状态
 
-保留现有 matcher 架构，通过 `ApplySstRequest` 把原版策略显式传入，而不是复制一套旧逻辑。
-
-#### 建议数据模型
-
-```text
-ApplySstRequest
-  sst_path
-  overwrite_scope
-  match_mode
-  restrict_to_filtered_ids?
-  reset_state
-  tag_only
-```
-
-#### 验收
-
-- 五种覆盖范围行为可测试。
-- 四种匹配模式可测试。
-- Selection/Filter 必须按稳定 `id` 传递，禁止按数组 index。
-- `tag_only` 不修改译文。
-- `reset_state` 行为与 Delphi 已有状态语义测试一致。
+- `cargo test -p xt-core matching::tests --lib` → **35 passed / 0 failed**。
+- `cargo test --workspace` → **通过**；其中 `xt-core` **318 passed / 0 failed**，其余 workspace 测试与 doc-tests 全绿，release-only 测试按测试声明保持 ignored。
+- `cargo check -p xtranslator-tauri` → **通过**。
+- `npx vitest run` → **27 passed / 0 failed**（4 个测试文件）。
+- `npx tsc --noEmit` → **通过**。
+- `git diff --check` → **通过**（仅报告仓库现有 LF→CRLF 提示，无 whitespace error）。
+- `cargo fmt --all -- --check` → **未通过**，但输出包含 DP-02/CLI 等本轮范围外的大量既有未格式化改动；本轮未为追求全局格式绿灯而改写这些无关文件。
+- **尚未完成项 1：VMAD。** Delphi 通过 `getfProcCompareOptVMAD` / `getfProcCompareOptVMADString` 单独处理 VMAD；其匹配模式、scope 与 reset 组合并不完全等同普通字符串。Rust 当前共享 matcher 尚未完整复刻该特殊分支。
+- **尚未完成项 2：L3。** 按本文件第 9 节定义，SST apply 需要 Delphi / 真实游戏交叉验证；完成前不得宣称 100% Delphi parity。
 
 ---
 
