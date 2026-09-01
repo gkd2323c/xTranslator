@@ -2535,7 +2535,21 @@ mod tests {
         assert_eq!(res_notrans.total_matched(), 0);
         assert!(strings_notrans[0].translation.is_empty());
 
-        // 3. StringOnly + PartialOnly: 当且仅当 VMAD 项被标记为 Partial (F2) 时，允许覆盖
+        // 3. StringOnly + NoTransAndPartial: 同样被屏蔽 (Delphi getfProcCompareOptVMADString -> compareOptBlock)
+        let mut strings_notrans_partial = vec![vmad_item.clone()];
+        let res_notrans_partial = apply_dictionary_entries_with_policy(
+            &mut strings_notrans_partial,
+            &[entry.clone()],
+            ApplyPolicy::sst_load_with_options(SstApplyOptions {
+                overwrite_scope: SstOverwriteScope::NoTransAndPartial,
+                match_mode: SstMatchMode::StringOnly,
+                ..Default::default()
+            }),
+        );
+        assert_eq!(res_notrans_partial.total_matched(), 0);
+        assert!(strings_notrans_partial[0].translation.is_empty());
+
+        // 4. StringOnly + PartialOnly: 当且仅当 VMAD 项被标记为 Partial (F2) 时，允许覆盖
         let mut vmad_partial = vmad_item.clone();
         vmad_partial.params.set(SkyStringParams::INCOMPLETE_TRANS, true);
         let mut strings_partial = vec![vmad_partial];
@@ -2551,7 +2565,7 @@ mod tests {
         assert_eq!(res_partial.total_matched(), 1);
         assert_eq!(strings_partial[0].translation, "任务脚本变量");
 
-        // 4. StringOnly + Selection: 选中项也允许覆盖
+        // 5. StringOnly + Selection: 选中项也允许覆盖
         let mut strings_selection = vec![vmad_item.clone()];
         let res_selection = apply_dictionary_entries_with_policy(
             &mut strings_selection,

@@ -245,15 +245,15 @@ Rust/Tauri 重写已经完成了绝大多数**核心翻译引擎**：ESP/ESM 解
 
 #### 当前验收状态
 
-- `cargo test -p xt-core matching::tests --lib` → **35 passed / 0 failed**。
-- `cargo test --workspace` → **通过**；其中 `xt-core` **318 passed / 0 failed**，其余 workspace 测试与 doc-tests 全绿，release-only 测试按测试声明保持 ignored。
+- `cargo test -p xt-core matching::tests --lib` → **36 passed / 0 failed**。
+- `cargo test --workspace` → **通过**；其中 `xt-core` **322 passed / 0 failed**，其余 workspace 测试与 doc-tests 全绿，release-only 测试按测试声明保持 ignored。
 - `cargo check -p xtranslator-tauri` → **通过**。
 - `npx vitest run` → **27 passed / 0 failed**（4 个测试文件）。
 - `npx tsc --noEmit` → **通过**。
 - `git diff --check` → **通过**（仅报告仓库现有 LF→CRLF 提示，无 whitespace error）。
 - `cargo fmt --all -- --check` → **未通过**，但输出包含 DP-02/CLI 等本轮范围外的大量既有未格式化改动；本轮未为追求全局格式绿灯而改写这些无关文件。
-- **尚未完成项 1：VMAD。** Delphi 通过 `getfProcCompareOptVMAD` / `getfProcCompareOptVMADString` 单独处理 VMAD；其匹配模式、scope 与 reset 组合并不完全等同普通字符串。Rust 当前共享 matcher 尚未完整复刻该特殊分支。
-- **尚未完成项 2：L3。** 按本文件第 9 节定义，SST apply 需要 Delphi / 真实游戏交叉验证；完成前不得宣称 100% Delphi parity。
+- **VMAD 进展**：已完成 `getfProcCompareOptVMADString` 的防污染保护机制，StringOnly 模式下 5 档 Scope 矩阵已全量单测覆盖（All / NoTransExclusive / NoTransAndPartial 屏蔽；PartialOnly / Selection 放行）；VMAD 其余专用 FormID/comparator Apply 路径仍待闭环。
+- **尚未完成项（L3）**：按本文件第 9 节定义，SST apply 需要 Delphi / 真实游戏交叉验证；完成前不得宣称 100% Delphi parity。
 
 ---
 
