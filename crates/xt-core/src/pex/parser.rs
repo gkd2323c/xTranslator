@@ -1,5 +1,5 @@
 //! PEX 二进制解析器 — 从编译的 Papyrus 脚本中提取可翻译字符串。
-//! 严格支持真实 Bethesda PEX 规范与大小端模式（Skyrim Big-Endian 与 FO4/Starfield Little-Endian）。
+//! 严格支持真实 Bethesda PEX 规范：Big-Endian (Skyrim) 与 Little-Endian (FO4/FO76/Starfield)。
 
 use byteorder::{BigEndian, ByteOrder, LittleEndian, ReadBytesExt};
 use std::io::{self, Cursor, Read, Result};
@@ -72,8 +72,23 @@ impl<R: Read> PexReader<R> {
 }
 
 impl<T: io::Seek> PexReader<T> {
+    /// 返回当前读取位置的绝对偏移
     pub fn position(&mut self) -> Result<u64> {
         self.reader.stream_position()
+    }
+}
+
+/// 检测 PEX 大小端
+pub fn detect_endian(data: &[u8]) -> Option<PexEndian> {
+    if data.len() < 4 {
+        return None;
+    }
+    if data[0..4] == [0xFA, 0x57, 0xC0, 0xDE] {
+        Some(PexEndian::BigEndian)
+    } else if data[0..4] == [0xDE, 0xC0, 0x57, 0xFA] {
+        Some(PexEndian::LittleEndian)
+    } else {
+        None
     }
 }
 
@@ -89,23 +104,21 @@ pub fn parse_pex<R: Read>(reader: &mut R) -> Result<PexScript> {
         ));
     }
 
-    let endian = if raw_bytes[0..4] == [0xFA, 0x57, 0xC0, 0xDE] {
-        PexEndian::BigEndian
-    } else if raw_bytes[0..4] == [0xDE, 0xC0, 0x57, 0xFA] {
-        PexEndian::LittleEndian
-    } else {
-        return Err(io::Error::new(
+    let endian = detect_endian(&raw_bytes).ok_or_else(|| {
+        io::Error::new(
             io::ErrorKind::InvalidData,
             format!("Invalid PEX magic: {:?}", &raw_bytes[0..4]),
-        ));
-    };
+        )
+    })?;
 
     let raw_magic = match endian {
         PexEndian::BigEndian => BigEndian::read_u32(&raw_bytes[0..4]),
         PexEndian::LittleEndian => LittleEndian::read_u32(&raw_bytes[0..4]),
     };
 
-    let mut cur = Cursor::new(&raw_bytes[4..]);
+    // 在整个 raw_bytes 上建立游标，保证 position() 是绝对偏移
+    let mut cur = Cursor::new(&raw_bytes);
+    let _ = cur.read_u32::<BigEndian>()?; // 跳过 magic (已通过 detect_endian 验证)
 
     let mut pex_reader = PexReader::new(&mut cur, endian);
 
@@ -130,12 +143,14 @@ pub fn parse_pex<R: Read>(reader: &mut R) -> Result<PexScript> {
         computer_name,
     };
 
-    // 记录 Header 结束位置（保存 header_raw）
-    let header_end_pos = pex_reader.position().unwrap_or(0) as usize;
+    // 字符串表 count（header_raw 必须包含这个 u16！Delphi headerPexBuffer 在读 tableCount 后截取）
+    let st_count = pex_reader.read_u16()? as usize;
+
+    // header_raw: 从 magic 到 stringTableCount (含) 的完整字节
+    let header_end_pos = pex_reader.position()? as usize;
     let header_raw = raw_bytes[0..header_end_pos].to_vec();
 
     // 字符串表
-    let st_count = pex_reader.read_u16()? as usize;
     let mut string_table = Vec::with_capacity(st_count);
     for i in 0..st_count {
         let text = pex_reader.read_string()?;
@@ -145,13 +160,9 @@ pub fn parse_pex<R: Read>(reader: &mut R) -> Result<PexScript> {
         });
     }
 
-    // 记录数据区开始位置（保存 data_raw）
-    let data_start_pos = pex_reader.position().unwrap_or(0) as usize;
-    let data_raw = if data_start_pos <= raw_bytes.len() {
-        raw_bytes[data_start_pos..].to_vec()
-    } else {
-        Vec::new()
-    };
+    // data_raw: stringTable 之后的全部字节 (hasDebugInfo + debugInfo + userFlags + objects)
+    let data_start_pos = pex_reader.position()? as usize;
+    let data_raw = raw_bytes[data_start_pos..].to_vec();
 
     // 解析数据区以提取可翻译文本
     let mut translatable = Vec::new();
@@ -209,13 +220,15 @@ pub fn parse_pex<R: Read>(reader: &mut R) -> Result<PexScript> {
         let name_idx = pex_reader.read_u16()?;
         let obj_name = lookup_str(st, name_idx);
 
-        let body_size = pex_reader.read_u32()? as usize;
+        // Delphi: tmpSize := readValue_Int(fstream) - 4  — size 字段包含 4 字节 size 自身
+        let raw_size = pex_reader.read_u32()? as usize;
+        let body_size = raw_size.saturating_sub(4);
         let mut body_bytes = vec![0u8; body_size];
         pex_reader.read_exact(&mut body_bytes)?;
 
         let mut body_cur = Cursor::new(&body_bytes[..]);
         let mut body_reader = PexReader::new(&mut body_cur, endian);
-        parse_object_body(&mut body_reader, &obj_name, st, &mut translatable)?;
+        parse_object_body(&mut body_reader, &obj_name, st, &mut translatable, game_id)?;
     }
 
     Ok(PexScript {
@@ -235,11 +248,13 @@ fn lookup_str(st: &StrTab, idx: u16) -> String {
         .unwrap_or_default()
 }
 
+/// 按 Delphi `checkObjectData` 顺序解析对象体（parent → doc → [LE] uConst → uFlags → autoState → [LE] structs → vars → [Starfield] guards → props → states）
 fn parse_object_body<R: Read>(
     r: &mut PexReader<R>,
     obj_name: &str,
     st: &StrTab,
     out: &mut Vec<PexTranslatableString>,
+    game_id: u16,
 ) -> Result<()> {
     let _parent = r.read_u16()?;
     let doc_idx = r.read_u16()?;
@@ -255,48 +270,46 @@ fn parse_object_body<R: Read>(
         });
     }
 
-    let uf_count = r.read_u16()? as usize;
-    for _ in 0..uf_count {
-        let _un = r.read_u16()?;
-        let _uf = r.read_u8()?;
+    // [LE] uConst (u8)
+    if r.endian == PexEndian::LittleEndian {
+        let _uconst = r.read_u8()?;
     }
+
+    // userFlags (u32)
+    let _user_flags = r.read_u32()?;
 
     let _auto_state = r.read_u16()?;
 
-    // Variables
-    let var_count = r.read_u16()? as usize;
-    for _ in 0..var_count {
-        let _name_idx = r.read_u16()?;
-        let _type_idx = r.read_u16()?;
-        let _flags = r.read_u32()?;
-        let _doc_idx = r.read_u16()?;
-        let _user_flags = r.read_u32()?;
-        parse_var_value(r, st, obj_name, "", "", out)?;
-    }
-
-    // Guards (Starfield / FO4)
+    // [LE] structs
     if r.endian == PexEndian::LittleEndian {
-        // Starfield guard count
-        let guard_count = r.read_u16().unwrap_or(0) as usize;
-        for _ in 0..guard_count {
-            let _name = r.read_u16()?;
-            let sc = r.read_u32()? as usize;
-            for _ in 0..sc {
-                let _uf = r.read_u16()?;
+        let struct_count = r.read_u16().unwrap_or(0) as usize;
+        for _ in 0..struct_count {
+            let _struct_name = r.read_u16()?;
+            let var_count = r.read_u16().unwrap_or(0) as usize;
+            for _ in 0..var_count {
+                parse_variable(r, st, obj_name, "", "", out, true)?;
             }
         }
     }
 
-    // Property Groups
-    let pg_count = r.read_u16().unwrap_or(0) as usize;
-    for _ in 0..pg_count {
-        let _name = r.read_u16()?;
-        let _doc = r.read_u16()?;
-        let _flags = r.read_u32()?;
-        let prop_count = r.read_u16()? as usize;
-        for _ in 0..prop_count {
-            parse_property(r, obj_name, st, out)?;
+    // Variables
+    let var_count = r.read_u16().unwrap_or(0) as usize;
+    for _ in 0..var_count {
+        parse_variable(r, st, obj_name, "", "", out, false)?;
+    }
+
+    // [Starfield only, game_id == 4] Guards — 每个 guard 只是一个 string ID
+    if game_id == 4 {
+        let guard_count = r.read_u16().unwrap_or(0) as usize;
+        for _ in 0..guard_count {
+            let _guard_name = r.read_u16()?;
         }
+    }
+
+    // Properties
+    let prop_count = r.read_u16().unwrap_or(0) as usize;
+    for _ in 0..prop_count {
+        parse_property(r, obj_name, st, out)?;
     }
 
     // States
@@ -307,6 +320,33 @@ fn parse_object_body<R: Read>(
         let func_count = r.read_u16()? as usize;
         for _ in 0..func_count {
             parse_function(r, obj_name, &state_name, st, out)?;
+        }
+    }
+
+    Ok(())
+}
+
+/// 按 Delphi `checkVariables` 顺序解析变量：name → type → uFlags(u32) → value → [LE] group → [struct] docType
+fn parse_variable<R: Read>(
+    r: &mut PexReader<R>,
+    st: &StrTab,
+    obj_name: &str,
+    state_name: &str,
+    func_name: &str,
+    out: &mut Vec<PexTranslatableString>,
+    use_doc_string: bool,
+) -> Result<()> {
+    let _name_idx = r.read_u16()?;
+    let _type_idx = r.read_u16()?;
+    let _uflags = r.read_u32()?;
+
+    // value (checkVariableData)
+    parse_var_data(r, st, obj_name, state_name, func_name, out)?;
+
+    if r.endian == PexEndian::LittleEndian {
+        let _group = r.read_u8()?;
+        if use_doc_string {
+            let _doc_type = r.read_u16()?;
         }
     }
 
@@ -335,13 +375,21 @@ fn parse_property<R: Read>(
         });
     }
 
-    let _flags = r.read_u32()?;
-    let _user_flags = r.read_u8()?;
-    let has_auto = r.read_u8()?;
-    if has_auto != 0 {
+    let _uflags = r.read_u32()?;
+    let flags = r.read_u8()?;
+
+    // auto var (flag bit 2 = 0x04)
+    if flags & 0x04 != 0 {
         let _auto_var = r.read_u16()?;
     }
-    parse_var_value(r, st, obj_name, "", &prop_name, out)?;
+    // read handler (flag bit 0 = 0x01)
+    if flags & 0x01 != 0 {
+        parse_function_no_name(r, obj_name, st, out)?;
+    }
+    // write handler (flag bit 1 = 0x02)
+    if flags & 0x02 != 0 {
+        parse_function_no_name(r, obj_name, st, out)?;
+    }
     Ok(())
 }
 
@@ -368,12 +416,55 @@ fn parse_function<R: Read>(
         });
     }
 
+    let _uflags = r.read_u32()?;
     let _flags = r.read_u8()?;
-    let uf_count = r.read_u16()? as usize;
-    for _ in 0..uf_count {
-        let _un = r.read_u16()?;
-        let _uf = r.read_u8()?;
+
+    // params
+    let param_count = r.read_u16()? as usize;
+    for _ in 0..param_count {
+        let _pn = r.read_u16()?;
+        let _pt = r.read_u16()?;
     }
+
+    // locals
+    let local_count = r.read_u16()? as usize;
+    for _ in 0..local_count {
+        let _ln = r.read_u16()?;
+        let _lt = r.read_u16()?;
+    }
+
+    // instructions
+    let inst_count = r.read_u16()? as usize;
+    for _ in 0..inst_count {
+        parse_instruction_for_strings(r, obj_name, state_name, &func_name, st, out)?;
+    }
+
+    Ok(())
+}
+
+/// property read/write handler 函数（无函数名，getFirst=false）
+fn parse_function_no_name<R: Read>(
+    r: &mut PexReader<R>,
+    obj_name: &str,
+    st: &StrTab,
+    out: &mut Vec<PexTranslatableString>,
+) -> Result<()> {
+    let _ret_type_idx = r.read_u16()?;
+    let doc_idx = r.read_u16()?;
+    let doc = lookup_str(st, doc_idx);
+    if !doc.is_empty() {
+        out.push(PexTranslatableString {
+            object_name: obj_name.to_string(),
+            state_name: String::new(),
+            function_name: "(handler)".to_string(),
+            string_type: "DocString".to_string(),
+            source_text: doc,
+            translation: String::new(),
+        });
+    }
+
+    let _uflags = r.read_u32()?;
+    let _flags = r.read_u8()?;
 
     let param_count = r.read_u16()? as usize;
     for _ in 0..param_count {
@@ -389,13 +480,14 @@ fn parse_function<R: Read>(
 
     let inst_count = r.read_u16()? as usize;
     for _ in 0..inst_count {
-        parse_instruction_for_strings(r, obj_name, state_name, &func_name, st, out)?;
+        parse_instruction_for_strings(r, obj_name, "", "(handler)", st, out)?;
     }
 
     Ok(())
 }
 
-fn parse_var_value<R: Read>(
+/// Delphi `checkVariableData`：1 字节 type tag + payload
+fn parse_var_data<R: Read>(
     r: &mut PexReader<R>,
     st: &StrTab,
     obj_name: &str,
@@ -436,7 +528,7 @@ fn parse_var_value<R: Read>(
         6 => {
             let count = r.read_u32()? as usize;
             for _ in 0..count {
-                parse_var_value(r, st, obj_name, state_name, func_name, out)?;
+                parse_var_data(r, st, obj_name, state_name, func_name, out)?;
             }
             Ok(())
         }
@@ -538,6 +630,7 @@ fn parse_instruction_for_strings<R: Read>(
 #[cfg(test)]
 pub mod tests {
     use super::*;
+    use byteorder::{BigEndian, WriteBytesExt};
 
     #[test]
     fn test_reject_invalid_magic() {
@@ -548,8 +641,6 @@ pub mod tests {
     #[test]
     fn test_empty_string_table_skyrim_big_endian() {
         let mut buf = Vec::new();
-        use byteorder::BigEndian;
-        use byteorder::WriteBytesExt;
 
         buf.write_u32::<BigEndian>(PEX_MAGIC_BIG).unwrap();
         buf.push(3); // major
@@ -577,5 +668,10 @@ pub mod tests {
         assert_eq!(script.header.game_id, 1);
         assert_eq!(script.header.endian, PexEndian::BigEndian);
         assert!(script.string_table.is_empty());
+        // header_raw 必须包含 stringTableCount
+        assert!(script.header_raw.len() >= 18);
+        // 验证 header_raw 尾两字节是大端 0 (count)
+        let n = script.header_raw.len();
+        assert_eq!(&script.header_raw[n - 2..], &[0x00, 0x00]);
     }
 }

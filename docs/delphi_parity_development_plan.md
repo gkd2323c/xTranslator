@@ -135,7 +135,7 @@ Rust/Tauri 重写已经完成了绝大多数**核心翻译引擎**：ESP/ESM 解
 
 #### 状态
 
-✅ **2026-09-01 完成。** 已全面重构 `crates/xt-core/src/pex/decompile.rs`，所有操作码定义、参数解析模型与反编译格式严格按照 Delphi 原版 `TESVT_scriptPex.pas` 对齐。
+🟡 **2026-09-01 主体修复完成，真实游戏 fixture 待补。** 已对齐真实 Bethesda PEX 头部规范、大小端、GameID 建模、Object Body 字段顺序与字节级无损写回；但仓库内尚无真实游戏/编译器产出的 `.pex` fixture，L3 交叉验证未完成。
 
 #### 目标
 
@@ -153,6 +153,18 @@ Rust/Tauri 重写已经完成了绝大多数**核心翻译引擎**：ESP/ESM 解
 - **真实 Bethesda PEX 格式全链路支持（关键根因修复）**：
   - 彻底抛弃早期简化 PEX 头，全面对齐 Champollion 与 Delphi 原版 `TESVT_scriptPex.pas` 规范：支持 `Magic (0xFA57C0DE BE / 0xDEC057FA LE)` -> `Major` -> `Minor` -> `GameID` -> `CompilationTime` -> `SourceFileName (.psc)` -> `UserName` -> `ComputerName` -> `StringTable` -> `HasDebugInfo (u8)`。
   - 统一重构 `parser.rs`、`decompile.rs` 与 `compile.rs`，引入基于 `PexEndian` 的自适应 `PexReader` 读取器，自动根据前 4 字节 Magic 识别 Skyrim Big-Endian（`[0xFA, 0x57, 0xC0, 0xDE]`）与 FO4/Starfield Little-Endian（`[0xDE, 0xC0, 0x57, 0xFA]`）。
+- **写回边界修正（P0 roundtrip 修复）**：
+  - 修正 `parser.rs` 的 `header_raw` / `data_raw` 截取边界：游标建立在完整 `raw_bytes` 上，位置即绝对偏移，不再丢失 magic 的 +4；
+  - `header_raw` 现在**包含 stringTableCount (u16)**，与 Delphi `headerPexBuffer` 在读 tableCount 后截取的行为一致；
+  - `compile_pex_bytes` 恢复 `header_raw → string entries → data_raw` 的完整写回，恢复**无翻译时 parse→compile byte-for-byte 相同**的大小端双 roundtrip 测试（`test_roundtrip_big_endian_byte_for_byte` / `test_roundtrip_little_endian_byte_for_byte`）。
+- **Object Body 字段顺序对齐 Delphi `checkObjectData` / `checkVariables` / `checkFunction` / `checkProperty`（P0 结构修复）**：
+  - Object: `parentClass(u16)` → `docString(u16)` → `[LE] uConst(u8)` → `userFlags(u32)` → `autoStateName(u16)` → `[LE] Structs` → `Variables` → `[game_id==4] Guards` → `Properties` → `States`；
+  - 纠正 Object `userFlags` 为单个 `u32`（不再读 `u16 count + entries`）；
+  - 补 FO4+ 的 `uConst(u8)` 与 LE Struct 段；
+  - Variable 改为 `name → type → uFlags(u32) → VarData → [LE] group(u8) → [struct] docType`（去掉虚构的 doc_idx / user_flags(u32)）；
+  - Guard 仅在 `game_id == 4` 读取，且每项只是一个字符串表 ID（去掉虚构的 `sc: u32 + user_flags[]`）；
+  - Properties 直接读 `count`，Property 结构为 `name → type → doc → uFlags(u32) → flag(u8)`，并按 flag 位读取 `AutoVar` / `ReadHandler` / `WriteHandler`（handler 为无名的函数体）；
+  - Function 改为 `name → returnType → doc → uFlags(u32) → flags(u8) → params → locals → instructions`（去掉虚构的 user_flags 段）。
 - **纠正 GameID 游戏体系建模**：
   - `GameID: 1` => Skyrim / Skyrim SE / Skyrim VR（Big-Endian，支持 `0x00..=0x23`）；
   - `GameID: 2` => Fallout 4（Little-Endian，支持 `0x00..=0x2E`）；
@@ -165,13 +177,23 @@ Rust/Tauri 重写已经完成了绝大多数**核心翻译引擎**：ESP/ESM 解
   - `includeNewArray` 严格对齐 Delphi：仅当类型字符串中包含 `]` 时插入维度，否则原样返回；
   - `::NoneVar` 作为方法调用返回值时自动抑制赋值前缀。
 - **未知操作码保护**：引入 `Opcode::Unknown(u8)`，保留原始字节码并安全发射 `unknown OpCode: XX`。
-- **真实 PEX 二进制端到端测试**：编写真实 Skyrim 大端序 PEX 二进制测试（`test_decompile_real_skyrim_big_endian_pex`）与真实 Starfield 小端序 PEX 二进制测试（`test_decompile_real_starfield_little_endian_pex`），全面验证多段字符串头部、大小端解码与变长参数解析。
+- **二进制测试覆盖**：
+  - Skyrim Big-Endian PEX 反编译测试（`test_decompile_real_skyrim_big_endian_pex`）；
+  - Starfield Little-Endian PEX 反编译测试（`test_decompile_real_starfield_little_endian_pex`），验证 uConst/Struct/Guard 段；
+  - 大小端双 byte-for-byte roundtrip 测试（`test_roundtrip_big_endian_byte_for_byte` / `test_roundtrip_little_endian_byte_for_byte`）。
+  - **注意**：上述测试仍为测试代码现场构造的字节流（Header 已按真实格式），**仓库内尚无真实游戏/Papyrus 编译器产出的 `.pex` fixture**，待补。
 
 #### 验证结果
 
-- `cargo test -p xt-core --lib` → **306 passed / 0 failed**。
+- `cargo test -p xt-core --lib` → **307 passed / 0 failed**。
 - `cargo test --workspace` → **全部通过**。
+- `cargo check -p xtranslator-tauri` → **通过**。
 - `npx tsc --noEmit` → **通过**。
+- `git diff --check` → **通过**。
+
+#### 待办（真实文件交叉验证）
+
+- 放入至少一个真实游戏 / Papyrus 编译器产出的 **Skyrim `.pex`** 与 **FO4/Starfield `.pex`** fixture，跑通 `decompile` 与 `parse→compile→parse` roundtrip，并将这两项测试命名为真实 fixture 测试，取代现场拼接。
 
 ---
 
