@@ -135,7 +135,7 @@ Rust/Tauri 重写已经完成了绝大多数**核心翻译引擎**：ESP/ESM 解
 
 #### 状态
 
-🟡 **2026-09-01 主体修复完成，真实游戏 fixture 待补。** 已对齐真实 Bethesda PEX 头部规范、大小端、GameID 建模、Object Body 字段顺序与字节级无损写回；但仓库内尚无真实游戏/编译器产出的 `.pex` fixture，L3 交叉验证未完成。
+🟡 **2026-09-01 主体修复完成，真实 Little-Endian fixture 待补。** 已对齐真实 Bethesda PEX 头部规范、大小端、GameID 建模、Object Body 字段顺序与字节级无损写回；仓库现已加入 Bethesda PapyrusCompiler 实际产出的 Skyrim SE Big-Endian fixture，并通过真实 parse/decompile/byte-for-byte roundtrip。FO4/FO76/Starfield Little-Endian 仍缺真实编译器产物，L3 交叉验证尚未完全闭环。
 
 #### 目标
 
@@ -181,7 +181,8 @@ Rust/Tauri 重写已经完成了绝大多数**核心翻译引擎**：ESP/ESM 解
   - Skyrim Big-Endian PEX 反编译测试（`test_decompile_real_skyrim_big_endian_pex`）；
   - Starfield Little-Endian PEX 反编译测试（`test_decompile_real_starfield_little_endian_pex`），验证 uConst/Struct/Guard 段；
   - 大小端双 byte-for-byte roundtrip 测试（`test_roundtrip_big_endian_byte_for_byte` / `test_roundtrip_little_endian_byte_for_byte`）。
-  - **注意**：上述测试仍为测试代码现场构造的字节流（Header 已按真实格式），**仓库内尚无真实游戏/Papyrus 编译器产出的 `.pex` fixture**，待补。
+  - 新增 `crates/xt-core/tests/fixtures/pex/skyrim_se/XtPexFixture.pex.hex`：由 Skyrim Special Edition 自带 Bethesda `PapyrusCompiler.exe` 对项目自有 `XtPexFixture.psc` 实际编译产生，仅对 Header 中 UserName / ComputerName 做等长脱敏；`pex_real_fixture.rs` 验证真实编译产物能够 parse、decompile，并在无修改写回时 byte-for-byte 完全一致。
+  - **剩余边界**：FO4 / FO76 / Starfield Little-Endian 路径仍只有按真实规范构造的字节测试，尚缺对应游戏编译器实际产出的 fixture。
 
 #### 验证结果
 
