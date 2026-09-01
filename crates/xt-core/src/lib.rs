@@ -1,4 +1,5 @@
 pub mod ba2;
+pub mod archive_inject;
 pub mod batch_queue;
 pub mod bsa;
 pub mod cache;

@@ -9,6 +9,7 @@
 pub mod directory;
 pub mod extraction;
 pub mod header;
+pub mod injection;
 
 use directory::BsaDirectory;
 use extraction::extract_file_data;
@@ -132,6 +133,26 @@ impl BsaArchive {
         }
         entries.sort_by(|a, b| a.path.cmp(&b.path));
         entries
+    }
+
+    /// 替换归档内已存在文件（DP-06）。
+    ///
+    /// `replacements`: 小写 `folder/filename` → 新数据。只替换已存在条目。
+    /// `output`: 写入重建后归档的目标（调用方负责临时文件与原子替换）。
+    ///
+    /// 保留原 entry 的压缩策略；SSE 用 LZ4，Skyrim 用 zlib。
+    pub fn inject_file<W: std::io::Write + std::io::Seek>(
+        &self,
+        output: &mut W,
+        replacements: &std::collections::HashMap<String, Vec<u8>>,
+    ) -> std::io::Result<crate::bsa::injection::BsaInjectionSummary> {
+        crate::bsa::injection::inject_bsa(
+            &self.path,
+            &self.header,
+            &self.directory,
+            output,
+            replacements,
+        )
     }
 }
 

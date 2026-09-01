@@ -3,10 +3,10 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { useTranslation } from "react-i18next";
 import {
   FolderOpen, FileText, Download, Folder,
-  HardDrive, FileArchive, ChevronRight, ChevronDown, Search, X, Eye
+  HardDrive, FileArchive, ChevronRight, ChevronDown, Search, X, Eye, Upload
 } from "lucide-react";
 import toast from "react-hot-toast";
-import { listBsaFiles, listBa2Files, extractBsaFile, extractBa2File, extractBsaFolder, extractBa2Folder } from "../api/strings";
+import { listBsaFiles, listBa2Files, extractBsaFile, extractBa2File, extractBsaFolder, extractBa2Folder, injectArchive } from "../api/strings";
 import type { BsaFileListDto, BsaFileEntryDto } from "../api/strings";
 import { Button, EmptyState } from "./ui";
 
@@ -122,6 +122,48 @@ export function BsaBrowser() {
       toast.success(t("bsa.extractedFiles", { count: results.length }));
     } catch (e: any) {
       toast.error(`${t("bsa.extractFailed")}: ${e}`);
+    }
+  };
+
+  // 替换归档内已存在文件（DP-06）：选择新内容文件 → 注入
+  const handleReplaceFile = async (entry: BsaFileEntryDto) => {
+    if (!archivePath || !archiveType) return;
+    const replacement = await open({
+      multiple: false,
+      directory: false,
+      title: t("bsa.chooseReplacement", { defaultValue: "Choose replacement file content" }),
+    });
+    if (!replacement) return;
+
+    const confirmed = window.confirm(
+      t("bsa.replaceConfirm", {
+        defaultValue: `Replace "{{path}}" inside the archive? A backup will be created before writing.`,
+        path: entry.path,
+      })
+    );
+    if (!confirmed) return;
+
+    try {
+      const fileData = await readFileBytes(replacement);
+      const base64Data = await fileToBase64(fileData);
+      const result = await injectArchive({
+        archive_path: archivePath,
+        replacements: { [entry.path.toLowerCase()]: base64Data },
+        create_backup: true,
+      });
+      if (result.injected > 0) {
+        toast.success(
+          t("bsa.replaced", {
+            defaultValue: "Replaced {{path}}; backup at {{backup}}",
+            path: entry.path,
+            backup: result.backup_path ?? "",
+          })
+        );
+      } else {
+        toast.error(t("bsa.replaceFailed", { defaultValue: "No file was replaced" }));
+      }
+    } catch (e: any) {
+      toast.error(`${t("bsa.replaceError", { defaultValue: "Replace failed" })}: ${e}`);
     }
   };
 
@@ -328,6 +370,9 @@ export function BsaBrowser() {
                     <Button variant="default" size="xs" onClick={() => handleExtractFile(previewFile)} icon={<Download size={10} />}>
                       {t("bsa.extract")}
                     </Button>
+                    <Button variant="default" size="xs" onClick={() => void handleReplaceFile(previewFile)} icon={<Upload size={10} />}>
+                      {t("bsa.replace", { defaultValue: "Replace…" })}
+                    </Button>
                   </div>
                 </div>
               </div>
@@ -351,4 +396,23 @@ function highlightMatch(text: string, query: string): string {
         : part
     )
     .join("");
+}
+
+/** 读取本地文件为 ArrayBuffer（Tauri asset protocol） */
+async function readFileBytes(path: string): Promise<ArrayBuffer> {
+  const { convertFileSrc } = await import("@tauri-apps/api/core");
+  const response = await fetch(convertFileSrc(path));
+  if (!response.ok) throw new Error(`cannot read ${path}`);
+  return response.arrayBuffer();
+}
+
+/** ArrayBuffer → Base64 */
+async function fileToBase64(buffer: ArrayBuffer): Promise<string> {
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return btoa(binary);
 }

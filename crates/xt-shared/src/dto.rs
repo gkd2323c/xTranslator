@@ -604,6 +604,34 @@ pub struct BsaFileListDto {
     pub files: Vec<BsaFileEntryDto>,
 }
 
+// ── Archive Injection DTOs（DP-06）──────────────────────────────
+
+/// 归档注入请求
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct InjectArchiveRequest {
+    /// 归档文件路径（.bsa 或 .ba2）
+    pub archive_path: String,
+    /// 替换映射：小写 `folder/filename` → 新数据（Base64 编码）
+    pub replacements: std::collections::HashMap<String, String>,
+    /// 替换前是否备份原文件（默认 true）
+    #[serde(default = "default_true")]
+    pub create_backup: bool,
+}
+
+/// 归档注入响应
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InjectArchiveResponse {
+    /// 注入的文件数
+    pub injected: usize,
+    /// 未在归档中找到的请求路径
+    pub not_found: Vec<String>,
+    /// 备份文件路径（如创建）
+    pub backup_path: Option<String>,
+    /// 最终归档字节数
+    pub output_size: u64,
+}
+
 // ── PEX DTOs ────────────────────────────────────────────────────────
 
 /// PEX 脚本中可翻译的字符串条目 DTO
@@ -946,7 +974,6 @@ pub enum TcscDirection {
 }
 
 // ── Config DTOs ─────────────────────────────────────────────────────
-
 #[derive(Clone, Debug, Serialize, Deserialize, Default)]
 pub struct AppConfigDto {
     #[serde(default, skip_serializing_if = "Option::is_none")]

@@ -868,6 +868,27 @@ export async function extractBa2Folder(ba2Path: string, folder: string, outputDi
   return invoke("extract_ba2_folder", { ba2Path, folder, outputDir });
 }
 
+// ── 归档注入（DP-06）──────────────────────────────────────────────
+
+export interface InjectArchiveRequest {
+  archive_path: string;
+  replacements: Record<string, string>; // 小写 folder/filename → Base64 数据
+  create_backup?: boolean;
+}
+
+export interface InjectArchiveResponse {
+  injected: number;
+  not_found: string[];
+  backup_path?: string;
+  output_size: number;
+}
+
+export async function injectArchive(
+  request: InjectArchiveRequest
+): Promise<InjectArchiveResponse> {
+  return invoke("inject_archive", { request });
+}
+
 // ── PEX 类型 ───────────────────────────────────────────────────────
 
 export interface PexTranslatableDto {

@@ -29,7 +29,8 @@ use xt_shared::dto::{
     BatchStatus, BsaFileEntryDto, BsaFileListDto, CheckPendingCacheResponse, CtdaFuncDto,
     DataConfigsDto, DialogInfoDto, DialogTreeDto, EspComparePairDto, EspCompareResultDto,
     EspLoadProgress, FieldSizeInfoDto, FinalizeRequest, FinalizeResponse, FuzLipDataResponse,
-    FuzMapping, FuzScanResponse, HeuristicMatchDTO, HeuristicSearchRequest, LipDataDto,
+    FuzMapping, FuzScanResponse, HeuristicMatchDTO, HeuristicSearchRequest, InjectArchiveRequest,
+    InjectArchiveResponse, LipDataDto,
     LipKeyframeDto, LoadEspResponse, LoadSstResponse,
     McmComparePolicy, McmCompareRequest, McmCompareResult, McmEntryDto, McmFileDto, McmSaveRequest,
     NpcDialogDto, PexScriptDto, PexTranslatableDto, QueryRequest, QueryResponse, RecoveryInfo,
@@ -2196,6 +2197,43 @@ pub async fn extract_ba2_folder(
     }
 
     Ok(extracted)
+}
+
+// ── Archive Injection（DP-06）─────────────────────────────────────
+
+/// 替换归档内已存在文件（BSA/BA2 replacement injection）。
+///
+/// 安全流程：临时文件 → 重开校验 → 备份 → 原子替换。
+#[tauri::command]
+pub async fn inject_archive(
+    request: InjectArchiveRequest,
+) -> Result<InjectArchiveResponse, String> {
+    use base64::Engine;
+
+    let replacements: std::collections::HashMap<String, Vec<u8>> = request
+        .replacements
+        .iter()
+        .map(|(k, v)| {
+            let bytes = base64::engine::general_purpose::STANDARD
+                .decode(v)
+                .map_err(|e| format!("invalid base64 for {}: {}", k, e))?;
+            Ok((k.clone(), bytes))
+        })
+        .collect::<Result<_, String>>()?;
+
+    let result = xt_core::archive_inject::inject_archive(
+        std::path::Path::new(&request.archive_path),
+        &replacements,
+        request.create_backup,
+    )
+    .map_err(|e| format!("Archive injection failed: {}", e))?;
+
+    Ok(InjectArchiveResponse {
+        injected: result.injected,
+        not_found: result.not_found,
+        backup_path: result.backup_path.map(|p| p.to_string_lossy().into_owned()),
+        output_size: result.output_size,
+    })
 }
 
 // ── PEX Commands ────────────────────────────────────────────────────

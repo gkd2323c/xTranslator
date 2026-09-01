@@ -38,7 +38,7 @@ Rust/Tauri 重写已经完成了绝大多数**核心翻译引擎**：ESP/ESM 解
 
 - **主工作流没有真正接通的能力**：多游戏上下文、Localized/Hybrid 加载策略均已接通（DP-01/DP-07）。
 - **原版高级工作流缩水**：XML Export options；Apply SST、Advanced Search、BatchProcessor 已恢复（DP-03/DP-04/DP-05）。
-- **格式级兼容差距**：PEX opcode、XML EDID 信息、归档注入。
+- **格式级兼容差距**：PEX opcode（LE fixture 待补）、XML EDID 信息；归档注入已实现（DP-06）。
 - **低频辅助工具未移植**：DEFUI Component Generator、Codepage 手动覆盖、部分旧式工具窗。
 
 因此，当前版本更准确的描述是：
@@ -56,7 +56,7 @@ Rust/Tauri 重写已经完成了绝大多数**核心翻译引擎**：ESP/ESM 解
 | DP-03 | P0     | Apply SST 高级选项                | ⏳ **主体完成，VMAD/L3 待闭环** | `TESVT_ApplySSTOpts.*`                                                  | `matching.rs`, `commands.rs::load_sst`                                         |
 | DP-04 | P1     | Advanced Search                   | ✅ **已完成**                   | `TESVT_AdvSearch.*`                                                     | `ui/src/components/AdvSearchDialog.tsx`, `appStore.ts`                        |
 | DP-05 | P1     | BatchProcessor 命令脚本           | ✅ **已完成（L3 交叉验证待补）** | `TESVT_commandProcessor.*`, `TESVT_main.pas::batchCommands/runCommands` | `xt-core::command_processor`、`src-tauri::command_processor`、`CommandProcessorDialog.tsx` |
-| DP-06 | P1     | BSA/BA2 注入                      | **未实现**                     | `TESVT_bsa.pas::InjectData`                                             | `crates/xt-core/src/bsa`, `ba2` 目前主要读取/提取                              |
+| DP-06 | P1     | BSA/BA2 注入                      | ✅ **已完成（真实归档交叉验证待补）** | `TESVT_bsa.pas::InjectData`                                             | `archive_inject.rs`, `bsa/injection.rs`, `ba2/injection.rs`                 |
 | DP-07 | P1     | Localized / Hybrid 加载策略       | ✅ **已完成（真实游戏交叉验证待补）** | `TESVT_delocOpts.*`, MainLoader                                         | `StringsLoadStrategy`, `commands.rs::load_esp`                                |
 | DP-08 | P1     | XML Export 选项                   | **缩水**                       | `TESVT_XMLExportOpts.*`                                                 | `XmlExportRequest`, `commands.rs::export_xml`                                  |
 | DP-09 | P2     | XML EDID 元数据完整性             | **部分缺失**                   | `TESVT_XMLFunc.pas`                                                     | `SkyString`, `xml/mod.rs`                                                      |
@@ -430,6 +430,10 @@ Rust/Tauri 重写已经完成了绝大多数**核心翻译引擎**：ESP/ESM 解
 
 ### DP-06 BSA/BA2 注入
 
+#### 状态
+
+✅ **2026-09-01 完成（真实归档交叉验证待补）。** replacement injection 已实现：BSA（zlib / SSE LZ4）与 BA2 GNRL（zlib），含安全替换流程（临时文件 → 重开校验 → 备份 → 原子替换）。
+
 #### 原版能力
 
 Delphi `TESVT_bsa.pas` 从 2016 年起支持对已有 BSA/BA2 中的文件进行 replacement injection：
@@ -447,20 +451,39 @@ Rust 当前已有浏览、查找、提取和 GNRL 读取，但未实现 archive 
 
 只实现“替换归档内已存在文件”，不顺手扩大成通用 BSA/BA2 authoring 工具。
 
-#### 安全要求
+#### 实现内容
 
-- 永远写入临时归档。
-- 完成完整结构校验后再原子替换。
-- 替换前创建备份。
-- 保留原 entry 的压缩策略，除非格式要求改变。
-- DX10 texture archive 不因为 parity 工作被强行纳入；Delphi 主路径同样主要针对 GNRL。
+- **`crates/xt-core/src/bsa/injection.rs`**：`inject_bsa()` 按 Delphi `InjectData` 语义逐文件夹逐文件处理。命中替换映射 → 用新数据（保留原压缩策略：SSE 写 `[uSize][LZ4]`，Skyrim 写 `[uSize][zlib]`；未压缩原样写）；否则原样复制整个数据块（含 flag 9 名字前缀）。重写文件表条目的 raw_size（含压缩标志位，对齐 Delphi `SetFileCompressedFlag`）与 offset。文件表位置计算考虑 folder name 交错布局（每个 folder 的 name 块在 file records 之前）。
+- **`crates/xt-core/src/ba2/injection.rs`**：`inject_ba2()` 按 Delphi `TwbBA2File.InjectData` 复制 header + 重建数据区（GNRL zlib 压缩或原样）→ 复制文件表（name + 36 字节 record 交错）→ 重写每个 entry 的 offset/packedSize/size → 复制 string table → 更新 file_table_offset。DX10 纹理归档在 open 时即拒绝。
+- **`crates/xt-core/src/archive_inject.rs`**：`inject_archive()` 统一安全流程：open 校验（含替换目标必须存在于归档，fail-closed）→ 写同目录临时文件 → 重新打开临时文件验证可读 → 备份原文件（可选）→ 原子替换（Windows 先删后改，POSIX rename）。
+- **IPC**：`inject_archive` 命令 + `InjectArchiveRequest/Response` DTO（replacements 用 Base64 传输）；`src-tauri` 增加 base64 依赖。
+- **前端**：`BsaBrowser` 预览面板新增 "Replace…" 按钮：选择新内容文件 → 确认（提示会创建备份）→ 调用注入 → 成功提示含备份路径。
+- **顺带修复**：BA2 `contains_file`/`extract_file` 比较文件路径时用了分割后的文件名而非完整路径，导致按路径查找永远失败（真实 BA2 的 `files[i].name` 存完整路径）。已修复为完整路径比较。
+
+#### 安全要求（已落实）
+
+- ✅ 永远写入临时归档（同目录，保证 rename 原子性）。
+- ✅ 完成完整结构校验后再原子替换（重开验证）。
+- ✅ 替换前创建备份（`create_backup` 默认 true）。
+- ✅ 保留原 entry 的压缩策略（BSA 按版本 zlib/LZ4；BA2 zlib）。
+- ✅ DX10 texture archive 不纳入（open 时拒绝）。
 
 #### 验收
 
-- BSA v0x68/v0x69 replacement roundtrip。
-- BA2 GNRL replacement roundtrip。
-- 注入后能被 Rust 自己重新打开并读取替换后的文件。
-- 有真实 Bethesda 工具/xEdit 的交叉验证样本时再加 L3 验证。
+- ✅ BSA v0x69 replacement roundtrip（构造 fixture：替换后可重开读取替换与未替换文件）。
+- ✅ BA2 GNRL replacement roundtrip（构造 fixture：替换后可重开读取）。
+- ✅ 注入后能被 Rust 自己重新打开并读取替换后的文件。
+- ⚠️ L3：真实 Skyrim Interface.bsa / FO4 归档的注入交叉验证待真实样本。
+
+#### 验证结果
+
+- `cargo test -p xt-core --test injection_roundtrip` → **3 passed / 0 failed**（BSA roundtrip、BA2 roundtrip、missing 报告）。
+- `cargo test --workspace` → **全部通过**（xt-core 339 + 注入 3）。
+- `cargo check -p xtranslator-tauri` → **通过**。
+- `npx tsc --noEmit` → **通过**。
+- `npx vitest run` → **59 passed / 0 failed**。
+- `npm run build` → **通过**。
+- `git diff --check` → **通过**（仅仓库行尾转换提示）。
 
 ---
 
@@ -707,14 +730,14 @@ MS Word backend 属于 Windows 特有兼容功能，应作为可选 adapter，�
 
 ## 10. 推荐实施顺序
 
-DP-01、DP-04、DP-05、DP-07 已完成，后续严格按下面顺序推进：
+DP-01、DP-04、DP-05、DP-06、DP-07 已完成，后续严格按下面顺序推进：
 
 1. **DP-02 PEX opcode** — 修正已经发现的格式级风险。
 2. **DP-03 Apply SST options** — 恢复核心翻译工作流的用户控制能力。
 3. ~~**DP-04 Advanced Search**~~ — ✅ 已完成（2026-09-01）：独立面板、六维度、按字段 Regex、REC:FIELD 联合、preset 持久化；Keyword 维度待数据管道。
 4. ~~**DP-05 BatchProcessor**~~ — ✅ 已完成（2026-09-01，L3 交叉验证待补）：完整白名单 parser + 全部 11 命令执行路径（含 GenerateDictionaries / LoadMasters / ApiTranslation）+ 独立 UI；ImportXml comparator 语义随 DP-09 闭环。
-5. ~~**DP-07 Localized/Hybrid loading**~~ — ✅ 已完成（2026-09-01，真实游戏交叉验证待补）：DiskPreferred / ArchivePreferred / Manual 三策略 + 逐文件来源追踪 + UI 展示。
-6. **DP-06 BSA/BA2 injection** — 在资源加载稳定后实现写回。
+5. ~~**DP-06 BSA/BA2 注入**~~ — ✅ 已完成（2026-09-01，真实归档交叉验证待补）：BSA zlib/LZ4 + BA2 GNRL zlib replacement injection，安全替换流程（临时文件→校验→备份→原子替换）。
+6. ~~**DP-07 Localized/Hybrid loading**~~ — ✅ 已完成（2026-09-01，真实游戏交叉验证待补）：DiskPreferred / ArchivePreferred / Manual 三策略 + 逐文件来源追踪 + UI 展示。
 7. **DP-08 / DP-09 XML export + EDID**。
 8. **DP-10 / DP-11 辅助工具**。
 9. **P3 兼容尾项**。

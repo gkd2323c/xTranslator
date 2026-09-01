@@ -5724,6 +5724,7 @@ name = "xtranslator-tauri"
 version = "1.2.0"
 dependencies = [
  "async-trait",
+ "base64 0.22.1",
  "env_logger",
  "log",
  "regex",

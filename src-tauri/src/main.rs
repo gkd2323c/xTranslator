@@ -21,7 +21,7 @@ use commands::{
     header_rules_add, header_rules_apply, header_rules_delete, header_rules_list,
     header_rules_load, header_rules_move, header_rules_save, header_rules_toggle,
     header_rules_update, header_templates_delete, header_templates_list, header_templates_load,
-    header_templates_save, heuristic_search, import_xml, list_ba2_files, list_bsa_files,
+    header_templates_save, heuristic_search, import_xml, inject_archive, list_ba2_files, list_bsa_files,
     list_esp_files, load_config, load_data_configs, load_esp, load_mcm_file, load_sst,
     load_vocabulary, mcm_compare, parse_pex_strings, preproc_opts_delete, preproc_opts_list,
     preproc_opts_load, preproc_opts_save, preproc_opts_set, query_strings_command, rtl_preview,
@@ -88,6 +88,8 @@ fn main() {
             extract_ba2_file,
             extract_bsa_folder,
             extract_ba2_folder,
+            // 归档注入（DP-06）
+            inject_archive,
             // PEX 命令
             parse_pex_strings,
             compile_pex,

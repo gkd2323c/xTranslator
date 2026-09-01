@@ -16,6 +16,7 @@
 pub mod directory;
 pub mod extraction;
 pub mod header;
+pub mod injection;
 
 use directory::{Ba2FileEntryDto, Ba2FileRecord, Ba2FolderEntry};
 use extraction::extract_file_data;
@@ -103,10 +104,11 @@ impl Ba2Archive {
     pub fn extract_file(&self, path: &str) -> io::Result<Vec<u8>> {
         let normalized_path = path.replace('/', "\\");
         let (folder, filename) = Self::split_path(&normalized_path);
+        let full_path = format!("{}\\{}", folder, filename);
 
         if let Some(folder_entry) = self.folder_map.get(&folder) {
             for &idx in &folder_entry.file_indices {
-                if self.files[idx].name == filename {
+                if self.files[idx].name == full_path {
                     return self.extract_file_by_index(idx);
                 }
             }
@@ -136,10 +138,11 @@ impl Ba2Archive {
     pub fn contains_file(&self, path: &str) -> bool {
         let normalized_path = path.replace('/', "\\");
         let (folder, filename) = Self::split_path(&normalized_path);
+        let full_path = format!("{}\\{}", folder, filename);
 
         if let Some(folder_entry) = self.folder_map.get(&folder) {
             for &idx in &folder_entry.file_indices {
-                if self.files[idx].name == filename {
+                if self.files[idx].name == full_path {
                     return true;
                 }
             }
@@ -197,6 +200,24 @@ impl Ba2Archive {
         }
         entries.sort_by(|a, b| a.path.cmp(&b.path));
         entries
+    }
+
+    /// 替换归档内已存在文件（DP-06）。只支持 GNRL 类型。
+    ///
+    /// `replacements`: 小写 `folder/filename` → 新数据。
+    /// `output`: 写入重建后归档的目标（调用方负责临时文件与原子替换）。
+    pub fn inject_file<W: std::io::Write + std::io::Seek>(
+        &self,
+        output: &mut W,
+        replacements: &std::collections::HashMap<String, Vec<u8>>,
+    ) -> std::io::Result<crate::ba2::injection::Ba2InjectionSummary> {
+        crate::ba2::injection::inject_ba2(
+            &self.path,
+            &self.header,
+            &self.files,
+            output,
+            replacements,
+        )
     }
 }
 
