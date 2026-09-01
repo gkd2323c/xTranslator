@@ -48,19 +48,6 @@ function getView(
   return "idle";
 }
 
-function detectGameFromPath(filePath: string): string | undefined {
-  const lower = filePath.toLowerCase();
-  if (lower.includes("skyrim")) return "SkyrimSE";
-  if (lower.includes("fallout4") || lower.includes("fallout 4")) return "Fallout4";
-  if (lower.includes("starfield")) return "Starfield";
-  if (lower.includes("fallout76") || lower.includes("fallout 76")) return "Fallout76";
-  if (lower.includes("falloutnv") || lower.includes("fallout nv") || lower.includes("new vegas"))
-    return "FalloutNV";
-  if (lower.includes("oblivion")) return "Oblivion";
-  if (lower.includes("morrowind")) return "Morrowind";
-  return undefined;
-}
-
 function detectLanguageFromPath(filePath: string): string | undefined {
   const lower = filePath.toLowerCase();
   if (lower.includes("english")) return "english";
@@ -90,6 +77,8 @@ export function BatchPanel() {
   const addBatchEntries = useAppStore((s) => s.addBatchEntries);
   const removeBatchEntry = useAppStore((s) => s.removeBatchEntry);
   const clearBatchEntries = useAppStore((s) => s.clearBatchEntries);
+  const currentGame = useAppStore((s) => s.currentGame);
+  const gameSelectionMode = useAppStore((s) => s.gameSelectionMode);
 
   const [provider, setProvider] = useState("openai");
   const [skipTranslated, setSkipTranslated] = useState(true);
@@ -182,7 +171,7 @@ export function BatchPanel() {
     const entries: BatchEntry[] = paths.map((path) => ({
       esp_path: path,
       language: detectLanguageFromPath(path),
-      game: detectGameFromPath(path),
+      game: gameSelectionMode === "manual" ? currentGame ?? undefined : undefined,
     }));
     addBatchEntries(entries);
     if (entries.length > 0) {
@@ -206,7 +195,7 @@ export function BatchPanel() {
       const entries: BatchEntry[] = files.map((path) => ({
         esp_path: path,
         language: detectLanguageFromPath(path),
-        game: detectGameFromPath(path),
+        game: gameSelectionMode === "manual" ? currentGame ?? undefined : undefined,
       }));
       addBatchEntries(entries);
       toast.success(t("batch.foundFiles", { count: entries.length }));

@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 import { listen } from "@tauri-apps/api/event";
 import { setI18nLanguage } from "./i18n";
 import { useAppStore } from "./stores/appStore";
+import { restoreGameSelection } from "./gameContext";
 import { GroupedMenuBar } from "./components/GroupedMenuBar";
 import { SidePanel } from "./components/SidePanel";
 import { VocabularyPanel } from "./components/bottom/VocabularyPanel";
@@ -198,6 +199,7 @@ function App() {
       if (cfg.current_provider) setTranslationProvider(cfg.current_provider);
       if (cfg.esp_mode !== undefined) useAppStore.getState().setEspMode(cfg.esp_mode);
       if (cfg.editor_mode) useAppStore.getState().setEditorMode(cfg.editor_mode as any);
+      useAppStore.setState(restoreGameSelection(cfg.game_selection_mode, cfg.last_game));
     }).catch(() => {});
   }, []);
 

@@ -27,6 +27,12 @@ pub struct AppConfig {
     pub theme: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub language: Option<String>,
+    /// Last explicitly selected game workspace (for example "SkyrimSE" or "Fallout4").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_game: Option<String>,
+    /// Game selection mode: "auto" detects from ESP; "manual" uses `last_game`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub game_selection_mode: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub proxy_server: Option<String>,
     #[serde(default)]
@@ -108,6 +114,12 @@ impl AppConfig {
         if other.language.is_some() {
             self.language = other.language.clone();
         }
+        if other.last_game.is_some() {
+            self.last_game = other.last_game.clone();
+        }
+        if other.game_selection_mode.is_some() {
+            self.game_selection_mode = other.game_selection_mode.clone();
+        }
         if other.proxy_server.is_some() {
             self.proxy_server = other.proxy_server.clone();
         }
@@ -156,6 +168,8 @@ mod tests {
             openai_api_key: Some("sk-test".to_string()),
             theme: Some("dark".to_string()),
             language: Some("zh-CN".to_string()),
+            last_game: Some("Fallout4".to_string()),
+            game_selection_mode: Some("manual".to_string()),
             ..Default::default()
         };
         config.save(&dir).unwrap();
@@ -163,6 +177,8 @@ mod tests {
         assert_eq!(loaded.openai_api_key.as_deref(), Some("sk-test"));
         assert_eq!(loaded.theme.as_deref(), Some("dark"));
         assert_eq!(loaded.language.as_deref(), Some("zh-CN"));
+        assert_eq!(loaded.last_game.as_deref(), Some("Fallout4"));
+        assert_eq!(loaded.game_selection_mode.as_deref(), Some("manual"));
         assert!(loaded.deepl_api_key.is_none());
         let _ = std::fs::remove_dir_all(&dir);
     }

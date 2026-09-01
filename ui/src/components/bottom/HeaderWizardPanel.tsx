@@ -1,15 +1,17 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { headerBatchProcess, type HeaderBatchConfig, type HeaderBatchProgress, type HeaderBatchComplete } from "../../api/strings";
+import { headerBatchProcess, SUPPORTED_GAME_IDS, type HeaderBatchConfig, type HeaderBatchProgress, type HeaderBatchComplete, type SupportedGameId } from "../../api/strings";
 import { listen } from "@tauri-apps/api/event";
 import toast from "react-hot-toast";
 import { Button } from "../ui";
 import { Play } from "lucide-react";
+import { useAppStore } from "../../stores/appStore";
 
 export function HeaderWizardPanel() {
   const { t } = useTranslation();
   const [sourceDir, setSourceDir] = useState("");
-  const [gameId, setGameId] = useState("SkyrimSE");
+  const currentGame = useAppStore((s) => s.currentGame);
+  const setGameSelection = useAppStore((s) => s.setGameSelection);
   const [dataDir, setDataDir] = useState("Data");
   const [createBackup, setCreateBackup] = useState(true);
   const [running, setRunning] = useState(false);
@@ -34,14 +36,19 @@ export function HeaderWizardPanel() {
   };
 
   const startBatch = async () => {
-    if (!sourceDir || !gameId || !dataDir) return;
+    if (!sourceDir || !currentGame || !dataDir) {
+      if (!currentGame) {
+        toast.error(t("headerWizard.selectGame", { defaultValue: "Select a game workspace before running the wizard." }));
+      }
+      return;
+    }
     setRunning(true);
     setProgress(null);
     setComplete(null);
 
     const config: HeaderBatchConfig = {
       source_dir: sourceDir,
-      game_id: gameId,
+      game_id: currentGame,
       data_dir: dataDir,
       create_backup: createBackup,
     };
@@ -82,13 +89,12 @@ export function HeaderWizardPanel() {
         <div style={{ display: "flex", flexDirection: "column", gap: "4px", flex: 1 }}>
           <label style={{ fontSize: "12px", color: "var(--color-muted)" }}>{t("headerWizard.game")}</label>
           <select className="ui-input" style={{ fontSize: "12px", padding: "2px 4px" }}
-            value={gameId} onChange={(e) => setGameId(e.target.value)}>
-            <option value="SkyrimSE">Skyrim SE</option>
-            <option value="Skyrim">Skyrim</option>
-            <option value="Fallout4">Fallout 4</option>
-            <option value="FalloutNV">Fallout NV</option>
-            <option value="Fallout76">Fallout 76</option>
-            <option value="Starfield">Starfield</option>
+            value={currentGame ?? ""}
+            onChange={(e) => setGameSelection("manual", e.target.value as SupportedGameId)}>
+            <option value="" disabled>{t("headerWizard.selectGame", { defaultValue: "Select game" })}</option>
+            {SUPPORTED_GAME_IDS.map((game) => (
+              <option key={game} value={game}>{game}</option>
+            ))}
           </select>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: "4px", flex: 1 }}>

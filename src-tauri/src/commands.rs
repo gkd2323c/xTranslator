@@ -3,6 +3,7 @@ use std::sync::{Arc, Mutex};
 use tauri::Emitter;
 use xt_core::batch_queue::BatchQueue;
 use xt_core::cache_index::CacheIndex;
+use xt_core::esp::game_detect;
 use xt_core::esp::parser::{EspParser, StringsFiles};
 use xt_core::esp::record_tree::EspFile;
 use xt_core::matching::{apply_dictionary_entries_with_policy, ApplyPolicy, DictionaryApplyEntry};
@@ -348,6 +349,17 @@ pub async fn load_esp(
                         None
                     };
 
+                    // Cache hits still need game context for downstream game-specific tools.
+                    // Reuse the TES4 header already parsed for the write-back tree.
+                    let detected_game_id = esp_file.as_ref().and_then(|f| {
+                        game_detect::game_from_form_version(f.tes4.record_header_data.f_version)
+                    });
+                    let (resolved_game_id, game_source) = game_detect::resolve_game_id(
+                        game_clone.as_deref(),
+                        detected_game_id,
+                        GameId::SkyrimSE,
+                    );
+
                     return Ok((
                         cached.strings,
                         LoadEspResponse {
@@ -358,6 +370,9 @@ pub async fn load_esp(
                             record_counts,
                             cached: true,
                             esp_hash: hash.clone(),
+                            game_id: resolved_game_id.as_str().to_string(),
+                            detected_game_id: detected_game_id.map(|g| g.as_str().to_string()),
+                            game_source: game_source.as_str().to_string(),
                         },
                         esp_file,
                     ));
@@ -378,19 +393,14 @@ pub async fn load_esp(
                 },
             );
 
-            // 兼容前端传入的游戏别名；无法识别时默认回退到天际特别版。
-            let game_id = game_clone
-                .as_deref()
-                .and_then(|g| match g.to_lowercase().as_str() {
-                    "skyrim" => Some(GameId::Skyrim),
-                    "skyrimse" | "skyrim se" => Some(GameId::SkyrimSE),
-                    "fallout4" | "fo4" => Some(GameId::Fallout4),
-                    "falloutnv" | "fonv" => Some(GameId::FalloutNV),
-                    "fallout76" | "fo76" => Some(GameId::Fallout76),
-                    "starfield" | "sf" => Some(GameId::Starfield),
-                    _ => None,
-                })
-                .unwrap_or(GameId::SkyrimSE);
+            // Prefer an explicit workspace, otherwise detect from TES4 Form Version.
+            // A compatibility fallback remains explicitly marked as untrusted.
+            let detected_game_id = game_detect::detect_game_from_esp(esp_path_ref);
+            let (game_id, game_source) = game_detect::resolve_game_id(
+                game_clone.as_deref(),
+                detected_game_id,
+                GameId::SkyrimSE,
+            );
 
             // 优先加载对应游戏的 record_defs；失败时回退到内置默认定义。
             let data_dir = std::path::Path::new("Data");
@@ -429,16 +439,7 @@ pub async fn load_esp(
                 .and_then(|s| s.to_str())
                 .unwrap_or("skyrim");
 
-            let codepage_path = data_dir
-                .join(match game_id {
-                    GameId::Skyrim => "Skyrim",
-                    GameId::SkyrimSE => "SkyrimSE",
-                    GameId::Fallout4 => "Fallout4",
-                    GameId::FalloutNV => "FalloutNV",
-                    GameId::Fallout76 => "Fallout76",
-                    GameId::Starfield => "Starfield",
-                })
-                .join("codepage.txt");
+            let codepage_path = data_dir.join(game_id.as_str()).join("codepage.txt");
             let codepage_table = if codepage_path.exists() {
                 CodepageTable::load_from_file(&codepage_path).ok()
             } else {
@@ -583,6 +584,9 @@ pub async fn load_esp(
                     record_counts,
                     cached: false,
                     esp_hash: file_hash.unwrap_or_default(),
+                    game_id: game_id.as_str().to_string(),
+                    detected_game_id: detected_game_id.map(|g| g.as_str().to_string()),
+                    game_source: game_source.as_str().to_string(),
                 },
                 esp_file,
             ))
@@ -614,29 +618,11 @@ pub async fn load_esp(
 
     *state.is_dirty.lock().map_err(|e| e.to_string())? = false;
 
-    // 存储代码页表（用于 save_strings/finalize 导出）
+    // Store the codepage table for save/finalize using the already-resolved game context.
     let codepage_table = {
-        let game_id = game
-            .as_deref()
-            .map(|g| match g.to_lowercase().as_str() {
-                "skyrim" => GameId::Skyrim,
-                "skyrimse" | "skyrim se" => GameId::SkyrimSE,
-                "fallout4" | "fo4" => GameId::Fallout4,
-                "falloutnv" | "fonv" => GameId::FalloutNV,
-                "fallout76" | "fo76" => GameId::Fallout76,
-                "starfield" | "sf" => GameId::Starfield,
-                _ => GameId::SkyrimSE,
-            })
-            .unwrap_or(GameId::SkyrimSE);
+        let resolved_game_id = GameId::from_alias(&result.1.game_id).unwrap_or(GameId::SkyrimSE);
         let codepage_path = std::path::Path::new("Data")
-            .join(match game_id {
-                GameId::Skyrim => "Skyrim",
-                GameId::SkyrimSE => "SkyrimSE",
-                GameId::Fallout4 => "Fallout4",
-                GameId::FalloutNV => "FalloutNV",
-                GameId::Fallout76 => "Fallout76",
-                GameId::Starfield => "Starfield",
-            })
+            .join(resolved_game_id.as_str())
             .join("codepage.txt");
         if codepage_path.exists() {
             CodepageTable::load_from_file(&codepage_path).ok()
@@ -2134,7 +2120,7 @@ pub async fn extract_ba2_folder(
 #[tauri::command]
 pub async fn parse_pex_strings(
     pex_path: String,
-    game: Option<String>,
+    game: String,
 ) -> Result<PexScriptDto, String> {
     let mut file =
         std::fs::File::open(&pex_path).map_err(|e| format!("Failed to open PEX: {}", e))?;
@@ -2148,8 +2134,9 @@ pub async fn parse_pex_strings(
         .unwrap_or("unknown")
         .to_string();
 
-    // 加载游戏的 pexNoTransProc.txt 过滤器
-    let no_trans_procs = load_no_trans_procs(game.as_deref());
+    // Load pexNoTransProc.txt from the explicit global game context; no silent fallback.
+    let game_id = GameId::from_alias(&game).ok_or_else(|| format!("Unknown game: {}", game))?;
+    let no_trans_procs = load_no_trans_procs(game_id);
 
     let translatable: Vec<PexTranslatableDto> = script
         .translatable
@@ -2233,18 +2220,9 @@ pub async fn decompile_pex(
 
 /// 加载指定游戏的 pexNoTransProc.txt 过滤器，返回一个
 /// 应排除在翻译之外的小写过程（procedure）名称集合。
-fn load_no_trans_procs(game: Option<&str>) -> std::collections::HashSet<String> {
-    let game_subdir = match game.unwrap_or("SkyrimSE") {
-        "Skyrim" => "Skyrim",
-        "SkyrimSE" => "SkyrimSE",
-        "Fallout4" => "Fallout4",
-        "FalloutNV" => "FalloutNV",
-        "Fallout76" => "Fallout76",
-        "Starfield" => "Starfield",
-        _ => "SkyrimSE",
-    };
+fn load_no_trans_procs(game: GameId) -> std::collections::HashSet<String> {
     let path = std::path::Path::new("Data")
-        .join(game_subdir)
+        .join(game.as_str())
         .join("pexNoTransProc.txt");
     if !path.exists() {
         return std::collections::HashSet::new();
@@ -2544,24 +2522,12 @@ use xt_core::data_config::{
     parse_ctda_func, parse_dial_sub_type, parse_emote_definition, parse_field_size_ref,
 };
 
-/// 将游戏标识字符串映射到 Data/<Game> 子目录名称
-fn game_to_data_dir(game: &str) -> &'static str {
-    match game.to_lowercase().as_str() {
-        "skyrim" => "Skyrim",
-        "skyrimse" | "skyrim se" => "SkyrimSE",
-        "fallout4" | "fo4" => "Fallout4",
-        "falloutnv" | "fonv" => "FalloutNV",
-        "fallout76" | "fo76" => "Fallout76",
-        "starfield" | "sf" => "Starfield",
-        _ => "SkyrimSE",
-    }
-}
-
 /// Load and parse Data/<Game>/ 配置文件
 #[tauri::command]
 pub async fn load_data_configs(game: String) -> Result<DataConfigsDto, String> {
     let data_dir = std::path::Path::new("Data");
-    let game_dir = data_dir.join(game_to_data_dir(&game));
+    let game_id = GameId::from_alias(&game).ok_or_else(|| format!("Unknown game: {}", game))?;
+    let game_dir = data_dir.join(game_id.as_str());
 
     // 解析 ctdaFunc.txt
     let ctda_funcs: Vec<CtdaFuncDto> = {
@@ -2825,29 +2791,14 @@ pub async fn load_vocabulary(
     strings_dir: String,
     source_lang: String,
     target_lang: String,
-    game: Option<String>,
+    game: String,
 ) -> Result<VocabularyInfo, String> {
-    let game_id = match game.as_deref() {
-        Some("Skyrim") => GameId::Skyrim,
-        Some("SkyrimSE") | None => GameId::SkyrimSE,
-        Some("Fallout4") => GameId::Fallout4,
-        Some("FalloutNV") => GameId::FalloutNV,
-        Some("Fallout76") => GameId::Fallout76,
-        Some("Starfield") => GameId::Starfield,
-        Some(g) => return Err(format!("Unknown game: {}", g)),
-    };
+    let game_id = GameId::from_alias(&game).ok_or_else(|| format!("Unknown game: {}", game))?;
 
     let state_clone = state.inner().clone();
     let result = tokio::task::spawn_blocking(move || {
         let data_dir = std::path::Path::new("Data");
-        let game_dir = data_dir.join(match game_id {
-            GameId::Skyrim => "Skyrim",
-            GameId::SkyrimSE => "SkyrimSE",
-            GameId::Fallout4 => "Fallout4",
-            GameId::FalloutNV => "FalloutNV",
-            GameId::Fallout76 => "Fallout76",
-            GameId::Starfield => "Starfield",
-        });
+        let game_dir = data_dir.join(game_id.as_str());
 
         let vocab_path = game_dir.join("vocabulary.txt");
         if !vocab_path.exists() {
@@ -3946,6 +3897,8 @@ fn config_to_dto(cfg: &xt_core::config::AppConfig) -> AppConfigDto {
         current_provider: cfg.current_provider.clone(),
         theme: cfg.theme.clone(),
         language: cfg.language.clone(),
+        last_game: cfg.last_game.clone(),
+        game_selection_mode: cfg.game_selection_mode.clone(),
         proxy_server: cfg.proxy_server.clone(),
         proxy_port: cfg.proxy_port,
         proxy_username: cfg.proxy_username.clone(),
@@ -3970,6 +3923,8 @@ fn dto_to_config(dto: &AppConfigDto) -> xt_core::config::AppConfig {
         current_provider: dto.current_provider.clone(),
         theme: dto.theme.clone(),
         language: dto.language.clone(),
+        last_game: dto.last_game.clone(),
+        game_selection_mode: dto.game_selection_mode.clone(),
         proxy_server: dto.proxy_server.clone(),
         proxy_port: dto.proxy_port,
         proxy_username: dto.proxy_username.clone(),

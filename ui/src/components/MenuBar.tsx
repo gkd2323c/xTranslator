@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAppStore } from "../stores/appStore";
 import { Button, Input } from "./ui";
-import { loadEsp, loadSst, saveSst, exportXml, importXml, saveStrings, saveEsp, tcscConvert, tcscBatchConvert, updateTranslation, loadVocabulary, compareSourceDest, loadDataConfigs, delocalizeEsp, loadConfig, spellCheckLoad, spellCheckToggle, spellCheckConfig, type BatchProgress } from "../api/strings";
-import type { LoadSstResponse, XmlImportResponse } from "../api/strings";
+import { loadEsp, loadSst, saveSst, exportXml, importXml, saveStrings, saveEsp, tcscConvert, tcscBatchConvert, updateTranslation, loadVocabulary, compareSourceDest, loadDataConfigs, delocalizeEsp, loadConfig, spellCheckLoad, spellCheckToggle, spellCheckConfig, SUPPORTED_GAME_IDS, type BatchProgress } from "../api/strings";
+import type { LoadSstResponse, XmlImportResponse, SupportedGameId } from "../api/strings";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
@@ -14,6 +14,7 @@ import { SettingsDialog } from "./SettingsDialog";
 import { ToolboxDialog } from "./ToolboxDialog";
 import { SpellCheckSettingsDialog } from "./SpellCheckSettingsDialog";
 import { MergeSstDialog } from "./MergeSstDialog";
+import { requestedGameForLoad } from "../gameContext";
 
 // ============================================================================
 // MenuBar 组件 - 应用菜单栏和工具栏
@@ -294,6 +295,8 @@ export function MenuBar() {
   const language = useAppStore((s) => s.language);             // 源语言
   const isDirty = useAppStore((s) => s.isDirty);               // 是否有未保存的改动
   const targetLang = useAppStore((s) => s.targetLang);         // 目标语言
+  const currentGame = useAppStore((s) => s.currentGame);       // 当前游戏上下文
+  const gameSelectionMode = useAppStore((s) => s.gameSelectionMode);
   const selectedId = useAppStore((s) => s.selectedId);         // 当前选中的字符串 ID
   const activePanel = useAppStore((s) => s.activePanel);       // 当前活跃的工具面板
   const espMode = useAppStore((s) => s.espMode);               // 是否为 ESP 模式
@@ -313,6 +316,7 @@ export function MenuBar() {
   const loadAllStrings = useAppStore((s) => s.loadAllStrings);
   const setIsDirty = useAppStore((s) => s.setIsDirty);
   const setTargetLang = useAppStore((s) => s.setTargetLang);
+  const setGameSelection = useAppStore((s) => s.setGameSelection);
   const reset = useAppStore((s) => s.reset);
   const theme = useAppStore((s) => s.theme);
   const setTheme = useAppStore((s) => s.setTheme);
@@ -393,9 +397,9 @@ export function MenuBar() {
    * 
    * @param path - ESP 文件的完整路径
    */
-  const loadEspFromPath = useCallback(async (path: string) => {
+  const loadEspFromPath = useCallback(async (path: string, skipDirtyConfirm = false) => {
     // 检查是否有未保存的改动
-    if (isDirty && !confirm(t("app.resetConfirm"))) return;
+    if (!skipDirtyConfirm && isDirty && !confirm(t("app.resetConfirm"))) return;
     warnIfBatchFile(path);
 
     // 自动查找 Strings 目录
@@ -415,11 +419,45 @@ export function MenuBar() {
 
       try {
         // 加载 ESP 文件
-        const stats = await loadEsp(path, stringsDir, language);
+        const gameState = useAppStore.getState();
+        const requestedGame = requestedGameForLoad(gameState.gameSelectionMode, gameState.currentGame);
+        const stats = await loadEsp(path, stringsDir, language, requestedGame);
         setEspLoaded(path, stats, stringsDir);
         await loadAllStrings();
         setIsDirty(false);
         toast.success(t("toast.espLoaded", { count: stats.total.toLocaleString() }));
+
+        const store = useAppStore.getState();
+        store.addLog(
+          "info",
+          `Game context: ${stats.game_id} (${stats.game_source}); Data/${stats.game_id}`,
+          "ESP",
+        );
+        if (stats.game_source === "fallback") {
+          store.addLog("warn", "Game auto-detection failed; select a game explicitly and reload the plugin.", "ESP");
+          toast.error(
+            t("menu.gameDetectionFallback", {
+              defaultValue: "Game auto-detection failed. Select a game explicitly and reload the plugin.",
+            }),
+            { duration: 8000 },
+          );
+          return;
+        }
+        if (stats.detected_game_id && stats.detected_game_id !== stats.game_id) {
+          store.addLog(
+            "warn",
+            `Workspace mismatch: selected ${stats.game_id}, plugin reports ${stats.detected_game_id}.`,
+            "ESP",
+          );
+          toast(
+            t("menu.gameMismatch", {
+              defaultValue: "Selected game {{selected}} differs from plugin detection {{detected}}.",
+              selected: stats.game_id,
+              detected: stats.detected_game_id,
+            }),
+            { icon: "!", duration: 6000 },
+          );
+        }
 
         // 检查崩溃恢复缓存
         if (stats.esp_hash) {
@@ -427,7 +465,7 @@ export function MenuBar() {
         }
 
         // 自动加载词汇表（用于启发式搜索）
-        loadVocabulary(stringsDir, language, useAppStore.getState().targetLang, useAppStore.getState().language === "english" ? "SkyrimSE" : undefined)
+        loadVocabulary(stringsDir, language, useAppStore.getState().targetLang, stats.game_id)
           .then((info) => {
             if (info.pair_count > 0) {
               toast(t("menu.vocabularyLoaded", { pairs: info.pair_count.toLocaleString(), files: info.base_names.length }), { duration: 3000 });
@@ -436,7 +474,7 @@ export function MenuBar() {
           .catch(() => {});
 
         // 自动加载数据配置（字段大小、CTDA 函数等）
-        loadDataConfigs(useAppStore.getState().language === "english" ? "SkyrimSE" : "SkyrimSE")
+        loadDataConfigs(stats.game_id)
           .then((cfg) => {
             setDataConfigs(cfg);
             const fieldCount = Object.keys(cfg.field_size_ref).length;
@@ -465,6 +503,18 @@ export function MenuBar() {
     t,
     warnIfBatchFile,
   ]);
+
+  const handleGameSelectionChange = useCallback(async (value: string) => {
+    if (espPath && isDirty && !confirm(t("app.resetConfirm"))) return;
+    if (value === "auto") {
+      setGameSelection("auto");
+    } else {
+      setGameSelection("manual", value as SupportedGameId);
+    }
+    if (espPath) {
+      await loadEspFromPath(espPath, true);
+    }
+  }, [espPath, isDirty, loadEspFromPath, setGameSelection, t]);
 
   const handleLoadEsp = useCallback(async () => {
     const selected = await open({
@@ -1253,6 +1303,18 @@ export function MenuBar() {
         </div>
 
         <div className="toolbar-group toolbar-selects" role="group" aria-label="Preferences">
+          <select
+            value={gameSelectionMode === "auto" ? "auto" : currentGame ?? "auto"}
+            onChange={(e) => void handleGameSelectionChange(e.target.value)}
+            className="lang-select"
+            title={t("menu.gameWorkspace", { defaultValue: "Game workspace" })}
+            aria-label={t("menu.gameWorkspace", { defaultValue: "Game workspace" })}
+          >
+            <option value="auto">{t("menu.gameAuto", { defaultValue: "Game: Auto" })}</option>
+            {SUPPORTED_GAME_IDS.map((game) => (
+              <option key={game} value={game}>{game}</option>
+            ))}
+          </select>
           <select
             value={targetLang}
             onChange={(e) => setTargetLang(e.target.value)}

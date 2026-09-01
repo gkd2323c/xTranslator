@@ -19,7 +19,7 @@ export function PexPanel() {
   const [pexPath, setPexPath] = useState<string>("");
   const [stringSearch, setStringSearch] = useState("");
   const [expandedStrings, setExpandedStrings] = useState<Set<number>>(new Set());
-  const language = useAppStore((s) => s.language);
+  const currentGame = useAppStore((s) => s.currentGame);
 
   const types = [...new Set((script?.translatable ?? []).map((t) => t.string_type))];
 
@@ -58,7 +58,11 @@ export function PexPanel() {
     setStringSearch("");
     setLoading(true);
     try {
-      const result = await parsePexStrings(path, language === "english" ? "SkyrimSE" : undefined);
+      if (!currentGame) {
+        toast.error(t("pex.selectGame", { defaultValue: "Select a game workspace before opening a PEX file." }));
+        return;
+      }
+      const result = await parsePexStrings(path, currentGame);
       setScript(result);
       toast.success(t("pex.foundStrings", { count: result.translatable.length }));
     } catch (e: any) {

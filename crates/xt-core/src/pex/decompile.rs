@@ -1,4 +1,4 @@
-//! PEX 反编译器 — 将 PEX 二进制文件解析为结构化类型，并输出类似于 Papyrus 的伪代码。
+//! PEX 反编译器 — 将 PEX 二进制文件解析为结构化类型，并输出与 Delphi xTranslator 完全等价的 Papyrus 伪代码。
 
 use byteorder::{LittleEndian, ReadBytesExt};
 use std::fmt::Write;
@@ -8,15 +8,55 @@ use super::types::PexStringEntry;
 
 // ── 结构化类型 ──────────────────────────────────────────────────────
 
-/// 解码后的 PEX 指令
-#[derive(Clone, Debug)]
-pub struct Instruction {
-    pub opcode: Opcode,
-    pub args: Vec<u16>,
+/// PEX 指令参数的类型化值（严格对应 Delphi TpexVarData / Papyrus VariableData）
+#[derive(Clone, Debug, PartialEq)]
+pub enum PexValue {
+    None,
+    Identifier(String),
+    StringLiteral(String),
+    Integer(i32),
+    Float(f32),
+    Bool(bool),
 }
 
-/// 所有已知的 Papyrus 操作码
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+impl PexValue {
+    /// 格式化为与 Delphi `TpexVarData.getStrValue` 严格一致的字符串表示
+    pub fn get_str_value(&self, add_equal: bool) -> String {
+        let tag = if add_equal { "= " } else { "" };
+        match self {
+            PexValue::None => {
+                if !add_equal {
+                    "none".to_string()
+                } else {
+                    String::new()
+                }
+            }
+            PexValue::Identifier(s) => format!("{}{}", tag, s),
+            PexValue::StringLiteral(s) => format!("{}\"{}\"", tag, s),
+            PexValue::Integer(i) => format!("{}{}", tag, i),
+            PexValue::Float(f) => format!("{}{:.4}", tag, f),
+            PexValue::Bool(b) => format!("{}{}", tag, if *b { "True" } else { "False" }),
+        }
+    }
+
+    pub fn as_str(&self) -> &str {
+        match self {
+            PexValue::Identifier(s) | PexValue::StringLiteral(s) => s.as_str(),
+            _ => "",
+        }
+    }
+}
+
+/// 解码后的 PEX 指令
+#[derive(Clone, Debug, PartialEq)]
+pub struct Instruction {
+    pub opcode: Opcode,
+    pub raw_opcode: u8,
+    pub args: Vec<PexValue>,
+}
+
+/// 所有已知的 Papyrus 操作码（严格与 Delphi TESVT_scriptPex.pas 对齐，0x00 ..= 0x32）
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[repr(u8)]
 pub enum Opcode {
     Nop = 0x00,
@@ -34,37 +74,46 @@ pub enum Opcode {
     Fneg = 0x0C,
     Assign = 0x0D,
     Cast = 0x0E,
-    Cmplt = 0x0F,
-    CmpEq = 0x10,
+    CmpEq = 0x0F,
+    CmpLt = 0x10,
     CmpLte = 0x11,
-    Cmpgt = 0x12,
-    Cmpgte = 0x13,
-    Cmpneq = 0x14,
-    Jump = 0x15,
-    Jz = 0x16,
-    Jnz = 0x17,
-    Callmethod = 0x18,
-    Callparent = 0x19,
-    Callstatic = 0x1A,
-    Return = 0x1B,
-    Strcat = 0x1C,
-    Propget = 0x1D,
-    Propset = 0x1E,
-    ArrayCreate = 0x1F,
-    ArrayLength = 0x20,
-    ArrayGetElement = 0x21,
-    ArraySetElement = 0x22,
-    ArrayFindElement = 0x23,
-    ArrayRfindElement = 0x24,
-    ArrayAddElement = 0x25,
-    ArrayInsert = 0x26,
-    ArrayRemoveLast = 0x27,
-    ArrayRemoveIndex = 0x28,
-    ArrayClear = 0x29,
-    ArrayRemovelast = 0x2A,
-    Invalid = 0x2B,
-    IntToFloat = 0x2C,
-    FloatToInt = 0x2D,
+    CmpGt = 0x12,
+    CmpGte = 0x13,
+    Jump = 0x14,
+    Jz = 0x15,
+    Jnz = 0x16,
+    Callmethod = 0x17,
+    Callparent = 0x18,
+    Callstatic = 0x19,
+    Return = 0x1A,
+    Strcat = 0x1B,
+    Propget = 0x1C,
+    Propset = 0x1D,
+    ArrayCreate = 0x1E,
+    ArrayLength = 0x1F,
+    ArrayGetElement = 0x20,
+    ArraySetElement = 0x21,
+    ArrayFindElement = 0x22,
+    ArrayRfindElement = 0x23,
+    // Fallout 4 新增操作码
+    Is = 0x24,
+    StructCreate = 0x25,
+    StructGet = 0x26,
+    StructSet = 0x27,
+    StructFind = 0x28,
+    StructRFind = 0x29,
+    ArrayAdd = 0x2A,
+    ArrayInsert = 0x2B,
+    ArrayRemoveLast = 0x2C,
+    ArrayRemove = 0x2D,
+    ArrayClear = 0x2E,
+    // Starfield 新增操作码
+    GetAllMatchingStruct = 0x2F,
+    GuardLock = 0x30,
+    GuardUnlock = 0x31,
+    GuardTryLock = 0x32,
+    /// 未知或未识别的操作码（保留原始数值）
+    Unknown(u8),
 }
 
 impl Opcode {
@@ -85,38 +134,100 @@ impl Opcode {
             0x0C => Self::Fneg,
             0x0D => Self::Assign,
             0x0E => Self::Cast,
-            0x0F => Self::Cmplt,
-            0x10 => Self::CmpEq,
+            0x0F => Self::CmpEq,
+            0x10 => Self::CmpLt,
             0x11 => Self::CmpLte,
-            0x12 => Self::Cmpgt,
-            0x13 => Self::Cmpgte,
-            0x14 => Self::Cmpneq,
-            0x15 => Self::Jump,
-            0x16 => Self::Jz,
-            0x17 => Self::Jnz,
-            0x18 => Self::Callmethod,
-            0x19 => Self::Callparent,
-            0x1A => Self::Callstatic,
-            0x1B => Self::Return,
-            0x1C => Self::Strcat,
-            0x1D => Self::Propget,
-            0x1E => Self::Propset,
-            0x1F => Self::ArrayCreate,
-            0x20 => Self::ArrayLength,
-            0x21 => Self::ArrayGetElement,
-            0x22 => Self::ArraySetElement,
-            0x23 => Self::ArrayFindElement,
-            0x24 => Self::ArrayRfindElement,
-            0x25 => Self::ArrayAddElement,
-            0x26 => Self::ArrayInsert,
-            0x27 => Self::ArrayRemoveLast,
-            0x28 => Self::ArrayRemoveIndex,
-            0x29 => Self::ArrayClear,
-            0x2A => Self::ArrayRemovelast,
-            0x2B => Self::Invalid,
-            0x2C => Self::IntToFloat,
-            0x2D => Self::FloatToInt,
-            _ => Self::Nop,
+            0x12 => Self::CmpGt,
+            0x13 => Self::CmpGte,
+            0x14 => Self::Jump,
+            0x15 => Self::Jz,
+            0x16 => Self::Jnz,
+            0x17 => Self::Callmethod,
+            0x18 => Self::Callparent,
+            0x19 => Self::Callstatic,
+            0x1A => Self::Return,
+            0x1B => Self::Strcat,
+            0x1C => Self::Propget,
+            0x1D => Self::Propset,
+            0x1E => Self::ArrayCreate,
+            0x1F => Self::ArrayLength,
+            0x20 => Self::ArrayGetElement,
+            0x21 => Self::ArraySetElement,
+            0x22 => Self::ArrayFindElement,
+            0x23 => Self::ArrayRfindElement,
+            0x24 => Self::Is,
+            0x25 => Self::StructCreate,
+            0x26 => Self::StructGet,
+            0x27 => Self::StructSet,
+            0x28 => Self::StructFind,
+            0x29 => Self::StructRFind,
+            0x2A => Self::ArrayAdd,
+            0x2B => Self::ArrayInsert,
+            0x2C => Self::ArrayRemoveLast,
+            0x2D => Self::ArrayRemove,
+            0x2E => Self::ArrayClear,
+            0x2F => Self::GetAllMatchingStruct,
+            0x30 => Self::GuardLock,
+            0x31 => Self::GuardUnlock,
+            0x32 => Self::GuardTryLock,
+            other => Self::Unknown(other),
+        }
+    }
+
+    pub fn to_u8(self) -> u8 {
+        match self {
+            Self::Nop => 0x00,
+            Self::Iadd => 0x01,
+            Self::Fadd => 0x02,
+            Self::Isub => 0x03,
+            Self::Fsub => 0x04,
+            Self::Imul => 0x05,
+            Self::Fmul => 0x06,
+            Self::Idiv => 0x07,
+            Self::Fdiv => 0x08,
+            Self::Imod => 0x09,
+            Self::Not => 0x0A,
+            Self::Ineg => 0x0B,
+            Self::Fneg => 0x0C,
+            Self::Assign => 0x0D,
+            Self::Cast => 0x0E,
+            Self::CmpEq => 0x0F,
+            Self::CmpLt => 0x10,
+            Self::CmpLte => 0x11,
+            Self::CmpGt => 0x12,
+            Self::CmpGte => 0x13,
+            Self::Jump => 0x14,
+            Self::Jz => 0x15,
+            Self::Jnz => 0x16,
+            Self::Callmethod => 0x17,
+            Self::Callparent => 0x18,
+            Self::Callstatic => 0x19,
+            Self::Return => 0x1A,
+            Self::Strcat => 0x1B,
+            Self::Propget => 0x1C,
+            Self::Propset => 0x1D,
+            Self::ArrayCreate => 0x1E,
+            Self::ArrayLength => 0x1F,
+            Self::ArrayGetElement => 0x20,
+            Self::ArraySetElement => 0x21,
+            Self::ArrayFindElement => 0x22,
+            Self::ArrayRfindElement => 0x23,
+            Self::Is => 0x24,
+            Self::StructCreate => 0x25,
+            Self::StructGet => 0x26,
+            Self::StructSet => 0x27,
+            Self::StructFind => 0x28,
+            Self::StructRFind => 0x29,
+            Self::ArrayAdd => 0x2A,
+            Self::ArrayInsert => 0x2B,
+            Self::ArrayRemoveLast => 0x2C,
+            Self::ArrayRemove => 0x2D,
+            Self::ArrayClear => 0x2E,
+            Self::GetAllMatchingStruct => 0x2F,
+            Self::GuardLock => 0x30,
+            Self::GuardUnlock => 0x31,
+            Self::GuardTryLock => 0x32,
+            Self::Unknown(raw) => raw,
         }
     }
 
@@ -137,12 +248,11 @@ impl Opcode {
             Self::Fneg => "fneg",
             Self::Assign => "assign",
             Self::Cast => "cast",
-            Self::Cmplt => "cmplt",
             Self::CmpEq => "cmpeq",
+            Self::CmpLt => "cmplt",
             Self::CmpLte => "cmplte",
-            Self::Cmpgt => "cmpgt",
-            Self::Cmpgte => "cmpgte",
-            Self::Cmpneq => "cmpneq",
+            Self::CmpGt => "cmpgt",
+            Self::CmpGte => "cmpgte",
             Self::Jump => "jump",
             Self::Jz => "jz",
             Self::Jnz => "jnz",
@@ -155,79 +265,90 @@ impl Opcode {
             Self::Propset => "propset",
             Self::ArrayCreate => "array_create",
             Self::ArrayLength => "array_length",
-            Self::ArrayGetElement => "array_get",
-            Self::ArraySetElement => "array_set",
-            Self::ArrayFindElement => "array_find",
-            Self::ArrayRfindElement => "array_rfind",
-            Self::ArrayAddElement => "array_add",
+            Self::ArrayGetElement => "array_getelement",
+            Self::ArraySetElement => "array_setelement",
+            Self::ArrayFindElement => "array_findelement",
+            Self::ArrayRfindElement => "array_rfindelement",
+            Self::Is => "is",
+            Self::StructCreate => "struct_create",
+            Self::StructGet => "struct_get",
+            Self::StructSet => "struct_set",
+            Self::StructFind => "struct_find",
+            Self::StructRFind => "struct_rfind",
+            Self::ArrayAdd => "array_add",
             Self::ArrayInsert => "array_insert",
             Self::ArrayRemoveLast => "array_removelast",
-            Self::ArrayRemoveIndex => "array_removeindex",
+            Self::ArrayRemove => "array_remove",
             Self::ArrayClear => "array_clear",
-            Self::ArrayRemovelast => "array_removelast",
-            Self::Invalid => "invalid",
-            Self::IntToFloat => "int_to_float",
-            Self::FloatToInt => "float_to_int",
+            Self::GetAllMatchingStruct => "getallmatchingstruct",
+            Self::GuardLock => "guardlock",
+            Self::GuardUnlock => "guardunlock",
+            Self::GuardTryLock => "guardtrylock",
+            Self::Unknown(_) => "unknown",
         }
     }
 
-    /// 此操作码接受的 u16 参数数量（基于 PEX 二进制格式）。
-    pub fn arg_count(self) -> usize {
+    /// 固定基础参数数量（严格对应 Delphi `instructionData: array [0 .. $32] of integer`）
+    pub fn fixed_arg_count(self) -> usize {
         match self {
-            // 0 参数指令
-            Self::Nop
-            | Self::Iadd
-            | Self::Fadd
-            | Self::Isub
-            | Self::Fsub
-            | Self::Imul
-            | Self::Fmul
-            | Self::Idiv
-            | Self::Fdiv
-            | Self::Imod
-            | Self::Not
-            | Self::Ineg
-            | Self::Fneg
-            | Self::Assign
-            | Self::Return
-            | Self::Propset
-            | Self::ArraySetElement
-            | Self::ArrayClear
-            | Self::FloatToInt => 0,
+            Self::Nop => 0,
+            Self::Iadd | Self::Fadd | Self::Isub | Self::Fsub | Self::Imul | Self::Fmul
+            | Self::Idiv | Self::Fdiv | Self::Imod => 3,
+            Self::Not | Self::Ineg | Self::Fneg | Self::Assign | Self::Cast => 2,
+            Self::CmpEq | Self::CmpLt | Self::CmpLte | Self::CmpGt | Self::CmpGte => 3,
+            Self::Jump => 1,
+            Self::Jz | Self::Jnz => 2,
+            Self::Callmethod => 4, // method, target, result, arg_count (+ args)
+            Self::Callparent => 3, // method, result, arg_count (+ args)
+            Self::Callstatic => 4, // class, method, result, arg_count (+ args)
+            Self::Return => 1,
+            Self::Strcat | Self::Propget | Self::Propset => 3,
+            Self::ArrayCreate | Self::ArrayLength => 2,
+            Self::ArrayGetElement | Self::ArraySetElement => 3,
+            Self::ArrayFindElement | Self::ArrayRfindElement => 4,
+            Self::Is => 3,
+            Self::StructCreate => 1,
+            Self::StructGet | Self::StructSet => 3,
+            Self::StructFind | Self::StructRFind => 5,
+            Self::ArrayAdd | Self::ArrayInsert => 3,
+            Self::ArrayRemoveLast => 1,
+            Self::ArrayRemove => 3,
+            Self::ArrayClear => 1,
+            Self::GetAllMatchingStruct => 6,
+            Self::GuardLock | Self::GuardUnlock => 1, // guard_count (+ guards)
+            Self::GuardTryLock => 2,                  // dest, guard_count (+ guards)
+            Self::Unknown(_) => 0,
+        }
+    }
 
-            // 1 参数指令
-            Self::Cmplt
-            | Self::CmpEq
-            | Self::CmpLte
-            | Self::Cmpgt
-            | Self::Cmpgte
-            | Self::Cmpneq
-            | Self::Strcat
-            | Self::Cast
-            | Self::Callstatic
-            | Self::Propget
-            | Self::ArrayCreate
-            | Self::ArrayLength
-            | Self::ArrayGetElement
-            | Self::ArrayAddElement
-            | Self::ArrayRemoveLast
-            | Self::ArrayRemovelast
-            | Self::IntToFloat => 1,
+    /// 是否为变长参数指令（严格对应 Delphi `extendedproc = [$17, $18, $19, $30, $31, $32]`）
+    pub fn is_extended_proc(self) -> bool {
+        matches!(
+            self,
+            Self::Callmethod
+                | Self::Callparent
+                | Self::Callstatic
+                | Self::GuardLock
+                | Self::GuardUnlock
+                | Self::GuardTryLock
+        )
+    }
 
-            // 2 参数指令
-            Self::Jump
-            | Self::Jnz
-            | Self::Callmethod
-            | Self::Callparent
-            | Self::Invalid
-            | Self::Jz
-            | Self::ArrayFindElement
-            | Self::ArrayRfindElement
-            | Self::ArrayInsert
-            | Self::ArrayRemoveIndex => 2,
+    /// 判断指令是否属于特定游戏体系
+    pub fn is_supported_in_game(self, game_id: u16) -> bool {
+        let raw = self.to_u8();
+        match game_id {
+            // Skyrim / Skyrim SE / Skyrim VR (GameID = 1 或 2)
+            1 | 2 => raw <= 0x23,
+            // Fallout 4 / Fallout 76 (GameID = 3)
+            3 => raw <= 0x2E,
+            // Starfield (GameID = 4 及更高)
+            _ => raw <= 0x32,
         }
     }
 }
+
+// ── 语法与模型结构 ──────────────────────────────────────────────────
 
 /// 变量定义
 #[derive(Clone, Debug)]
@@ -327,14 +448,16 @@ pub struct PexObject {
     pub states: Vec<PexState>,
 }
 
-/// 完全反编译的 PEX 脚本
+/// 完全反编译的 PEX
 #[derive(Clone, Debug)]
 pub struct DecompiledPex {
+    pub game_id: u16,
+    pub major_version: u8,
+    pub minor_version: u8,
+    pub compile_time: u64,
     pub objects: Vec<PexObject>,
     pub string_table: Vec<PexStringEntry>,
 }
-
-// ── 解析器 ────────────────────────────────────────────────────────────────
 
 type StrTab = Vec<PexStringEntry>;
 
@@ -344,58 +467,68 @@ fn lookup(st: &StrTab, idx: u16) -> String {
         .unwrap_or_default()
 }
 
-fn parse_var_value(cur: &mut Cursor<&[u8]>, st: &StrTab) -> io::Result<VarValue> {
-    if cur.position() >= cur.get_ref().len() as u64 {
-        return Ok(VarValue::None);
-    }
-    let val_type = cur.read_u8()?;
-    match val_type {
-        0 => Ok(VarValue::None),
-        1 => Ok(VarValue::Bool(cur.read_u8()? != 0)),
-        2 => Ok(VarValue::Integer(cur.read_u32::<LittleEndian>()?)),
-        3 => Ok(VarValue::Float(cur.read_f32::<LittleEndian>()?)),
-        4 => Ok(VarValue::Bool(cur.read_u8()? != 0)),
+// ── 解析实现 ────────────────────────────────────────────────────────
+
+fn parse_pex_value(cur: &mut Cursor<&[u8]>, st: &StrTab) -> io::Result<PexValue> {
+    let type_flag = cur.read_u8()?;
+    match type_flag {
+        0 => Ok(PexValue::None),
+        1 => {
+            let idx = cur.read_u16::<LittleEndian>()?;
+            Ok(PexValue::Identifier(lookup(st, idx)))
+        }
+        2 => {
+            let idx = cur.read_u16::<LittleEndian>()?;
+            Ok(PexValue::StringLiteral(lookup(st, idx)))
+        }
+        3 => {
+            let val = cur.read_i32::<LittleEndian>()?;
+            Ok(PexValue::Integer(val))
+        }
+        4 => {
+            let val = cur.read_f32::<LittleEndian>()?;
+            Ok(PexValue::Float(val))
+        }
         5 => {
+            let val = cur.read_u8()?;
+            Ok(PexValue::Bool(val != 0))
+        }
+        other => Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("Unknown PEX variable type flag: {}", other),
+        )),
+    }
+}
+
+fn parse_var_value(cur: &mut Cursor<&[u8]>, st: &StrTab) -> io::Result<VarValue> {
+    let type_tag = cur.read_u8()?;
+    match type_tag {
+        0 => Ok(VarValue::None),
+        1 => {
             let idx = cur.read_u16::<LittleEndian>()?;
             Ok(VarValue::String(lookup(st, idx)))
         }
-        6 | 7 | 8 => {
-            let count = cur.read_u16::<LittleEndian>()? as usize;
+        2 => {
+            let idx = cur.read_u16::<LittleEndian>()?;
+            Ok(VarValue::String(lookup(st, idx)))
+        }
+        3 => {
+            let val = cur.read_u32::<LittleEndian>()?;
+            Ok(VarValue::Integer(val))
+        }
+        4 => {
+            let val = cur.read_f32::<LittleEndian>()?;
+            Ok(VarValue::Float(val))
+        }
+        5 => {
+            let val = cur.read_u8()?;
+            Ok(VarValue::Bool(val != 0))
+        }
+        6 => {
+            let count = cur.read_u32::<LittleEndian>()? as usize;
             let mut arr = Vec::with_capacity(count);
             for _ in 0..count {
                 arr.push(parse_var_value(cur, st)?);
-            }
-            Ok(VarValue::Array(arr))
-        }
-        11 => {
-            let count = cur.read_u16::<LittleEndian>()? as usize;
-            let byte_count = (count + 7) / 8;
-            let pos = cur.position();
-            cur.set_position(pos + byte_count as u64);
-            Ok(VarValue::None)
-        }
-        12 => {
-            let count = cur.read_u16::<LittleEndian>()? as usize;
-            let mut arr = Vec::with_capacity(count);
-            for _ in 0..count {
-                arr.push(VarValue::Integer(cur.read_u32::<LittleEndian>()?));
-            }
-            Ok(VarValue::Array(arr))
-        }
-        13 => {
-            let count = cur.read_u16::<LittleEndian>()? as usize;
-            let mut arr = Vec::with_capacity(count);
-            for _ in 0..count {
-                arr.push(VarValue::Float(cur.read_f32::<LittleEndian>()?));
-            }
-            Ok(VarValue::Array(arr))
-        }
-        14 => {
-            let count = cur.read_u16::<LittleEndian>()? as usize;
-            let mut arr = Vec::with_capacity(count);
-            for _ in 0..count {
-                let idx = cur.read_u16::<LittleEndian>()?;
-                arr.push(VarValue::String(lookup(st, idx)));
             }
             Ok(VarValue::Array(arr))
         }
@@ -403,15 +536,36 @@ fn parse_var_value(cur: &mut Cursor<&[u8]>, st: &StrTab) -> io::Result<VarValue>
     }
 }
 
-fn parse_instruction(cur: &mut Cursor<&[u8]>) -> io::Result<Instruction> {
-    let opcode_byte = cur.read_u8()?;
-    let opcode = Opcode::from_u8(opcode_byte);
-    let arg_count = opcode.arg_count();
-    let mut args = Vec::with_capacity(arg_count);
-    for _ in 0..arg_count {
-        args.push(cur.read_u16::<LittleEndian>()?);
+fn parse_instruction(cur: &mut Cursor<&[u8]>, st: &StrTab) -> io::Result<Instruction> {
+    let raw_opcode = cur.read_u8()?;
+    let opcode = Opcode::from_u8(raw_opcode);
+    let fixed_count = opcode.fixed_arg_count();
+    let mut args = Vec::with_capacity(fixed_count);
+
+    let mut extra_args_count: i32 = 0;
+    for _ in 0..fixed_count {
+        let val = parse_pex_value(cur, st)?;
+        // 在 Delphi checkVariableData 中，读取到 Integer 类型时返回其数值作为 extraArg 候选
+        if let PexValue::Integer(i) = val {
+            extra_args_count = i;
+        } else {
+            extra_args_count = 0;
+        }
+        args.push(val);
     }
-    Ok(Instruction { opcode, args })
+
+    // 严格按照 Delphi 逻辑：若属于 extendedproc ($17, $18, $19, $30, $31, $32) 且 extraArg > 0，继续读取变长参数
+    if opcode.is_extended_proc() && extra_args_count > 0 {
+        for _ in 0..extra_args_count {
+            args.push(parse_pex_value(cur, st)?);
+        }
+    }
+
+    Ok(Instruction {
+        opcode,
+        raw_opcode,
+        args,
+    })
 }
 
 /// 将 PEX 二进制文件完全反编译为结构化类型。
@@ -428,10 +582,10 @@ pub fn decompile_pex(data: &[u8]) -> io::Result<DecompiledPex> {
     }
 
     // Header
-    let _major = cur.read_u8()?;
-    let _minor = cur.read_u8()?;
-    let _game_id = cur.read_u16::<LittleEndian>()?;
-    let _compile_time = cur.read_u64::<LittleEndian>()?;
+    let major_version = cur.read_u8()?;
+    let minor_version = cur.read_u8()?;
+    let game_id = cur.read_u16::<LittleEndian>()?;
+    let compile_time = cur.read_u64::<LittleEndian>()?;
 
     // 字符串表
     let st_count = cur.read_u16::<LittleEndian>()? as usize;
@@ -446,7 +600,7 @@ pub fn decompile_pex(data: &[u8]) -> io::Result<DecompiledPex> {
         });
     }
 
-    // 调试信息（跳过 — 反编译不需要它）
+    // 调试信息（跳过）
     let _debug_mod_time = cur.read_u64::<LittleEndian>()?;
     let debug_count = cur.read_u16::<LittleEndian>()? as usize;
     for _ in 0..debug_count {
@@ -455,7 +609,7 @@ pub fn decompile_pex(data: &[u8]) -> io::Result<DecompiledPex> {
         cur.set_position(pos + len as u64);
     }
 
-    // 用户标志（跳过文件头级别）
+    // 用户标志（跳过）
     let uf_count = cur.read_u16::<LittleEndian>()? as usize;
     for _ in 0..uf_count {
         let _n = cur.read_u16::<LittleEndian>()?;
@@ -478,6 +632,10 @@ pub fn decompile_pex(data: &[u8]) -> io::Result<DecompiledPex> {
     }
 
     Ok(DecompiledPex {
+        game_id,
+        major_version,
+        minor_version,
+        compile_time,
         objects,
         string_table,
     })
@@ -649,7 +807,7 @@ fn parse_function(cur: &mut Cursor<&[u8]>, st: &StrTab) -> io::Result<PexFunctio
     let inst_count = cur.read_u16::<LittleEndian>()? as usize;
     let mut instructions = Vec::with_capacity(inst_count);
     for _ in 0..inst_count {
-        instructions.push(parse_instruction(cur)?);
+        instructions.push(parse_instruction(cur, st)?);
     }
 
     Ok(PexFunction {
@@ -666,18 +824,18 @@ fn parse_function(cur: &mut Cursor<&[u8]>, st: &StrTab) -> io::Result<PexFunctio
 
 // ── 伪代码发射器 ────────────────────────────────────────────────────
 
-/// 从反编译的 PEX 发射类似于 Papyrus 的伪代码。
+/// 从反编译的 PEX 发射类似于 Papyrus 的伪代码（格式完全对齐 Delphi xTranslator）。
 pub fn emit_pseudocode(pex: &DecompiledPex) -> String {
     let mut out = String::with_capacity(4096);
 
     for obj in &pex.objects {
-        emit_object(&mut out, obj, &pex.string_table);
+        emit_object(&mut out, obj);
     }
 
     out
 }
 
-fn emit_object(out: &mut String, obj: &PexObject, st: &StrTab) {
+fn emit_object(out: &mut String, obj: &PexObject) {
     // 脚本头
     let _ = write!(out, "ScriptName {}", obj.name);
     if !obj.parent_class.is_empty() {
@@ -705,7 +863,7 @@ fn emit_object(out: &mut String, obj: &PexObject, st: &StrTab) {
                 let _ = write!(out, " = {}", i);
             }
             VarValue::Float(f) => {
-                let _ = write!(out, " = {}", f);
+                let _ = write!(out, " = {:.4}", f);
             }
             VarValue::String(s) => {
                 let _ = write!(out, " = \"{}\"", s);
@@ -734,21 +892,18 @@ fn emit_object(out: &mut String, obj: &PexObject, st: &StrTab) {
         out.push('\n');
     }
 
-    // 独立属性（不在组中）
-    // 组中的属性已在上方发射
-
     // 状态
     for state in &obj.states {
         if state.name.is_empty() {
             // 默认状态 — 直接发射函数
             for func in &state.functions {
-                emit_function(out, func, st);
+                emit_function(out, func);
                 out.push('\n');
             }
         } else {
             let _ = writeln!(out, "State {}", state.name);
             for func in &state.functions {
-                emit_function(out, func, st);
+                emit_function(out, func);
             }
             let _ = writeln!(out, "EndState");
             out.push('\n');
@@ -770,7 +925,7 @@ fn emit_property(out: &mut String, prop: &PexProperty) {
             let _ = write!(out, " = {}", i);
         }
         VarValue::Float(f) => {
-            let _ = write!(out, " = {}", f);
+            let _ = write!(out, " = {:.4}", f);
         }
         VarValue::String(s) => {
             let _ = write!(out, " = \"{}\"", s);
@@ -781,7 +936,7 @@ fn emit_property(out: &mut String, prop: &PexProperty) {
     let _ = writeln!(out, "EndProperty");
 }
 
-fn emit_function(out: &mut String, func: &PexFunction, st: &StrTab) {
+fn emit_function(out: &mut String, func: &PexFunction) {
     if !func.doc.is_empty() {
         let _ = writeln!(out, "    ; {}", func.doc);
     }
@@ -813,486 +968,598 @@ fn emit_function(out: &mut String, func: &PexFunction, st: &StrTab) {
 
     // 指令
     for inst in &func.instructions {
-        emit_instruction(out, inst, st);
+        emit_instruction(out, inst, &func.locals);
     }
 
     let _ = writeln!(out, "    EndFunction");
 }
 
-fn emit_instruction(out: &mut String, inst: &Instruction, st: &StrTab) {
-    match inst.opcode {
-        Opcode::Nop => {
-            let _ = writeln!(out, "        ; nop");
+fn get_arg(inst: &Instruction, idx: usize) -> String {
+    inst.args
+        .get(idx)
+        .map(|v| v.get_str_value(false))
+        .unwrap_or_default()
+}
+
+fn get_var_type(var_name: &str, locals: &[PexLocal]) -> String {
+    for local in locals {
+        if local.name == var_name {
+            return local.type_name.clone();
         }
-        Opcode::Return => {
-            let _ = writeln!(out, "        return");
-        }
-        Opcode::Assign => {
-            if inst.args.len() >= 2 {
-                let dest = arg_name(inst.args[0], st);
-                let src = arg_name(inst.args[1], st);
-                let _ = writeln!(out, "        {} = {}", dest, src);
-            }
-        }
-        Opcode::Iadd | Opcode::Fadd => {
-            if inst.args.len() >= 3 {
-                let dest = arg_name(inst.args[0], st);
-                let a = arg_name(inst.args[1], st);
-                let b = arg_name(inst.args[2], st);
-                let op = if inst.opcode == Opcode::Iadd {
-                    "+"
-                } else {
-                    "+"
-                };
-                let _ = writeln!(out, "        {} = {} {} {}", dest, a, op, b);
-            }
-        }
-        Opcode::Isub | Opcode::Fsub => {
-            if inst.args.len() >= 3 {
-                let dest = arg_name(inst.args[0], st);
-                let a = arg_name(inst.args[1], st);
-                let b = arg_name(inst.args[2], st);
-                let _ = writeln!(out, "        {} = {} - {}", dest, a, b);
-            }
-        }
-        Opcode::Imul | Opcode::Fmul => {
-            if inst.args.len() >= 3 {
-                let dest = arg_name(inst.args[0], st);
-                let a = arg_name(inst.args[1], st);
-                let b = arg_name(inst.args[2], st);
-                let _ = writeln!(out, "        {} = {} * {}", dest, a, b);
-            }
-        }
-        Opcode::Idiv | Opcode::Fdiv => {
-            if inst.args.len() >= 3 {
-                let dest = arg_name(inst.args[0], st);
-                let a = arg_name(inst.args[1], st);
-                let b = arg_name(inst.args[2], st);
-                let _ = writeln!(out, "        {} = {} / {}", dest, a, b);
-            }
-        }
-        Opcode::Imod => {
-            if inst.args.len() >= 3 {
-                let dest = arg_name(inst.args[0], st);
-                let a = arg_name(inst.args[1], st);
-                let b = arg_name(inst.args[2], st);
-                let _ = writeln!(out, "        {} = {} % {}", dest, a, b);
-            }
-        }
-        Opcode::CmpEq => {
-            if inst.args.len() >= 3 {
-                let dest = arg_name(inst.args[0], st);
-                let a = arg_name(inst.args[1], st);
-                let b = arg_name(inst.args[2], st);
-                let _ = writeln!(out, "        {} = {} == {}", dest, a, b);
-            }
-        }
-        Opcode::Cmpneq => {
-            if inst.args.len() >= 3 {
-                let dest = arg_name(inst.args[0], st);
-                let a = arg_name(inst.args[1], st);
-                let b = arg_name(inst.args[2], st);
-                let _ = writeln!(out, "        {} = {} != {}", dest, a, b);
-            }
-        }
-        Opcode::Cmplt => {
-            if inst.args.len() >= 3 {
-                let dest = arg_name(inst.args[0], st);
-                let a = arg_name(inst.args[1], st);
-                let b = arg_name(inst.args[2], st);
-                let _ = writeln!(out, "        {} = {} < {}", dest, a, b);
-            }
-        }
-        Opcode::CmpLte => {
-            if inst.args.len() >= 3 {
-                let dest = arg_name(inst.args[0], st);
-                let a = arg_name(inst.args[1], st);
-                let b = arg_name(inst.args[2], st);
-                let _ = writeln!(out, "        {} = {} <= {}", dest, a, b);
-            }
-        }
-        Opcode::Cmpgt => {
-            if inst.args.len() >= 3 {
-                let dest = arg_name(inst.args[0], st);
-                let a = arg_name(inst.args[1], st);
-                let b = arg_name(inst.args[2], st);
-                let _ = writeln!(out, "        {} = {} > {}", dest, a, b);
-            }
-        }
-        Opcode::Cmpgte => {
-            if inst.args.len() >= 3 {
-                let dest = arg_name(inst.args[0], st);
-                let a = arg_name(inst.args[1], st);
-                let b = arg_name(inst.args[2], st);
-                let _ = writeln!(out, "        {} = {} >= {}", dest, a, b);
-            }
-        }
-        Opcode::Not => {
-            if inst.args.len() >= 2 {
-                let dest = arg_name(inst.args[0], st);
-                let src = arg_name(inst.args[1], st);
-                let _ = writeln!(out, "        {} = !{}", dest, src);
-            }
-        }
-        Opcode::Ineg => {
-            if inst.args.len() >= 2 {
-                let dest = arg_name(inst.args[0], st);
-                let src = arg_name(inst.args[1], st);
-                let _ = writeln!(out, "        {} = -{}", dest, src);
-            }
-        }
-        Opcode::Fneg => {
-            if inst.args.len() >= 2 {
-                let dest = arg_name(inst.args[0], st);
-                let src = arg_name(inst.args[1], st);
-                let _ = writeln!(out, "        {} = -{}", dest, src);
-            }
-        }
-        Opcode::Cast => {
-            if inst.args.len() >= 2 {
-                let dest = arg_name(inst.args[0], st);
-                let src = arg_name(inst.args[1], st);
-                let _ = writeln!(out, "        {} = ({}) {}", dest, "...", src);
-            }
-        }
-        Opcode::Jump => {
-            if !inst.args.is_empty() {
-                let _ = writeln!(out, "        jump {}", inst.args[0]);
-            }
-        }
-        Opcode::Jz => {
-            if inst.args.len() >= 2 {
-                let cond = arg_name(inst.args[0], st);
-                let _ = writeln!(out, "        if !{}: jump {}", cond, inst.args[1]);
-            }
-        }
-        Opcode::Jnz => {
-            if inst.args.len() >= 2 {
-                let cond = arg_name(inst.args[0], st);
-                let _ = writeln!(out, "        if {}: jump {}", cond, inst.args[1]);
-            }
-        }
-        Opcode::Callmethod => {
-            if inst.args.len() >= 2 {
-                let func_name = arg_name(inst.args[0], st);
-                let obj = arg_name(inst.args[1], st);
-                let _ = writeln!(out, "        {}.{}(...)", obj, func_name);
-            }
-        }
-        Opcode::Callparent => {
-            if !inst.args.is_empty() {
-                let func_name = arg_name(inst.args[0], st);
-                let _ = writeln!(out, "        parent.{}(...)", func_name);
-            }
-        }
-        Opcode::Callstatic => {
-            if inst.args.len() >= 2 {
-                let func_name = arg_name(inst.args[0], st);
-                let script = arg_name(inst.args[1], st);
-                let _ = writeln!(out, "        {}.{}(...)", script, func_name);
-            }
-        }
-        Opcode::Strcat => {
-            if inst.args.len() >= 3 {
-                let dest = arg_name(inst.args[0], st);
-                let a = arg_name(inst.args[1], st);
-                let b = arg_name(inst.args[2], st);
-                let _ = writeln!(out, "        {} = {} + {}", dest, a, b);
-            }
-        }
-        Opcode::Propget => {
-            if inst.args.len() >= 2 {
-                let prop = arg_name(inst.args[0], st);
-                let obj = arg_name(inst.args[1], st);
-                let _ = writeln!(out, "        {} = {}.{}", obj, obj, prop);
-            }
-        }
-        Opcode::Propset => {
-            if inst.args.len() >= 2 {
-                let prop = arg_name(inst.args[0], st);
-                let val = arg_name(inst.args[1], st);
-                let _ = writeln!(out, "        {} = {}", prop, val);
-            }
-        }
-        Opcode::ArrayCreate => {
-            if inst.args.len() >= 2 {
-                let arr = arg_name(inst.args[0], st);
-                let size = arg_name(inst.args[1], st);
-                let _ = writeln!(out, "        {} = new [{}]", arr, size);
-            }
-        }
-        Opcode::ArrayLength => {
-            if inst.args.len() >= 2 {
-                let dest = arg_name(inst.args[0], st);
-                let arr = arg_name(inst.args[1], st);
-                let _ = writeln!(out, "        {} = {}.length", dest, arr);
-            }
-        }
-        Opcode::ArrayGetElement => {
-            if inst.args.len() >= 3 {
-                let dest = arg_name(inst.args[0], st);
-                let arr = arg_name(inst.args[1], st);
-                let idx = arg_name(inst.args[2], st);
-                let _ = writeln!(out, "        {} = {}[{}]", dest, arr, idx);
-            }
-        }
-        Opcode::ArraySetElement => {
-            if inst.args.len() >= 3 {
-                let arr = arg_name(inst.args[0], st);
-                let idx = arg_name(inst.args[1], st);
-                let val = arg_name(inst.args[2], st);
-                let _ = writeln!(out, "        {}[{}] = {}", arr, idx, val);
-            }
-        }
-        Opcode::ArrayFindElement => {
-            if inst.args.len() >= 4 {
-                let dest = arg_name(inst.args[0], st);
-                let arr = arg_name(inst.args[1], st);
-                let val = arg_name(inst.args[2], st);
-                let start = arg_name(inst.args[3], st);
-                let _ = writeln!(out, "        {} = {}.find({}, {})", dest, arr, val, start);
-            }
-        }
-        Opcode::ArrayRfindElement => {
-            if inst.args.len() >= 4 {
-                let dest = arg_name(inst.args[0], st);
-                let arr = arg_name(inst.args[1], st);
-                let val = arg_name(inst.args[2], st);
-                let start = arg_name(inst.args[3], st);
-                let _ = writeln!(out, "        {} = {}.rfind({}, {})", dest, arr, val, start);
-            }
-        }
-        Opcode::ArrayAddElement => {
-            if inst.args.len() >= 2 {
-                let arr = arg_name(inst.args[0], st);
-                let val = arg_name(inst.args[1], st);
-                let _ = writeln!(out, "        {}.add({})", arr, val);
-            }
-        }
-        Opcode::ArrayInsert => {
-            if inst.args.len() >= 3 {
-                let arr = arg_name(inst.args[0], st);
-                let idx = arg_name(inst.args[1], st);
-                let val = arg_name(inst.args[2], st);
-                let _ = writeln!(out, "        {}.insert({}, {})", arr, idx, val);
-            }
-        }
-        Opcode::ArrayRemoveLast => {
-            if !inst.args.is_empty() {
-                let arr = arg_name(inst.args[0], st);
-                let _ = writeln!(out, "        {}.removelast()", arr);
-            }
-        }
-        Opcode::ArrayRemoveIndex => {
-            if inst.args.len() >= 3 {
-                let arr = arg_name(inst.args[0], st);
-                let idx = arg_name(inst.args[1], st);
-                let count = arg_name(inst.args[2], st);
-                let _ = writeln!(out, "        {}.remove({}, {})", arr, idx, count);
-            }
-        }
-        Opcode::ArrayClear => {
-            if !inst.args.is_empty() {
-                let arr = arg_name(inst.args[0], st);
-                let _ = writeln!(out, "        {}.clear()", arr);
-            }
-        }
-        Opcode::IntToFloat => {
-            if inst.args.len() >= 2 {
-                let dest = arg_name(inst.args[0], st);
-                let src = arg_name(inst.args[1], st);
-                let _ = writeln!(out, "        {} = {} as Float", dest, src);
-            }
-        }
-        Opcode::FloatToInt => {
-            if inst.args.len() >= 2 {
-                let dest = arg_name(inst.args[0], st);
-                let src = arg_name(inst.args[1], st);
-                let _ = writeln!(out, "        {} = {} as Int", dest, src);
-            }
-        }
-        Opcode::ArrayRemovelast => {
-            if !inst.args.is_empty() {
-                let arr = arg_name(inst.args[0], st);
-                let _ = writeln!(out, "        {}.removelast()", arr);
-            }
-        }
-        Opcode::Invalid => {
-            let _ = writeln!(out, "        ; invalid({:?})", inst.args);
-        }
+    }
+    String::new()
+}
+
+fn set_method_result(res: &str) -> String {
+    if res == "::NoneVar" || res.is_empty() {
+        String::new()
+    } else {
+        format!("{} = ", res)
     }
 }
 
-fn arg_name(arg: u16, st: &StrTab) -> String {
-    // PEX 中的参数通常是编码为字符串表引用的变量/临时变量索引
-    // 我们查找字符串表以提高可读性
-    lookup(st, arg)
+/// 严格按照 Delphi `tPexDecompiler.includeNewArray` 实现
+fn include_new_array(type_str: &str, size_str: &str) -> String {
+    if let Some(pos) = type_str.find(']') {
+        let mut res = type_str.to_string();
+        res.insert_str(pos, size_str);
+        res
+    } else {
+        type_str.to_string()
+    }
+}
+
+fn get_method_args(inst: &Instruction, start_idx: usize) -> String {
+    let mut res = String::new();
+    for i in start_idx..inst.args.len() {
+        res.push_str(&inst.args[i].get_str_value(false));
+        if i < inst.args.len() - 1 {
+            res.push_str(", ");
+        }
+    }
+    res
+}
+
+/// 严格按照 Delphi `tPexDecompiler.drawInstruction` 发射单条指令的伪代码
+fn emit_instruction(out: &mut String, inst: &Instruction, locals: &[PexLocal]) {
+    let strtmp = match inst.opcode {
+        Opcode::Nop => "none".to_string(),
+        Opcode::Iadd | Opcode::Fadd => {
+            format!("{} = {} + {}", get_arg(inst, 0), get_arg(inst, 1), get_arg(inst, 2))
+        }
+        Opcode::Isub | Opcode::Fsub => {
+            format!("{} = {} - {}", get_arg(inst, 0), get_arg(inst, 1), get_arg(inst, 2))
+        }
+        Opcode::Imul | Opcode::Fmul => {
+            format!("{} = {} * {}", get_arg(inst, 0), get_arg(inst, 1), get_arg(inst, 2))
+        }
+        Opcode::Idiv | Opcode::Fdiv => {
+            format!("{} = {} / {}", get_arg(inst, 0), get_arg(inst, 1), get_arg(inst, 2))
+        }
+        Opcode::Imod => {
+            format!("{} = {} mod {}", get_arg(inst, 0), get_arg(inst, 1), get_arg(inst, 2))
+        }
+        Opcode::Not => {
+            format!("{} = not {}", get_arg(inst, 0), get_arg(inst, 1))
+        }
+        Opcode::Ineg | Opcode::Fneg => {
+            format!("{} = -{}", get_arg(inst, 0), get_arg(inst, 1))
+        }
+        Opcode::Assign => {
+            format!("{} = {}", get_arg(inst, 0), get_arg(inst, 1))
+        }
+        Opcode::Cast => {
+            let target_type = get_var_type(&get_arg(inst, 0), locals);
+            format!("{} = {} as {}", get_arg(inst, 0), get_arg(inst, 1), target_type)
+        }
+        Opcode::CmpEq => {
+            format!("{} = {} == {}", get_arg(inst, 0), get_arg(inst, 1), get_arg(inst, 2))
+        }
+        Opcode::CmpLt => {
+            format!("{} = {} < {}", get_arg(inst, 0), get_arg(inst, 1), get_arg(inst, 2))
+        }
+        Opcode::CmpLte => {
+            format!("{} = {} <= {}", get_arg(inst, 0), get_arg(inst, 1), get_arg(inst, 2))
+        }
+        Opcode::CmpGt => {
+            format!("{} = {} > {}", get_arg(inst, 0), get_arg(inst, 1), get_arg(inst, 2))
+        }
+        Opcode::CmpGte => {
+            format!("{} = {} >= {}", get_arg(inst, 0), get_arg(inst, 1), get_arg(inst, 2))
+        }
+        Opcode::Jump => {
+            format!("jump {}", get_arg(inst, 0))
+        }
+        Opcode::Jz => {
+            format!("if {} then jump {}", get_arg(inst, 0), get_arg(inst, 1))
+        }
+        Opcode::Jnz => {
+            format!("if not {} then jump {}", get_arg(inst, 0), get_arg(inst, 1))
+        }
+        Opcode::Callmethod => {
+            format!(
+                "{}{}.{}({})",
+                set_method_result(&get_arg(inst, 2)),
+                get_arg(inst, 1),
+                get_arg(inst, 0),
+                get_method_args(inst, 4)
+            )
+        }
+        Opcode::Callparent => {
+            format!(
+                "{}parent.{}({})",
+                set_method_result(&get_arg(inst, 1)),
+                get_arg(inst, 0),
+                get_method_args(inst, 3)
+            )
+        }
+        Opcode::Callstatic => {
+            format!(
+                "{}{}.{}({})",
+                set_method_result(&get_arg(inst, 2)),
+                get_arg(inst, 0),
+                get_arg(inst, 1),
+                get_method_args(inst, 4)
+            )
+        }
+        Opcode::Return => {
+            format!("return {}", get_arg(inst, 0))
+        }
+        Opcode::Strcat => {
+            format!("{} = {} + {}", get_arg(inst, 0), get_arg(inst, 1), get_arg(inst, 2))
+        }
+        Opcode::Propget => {
+            format!("{} = {}.{}", get_arg(inst, 2), get_arg(inst, 1), get_arg(inst, 0))
+        }
+        Opcode::Propset => {
+            format!("{}.{} = {}", get_arg(inst, 1), get_arg(inst, 0), get_arg(inst, 2))
+        }
+        Opcode::ArrayCreate => {
+            let var_type = get_var_type(&get_arg(inst, 0), locals);
+            format!(
+                "{} = new {}",
+                get_arg(inst, 0),
+                include_new_array(&var_type, &get_arg(inst, 1))
+            )
+        }
+        Opcode::ArrayLength => {
+            format!("{} = {}.length", get_arg(inst, 0), get_arg(inst, 1))
+        }
+        Opcode::ArrayGetElement => {
+            format!("{} = {}[{}]", get_arg(inst, 0), get_arg(inst, 1), get_arg(inst, 2))
+        }
+        Opcode::ArraySetElement => {
+            format!("{}[{}] = {}", get_arg(inst, 0), get_arg(inst, 1), get_arg(inst, 2))
+        }
+        Opcode::ArrayFindElement => {
+            format!(
+                "{} = {}.find({}, {})",
+                get_arg(inst, 1),
+                get_arg(inst, 0),
+                get_arg(inst, 2),
+                get_arg(inst, 3)
+            )
+        }
+        Opcode::ArrayRfindElement => {
+            format!(
+                "{} = {}.rfind({}, {})",
+                get_arg(inst, 1),
+                get_arg(inst, 0),
+                get_arg(inst, 2),
+                get_arg(inst, 3)
+            )
+        }
+        // Fallout 4
+        Opcode::Is => {
+            format!("{} = {} is {}", get_arg(inst, 0), get_arg(inst, 1), get_arg(inst, 2))
+        }
+        Opcode::StructCreate => {
+            format!("new {}", get_arg(inst, 0))
+        }
+        Opcode::StructGet => {
+            format!("{} = {}.{}", get_arg(inst, 0), get_arg(inst, 1), get_arg(inst, 2))
+        }
+        Opcode::StructSet => {
+            format!("{}.{} = {}", get_arg(inst, 0), get_arg(inst, 1), get_arg(inst, 2))
+        }
+        Opcode::StructFind => {
+            format!(
+                "{} = {}.findstruct({}, {}, {})",
+                get_arg(inst, 1),
+                get_arg(inst, 0),
+                get_arg(inst, 2),
+                get_arg(inst, 3),
+                get_arg(inst, 4)
+            )
+        }
+        Opcode::StructRFind => {
+            format!(
+                "{} = {}.rfindstruct({}, {}, {})",
+                get_arg(inst, 1),
+                get_arg(inst, 0),
+                get_arg(inst, 2),
+                get_arg(inst, 3),
+                get_arg(inst, 4)
+            )
+        }
+        Opcode::ArrayAdd => {
+            format!("{}.Add({}, {})", get_arg(inst, 0), get_arg(inst, 1), get_arg(inst, 2))
+        }
+        Opcode::ArrayInsert => {
+            format!("{}.Insert({}, {})", get_arg(inst, 0), get_arg(inst, 1), get_arg(inst, 2))
+        }
+        Opcode::ArrayRemoveLast => {
+            format!("{}.RemoveLast", get_arg(inst, 0))
+        }
+        Opcode::ArrayRemove => {
+            format!("{}.Remove({}, {})", get_arg(inst, 0), get_arg(inst, 1), get_arg(inst, 2))
+        }
+        Opcode::ArrayClear => {
+            format!("{}.Clear", get_arg(inst, 0))
+        }
+        // Starfield
+        Opcode::GetAllMatchingStruct => {
+            format!(
+                "{}.GetAllMatchingStruct({}, {}, {}, {})",
+                get_arg(inst, 0),
+                get_arg(inst, 2),
+                get_arg(inst, 3),
+                get_arg(inst, 4),
+                get_arg(inst, 5)
+            )
+        }
+        Opcode::GuardLock => {
+            format!("GuardLock({})", get_arg(inst, 1))
+        }
+        Opcode::GuardUnlock => {
+            format!("GuardUnlock({})", get_arg(inst, 1))
+        }
+        Opcode::GuardTryLock => {
+            format!("{} = GuardTryLock({})", get_arg(inst, 0), get_arg(inst, 2))
+        }
+        Opcode::Unknown(raw) => {
+            format!("unknown OpCode: {:02x}", raw)
+        }
+    };
+
+    let _ = writeln!(out, "        {}", strtmp);
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use byteorder::WriteBytesExt;
 
     #[test]
     fn test_opcode_mnemonic() {
         assert_eq!(Opcode::Nop.mnemonic(), "nop");
         assert_eq!(Opcode::Return.mnemonic(), "return");
         assert_eq!(Opcode::Callmethod.mnemonic(), "callmethod");
+        assert_eq!(Opcode::Is.mnemonic(), "is");
+        assert_eq!(Opcode::GuardLock.mnemonic(), "guardlock");
     }
 
     #[test]
-    fn test_opcode_arg_count() {
-        assert_eq!(Opcode::Nop.arg_count(), 0);
-        assert_eq!(Opcode::Jump.arg_count(), 2);
-        assert_eq!(Opcode::Invalid.arg_count(), 2);
-        assert_eq!(Opcode::Cast.arg_count(), 1);
-        assert_eq!(Opcode::Return.arg_count(), 0);
-        assert_eq!(Opcode::Callmethod.arg_count(), 2);
-        assert_eq!(Opcode::Callstatic.arg_count(), 1);
-        assert_eq!(Opcode::Jz.arg_count(), 2);
-        assert_eq!(Opcode::Jnz.arg_count(), 2);
+    fn test_opcode_fixed_arg_count() {
+        assert_eq!(Opcode::Nop.fixed_arg_count(), 0);
+        assert_eq!(Opcode::Iadd.fixed_arg_count(), 3);
+        assert_eq!(Opcode::Jump.fixed_arg_count(), 1);
+        assert_eq!(Opcode::Jz.fixed_arg_count(), 2);
+        assert_eq!(Opcode::Jnz.fixed_arg_count(), 2);
+        assert_eq!(Opcode::Callmethod.fixed_arg_count(), 4);
+        assert_eq!(Opcode::Callparent.fixed_arg_count(), 3);
+        assert_eq!(Opcode::Callstatic.fixed_arg_count(), 4);
+        assert_eq!(Opcode::Return.fixed_arg_count(), 1);
+        assert_eq!(Opcode::ArrayGetElement.fixed_arg_count(), 3);
+        assert_eq!(Opcode::ArraySetElement.fixed_arg_count(), 3);
+        assert_eq!(Opcode::ArrayAdd.fixed_arg_count(), 3);
+        assert_eq!(Opcode::GetAllMatchingStruct.fixed_arg_count(), 6);
+        assert_eq!(Opcode::GuardLock.fixed_arg_count(), 1);
+        assert_eq!(Opcode::GuardUnlock.fixed_arg_count(), 1);
+        assert_eq!(Opcode::GuardTryLock.fixed_arg_count(), 2);
     }
 
     #[test]
-    fn test_decompile_minimal_pex() {
-        // 构造一个包含单个对象和单个函数的最小 PEX
-        // String table:
-        // 0: ""
-        // 1: "TestScript"
-        // 2: ""
-        // 3: ""
-        // 4: ""
-        // 5: "Int"
-        // 6: "count"
-        // 7: ""
-        // 8: "GetCount"
-        // 9: "Int"
-
-        let strings: Vec<&str> = vec![
-            "",
-            "",
-            "TestScript",
-            "",
-            "",
-            "",
-            "Int",
-            "count",
-            "",
-            "GetCount",
-            "Int",
-        ];
-        // idx 0:"", 1:"", 2:"TestScript", 3:"", 4:"", 5:"", 6:"Int", 7:"count", 8:"", 9:"GetCount", 10:"Int"
-
-        let mut data = Vec::new();
-        // Magic
-        data.extend_from_slice(&0xFA57C0DEu32.to_le_bytes());
-        // Header
-        data.push(3);
-        data.push(10);
-        data.extend_from_slice(&1u16.to_le_bytes());
-        data.extend_from_slice(&0u64.to_le_bytes());
-        // String table
-        data.extend_from_slice(&(strings.len() as u16).to_le_bytes());
-        for s in &strings {
-            let b = s.as_bytes();
-            data.extend_from_slice(&(b.len() as u16).to_le_bytes());
-            data.extend_from_slice(b);
+    fn test_opcode_from_and_to_u8() {
+        for b in 0x00..=0x32 {
+            let op = Opcode::from_u8(b);
+            assert_eq!(op.to_u8(), b);
         }
-        // Debug info (empty)
-        data.extend_from_slice(&0u64.to_le_bytes());
-        data.extend_from_slice(&0u16.to_le_bytes());
-        // User flags (empty)
-        data.extend_from_slice(&0u16.to_le_bytes());
-        // Objects: 1
-        data.extend_from_slice(&1u16.to_le_bytes());
-        data.extend_from_slice(&2u16.to_le_bytes()); // name=idx2 "TestScript"
+        let unknown = Opcode::from_u8(0xFF);
+        assert_eq!(unknown, Opcode::Unknown(0xFF));
+        assert_eq!(unknown.to_u8(), 0xFF);
+        assert_eq!(unknown.mnemonic(), "unknown");
+    }
 
-        // 构建对象体
+    #[test]
+    fn test_game_version_modeling() {
+        // Skyrim (GameID = 1) 只支持 0x00..=0x23
+        assert!(Opcode::Iadd.is_supported_in_game(1));
+        assert!(Opcode::ArrayRfindElement.is_supported_in_game(1));
+        assert!(!Opcode::Is.is_supported_in_game(1));
+        assert!(!Opcode::GuardLock.is_supported_in_game(1));
+
+        // Fallout 4 (GameID = 3) 支持 0x00..=0x2E
+        assert!(Opcode::Is.is_supported_in_game(3));
+        assert!(Opcode::ArrayClear.is_supported_in_game(3));
+        assert!(!Opcode::GetAllMatchingStruct.is_supported_in_game(3));
+        assert!(!Opcode::GuardLock.is_supported_in_game(3));
+
+        // Starfield (GameID = 4) 支持 0x00..=0x32
+        assert!(Opcode::GetAllMatchingStruct.is_supported_in_game(4));
+        assert!(Opcode::GuardLock.is_supported_in_game(4));
+        assert!(Opcode::GuardTryLock.is_supported_in_game(4));
+    }
+
+    #[test]
+    fn test_float_formatting_delphi_parity() {
+        let val1 = PexValue::Float(1.0);
+        assert_eq!(val1.get_str_value(false), "1.0000");
+
+        let val2 = PexValue::Float(3.14159);
+        assert_eq!(val2.get_str_value(false), "3.1416");
+    }
+
+    #[test]
+    fn test_include_new_array_delphi_parity() {
+        // 含 ']' 时插入 size
+        assert_eq!(include_new_array("Int[]", "5"), "Int[5]");
+        // 不含 ']' 时返回原字符串（严格对齐 Delphi）
+        assert_eq!(include_new_array("Int", "5"), "Int");
+    }
+
+    #[test]
+    fn test_array_get_and_set_instruction_formatting() {
+        let locals = vec![];
+
+        // ArrayGetElement (0x20): dest = array[index]
+        let inst_get = Instruction {
+            opcode: Opcode::ArrayGetElement,
+            raw_opcode: 0x20,
+            args: vec![
+                PexValue::Identifier("destVar".to_string()),
+                PexValue::Identifier("arrVar".to_string()),
+                PexValue::Integer(3),
+            ],
+        };
+        let mut out = String::new();
+        emit_instruction(&mut out, &inst_get, &locals);
+        assert_eq!(out.trim(), "destVar = arrVar[3]");
+
+        // ArraySetElement (0x21): array[index] = val
+        let inst_set = Instruction {
+            opcode: Opcode::ArraySetElement,
+            raw_opcode: 0x21,
+            args: vec![
+                PexValue::Identifier("arrVar".to_string()),
+                PexValue::Integer(3),
+                PexValue::StringLiteral("hello".to_string()),
+            ],
+        };
+        let mut out = String::new();
+        emit_instruction(&mut out, &inst_set, &locals);
+        assert_eq!(out.trim(), "arrVar[3] = \"hello\"");
+    }
+
+    #[test]
+    fn test_binary_parsing_guard_instructions_end_to_end() {
+        // 构造完整的 PEX 二进制流，验证 0x30, 0x31, 0x32 的变长参数在解码器中不发生字节错位
+        let mut data = Vec::new();
+
+        // Magic 0xFA57C0DE
+        data.write_u32::<LittleEndian>(0xFA57C0DE).unwrap();
+        // Major=3, Minor=9, GameID=4 (Starfield), CompileTime=0
+        data.push(3);
+        data.push(9);
+        data.write_u16::<LittleEndian>(4).unwrap();
+        data.write_u64::<LittleEndian>(0).unwrap();
+
+        // String Table:
+        // 0: ""
+        // 1: "GuardTest"
+        // 2: "TestFunc"
+        // 3: "None"
+        // 4: "myGuard"
+        // 5: "resVar"
+        let strings = ["", "GuardTest", "TestFunc", "None", "myGuard", "resVar"];
+        data.write_u16::<LittleEndian>(strings.len() as u16).unwrap();
+        for s in strings {
+            data.write_u16::<LittleEndian>(s.len() as u16).unwrap();
+            data.extend_from_slice(s.as_bytes());
+        }
+
+        // Debug info & User flags
+        data.write_u64::<LittleEndian>(0).unwrap();
+        data.write_u16::<LittleEndian>(0).unwrap();
+        data.write_u16::<LittleEndian>(0).unwrap();
+
+        // Objects count = 1
+        data.write_u16::<LittleEndian>(1).unwrap();
+        data.write_u16::<LittleEndian>(1).unwrap(); // Object name = "GuardTest"
+
         let mut body = Vec::new();
-        // parent class = "" (idx 0)
-        body.extend_from_slice(&0u16.to_le_bytes());
-        // doc = "" (idx 1)
-        body.extend_from_slice(&1u16.to_le_bytes());
-        // user flags = 0
-        body.extend_from_slice(&0u16.to_le_bytes());
-        // auto state = "" (idx 3)
-        body.extend_from_slice(&3u16.to_le_bytes());
-        // variables = 0
-        body.extend_from_slice(&0u16.to_le_bytes());
-        // guards = 0
-        body.extend_from_slice(&0u16.to_le_bytes());
-        // property groups = 0
-        body.extend_from_slice(&0u16.to_le_bytes());
-        // states = 1
-        body.extend_from_slice(&1u16.to_le_bytes());
-        // state name = "" (idx 4)
-        body.extend_from_slice(&4u16.to_le_bytes());
-        // functions = 1
-        body.extend_from_slice(&1u16.to_le_bytes());
-        // func name = "GetCount" (idx 9)
-        body.extend_from_slice(&9u16.to_le_bytes());
-        // return type = "Int" (idx 10)
-        body.extend_from_slice(&10u16.to_le_bytes());
-        // doc = "" (idx 5)
-        body.extend_from_slice(&5u16.to_le_bytes());
-        // flags = 0
-        body.push(0u8);
-        // user flags = 0
-        body.extend_from_slice(&0u16.to_le_bytes());
-        // params = 0
-        body.extend_from_slice(&0u16.to_le_bytes());
-        // locals = 1 (Int count)
-        body.extend_from_slice(&1u16.to_le_bytes());
-        body.extend_from_slice(&7u16.to_le_bytes()); // name=idx7 "count"
-        body.extend_from_slice(&6u16.to_le_bytes()); // type=idx6 "Int"
-                                                     // instructions = 3
-        body.extend_from_slice(&3u16.to_le_bytes());
-        // inst 0: Jump (0x15), 2 个参数
-        body.push(0x15u8);
-        body.extend_from_slice(&1u16.to_le_bytes());
-        body.extend_from_slice(&2u16.to_le_bytes());
-        // inst 1: Cast (0x0E), 1 个参数
-        body.push(0x0Eu8);
-        body.extend_from_slice(&5u16.to_le_bytes());
-        // inst 2: Return (0x1B), 0 个参数
-        body.push(0x1Bu8);
+        body.write_u16::<LittleEndian>(0).unwrap(); // parent
+        body.write_u16::<LittleEndian>(0).unwrap(); // doc
+        body.write_u16::<LittleEndian>(0).unwrap(); // user_flags
+        body.write_u16::<LittleEndian>(0).unwrap(); // auto_state
+        body.write_u16::<LittleEndian>(0).unwrap(); // variables
+        body.write_u16::<LittleEndian>(0).unwrap(); // guards
+        body.write_u16::<LittleEndian>(0).unwrap(); // property_groups
 
-        // 写入对象体大小和数据
-        data.extend_from_slice(&(body.len() as u32).to_le_bytes());
+        // States count = 1
+        body.write_u16::<LittleEndian>(1).unwrap();
+        body.write_u16::<LittleEndian>(0).unwrap(); // State name = ""
+        body.write_u16::<LittleEndian>(1).unwrap(); // Functions count = 1
+
+        // Function 0: TestFunc
+        body.write_u16::<LittleEndian>(2).unwrap(); // name = "TestFunc"
+        body.write_u16::<LittleEndian>(3).unwrap(); // return_type = "None"
+        body.write_u16::<LittleEndian>(0).unwrap(); // doc = ""
+        body.push(0); // flags
+        body.write_u16::<LittleEndian>(0).unwrap(); // user_flags
+        body.write_u16::<LittleEndian>(0).unwrap(); // params
+        body.write_u16::<LittleEndian>(0).unwrap(); // locals
+
+        // Instructions count = 4:
+        // 1) GuardLock (0x30): arg0 = Integer(1), arg1 = Ident("myGuard")
+        // 2) GuardTryLock (0x32): arg0 = Ident("resVar"), arg1 = Integer(1), arg2 = Ident("myGuard")
+        // 3) GuardUnlock (0x31): arg0 = Integer(1), arg1 = Ident("myGuard")
+        // 4) Return (0x1A): arg0 = None (type 0)
+        body.write_u16::<LittleEndian>(4).unwrap();
+
+        // Inst 1: GuardLock
+        body.push(0x30);
+        body.push(3); // Integer type
+        body.write_i32::<LittleEndian>(1).unwrap(); // count = 1
+        body.push(1); // Ident type
+        body.write_u16::<LittleEndian>(4).unwrap(); // "myGuard"
+
+        // Inst 2: GuardTryLock
+        body.push(0x32);
+        body.push(1); // Ident type
+        body.write_u16::<LittleEndian>(5).unwrap(); // "resVar"
+        body.push(3); // Integer type
+        body.write_i32::<LittleEndian>(1).unwrap(); // count = 1
+        body.push(1); // Ident type
+        body.write_u16::<LittleEndian>(4).unwrap(); // "myGuard"
+
+        // Inst 3: GuardUnlock
+        body.push(0x31);
+        body.push(3); // Integer type
+        body.write_i32::<LittleEndian>(1).unwrap(); // count = 1
+        body.push(1); // Ident type
+        body.write_u16::<LittleEndian>(4).unwrap(); // "myGuard"
+
+        // Inst 4: Return
+        body.push(0x1A);
+        body.push(0); // None type
+
+        // Write object body
+        data.write_u32::<LittleEndian>(body.len() as u32).unwrap();
         data.extend_from_slice(&body);
 
-        // 反编译
-        let result = decompile_pex(&data);
-        assert!(result.is_ok(), "Decompile failed: {:?}", result.err());
-        let decompiled = result.unwrap();
-
-        assert_eq!(decompiled.objects.len(), 1);
-        assert_eq!(decompiled.objects[0].name, "TestScript");
-        assert_eq!(decompiled.objects[0].states.len(), 1);
-        assert_eq!(decompiled.objects[0].states[0].functions.len(), 1);
+        // Decompile from raw bytes
+        let decompiled = decompile_pex(&data).expect("Must parse Starfield guard bytecode successfully");
+        assert_eq!(decompiled.game_id, 4);
         let func = &decompiled.objects[0].states[0].functions[0];
-        assert_eq!(func.name, "GetCount");
-        assert_eq!(func.return_type, "Int");
-        assert_eq!(func.locals.len(), 1);
-        assert_eq!(func.locals[0].name, "count");
-        assert_eq!(func.instructions.len(), 3);
-        assert_eq!(func.instructions[0].opcode, Opcode::Jump);
-        assert_eq!(func.instructions[1].opcode, Opcode::Cast);
-        assert_eq!(func.instructions[2].opcode, Opcode::Return);
+        assert_eq!(func.instructions.len(), 4);
 
-        // 发射伪代码并验证关键部分
+        // Verify parsed AST arguments
+        assert_eq!(func.instructions[0].opcode, Opcode::GuardLock);
+        assert_eq!(
+            func.instructions[0].args,
+            vec![PexValue::Integer(1), PexValue::Identifier("myGuard".to_string())]
+        );
+
+        assert_eq!(func.instructions[1].opcode, Opcode::GuardTryLock);
+        assert_eq!(
+            func.instructions[1].args,
+            vec![
+                PexValue::Identifier("resVar".to_string()),
+                PexValue::Integer(1),
+                PexValue::Identifier("myGuard".to_string())
+            ]
+        );
+
+        assert_eq!(func.instructions[2].opcode, Opcode::GuardUnlock);
+        assert_eq!(
+            func.instructions[2].args,
+            vec![PexValue::Integer(1), PexValue::Identifier("myGuard".to_string())]
+        );
+
+        assert_eq!(func.instructions[3].opcode, Opcode::Return);
+        assert_eq!(func.instructions[3].args, vec![PexValue::None]);
+
+        // Verify formatted pseudocode
         let pseudo = emit_pseudocode(&decompiled);
-        println!("=== PSEUDOCODE ===\n{}", pseudo);
-        assert!(pseudo.contains("ScriptName TestScript"));
-        assert!(pseudo.contains("Int Function GetCount()"));
-        assert!(pseudo.contains("Int count"));
-        assert!(pseudo.contains("return"));
-        assert!(pseudo.contains("EndFunction"));
+        assert!(pseudo.contains("GuardLock(myGuard)"));
+        assert!(pseudo.contains("resVar = GuardTryLock(myGuard)"));
+        assert!(pseudo.contains("GuardUnlock(myGuard)"));
+        assert!(pseudo.contains("return none"));
+    }
+
+    #[test]
+    fn test_binary_parsing_callmethod_end_to_end() {
+        let mut data = Vec::new();
+
+        data.write_u32::<LittleEndian>(0xFA57C0DE).unwrap();
+        data.push(3);
+        data.push(9);
+        data.write_u16::<LittleEndian>(1).unwrap();
+        data.write_u64::<LittleEndian>(0).unwrap();
+
+        // String Table:
+        // 0: ""
+        // 1: "CallTest"
+        // 2: "TestFunc"
+        // 3: "None"
+        // 4: "DoSomething"
+        // 5: "self"
+        // 6: "::NoneVar"
+        // 7: "hello"
+        let strings = ["", "CallTest", "TestFunc", "None", "DoSomething", "self", "::NoneVar", "hello"];
+        data.write_u16::<LittleEndian>(strings.len() as u16).unwrap();
+        for s in strings {
+            data.write_u16::<LittleEndian>(s.len() as u16).unwrap();
+            data.extend_from_slice(s.as_bytes());
+        }
+
+        data.write_u64::<LittleEndian>(0).unwrap();
+        data.write_u16::<LittleEndian>(0).unwrap();
+        data.write_u16::<LittleEndian>(0).unwrap();
+
+        data.write_u16::<LittleEndian>(1).unwrap();
+        data.write_u16::<LittleEndian>(1).unwrap();
+
+        let mut body = Vec::new();
+        body.write_u16::<LittleEndian>(0).unwrap();
+        body.write_u16::<LittleEndian>(0).unwrap();
+        body.write_u16::<LittleEndian>(0).unwrap();
+        body.write_u16::<LittleEndian>(0).unwrap();
+        body.write_u16::<LittleEndian>(0).unwrap();
+        body.write_u16::<LittleEndian>(0).unwrap();
+        body.write_u16::<LittleEndian>(0).unwrap();
+
+        body.write_u16::<LittleEndian>(1).unwrap();
+        body.write_u16::<LittleEndian>(0).unwrap();
+        body.write_u16::<LittleEndian>(1).unwrap();
+
+        body.write_u16::<LittleEndian>(2).unwrap();
+        body.write_u16::<LittleEndian>(3).unwrap();
+        body.write_u16::<LittleEndian>(0).unwrap();
+        body.push(0);
+        body.write_u16::<LittleEndian>(0).unwrap();
+        body.write_u16::<LittleEndian>(0).unwrap();
+        body.write_u16::<LittleEndian>(0).unwrap();
+
+        // 1 Callmethod instruction:
+        // method="DoSomething", target="self", result="::NoneVar", arg_count=2, arg0=100 (int), arg1="hello" (str)
+        body.write_u16::<LittleEndian>(1).unwrap();
+        body.push(0x17);
+        body.push(1); // method
+        body.write_u16::<LittleEndian>(4).unwrap();
+        body.push(1); // target
+        body.write_u16::<LittleEndian>(5).unwrap();
+        body.push(1); // result
+        body.write_u16::<LittleEndian>(6).unwrap();
+        body.push(3); // count
+        body.write_i32::<LittleEndian>(2).unwrap();
+        body.push(3); // extra arg 0: 100
+        body.write_i32::<LittleEndian>(100).unwrap();
+        body.push(2); // extra arg 1: "hello"
+        body.write_u16::<LittleEndian>(7).unwrap();
+
+        data.write_u32::<LittleEndian>(body.len() as u32).unwrap();
+        data.extend_from_slice(&body);
+
+        let decompiled = decompile_pex(&data).expect("Must parse Callmethod successfully");
+        let pseudo = emit_pseudocode(&decompiled);
+        assert!(pseudo.contains("self.DoSomething(100, \"hello\")"));
     }
 
     #[test]
     fn test_decompile_reject_invalid_magic() {
-        let data = vec![0u8; 16];
+        let data = vec![0x00, 0x00, 0x00, 0x00];
         let result = decompile_pex(&data);
         assert!(result.is_err());
     }
@@ -1300,16 +1567,16 @@ mod tests {
     #[test]
     fn test_decompile_empty_object_list() {
         let mut data = Vec::new();
-        data.extend_from_slice(&0xFA57C0DEu32.to_le_bytes());
+        data.write_u32::<LittleEndian>(0xFA57C0DE).unwrap();
         data.push(3);
-        data.push(10);
-        data.extend_from_slice(&1u16.to_le_bytes());
-        data.extend_from_slice(&0u64.to_le_bytes());
-        data.extend_from_slice(&0u16.to_le_bytes()); // 空字符串表
-        data.extend_from_slice(&0u64.to_le_bytes()); // 调试修改时间
-        data.extend_from_slice(&0u16.to_le_bytes()); // 调试计数
-        data.extend_from_slice(&0u16.to_le_bytes()); // 用户标志
-        data.extend_from_slice(&0u16.to_le_bytes()); // 0 个对象
+        data.push(9);
+        data.write_u16::<LittleEndian>(1).unwrap();
+        data.write_u64::<LittleEndian>(0).unwrap();
+        data.write_u16::<LittleEndian>(0).unwrap(); // string table
+        data.write_u64::<LittleEndian>(0).unwrap(); // debug info
+        data.write_u16::<LittleEndian>(0).unwrap();
+        data.write_u16::<LittleEndian>(0).unwrap(); // user flags
+        data.write_u16::<LittleEndian>(0).unwrap(); // objects count = 0
 
         let result = decompile_pex(&data);
         assert!(result.is_ok());

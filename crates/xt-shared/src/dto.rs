@@ -118,6 +118,18 @@ pub struct LoadEspResponse {
     /// 用于内容寻址缓存，确保文件内容变化时缓存失效
     #[serde(default)]
     pub esp_hash: String,
+    /// Game actually used to parse the file (canonical `GameId` string such as "SkyrimSE").
+    /// Resolution order: explicit request > TES4 Form Version detection > fallback.
+    #[serde(default)]
+    pub game_id: String,
+    /// Game detected from TES4 Form Version, or `None` for unknown/non-standard versions.
+    /// A mismatch should warn the frontend without silently switching workspaces.
+    #[serde(default)]
+    pub detected_game_id: Option<String>,
+    /// Source of `game_id`: "requested" | "detected" | "fallback".
+    /// "fallback" is not trusted and requires explicit user selection downstream.
+    #[serde(default)]
+    pub game_source: String,
 }
 
 /// ESP 文件加载进度事件
@@ -867,6 +879,10 @@ pub struct AppConfigDto {
     pub theme: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub language: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_game: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub game_selection_mode: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub proxy_server: Option<String>,
     #[serde(default)]

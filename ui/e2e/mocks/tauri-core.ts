@@ -67,6 +67,9 @@ export async function invoke<T = unknown>(cmd: string, args?: Record<string, unk
         record_counts: { INFO: 80, QUST: 30, DIAL: 18 },
         cached: false,
         esp_hash: "mock_hash_abc123",
+        game_id: "SkyrimSE",
+        detected_game_id: "SkyrimSE",
+        game_source: "detected",
       } as T;
 
     case "save_sst":
@@ -455,6 +458,9 @@ function __e2eSeedMockData(): void {
     record_counts: { INFO: 80, QUST: 30, DIAL: 18 },
     cached: false,
     esp_hash: "mock_hash_abc123",
+    game_id: "SkyrimSE",
+    detected_game_id: "SkyrimSE",
+    game_source: "detected",
   };
   mockData["__invoke_result:get_strings_count"] = 128;
   mockData["__invoke_result:get_is_dirty"] = false;

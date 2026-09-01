@@ -2,6 +2,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use tauri::Emitter;
 use xt_core::config::AppConfig;
+use xt_core::esp::game_detect;
 use xt_core::esp::parser::{EspParser, StringsFiles};
 use xt_core::strings::CodepageTable;
 use xt_core::translation_api::{
@@ -307,37 +308,6 @@ fn lang_to_api_code(lang: &str) -> &str {
     }
 }
 
-// ── 游戏探测 ─────────────────────────────────────────────────
-
-fn detect_game_from_path(esp_path: &str) -> GameId {
-    let lower = esp_path.to_lowercase();
-    if lower.contains("fallout4") || lower.contains("fo4") {
-        GameId::Fallout4
-    } else if lower.contains("starfield") {
-        GameId::Starfield
-    } else if lower.contains("falloutnv") || lower.contains("fonv") {
-        GameId::FalloutNV
-    } else if lower.contains("fallout76") || lower.contains("fo76") {
-        GameId::Fallout76
-    } else if lower.contains("skyrim") {
-        GameId::SkyrimSE
-    } else {
-        GameId::SkyrimSE
-    }
-}
-
-fn parse_game_override(game: &str) -> Option<GameId> {
-    match game.to_lowercase().as_str() {
-        "skyrim" => Some(GameId::Skyrim),
-        "skyrimse" | "skyrim se" => Some(GameId::SkyrimSE),
-        "fallout4" | "fo4" => Some(GameId::Fallout4),
-        "falloutnv" | "fonv" => Some(GameId::FalloutNV),
-        "fallout76" | "fo76" => Some(GameId::Fallout76),
-        "starfield" | "sf" => Some(GameId::Starfield),
-        _ => None,
-    }
-}
-
 // ── ESP 解析（独立于 AppState） ───────────────────────────────
 
 fn parse_esp_for_batch(
@@ -346,9 +316,16 @@ fn parse_esp_for_batch(
     language: &str,
     game_override: Option<&str>,
 ) -> Result<(Vec<SkyString>, u32), String> {
-    let game_id = game_override
-        .and_then(parse_game_override)
-        .unwrap_or_else(|| detect_game_from_path(esp_path));
+    let game_id = if let Some(game) = game_override {
+        GameId::from_alias(game).ok_or_else(|| format!("Unknown game override: {}", game))?
+    } else {
+        game_detect::detect_game_from_esp(std::path::Path::new(esp_path)).ok_or_else(|| {
+            format!(
+                "Could not detect game from TES4 Form Version: {}. Select a game explicitly.",
+                esp_path
+            )
+        })?
+    };
 
     let data_dir = std::path::Path::new("Data");
     let mut parser = EspParser::with_game(data_dir, game_id).unwrap_or_else(|_| EspParser::new());
@@ -360,16 +337,7 @@ fn parse_esp_for_batch(
         .unwrap_or("skyrim");
 
     // Codepage
-    let codepage_path = data_dir
-        .join(match game_id {
-            GameId::Skyrim => "Skyrim",
-            GameId::SkyrimSE => "SkyrimSE",
-            GameId::Fallout4 => "Fallout4",
-            GameId::FalloutNV => "FalloutNV",
-            GameId::Fallout76 => "Fallout76",
-            GameId::Starfield => "Starfield",
-        })
-        .join("codepage.txt");
+    let codepage_path = data_dir.join(game_id.as_str()).join("codepage.txt");
 
     let codepage_table = if codepage_path.exists() {
         CodepageTable::load_from_file(&codepage_path).ok()

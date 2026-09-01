@@ -59,9 +59,12 @@ xTranslator/
 
 ```
 User selects ESP → MenuBar.tsx
+  → gameSelectionMode=manual ? pass currentGame : omit game (auto)
   → invoke("load_esp", { espPath, stringsDir, language, game })
   → src-tauri/src/commands.rs::load_esp()
     → spawn_blocking: CPU-intensive ESP parsing
+      → Resolve game: requested workspace > TES4 Form Version > marked fallback
+      → Load Data/<resolvedGame> record definitions + codepage
       → Check CacheIndex + SqliteCache (SHA-256 of ESP → {hash}.sqlite in %LOCALAPPDATA%/xTranslator/cache/)
       → Cache hit: read SQLite payload → return strings instantly (cached=true, parse_time_ms=0)
       → Cache miss: full parse
@@ -72,9 +75,18 @@ User selects ESP → MenuBar.tsx
         → Store result in SQLite cache (content-addressed, max 50 entries, prune oldest)
     → Store Vec<SkyString> in AppState.strings
   → Emit "esp-load-progress" events (stage: parsing / finalizing / cached for cache hits)
-  → Return LoadEspResponse { total, compressed_records, strings_loaded, parse_time_ms, record_counts, cached }
-  → appStore.setEspLoaded() → SidePanel shows stats
+  → Return LoadEspResponse { ..., game_id, detected_game_id, game_source }
+  → appStore.setEspLoaded() → currentGame/detectedGame/gameSource + SidePanel stats
+  → Vocabulary / Data Configs / PEX / Header tools consume the same currentGame
 ```
+
+### Game Context
+
+- `GameId` canonical values: `Skyrim`, `SkyrimSE`, `Fallout4`, `FalloutNV`, `Fallout76`, `Starfield`.
+- Auto mode detects the game from the TES4 record header Form Version (`xt-core::esp::game_detect`); it does not inspect the file path.
+- Manual mode is an explicit workspace override. A TES4 mismatch produces a warning but does not silently switch the user's workspace.
+- `game_source="fallback"` is intentionally untrusted: the backend may parse with a compatibility fallback, but the frontend keeps `currentGame=null` until the user chooses a workspace.
+- `AppConfig.last_game` and `game_selection_mode` persist workspace behavior without turning a remembered game into an implicit override in Auto mode.
 
 ### Querying / Editing (Virtual Scroll)
 
@@ -267,7 +279,7 @@ Delphi xTranslator compatible:
 # Full backend build
 cargo build -p xtranslator-tauri
 
-# Core library unit tests (299 tests)
+# Core library unit tests (310 tests)
 cargo test -p xt-core --lib
 
 # End-to-end tests (requires Skyrim SE at D:\SteamLibrary\...)

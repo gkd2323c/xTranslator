@@ -1,5 +1,18 @@
 import { invoke } from "@tauri-apps/api/core";
 
+export const SUPPORTED_GAME_IDS = [
+  "Skyrim",
+  "SkyrimSE",
+  "Fallout4",
+  "FalloutNV",
+  "Fallout76",
+  "Starfield",
+] as const;
+
+export type SupportedGameId = (typeof SUPPORTED_GAME_IDS)[number];
+export type GameSelectionMode = "auto" | "manual";
+export type GameSource = "requested" | "detected" | "fallback";
+
 // 虚拟滚动分页查询请求
 export interface QueryRequest {
   // 文件 ID（当前固定为 "test"）
@@ -74,6 +87,12 @@ export interface LoadEspResponse {
   cached: boolean;
   // ESP 文件 SHA-256 哈希
   esp_hash: string;
+  // Game workspace actually used to parse this ESP.
+  game_id: SupportedGameId;
+  // Game detected from TES4 Form Version, if recognized.
+  detected_game_id?: SupportedGameId;
+  // Source used to resolve the game context.
+  game_source: GameSource;
 }
 
 // SST 加载响应
@@ -193,7 +212,7 @@ export async function loadEsp(
   espPath: string,
   stringsDir?: string,
   language?: string,
-  game?: string,
+  game?: SupportedGameId,
 ): Promise<LoadEspResponse> {
   return invoke("load_esp", { espPath, stringsDir, language, game });
 }
@@ -496,7 +515,7 @@ export async function preprocOptsSave(path: string): Promise<void> {
 
 export interface HeaderBatchConfig {
   source_dir: string;
-  game_id: string;
+  game_id: SupportedGameId;
   data_dir: string;
   create_backup: boolean;
 }
@@ -608,7 +627,7 @@ export interface BatchEntry {
   esp_path: string;
   strings_dir?: string;
   language?: string;
-  game?: string;
+  game?: SupportedGameId;
   sst_path?: string;
 }
 
@@ -776,7 +795,7 @@ export interface PexScriptDto {
   translatable: PexTranslatableDto[];
 }
 
-export async function parsePexStrings(pexPath: string, game?: string): Promise<PexScriptDto> {
+export async function parsePexStrings(pexPath: string, game: SupportedGameId): Promise<PexScriptDto> {
   return invoke("parse_pex_strings", { pexPath, game });
 }
 
@@ -933,6 +952,8 @@ export interface AppConfigDto {
   current_provider?: string;
   theme?: string;
   language?: string;
+  last_game?: SupportedGameId;
+  game_selection_mode?: GameSelectionMode;
   proxy_server?: string;
   proxy_port?: number;
   proxy_username?: string;
@@ -1032,7 +1053,7 @@ export async function loadVocabulary(
   stringsDir: string,
   sourceLang: string,
   targetLang: string,
-  game?: string,
+  game: SupportedGameId,
 ): Promise<VocabularyInfo> {
   return invoke("load_vocabulary", { stringsDir, sourceLang, targetLang, game });
 }
@@ -1101,7 +1122,7 @@ export interface DataConfigsDto {
   emote_definition: Record<string, string>;
 }
 
-export async function loadDataConfigs(game: string): Promise<DataConfigsDto> {
+export async function loadDataConfigs(game: SupportedGameId): Promise<DataConfigsDto> {
   return invoke("load_data_configs", { game });
 }
 

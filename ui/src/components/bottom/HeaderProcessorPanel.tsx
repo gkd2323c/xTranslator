@@ -25,6 +25,7 @@ import {
 import toast from "react-hot-toast";
 import { Button } from "../ui";
 import { Plus, Trash2, ChevronUp, ChevronDown, Save, Search, FolderOpen } from "lucide-react";
+import { useAppStore } from "../../stores/appStore";
 
 function editableField(
   value: string,
@@ -46,6 +47,7 @@ function editableField(
 
 export function HeaderProcessorPanel() {
   const { t } = useTranslation();
+  const currentGame = useAppStore((s) => s.currentGame);
   const [rules, setRules] = useState<HeaderRuleDto[]>([]);
   const [result, setResult] = useState<HeaderApplyResult | null>(null);
   const [filePath, setFilePath] = useState("");
@@ -102,6 +104,10 @@ export function HeaderProcessorPanel() {
   };
 
   const applyRules = async () => {
+    if (!currentGame) {
+      toast.error(t("headerProcessor.selectGame", { defaultValue: "Select or load a game workspace first." }));
+      return;
+    }
     setLoading(true);
     try {
       const res = await headerRulesApply();

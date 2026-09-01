@@ -20,12 +20,14 @@ import {
   spellCheckLoad,
   spellCheckToggle,
   spellCheckConfig,
+  SUPPORTED_GAME_IDS,
   type BatchProgress,
 } from "../api/strings";
-import type { LoadSstResponse, XmlImportResponse } from "../api/strings";
+import type { LoadSstResponse, XmlImportResponse, SupportedGameId } from "../api/strings";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
+import { requestedGameForLoad } from "../gameContext";
 import {
   FolderOpen,
   FileUp,
@@ -282,6 +284,8 @@ export function GroupedMenuBar() {
   const language = useAppStore((s) => s.language);
   const isDirty = useAppStore((s) => s.isDirty);
   const targetLang = useAppStore((s) => s.targetLang);
+  const currentGame = useAppStore((s) => s.currentGame);
+  const gameSelectionMode = useAppStore((s) => s.gameSelectionMode);
   const selectedId = useAppStore((s) => s.selectedId);
   const activePanel = useAppStore((s) => s.activePanel);
   const activeRightPanel = useAppStore((s) => s.activeRightPanel);
@@ -303,6 +307,7 @@ export function GroupedMenuBar() {
   const loadAllStrings = useAppStore((s) => s.loadAllStrings);
   const setIsDirty = useAppStore((s) => s.setIsDirty);
   const setTargetLang = useAppStore((s) => s.setTargetLang);
+  const setGameSelection = useAppStore((s) => s.setGameSelection);
   const reset = useAppStore((s) => s.reset);
   const setActivePanel = useAppStore((s) => s.setActivePanel);
   const setActiveRightPanel = useAppStore((s) => s.setActiveRightPanel);
@@ -366,8 +371,8 @@ export function GroupedMenuBar() {
    * 从指定路径加载 ESP 文件
    */
   const loadEspFromPath = useCallback(
-    async (path: string) => {
-      if (isDirty && !confirm(t("app.resetConfirm"))) return;
+    async (path: string, skipDirtyConfirm = false) => {
+      if (!skipDirtyConfirm && isDirty && !confirm(t("app.resetConfirm"))) return;
       warnIfBatchFile(path);
 
       const espDir = path.replace(/\\/g, "/").split("/").slice(0, -1).join("/");
@@ -383,7 +388,9 @@ export function GroupedMenuBar() {
         });
 
         try {
-          const stats = await loadEsp(path, stringsDir, language);
+          const gameState = useAppStore.getState();
+          const requestedGame = requestedGameForLoad(gameState.gameSelectionMode, gameState.currentGame);
+          const stats = await loadEsp(path, stringsDir, language, requestedGame);
           setEspLoaded(path, stats, stringsDir);
           await loadAllStrings();
           setIsDirty(false);
@@ -393,6 +400,38 @@ export function GroupedMenuBar() {
             })
           );
 
+          const store = useAppStore.getState();
+          store.addLog(
+            "info",
+            `Game context: ${stats.game_id} (${stats.game_source}); Data/${stats.game_id}`,
+            "ESP",
+          );
+          if (stats.game_source === "fallback") {
+            store.addLog("warn", "Game auto-detection failed; select a game explicitly and reload the plugin.", "ESP");
+            toast.error(
+              t("menu.gameDetectionFallback", {
+                defaultValue: "Game auto-detection failed. Select a game explicitly and reload the plugin.",
+              }),
+              { duration: 8000 },
+            );
+            return;
+          }
+          if (stats.detected_game_id && stats.detected_game_id !== stats.game_id) {
+            store.addLog(
+              "warn",
+              `Workspace mismatch: selected ${stats.game_id}, plugin reports ${stats.detected_game_id}.`,
+              "ESP",
+            );
+            toast(
+              t("menu.gameMismatch", {
+                defaultValue: "Selected game {{selected}} differs from plugin detection {{detected}}.",
+                selected: stats.game_id,
+                detected: stats.detected_game_id,
+              }),
+              { icon: "!", duration: 6000 },
+            );
+          }
+
           if (stats.esp_hash) {
             useAppStore.getState().checkAndPromptRecovery(stats.esp_hash);
           }
@@ -401,7 +440,7 @@ export function GroupedMenuBar() {
             stringsDir,
             language,
             useAppStore.getState().targetLang,
-            useAppStore.getState().language === "english" ? "SkyrimSE" : undefined
+            stats.game_id
           )
             .then((info) => {
               if (info.pair_count > 0) {
@@ -416,11 +455,7 @@ export function GroupedMenuBar() {
             })
             .catch(() => {});
 
-          loadDataConfigs(
-            useAppStore.getState().language === "english"
-              ? "SkyrimSE"
-              : "SkyrimSE"
-          )
+          loadDataConfigs(stats.game_id)
             .then((cfg) => {
               setDataConfigs(cfg);
               const fieldCount = Object.keys(cfg.field_size_ref).length;
@@ -458,6 +493,18 @@ export function GroupedMenuBar() {
       setDataConfigs,
     ]
   );
+
+  const handleGameSelectionChange = useCallback(async (value: string) => {
+    if (espPath && isDirty && !confirm(t("app.resetConfirm"))) return;
+    if (value === "auto") {
+      setGameSelection("auto");
+    } else {
+      setGameSelection("manual", value as SupportedGameId);
+    }
+    if (espPath) {
+      await loadEspFromPath(espPath, true);
+    }
+  }, [espPath, isDirty, loadEspFromPath, setGameSelection, t]);
 
   const handleLoadEsp = useCallback(async () => {
     const selected = await open({
@@ -1561,6 +1608,18 @@ export function GroupedMenuBar() {
           role="group"
           aria-label="Preferences"
         >
+          <select
+            value={gameSelectionMode === "auto" ? "auto" : currentGame ?? "auto"}
+            onChange={(e) => void handleGameSelectionChange(e.target.value)}
+            className="lang-select"
+            title={t("menu.gameWorkspace", { defaultValue: "Game workspace" })}
+            aria-label={t("menu.gameWorkspace", { defaultValue: "Game workspace" })}
+          >
+            <option value="auto">{t("menu.gameAuto", { defaultValue: "Game: Auto" })}</option>
+            {SUPPORTED_GAME_IDS.map((game) => (
+              <option key={game} value={game}>{game}</option>
+            ))}
+          </select>
           <select
             value={targetLang}
             onChange={(e) => setTargetLang(e.target.value)}

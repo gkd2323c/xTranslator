@@ -45,7 +45,7 @@ C20: Jaccard threshold 0.5 for vocabulary overlap matching (`MIN_JACCARD` in `ma
 
 #### Core Load/Save
 
-api: `load_esp` → `LoadEspResponse { total, compressed_records, strings_loaded, parse_time_ms, record_counts, cached, esp_hash }`
+api: `load_esp` → `LoadEspResponse { total, compressed_records, strings_loaded, parse_time_ms, record_counts, cached, esp_hash, game_id, detected_game_id?, game_source }`; game resolution = explicit workspace > TES4 Form Version detection > marked fallback
 api: `load_sst` → `LoadSstResponse { matched, unmatched, updated_ids, tier_exact, tier_edid, tier_normalized, tier_vocab, ambiguous, pending_skipped, old_data_preserved, warning, big_warning }`
 api: `save_sst` → `()`
 api: `sst_merge` → `MergeStatsDto { added, updated, overwritten, conflicts_skipped }` (merge another SST file; takes source_path + overwrite flag)
@@ -386,6 +386,10 @@ V54: ∀ `spell_check_load` → load Hunspell DLL via libloading; dictionary fro
 V55: ∀ `spell_check_text` → tokenize by word boundaries; check each word against Hunspell dictionary; ignore list checked before dictionary lookup; fault positions are byte offsets in source text
 V56: ∀ collaboration labels → 8 slots (0-7); each slot stores label name + per-string assignment via colab_id field; colab_filter mode: 0=off, 1=include assigned, 2=exclude assigned
 V57: ∀ `sst_merge` → match by (str_id, record_sig, field_sig) triple; overwrite existing translation only when overwrite=true; conflicts_skipped counts entries with matching triple but overwrite=false
+V58: ∀ game context → frontend `currentGame` is the single downstream game source for vocabulary/data configs/PEX/header tools; language must never be used to infer game
+V59: ∀ game selection mode=auto → `load_esp` receives no explicit game and resolves from TES4 Form Version; fallback is marked untrusted and must not become frontend `currentGame`
+V60: ∀ game selection mode=manual → selected `currentGame` is persisted as `last_game`, passed explicitly to `load_esp`, and retained even when TES4 detection disagrees (UI warns on mismatch)
+V61: ∀ batch ESP with no explicit game → detect game from TES4 Form Version; file path names must not be used for game detection
 
 ## §T Tasks
 

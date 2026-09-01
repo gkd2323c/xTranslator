@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { SkyStringDTO, LoadEspResponse, LoadSstResponse, BatchEntry, BatchStatus, DataConfigsDto, RecoveryInfo } from "../api/strings";
+import type { SkyStringDTO, LoadEspResponse, LoadSstResponse, BatchEntry, BatchStatus, DataConfigsDto, RecoveryInfo, SupportedGameId, GameSelectionMode, GameSource } from "../api/strings";
 import { getAllStrings, getStringsChunk, getStringsCount, queryStrings, updateTranslation, batchUpdateTranslations, startStringBatchTranslate, cancelStringBatchTranslate, checkPendingCache, applyTranslationCache, discardTranslationCache } from "../api/strings";
 import { saveConfig } from "../api/strings";
 import toast from "react-hot-toast";
@@ -128,6 +128,14 @@ interface AppState {
   language: string;
   // 目标语言（如 "chinese"）
   targetLang: string;
+  // Trusted game context used by downstream game-specific tools.
+  currentGame: SupportedGameId | null;
+  // Game selection mode: auto-detect or explicit workspace.
+  gameSelectionMode: GameSelectionMode;
+  // Game detected from the ESP Form Version.
+  detectedGame: SupportedGameId | null;
+  // Source of the current game context.
+  gameSource: GameSource | null;
 
   // ── 加载统计 ──
   // ESP 加载响应（包含解析统计）
@@ -251,6 +259,7 @@ interface AppState {
   setEspLoaded: (path: string, stats: LoadEspResponse, stringsDir?: string) => void;
   setSstLoaded: (path: string, stats: LoadSstResponse) => void;
   setTargetLang: (lang: string) => void;
+  setGameSelection: (mode: GameSelectionMode, game?: SupportedGameId | null) => void;
   setFilter: (filter: string) => void;
   setFilterNow: (filter: string) => void;
   setUseRegex: (use: boolean) => void;
@@ -452,7 +461,13 @@ export const useAppStore = create<AppState>((set, get) => ({
         record_counts: { INFO: Math.floor(mockItems.length * 0.6), QUST: Math.floor(mockItems.length * 0.25), DIAL: Math.floor(mockItems.length * 0.15) },
         cached: false,
         esp_hash: "mock_hash_abc123",
+        game_id: "SkyrimSE",
+        detected_game_id: "SkyrimSE",
+        game_source: "detected",
       },
+      currentGame: "SkyrimSE",
+      detectedGame: "SkyrimSE",
+      gameSource: "detected",
     });
   },
 
@@ -469,6 +484,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   stringsDir: null,
   language: "english",
   targetLang: "chinese",
+  currentGame: null,
+  gameSelectionMode: "auto",
+  detectedGame: null,
+  gameSource: null,
   espStats: null,
   sstStats: null,
   filter: "",
@@ -540,11 +559,34 @@ export const useAppStore = create<AppState>((set, get) => ({
   setLoadProgress: (loadProgress) => set({ loadProgress }),
 
   setEspLoaded: (espPath, espStats, stringsDir) =>
-    set({ espPath, espStats, stringsDir, sstStats: null, espHash: espStats.esp_hash || null }),
+    set({
+      espPath,
+      espStats,
+      stringsDir,
+      sstStats: null,
+      espHash: espStats.esp_hash || null,
+      // Fallback only keeps parsing alive; it must not become a trusted workspace.
+      currentGame: espStats.game_source === "fallback" ? null : espStats.game_id,
+      detectedGame: espStats.detected_game_id ?? null,
+      gameSource: espStats.game_source,
+      dataConfigs: null,
+    }),
 
   setSstLoaded: (sstPath, sstStats) => set({ sstPath, sstStats }),
 
   setTargetLang: (targetLang) => set({ targetLang }),
+
+  setGameSelection: (gameSelectionMode, game) => {
+    const state = get();
+    const currentGame = gameSelectionMode === "manual"
+      ? (game ?? state.currentGame)
+      : (state.espPath ? state.currentGame : null);
+    set({ gameSelectionMode, currentGame });
+    saveConfig({
+      game_selection_mode: gameSelectionMode,
+      last_game: game ?? state.currentGame ?? undefined,
+    }).catch(() => {});
+  },
 
   setFilter: (filter) => {
     // 防抖处理：立即更新过滤文本以保证输入响应，延迟进行重新过滤
@@ -1122,7 +1164,13 @@ export const useAppStore = create<AppState>((set, get) => ({
             record_counts: { INFO: Math.floor(mockItems.length * 0.6), QUST: Math.floor(mockItems.length * 0.25), DIAL: Math.floor(mockItems.length * 0.15) },
             cached: false,
             esp_hash: "mock_hash_abc123",
+            game_id: "SkyrimSE",
+            detected_game_id: "SkyrimSE",
+            game_source: "detected",
           },
+          currentGame: "SkyrimSE",
+          detectedGame: "SkyrimSE",
+          gameSource: "detected",
         });
         return;
       } catch (e: any) {
@@ -1272,7 +1320,8 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ showRecoveryModal: false, recoveryInfo: null });
   },
 
-  reset: () =>
+  reset: () => {
+    const state = get();
     set({
       allItems: [],
       items: [],
@@ -1299,13 +1348,17 @@ export const useAppStore = create<AppState>((set, get) => ({
       undoStack: [],
       redoStack: [],
       targetLang: "chinese",
+      currentGame: state.gameSelectionMode === "manual" ? state.currentGame : null,
+      detectedGame: null,
+      gameSource: null,
       dataConfigs: null,
       activePanel: null,
       activeRightPanel: null,
       panelLayout: { rightPanelSize: 400, bottomPanelSize: 300, rightPanelVisible: false },
       editorMode: "modal" as EditorMode,
       activeBottomTab: "overview",
-    }),
+    });
+  },
 }));
 
 // E2E 辅助：公开原始 zustand store，以便测试可以直接注入状态

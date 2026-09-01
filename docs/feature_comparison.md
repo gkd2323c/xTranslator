@@ -1,8 +1,8 @@
 # xTranslator 功能对比：Delphi 原版 vs Rust 重写
 
-> **更新日期**：2026-05-24
+> **更新日期**：2026-09-01
 > **原版版本**：xTranslator 1.6.0（Delphi 12.1 CE，~6.7 万行代码，10+ 年迭代）
-> **重写版本**：v1.1.0 — 后端 ~90%（299 单元测试，101 IPC 命令），前端 ~80%（43 组件，Phase 1-3 UI 打磨完成）
+> **重写版本**：v1.2.0 — 后端 ~90%（310 单元测试），前端 ~80%（多游戏上下文已贯穿主流程）
 >
 > 界面复刻的独立推进方案见 [`ui_reproduction_plan.md`](ui_reproduction_plan.md)。
 
@@ -122,6 +122,8 @@
 ---
 
 ## 七、游戏支持
+
+主工作流已实现统一 Game Context：Auto 模式按 ESP/ESM 的 TES4 Form Version 检测游戏，Manual 模式允许用户显式选择工作区；Vocabulary、Data Configs、PEX、Header 工具和 Batch 均复用同一游戏语义，不再通过语言或文件路径猜游戏。非 Skyrim SE 游戏的真实文件级兼容性仍按各行“验证状态”单独跟踪。
 
 | 游戏 | 原版 | Rust 重写 Data/ | record_defs | codepage | 验证状态 |
 |------|------|----------------|-------------|----------|---------|

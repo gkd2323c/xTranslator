@@ -55,6 +55,13 @@ cd ui && npm run test                      # vitest
 ### Frontend State Pipeline
 `appStore.allItems` (full DTO) → client filter/sort → `appStore.items` (display) → `react-window` `List` virtual render. **SidePanel stats are based on `allItems`, not `items`.**
 
+### Game Context
+- **Single frontend source:** `appStore.currentGame` (`Skyrim`, `SkyrimSE`, `Fallout4`, `FalloutNV`, `Fallout76`, `Starfield`). Vocabulary, data configs, PEX, and Header tools must use it; never infer game from UI language.
+- **Auto mode:** omit the `game` argument to `load_esp`; backend detects from TES4 Form Version via `esp::game_detect`.
+- **Manual mode:** pass the explicit workspace. If TES4 detection disagrees, warn but keep the user's explicit choice.
+- **Fallback is untrusted:** `LoadEspResponse.game_source == "fallback"` must not become a usable `currentGame`; require explicit user selection before downstream game-specific tools.
+- **Batch:** no path-name guessing. `BatchEntry.game` is only an explicit override; otherwise backend detects each plugin from TES4.
+
 ### zustand Pattern
 Use `useAppStore((s) => s.field)` — never `const store = useAppStore()`. Select only what the component needs to avoid unnecessary re-renders.
 

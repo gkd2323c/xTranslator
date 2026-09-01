@@ -11,15 +11,21 @@ export function VocabularyPanel() {
   const { t } = useTranslation();
   const language = useAppStore((s) => s.language);
   const targetLang = useAppStore((s) => s.targetLang);
+  const currentGame = useAppStore((s) => s.currentGame);
+  const stringsDir = useAppStore((s) => s.stringsDir);
   const items = useAppStore((s) => s.items);
   const [info, setInfo] = useState<VocabularyInfo | null>(null);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
 
   const handleLoad = async () => {
+    if (!currentGame) {
+      toast.error(t("vocabularyPanel.selectGame", { defaultValue: "Select or load a game workspace first." }));
+      return;
+    }
     setLoading(true);
     try {
-      const result = await loadVocabulary("", language, targetLang);
+      const result = await loadVocabulary(stringsDir ?? "", language, targetLang, currentGame);
       setInfo(result);
       toast.success(t("vocabularyPanel.loaded", { pairs: result.pair_count, sources: result.base_names.length }));
     } catch (e: any) {
