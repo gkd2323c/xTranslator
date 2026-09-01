@@ -1040,6 +1040,10 @@ export function GroupedMenuBar() {
             label: t("batch.title"),
             onClick: () => setActivePanel("batch"),
           },
+          {
+            label: t("commandProcessor.title", { defaultValue: "Command Processor" }),
+            onClick: () => setActivePanel("commandProcessor"),
+          },
           { label: t("bsa.title"), onClick: () => setActiveRightPanel("bsa") },
           { label: t("pex.title"), onClick: () => setActiveRightPanel("pex") },
           { label: t("fuz.title"), onClick: () => setActiveRightPanel("fuz") },

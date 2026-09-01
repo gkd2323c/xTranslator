@@ -29,3 +29,4 @@ log = { workspace = true }
 [dev-dependencies]
 xt-shared = { path = "../xt-shared" }
 serde_json = "1.0"
+tokio = { workspace = true }

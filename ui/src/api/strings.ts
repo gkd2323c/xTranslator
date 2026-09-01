@@ -722,6 +722,51 @@ export interface BatchComplete {
   errors: BatchFileError[];
 }
 
+// ── Delphi Command Processor types ───────────────────────────
+
+export type CommandProcessorErrorPolicy = "stop" | "continue";
+
+export interface CommandProcessorRunRequest {
+  script: string;
+  data_dir?: string;
+  game?: SupportedGameId;
+  error_policy?: CommandProcessorErrorPolicy;
+}
+
+export interface CommandProcessorFailure {
+  rule_number: number;
+  command_number?: number;
+  line: number;
+  command?: string;
+  message: string;
+}
+
+export interface CommandProcessorActiveFile {
+  esp_path: string;
+  strings_dir?: string;
+  stats: LoadEspResponse;
+}
+
+export interface CommandProcessorRunResponse {
+  rules_started: number;
+  rules_completed: number;
+  commands_succeeded: number;
+  failures: CommandProcessorFailure[];
+  warnings: string[];
+  file_context_changed: boolean;
+  active_file?: CommandProcessorActiveFile;
+  stopped_early: boolean;
+}
+
+export interface CommandProcessorProgress {
+  stage: "rule_start" | "command_start" | "command_done" | "rule_done" | "message";
+  rule_number: number;
+  command_number?: number;
+  line: number;
+  command?: string;
+  message: string;
+}
+
 // ── 批处理器 API 包装函数 ───────────────────────────────────
 
 export async function startBatchTranslate(config: BatchConfig): Promise<string> {
@@ -742,6 +787,20 @@ export async function getBatchStatus(): Promise<BatchStatus | null> {
 
 export async function cancelBatchJob(): Promise<void> {
   return invoke("cancel_batch_job");
+}
+
+export async function runCommandProcessor(
+  request: CommandProcessorRunRequest,
+): Promise<CommandProcessorRunResponse> {
+  return invoke("run_command_processor", { request });
+}
+
+export async function readTextFile(path: string): Promise<string> {
+  return invoke("read_text_file", { path });
+}
+
+export async function writeTextFile(path: string, content: string): Promise<void> {
+  return invoke("write_text_file", { path, content });
 }
 
 export async function listEspFiles(dir: string): Promise<string[]> {

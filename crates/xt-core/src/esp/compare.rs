@@ -23,7 +23,7 @@ use crate::esp::parser::{
     decompress_bethesda_record, load_game_record_defs, parse_record_defs, StringsFiles,
     TranslatableField,
 };
-use crate::types::esp_pointer::string_hash;
+use crate::types::esp_pointer::{split_form_id_identity, string_hash};
 use crate::types::game_id::GameId;
 use crate::types::sky_string::SkyString;
 use crate::vmad::VmadDecoder;
@@ -559,7 +559,7 @@ impl CompareExtractor {
             return (0, 0);
         }
 
-        let (owner_index, local_form_id) = split_form_id(form_id);
+        let (owner_index, local_form_id) = split_form_id_identity(form_id);
         let owner_hash = self.owner_hash_for_index(owner_index);
 
         if owner_hash == 0 {
@@ -599,24 +599,6 @@ fn build_def_map(defs: &[TranslatableField]) -> HashMap<([u8; 4], [u8; 4]), usiz
         }
     }
     map
-}
-
-fn split_form_id(form_id: u32) -> (usize, u32) {
-    let high = (form_id >> 24) as u8;
-
-    if high == 0xFE {
-        let owner_index = ((form_id >> 12) & 0x0FFF) as usize;
-        let local_form_id = 0xFE00_0000 | (form_id & 0x0000_0FFF);
-        (owner_index, local_form_id)
-    } else if high == 0xFD {
-        let owner_index = ((form_id >> 16) & 0x00FF) as usize;
-        let local_form_id = 0xFD00_0000 | (form_id & 0x0000_FFFF);
-        (owner_index, local_form_id)
-    } else {
-        let owner_index = high as usize;
-        let local_form_id = form_id & 0x00FF_FFFF;
-        (owner_index, local_form_id)
-    }
 }
 
 fn apply_field_index_max(

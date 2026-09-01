@@ -2,11 +2,12 @@ use crate::esp::header::{GenericHeader, GrupHeader, RecordHeaderData};
 use crate::esp::record_tree::{EspField, EspFile, EspGrup, EspRecord, Tes4Header};
 use crate::strings::{CodepageTable, StringsFile, StringsFormat};
 use crate::types::esp_pointer::{string_hash, EspPointer};
+use crate::types::esp_pointer::split_form_id_identity;
 use crate::types::game_id::GameId;
 use crate::types::params::SkyStringParams;
 use crate::types::sky_string::SkyString;
-use std::collections::HashMap;
-use std::io::{Cursor, Read, Result};
+use std::collections::{HashMap, HashSet};
+use std::io::{Cursor, Read, Result, Seek, SeekFrom};
 use std::path::Path;
 
 /// 解压 Bethesda 压缩记录
@@ -80,6 +81,158 @@ pub(crate) fn decompress_bethesda_record(data: &[u8]) -> Result<Vec<u8>> {
             format!("Zlib decompression failed: {}", e),
         )),
     }
+}
+
+/// Quickly scan an ESP/ESM for record EDIDs without loading Strings, record definitions,
+/// search indexes, or a persistent record tree.
+///
+/// This is intended for inherited-master lookups where callers only need
+/// `(FormID, record signature) -> EDID`. Compressed records are decompressed one at a time.
+pub fn scan_record_edids(path: &Path) -> Result<HashMap<(u32, [u8; 4]), String>> {
+    scan_record_edids_inner(path, None)
+}
+
+/// Scan only records whose `(local FormID, record signature)` appear in `wanted`.
+///
+/// The local FormID is the low 24 bits of a standard FormID. Non-matching records are
+/// skipped with `Seek`, so compressed payloads are not read or decompressed unless needed.
+pub fn scan_selected_record_edids(
+    path: &Path,
+    wanted: &HashSet<(u32, [u8; 4])>,
+) -> Result<HashMap<(u32, [u8; 4]), String>> {
+    scan_record_edids_inner(path, Some(wanted.clone()))
+}
+
+fn scan_record_edids_inner(
+    path: &Path,
+    mut remaining: Option<HashSet<(u32, [u8; 4])>>,
+) -> Result<HashMap<(u32, [u8; 4]), String>> {
+    let mut file = std::fs::File::open(path)?;
+    let end = file.metadata()?.len();
+    let mut index = HashMap::new();
+    scan_edid_container(&mut file, end, &mut remaining, &mut index)?;
+    Ok(index)
+}
+
+fn scan_edid_container<R: Read + Seek>(
+    reader: &mut R,
+    end: u64,
+    remaining: &mut Option<HashSet<(u32, [u8; 4])>>,
+    index: &mut HashMap<(u32, [u8; 4]), String>,
+) -> Result<()> {
+    while reader.stream_position()? < end {
+        if remaining.as_ref().is_some_and(HashSet::is_empty) {
+            return Ok(());
+        }
+        let header_start = reader.stream_position()?;
+        if end.saturating_sub(header_start) < 8 {
+            reader.seek(SeekFrom::Start(end))?;
+            break;
+        }
+
+        let header = match GenericHeader::read_from(reader) {
+            Ok(header) => header,
+            Err(error) if error.kind() == std::io::ErrorKind::UnexpectedEof => break,
+            Err(error) => return Err(error),
+        };
+
+        if header.is_grup() {
+            if header.dsize < 24 {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!("invalid GRUP size {} at offset {header_start}", header.dsize),
+                ));
+            }
+            let _grup_header = GrupHeader::read_from(reader)?;
+            let group_end = header_start
+                .checked_add(header.dsize as u64)
+                .ok_or_else(|| {
+                    std::io::Error::new(std::io::ErrorKind::InvalidData, "GRUP end overflow")
+                })?;
+            if group_end > end {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::UnexpectedEof,
+                    format!("GRUP at offset {header_start} exceeds its container"),
+                ));
+            }
+            scan_edid_container(reader, group_end, remaining, index)?;
+            reader.seek(SeekFrom::Start(group_end))?;
+            continue;
+        }
+
+        // All non-GRUP records use the standard 16-byte record-header suffix.
+        let record_header = RecordHeaderData::read_from(reader)?;
+        let (_, local_form_id) = split_form_id_identity(record_header.form_id);
+        let local_key = (local_form_id, header.name);
+        let selected = remaining
+            .as_ref()
+            .map(|wanted| wanted.contains(&local_key))
+            .unwrap_or(true);
+        if !selected {
+            reader.seek(SeekFrom::Current(header.dsize as i64))?;
+            continue;
+        }
+        let mut record_data = vec![0u8; header.dsize as usize];
+        reader.read_exact(&mut record_data)?;
+
+        let field_data = if record_header.is_compressed() {
+            decompress_bethesda_record(&record_data)?
+        } else {
+            record_data
+        };
+
+        if let Some(edid) = extract_edid_field(&field_data) {
+            index.insert((record_header.form_id, header.name), edid);
+            if let Some(remaining) = remaining.as_mut() {
+                remaining.remove(&local_key);
+            }
+        }
+    }
+    Ok(())
+}
+
+fn extract_edid_field(data: &[u8]) -> Option<String> {
+    let mut pos = 0usize;
+    let mut extended_size: Option<usize> = None;
+
+    while pos.checked_add(6)? <= data.len() {
+        let sig = [data[pos], data[pos + 1], data[pos + 2], data[pos + 3]];
+        let size = u16::from_le_bytes([data[pos + 4], data[pos + 5]]) as usize;
+        pos += 6;
+
+        if &sig == b"XXXX" {
+            if size < 4 || pos.checked_add(size)? > data.len() {
+                return None;
+            }
+            extended_size = Some(u32::from_le_bytes([
+                data[pos],
+                data[pos + 1],
+                data[pos + 2],
+                data[pos + 3],
+            ]) as usize);
+            pos += size;
+            continue;
+        }
+
+        let actual_size = extended_size.take().unwrap_or(size);
+        let field_end = pos.checked_add(actual_size)?;
+        if field_end > data.len() {
+            return None;
+        }
+
+        if &sig == b"EDID" {
+            let bytes = &data[pos..field_end];
+            let len = bytes.iter().position(|&byte| byte == 0).unwrap_or(bytes.len());
+            if len == 0 {
+                return None;
+            }
+            return Some(String::from_utf8_lossy(&bytes[..len]).into_owned());
+        }
+
+        pos = field_end;
+    }
+
+    None
 }
 
 /// 可翻译字段定义
@@ -1301,6 +1454,108 @@ impl Default for EspParser {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_scan_record_edids_nested_group() {
+        fn make_record(sig: [u8; 4], form_id: u32, edid: &str) -> Vec<u8> {
+            let mut fields = Vec::new();
+            fields.extend_from_slice(b"EDID");
+            let mut edid_bytes = edid.as_bytes().to_vec();
+            edid_bytes.push(0);
+            fields.extend_from_slice(&(edid_bytes.len() as u16).to_le_bytes());
+            fields.extend_from_slice(&edid_bytes);
+
+            let mut record = Vec::new();
+            record.extend_from_slice(&sig);
+            record.extend_from_slice(&(fields.len() as u32).to_le_bytes());
+            record.extend_from_slice(&0u32.to_le_bytes()); // flags
+            record.extend_from_slice(&form_id.to_le_bytes());
+            record.extend_from_slice(&0u32.to_le_bytes()); // version/control
+            record.extend_from_slice(&44u16.to_le_bytes()); // form version
+            record.extend_from_slice(&0u16.to_le_bytes());
+            record.extend_from_slice(&fields);
+            record
+        }
+
+        let child = make_record(*b"NPC_", 0x0100_1234, "TestNpcEditorId");
+        let mut grup = Vec::new();
+        grup.extend_from_slice(b"GRUP");
+        grup.extend_from_slice(&((24 + child.len()) as u32).to_le_bytes());
+        grup.extend_from_slice(b"NPC_");
+        grup.extend_from_slice(&0u32.to_le_bytes());
+        grup.extend_from_slice(&0u16.to_le_bytes());
+        grup.extend_from_slice(&0u16.to_le_bytes());
+        grup.extend_from_slice(&0u16.to_le_bytes());
+        grup.extend_from_slice(&0u16.to_le_bytes());
+        grup.extend_from_slice(&child);
+
+        let path = std::env::temp_dir().join(format!(
+            "xtranslator-edid-scan-{}-{}.esp",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::write(&path, grup).unwrap();
+        let result = scan_record_edids(&path).unwrap();
+        let _ = std::fs::remove_file(&path);
+
+        assert_eq!(
+            result.get(&(0x0100_1234, *b"NPC_")).map(String::as_str),
+            Some("TestNpcEditorId")
+        );
+    }
+
+    #[test]
+    fn test_extract_edid_field_honors_xxxx_extended_size() {
+        let mut fields = Vec::new();
+        fields.extend_from_slice(b"XXXX");
+        fields.extend_from_slice(&4u16.to_le_bytes());
+        fields.extend_from_slice(&5u32.to_le_bytes());
+        fields.extend_from_slice(b"EDID");
+        fields.extend_from_slice(&0u16.to_le_bytes());
+        fields.extend_from_slice(b"ABCD\0");
+
+        assert_eq!(extract_edid_field(&fields).as_deref(), Some("ABCD"));
+    }
+
+    #[test]
+    fn test_selected_edid_scan_uses_canonical_light_form_id() {
+        let mut fields = Vec::new();
+        fields.extend_from_slice(b"EDID");
+        fields.extend_from_slice(&6u16.to_le_bytes());
+        fields.extend_from_slice(b"Light\0");
+
+        let mut record = Vec::new();
+        record.extend_from_slice(b"ARMO");
+        record.extend_from_slice(&(fields.len() as u32).to_le_bytes());
+        record.extend_from_slice(&0u32.to_le_bytes());
+        record.extend_from_slice(&0xFE12_3ABCu32.to_le_bytes());
+        record.extend_from_slice(&0u32.to_le_bytes());
+        record.extend_from_slice(&44u16.to_le_bytes());
+        record.extend_from_slice(&0u16.to_le_bytes());
+        record.extend_from_slice(&fields);
+
+        let path = std::env::temp_dir().join(format!(
+            "xtranslator-light-edid-scan-{}-{}.esp",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::write(&path, record).unwrap();
+        let mut wanted = HashSet::new();
+        wanted.insert((0xFE00_0ABC, *b"ARMO"));
+        let result = scan_selected_record_edids(&path, &wanted).unwrap();
+        let _ = std::fs::remove_file(&path);
+
+        assert_eq!(
+            result.get(&(0xFE12_3ABC, *b"ARMO")).map(String::as_str),
+            Some("Light")
+        );
+    }
 
     #[test]
     fn test_parse_record_defs() {

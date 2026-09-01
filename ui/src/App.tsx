@@ -24,6 +24,7 @@ import { RightPanelContainer } from "./components/RightPanelContainer";
 
 // 工具面板懒加载（首次打开时按需加载，减小首屏包体积）
 const BatchPanel = lazy(() => import("./components/BatchPanel").then(m => ({ default: m.BatchPanel })));
+const CommandProcessorDialog = lazy(() => import("./components/CommandProcessorDialog").then(m => ({ default: m.CommandProcessorDialog })));
 const DialogView = lazy(() => import("./components/DialogView").then(m => ({ default: m.DialogView })));
 const McmPanel = lazy(() => import("./components/McmPanel").then(m => ({ default: m.McmPanel })));
 const FinalizePanel = lazy(() => import("./components/FinalizePanel").then(m => ({ default: m.FinalizePanel })));
@@ -51,7 +52,7 @@ const AUTO_BACKUP_INTERVAL_MS = 5 * 60 * 1000;
 // ├── Toaster (toast 通知)
 // ├── RecoveryPromptModal (恢复提示)
 // ├── EditorDialog (编辑对话框)
-// ├── 9× Modal (工具面板)
+// ├── Modal tool panels
 // ├── GroupedMenuBar (分组菜单栏)
 // ├── BatchTranslateBar (批处理进度条)
 // ├── app-body
@@ -314,11 +315,23 @@ function App() {
       
       {/* 编辑对话框（单字符串编辑） */}
       <EditorDialog open={editorOpen} onClose={() => setEditorOpen(false)} />
-      {/* 工具面板（5 个模态框，条件渲染：仅激活时挂载到 DOM） */}
+      {/* 工具面板（条件渲染：仅激活时挂载到 DOM） */}
       {/* BSA/PEX/FUZ/Compare 现在作为右侧面板显示，见 RightPanelContainer */}
       {activePanel === "batch" && (
         <Modal open onClose={() => setActivePanel(null)} title={t("batch.title")} size="lg">
           <Suspense fallback={<div className="modal-loading"><Loader size={24} /></div>}><BatchPanel /></Suspense>
+        </Modal>
+      )}
+      {activePanel === "commandProcessor" && (
+        <Modal
+          open
+          onClose={() => setActivePanel(null)}
+          title={t("commandProcessor.title", { defaultValue: "Command Processor" })}
+          size="xl"
+        >
+          <Suspense fallback={<div className="modal-loading"><Loader size={24} /></div>}>
+            <CommandProcessorDialog />
+          </Suspense>
         </Modal>
       )}
       {activePanel === "dialog" && (

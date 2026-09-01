@@ -9,9 +9,10 @@ import i18n from "../i18n";
 export type Theme = "obsidian" | "dark" | "light" | "slate" | "auto";
 
 // 工具面板类型（单选，互斥）
-// 用于管理 9 个工具对话框的显示状态
+// 用于管理模态工具对话框的显示状态
 export type ActivePanel =
   | "batch"      // 批处理面板
+  | "commandProcessor" // Delphi BatchProcessor 命令脚本
   | "bsa"        // BSA 浏览器
   | "pex"        // PEX 脚本编辑器
   | "fuz"        // FUZ 音频扫描
@@ -315,6 +316,7 @@ interface AppState {
   setError: (error: string | null) => void;
   setLoadProgress: (progress: LoadProgress | null) => void;
   setEspLoaded: (path: string, stats: LoadEspResponse, stringsDir?: string) => void;
+  clearEspLoaded: () => void;
   setSstLoaded: (path: string, stats: LoadSstResponse) => void;
   setTargetLang: (lang: string) => void;
   setGameSelection: (mode: GameSelectionMode, game?: SupportedGameId | null) => void;
@@ -754,6 +756,23 @@ export const useAppStore = create<AppState>((set, get) => ({
       gameSource: espStats.game_source,
       dataConfigs: null,
     }),
+
+  clearEspLoaded: () => {
+    const state = get();
+    set({
+      espPath: null,
+      stringsDir: null,
+      espStats: null,
+      sstPath: null,
+      sstStats: null,
+      espHash: null,
+      currentGame: state.gameSelectionMode === "manual" ? state.currentGame : null,
+      detectedGame: null,
+      gameSource: null,
+      dataConfigs: null,
+      isDirty: false,
+    });
+  },
 
   setSstLoaded: (sstPath, sstStats) => set({ sstPath, sstStats }),
 

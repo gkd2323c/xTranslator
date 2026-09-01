@@ -37,7 +37,7 @@ Rust/Tauri 重写已经完成了绝大多数**核心翻译引擎**：ESP/ESM 解
 剩余差距主要集中在四类：
 
 - **主工作流没有真正接通的能力**：多游戏上下文、Localized/Hybrid 加载策略。
-- **原版高级工作流缩水**：BatchProcessor、XML Export options；Apply SST、Advanced Search 已恢复（DP-03/DP-04）。
+- **原版高级工作流缩水**：XML Export options；Apply SST、Advanced Search、BatchProcessor 已恢复（DP-03/DP-04/DP-05）。
 - **格式级兼容差距**：PEX opcode、XML EDID 信息、归档注入。
 - **低频辅助工具未移植**：DEFUI Component Generator、Codepage 手动覆盖、部分旧式工具窗。
 
@@ -55,7 +55,7 @@ Rust/Tauri 重写已经完成了绝大多数**核心翻译引擎**：ESP/ESM 解
 | DP-02 | P0     | PEX opcode / 反编译语义           | ⏳ **真实 LE fixture 待补**     | `TESVT_scriptPex.pas`                                                   | `crates/xt-core/src/pex/decompile.rs`                                          |
 | DP-03 | P0     | Apply SST 高级选项                | ⏳ **主体完成，VMAD/L3 待闭环** | `TESVT_ApplySSTOpts.*`                                                  | `matching.rs`, `commands.rs::load_sst`                                         |
 | DP-04 | P1     | Advanced Search                   | ✅ **已完成**                   | `TESVT_AdvSearch.*`                                                     | `ui/src/components/AdvSearchDialog.tsx`, `appStore.ts`                        |
-| DP-05 | P1     | BatchProcessor 命令脚本           | **未实现**                     | `TESVT_commandProcessor.*`, `TESVT_main.pas::batchCommands/runCommands` | 当前 `BatchPanel` / `src-tauri/src/batch.rs` 不是等价实现                      |
+| DP-05 | P1     | BatchProcessor 命令脚本           | ✅ **已完成（L3 交叉验证待补）** | `TESVT_commandProcessor.*`, `TESVT_main.pas::batchCommands/runCommands` | `xt-core::command_processor`、`src-tauri::command_processor`、`CommandProcessorDialog.tsx` |
 | DP-06 | P1     | BSA/BA2 注入                      | **未实现**                     | `TESVT_bsa.pas::InjectData`                                             | `crates/xt-core/src/bsa`, `ba2` 目前主要读取/提取                              |
 | DP-07 | P1     | Localized / Hybrid 加载策略       | **部分实现**                   | `TESVT_delocOpts.*`, MainLoader                                         | `commands.rs::load_esp`                                                        |
 | DP-08 | P1     | XML Export 选项                   | **缩水**                       | `TESVT_XMLExportOpts.*`                                                 | `XmlExportRequest`, `commands.rs::export_xml`                                  |
@@ -328,6 +328,10 @@ Rust/Tauri 重写已经完成了绝大多数**核心翻译引擎**：ESP/ESM 解
 
 ### DP-05 BatchProcessor 命令脚本
 
+#### 状态
+
+✅ **2026-09-01 完成（除 L3 交叉验证）。** 已直接对照仓库内 Delphi `TESVT_commandProcessor.dfm`、`TESVT_main.pas::batchCommands/runCommands` 落地完整白名单 parser，并把 processor 执行接入现有 ESP/SST/XML/Finalize 能力。全部 11 个原版命令均已有真实执行路径；剩余仅为原版示例/真实游戏文件的端到端交叉验证（L3）。
+
 #### 原版能力
 
 原版 BatchProcessor 不是普通“多文件翻译队列”，而是一个轻量脚本解释器。
@@ -372,6 +376,49 @@ Rust/Tauri 重写已经完成了绝大多数**核心翻译引擎**：ESP/ESM 解
 3. 每个命令有结构化日志、错误和停止策略。
 4. 默认禁止脚本执行任意 shell 命令；只允许白名单内的 xTranslator command。
 5. 支持加载/保存 `.txt` processor 文件和临时草稿恢复。
+
+#### 已完成
+
+- 新增 `crates/xt-core/src/command_processor.rs`，parser 只把 processor 文本解析成 `CommandProcessorScript → CommandRule → ProcessorCommand`，不执行任何应用操作。
+- 全量识别 Delphi 当前 `runCommands()` 白名单：`LoadFile`、`CloseFile`、`CloseAll`、`Finalize`、`GenerateDictionaries`、`ApplySst`、`ImportSst`、`ImportXml`、`LoadMasters`、`SaveDictionary`、`ApiTranslation`。
+- 对齐原版 rule/global 配置：`global_vocabfolder`、`global_importfolder`、`global_exportfolder`、`langsource`、`langdest`、`usedatadir`、`exportsubfolder`；`UseDataDir` 缺失或非法时按 Delphi `strtobooldef(..., true)` 回退为 `true`。
+- `ApplySst` / `ImportSst` / `ImportXml` 按 Delphi `:<compareOption>:<applyMode>:<path>` 语法解析；使用三段 split，Windows `C:\...` 路径中的冒号不会被破坏。
+- `ApiTranslation:<apiId>:<noTransOnly>` 已结构化建模。
+- 未知 `Command=` 不再像 Delphi `runCommands()` 那样静默跳过，而是 fail-closed，报告源码行号；因此 processor 无法扩展成任意 shell 执行入口。
+- 建立 `CommandProcessorHost` + `execute_command_processor()`：核心 executor 负责 rule/command 顺序、Stop/Continue 错误策略与结构化失败位置；具体 ESP/SST/XML/API 操作由应用层 host 实现，避免复制已有翻译逻辑。
+- executor 错误报告包含 `rule_number`、`command_number`、源码 `line`、命令名和错误消息，为后续 UI 日志直接提供稳定数据。
+- 新增 `src-tauri/src/command_processor.rs` 实现真实 Tauri host，并注册 `run_command_processor` IPC；实时发射 `command-processor-progress`，前端可以稳定显示 rule / command / line 级执行日志。
+- `LoadFile` 已复用 `load_esp`；`UseDataDir=true` 严格按 Delphi 的 `Game_EspFolder + extractFileName(...)` 语义要求调用方提供游戏 `Data` 目录，不做路径名猜测。
+- `ApplySst` / `ImportSst` 已复用 DP-03 的高级 SST 引擎。经 `TESVT_FastSearch.pas::getfProcCompareOpt/getProcSortCompare` 核对，processor 第一参数 `0..4` 精确映射五档 overwrite scope，第二参数 `0..3` 精确映射四档 match mode。
+- `Finalize` 已按 TES4 localized 标志分流：localized 插件只导出目标语言 Strings；非 localized 插件走 ESP 字段写回，避免把字符串 ID 型字段错误改成内联文本。
+- `CloseFile` / `CloseAll` 已清理 Rust 当前单活动 loader 的完整后端状态；由于 Rust 重写目前只有一个活动文件，两者在应用层效果等价。
+- `SaveDictionary` 已接通 SST 保存；存在 `Global_VocabFolder` 时按 Delphi `${addon}_${LangSource}_${LangDest}.sst` 命名。Rust 尚无 Delphi `SSTUserFolder` 全局设置，因此未提供该 fallback 时会明确报错而不是猜目录。
+- `ImportXml` 已可执行现有 Rust XML 导入，但当前 XML 管线仍使用通用 T1-T4 matcher；processor 的 `0/1/2` EDID/Strict/Relax comparator 语义依赖 DP-09 XML EDID/FormID 元数据闭环。执行报告会显式返回 warning，不宣称已经等价。
+- `Global_ImportFolder` 已接入 import 路径解析；`Global_ExportFolder` 在 Rust 中作为显式输出基目录使用。需注明：Delphi 当前 `runCommands()` 虽解析该字段，但实际 `Finalize` 路径没有消费它，因此这是兼容脚本字段的现代化补全，不作为逐字节 parity 依据。
+- 新增独立 `CommandProcessorDialog`：支持 `.txt` 打开/保存、localStorage 草稿恢复、Data 目录选择、Stop/Continue 策略、实时执行日志、失败/警告报告；现有现代 `BatchPanel` 保持不变。
+- processor 执行结果会返回最后的活动文件上下文；前端同步 `espPath` / `stringsDir` / `currentGame`，脚本 `CloseFile/CloseAll` 后也会清除旧上下文，避免后端与 UI 状态漂移。
+- `read_text_file` / 既有 `write_text_file` 作为 processor 编辑器文件 IO；processor 语言本身仍然只有固定 xTranslator 命令白名单，不存在 shell escape。
+- **`ApiTranslation`**：按 Delphi `aApiBaseName` 数字 ID 映射到 Rust provider（0→azure、2→baidu、3→youdao、5→google、6→deepl、7→openai；1=Yandex、4=freeApi 明确报"未实现"，不猜映射）。候选集按 Delphi `StartApiTranslationArray(false,...)` 的 `compareOptNoTransAndPartialsExLocked` 语义排除 VMAD/locked/translated/incomplete/validated；等源字符串复用同一次 API 结果；成功后重置状态为 incomplete。`noTransOnly=1` 的 NoTranslation 预标记请求会显式返回 warning（Rust 无 lRulesNoTransListIn/Out 规则集）。
+- **`GenerateDictionaries`**：读取 `Data/<Game>/vocabulary.txt` 的 STRINGS= 列表，逐个加载插件、按目标语言 Strings 回填翻译、按 Delphi `${addon}_${LangSource}_${LangDest}.sst` 命名生成 SST 到 `Global_VocabFolder`。执行前对当前 AppState 做快照、结束后恢复，避免污染用户正在编辑的工作区。
+- **`LoadMasters`**：解析当前插件 TES4 声明的 masters，把继承的 FormID（本插件内无 EDID 的字符串）按 master slot 解析回 EDID 并回填 `sk.edid` / `edid_hash`。非 Starfield 按 Delphi 高字节规则，Starfield 按 FE/FD 与 normal/medium/light 分桶重建 owner slot（对齐 Delphi `buildInheritedData` 的 `getPluginType` 语义）。
+- `ImportXml` 已可执行现有 Rust XML 导入，但当前 XML 管线仍使用通用 T1-T4 matcher；processor 的 `0/1/2` EDID/Strict/Relax comparator 语义依赖 DP-09 XML EDID/FormID 元数据闭环。执行报告会显式返回 warning，不宣称已经等价。
+
+#### 当前验证
+
+- `cargo test -p xt-core command_processor::tests --lib` → **9 passed / 0 failed**。
+- `cargo test -p xt-core --lib` → **335 passed / 0 failed**。
+- `cargo test -p xtranslator-tauri` → **7 passed / 0 failed**（含 command_processor 单元测试）。
+- `cargo test --workspace` → **全部通过**。
+- `cargo check -p xtranslator-tauri` → **通过**。
+- `npx tsc --noEmit` → **通过**。
+- `npx vitest run` → **59 passed / 0 failed**（6 个测试文件；新增 `CommandProcessorDialog.test.tsx` 2 项：默认脚本渲染与草稿持久化）。
+- `npm run build` → **通过**。
+- `git diff --check` → **通过**（仅仓库行尾转换提示，无 whitespace error）。
+
+#### 下一步（L3）
+
+1. 用原版 Delphi processor 示例和真实 Skyrim SE 文件跑 `LoadFile → ApplySst/ImportXml → Finalize → CloseFile` 端到端交叉验证，并锁成 fixture/E2E。
+2. 随 DP-09 补齐 processor `ImportXml` 的 EDID/Strict/Relax comparator 语义及 fake `[FormID]` EDID hash 规则。
 
 #### 验收
 
@@ -637,12 +684,12 @@ MS Word backend 属于 Windows 特有兼容功能，应作为可选 adapter，�
 
 ## 10. 推荐实施顺序
 
-DP-01、DP-04 已完成，后续严格按下面顺序推进：
+DP-01、DP-04、DP-05 已完成，后续严格按下面顺序推进：
 
 1. **DP-02 PEX opcode** — 修正已经发现的格式级风险。
 2. **DP-03 Apply SST options** — 恢复核心翻译工作流的用户控制能力。
 3. ~~**DP-04 Advanced Search**~~ — ✅ 已完成（2026-09-01）：独立面板、六维度、按字段 Regex、REC:FIELD 联合、preset 持久化；Keyword 维度待数据管道。
-4. **DP-05 BatchProcessor** — 恢复原版自动化脚本能力。
+4. ~~**DP-05 BatchProcessor**~~ — ✅ 已完成（2026-09-01，L3 交叉验证待补）：完整白名单 parser + 全部 11 命令执行路径（含 GenerateDictionaries / LoadMasters / ApiTranslation）+ 独立 UI；ImportXml comparator 语义随 DP-09 闭环。
 5. **DP-07 Localized/Hybrid loading** — 打通 archive 与 ESP 主流程。
 6. **DP-06 BSA/BA2 injection** — 在资源加载稳定后实现写回。
 7. **DP-08 / DP-09 XML export + EDID**。

@@ -112,6 +112,30 @@ pub fn string_hash(s: &str) -> u32 {
     hash
 }
 
+/// Split a Bethesda FormID into its owner-slot index and canonical local identity.
+///
+/// Normal plugins store the owner in the high byte and keep a 24-bit local FormID.
+/// Starfield light (`FE`) and medium (`FD`) plugins encode a separate owner index and
+/// use 12-bit / 16-bit local IDs respectively. Keeping the `FE`/`FD` marker in the
+/// local identity prevents collisions with normal records that happen to share the
+/// same low bits.
+pub fn split_form_id_identity(form_id: u32) -> (usize, u32) {
+    let high = (form_id >> 24) as u8;
+    if high == 0xFE {
+        let owner_index = ((form_id >> 12) & 0x0FFF) as usize;
+        let local_form_id = 0xFE00_0000 | (form_id & 0x0000_0FFF);
+        (owner_index, local_form_id)
+    } else if high == 0xFD {
+        let owner_index = ((form_id >> 16) & 0x00FF) as usize;
+        let local_form_id = 0xFD00_0000 | (form_id & 0x0000_FFFF);
+        (owner_index, local_form_id)
+    } else {
+        let owner_index = high as usize;
+        let local_form_id = form_id & 0x00FF_FFFF;
+        (owner_index, local_form_id)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -156,5 +180,12 @@ mod tests {
         let mut expected: u32 = 2166136261;
         expected = (expected ^ 0x60).wrapping_mul(16777619);
         assert_eq!(h, expected);
+    }
+
+    #[test]
+    fn test_split_form_id_identity_normal_light_medium() {
+        assert_eq!(split_form_id_identity(0x0312_3456), (3, 0x0012_3456));
+        assert_eq!(split_form_id_identity(0xFE12_3ABC), (0x123, 0xFE00_0ABC));
+        assert_eq!(split_form_id_identity(0xFD34_BEEF), (0x34, 0xFD00_BEEF));
     }
 }

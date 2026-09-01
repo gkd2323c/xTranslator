@@ -457,6 +457,88 @@ pub struct BatchFileError {
     pub message: String,
 }
 
+// ── Delphi Command Processor DTOs ─────────────────────────────────
+
+/// Error handling policy for the Delphi-compatible command processor.
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CommandProcessorErrorPolicyDto {
+    /// Stop at the first rule/command failure.
+    #[default]
+    Stop,
+    /// Record the failure and continue with later commands/rules.
+    Continue,
+}
+
+/// Request to parse and execute one Delphi BatchProcessor script.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct CommandProcessorRunRequest {
+    /// Processor source text.
+    pub script: String,
+    /// Bethesda game Data directory used by `UseDataDir=true` rules.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub data_dir: Option<String>,
+    /// Optional explicit game workspace passed through to `load_esp`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub game: Option<String>,
+    /// Stop/continue behavior after command failures.
+    #[serde(default)]
+    pub error_policy: CommandProcessorErrorPolicyDto,
+}
+
+/// One structured command processor failure.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct CommandProcessorFailureDto {
+    pub rule_number: usize,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub command_number: Option<usize>,
+    pub line: usize,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub command: Option<String>,
+    pub message: String,
+}
+
+/// File context left open after command processor execution.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct CommandProcessorActiveFileDto {
+    pub esp_path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub strings_dir: Option<String>,
+    pub stats: LoadEspResponse,
+}
+
+/// Final report returned by `run_command_processor`.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct CommandProcessorRunResponse {
+    pub rules_started: usize,
+    pub rules_completed: usize,
+    pub commands_succeeded: usize,
+    pub failures: Vec<CommandProcessorFailureDto>,
+    #[serde(default)]
+    pub warnings: Vec<String>,
+    /// True when LoadFile/CloseFile/CloseAll changed the backend active-file context.
+    #[serde(default)]
+    pub file_context_changed: bool,
+    /// Active file remaining open after the script, if any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub active_file: Option<CommandProcessorActiveFileDto>,
+    pub stopped_early: bool,
+}
+
+/// Real-time command processor event payload.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct CommandProcessorProgressDto {
+    /// `rule_start`, `command_start`, `command_done`, `rule_done`, or `message`.
+    pub stage: String,
+    pub rule_number: usize,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub command_number: Option<usize>,
+    pub line: usize,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub command: Option<String>,
+    pub message: String,
+}
+
 /// 保存 Strings 文件响应
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SaveStringsResponse {

@@ -1,0 +1,131 @@
+.command-processor {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 620px;
+}
+
+.command-processor-toolbar,
+.command-processor-actions,
+.command-processor-options,
+.command-processor-path-row,
+.command-processor-result {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.command-processor-toolbar {
+  justify-content: space-between;
+}
+
+.command-processor-file {
+  max-width: 420px;
+  overflow: hidden;
+  color: var(--color-muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.command-processor-options {
+  align-items: flex-end;
+}
+
+.command-processor-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 180px;
+  color: var(--color-muted);
+  font-size: 12px;
+}
+
+.command-processor-data-dir {
+  flex: 1;
+}
+
+.command-processor-path-row .ui-input {
+  flex: 1;
+}
+
+.command-processor-main {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(280px, 2fr);
+  gap: 12px;
+  min-height: 470px;
+}
+
+.command-processor-editor-wrap,
+.command-processor-log-wrap {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.command-processor-section-title {
+  color: var(--color-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.command-processor-editor {
+  min-height: 440px;
+  flex: 1;
+  resize: none;
+  font-family: "Cascadia Code", "Consolas", monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  tab-size: 2;
+}
+
+.command-processor-log {
+  min-height: 440px;
+  flex: 1;
+  overflow: auto;
+  padding: 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-surface-subtle);
+  font-family: "Cascadia Code", "Consolas", monospace;
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.command-processor-log-pos,
+.command-processor-log-empty {
+  color: var(--color-muted);
+}
+
+.command-processor-result {
+  align-items: flex-start;
+  flex-wrap: wrap;
+  padding-top: 10px;
+  border-top: 1px solid var(--color-border);
+  font-size: 12px;
+}
+
+.command-processor-failure,
+.command-processor-warning {
+  width: 100%;
+}
+
+.command-processor-failure {
+  color: var(--color-danger, #d55);
+}
+
+.command-processor-warning {
+  color: var(--color-warning, #d9a441);
+}
+
+@media (max-width: 900px) {
+  .command-processor-main {
+    grid-template-columns: 1fr;
+  }
+
+  .command-processor-options {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

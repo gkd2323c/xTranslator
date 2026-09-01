@@ -45,6 +45,7 @@ use crate::batch::BatchExecutor;
 ///
 /// 用于追踪当前打开的 ESP 文件及其关联的 Strings 目录。
 /// 当用户加载新的 ESP 文件时，此结构会被更新。
+#[derive(Clone, Debug)]
 pub struct EspFileInfo {
     /// ESP/ESM 文件的完整路径
     pub esp_path: String,
@@ -5111,9 +5112,21 @@ pub fn cancel_string_batch_translate(state: tauri::State<'_, Arc<AppState>>) -> 
 #[tauri::command]
 pub fn write_text_file(path: String, content: String) -> Result<(), String> {
     use std::io::Write;
+    if let Some(parent) = std::path::Path::new(&path).parent() {
+        if !parent.as_os_str().is_empty() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| format!("Failed to create parent directory: {}", e))?;
+        }
+    }
     let mut file =
         std::fs::File::create(&path).map_err(|e| format!("Failed to create file: {}", e))?;
     file.write_all(content.as_bytes())
         .map_err(|e| format!("Failed to write file: {}", e))?;
     Ok(())
+}
+
+/// Read a UTF-8 text file for editor-style tools such as Command Processor.
+#[tauri::command]
+pub fn read_text_file(path: String) -> Result<String, String> {
+    std::fs::read_to_string(&path).map_err(|e| format!("Failed to read text file: {e}"))
 }

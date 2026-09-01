@@ -5,8 +5,10 @@
 
 mod batch;
 mod commands;
+mod command_processor;
 
 use crate::batch::BatchExecutor;
+use crate::command_processor::run_command_processor;
 use commands::{
     apply_translation_cache, auto_backup_sst, batch_update_translations, build_dialog_tree,
     cancel_batch_job, cancel_string_batch_translate, check_aliases, check_pending_cache,
@@ -23,7 +25,7 @@ use commands::{
     list_esp_files, load_config, load_data_configs, load_esp, load_mcm_file, load_sst,
     load_vocabulary, mcm_compare, parse_pex_strings, preproc_opts_delete, preproc_opts_list,
     preproc_opts_load, preproc_opts_save, preproc_opts_set, query_strings_command, rtl_preview,
-    rtl_reverse, save_config, save_esp, save_mcm_file, save_sst, save_strings, scan_fuz_directory,
+    read_text_file, rtl_reverse, save_config, save_esp, save_mcm_file, save_sst, save_strings, scan_fuz_directory,
     set_azure_api_key, set_baidu_api_key, set_deepl_api_key, set_openai_api_key,
     set_translation_provider, set_yooudao_api_key, shape_arabic, spell_check_config,
     spell_check_ignore, spell_check_load, spell_check_suggestions, spell_check_text,
@@ -78,6 +80,7 @@ fn main() {
             get_batch_status,
             cancel_batch_job,
             list_esp_files,
+            run_command_processor,
             // BSA 浏览器命令
             list_bsa_files,
             list_ba2_files,
@@ -126,6 +129,7 @@ fn main() {
             start_string_batch_translate,
             cancel_string_batch_translate,
             write_text_file,
+            read_text_file,
             // 拼写检查
             spell_check_load,
             spell_check_unload,
