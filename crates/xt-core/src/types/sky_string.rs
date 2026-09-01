@@ -33,6 +33,12 @@ pub struct SkyString {
     /// 标识记录内的具体字段
     pub field_sig: [u8; 4],
 
+    /// Editor ID（EDID 字段文本，如 "Whiterun"）。
+    /// 解析 ESP 时从记录的 EDID 字段提取，供 Advanced Search / XML 导出等
+    /// 需要 EDID 文本的工作流使用；非 ESP 来源（SST/XML 直接加载）为 None。
+    /// 与 `esp_ptr.edid_hash` 配合：hash 用于快速匹配，文本用于展示与搜索。
+    pub edid: Option<String>,
+
     /// 规范化后的源字符串（用于模糊匹配，对应 Delphi 的 gSNormalized）
     /// 去除标点、转换大小写等，用于启发式搜索
     pub source_normalized: Option<String>,
@@ -174,6 +180,7 @@ impl SkyString {
             translation,
             record_sig,
             field_sig,
+            edid: None,
             hash,
             hash_trans,
             word_hashes,
@@ -230,6 +237,7 @@ mod tests {
         assert_ne!(sk.hash, 0);
         assert_ne!(sk.hash_trans, 0);
         assert_eq!(sk.colab_id, 0);
+        assert_eq!(sk.edid, None);
     }
 
     #[test]

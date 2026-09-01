@@ -894,6 +894,7 @@ mod tests {
             min_word: 0,
             source_normalized: None,
             normalized_hash: None,
+            edid: None,
             hash: 0,
             hash_trans: 0,
             word_hashes: Vec::new(),

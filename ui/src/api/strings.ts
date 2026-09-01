@@ -43,6 +43,8 @@ export interface SkyStringDTO {
   record_sig: string;
   // 字段签名（如 "FULL", "DESC"）
   field_sig: string;
+  // Editor ID（EDID 字段文本，如 "Whiterun"）；非 ESP 来源可能为空
+  edid?: string | null;
   // FormID（十六进制字符串，如 "0x00012345"）
   form_id: string;
   // 翻译状态："translated" / "incomplete" / "locked"

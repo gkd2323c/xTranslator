@@ -70,6 +70,10 @@ pub struct SkyStringDTO {
     pub record_sig: String,
     /// 字段签名（如 "FULL", "DESC"），标识记录内的具体字段
     pub field_sig: String,
+    /// Editor ID（EDID 字段文本，如 "Whiterun"），ESP 解析时提取；
+    /// 非 ESP 来源（SST/XML 直接加载）可能为空。用于 Advanced Search / XML 导出。
+    #[serde(default)]
+    pub edid: Option<String>,
     /// FormID（十六进制字符串，如 "0x00012345"），用于定位 ESP 中的对象
     pub form_id: String,
     /// 翻译状态："translated" / "incomplete" / "locked"

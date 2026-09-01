@@ -45,6 +45,7 @@ fn benchmark_full_ipc_pipeline() {
             translation: sk.translation.clone(),
             record_sig: String::from_utf8_lossy(&sk.esp_ptr.record_sig).to_string(),
             field_sig: String::from_utf8_lossy(&sk.esp_ptr.field_sig).to_string(),
+            edid: sk.edid.clone(),
             form_id: format!("0x{:08X}", sk.esp_ptr.form_id),
             status: "translated".to_string(),
             list_index: 0,

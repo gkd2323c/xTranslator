@@ -37,12 +37,70 @@ export type EditorMode = "modal" | "sidebar" | "inline";
 export type LogLevel = "info" | "warn" | "error";
 
 // 日志条目
+
 export interface LogEntry {
   id: number;
   timestamp: Date;
   level: LogLevel;
   message: string;
   source?: string;
+}
+
+// ============================================================================
+// Advanced Search（DP-04）
+// ============================================================================
+//
+// 对应 Delphi `TESVT_AdvSearch`。每个搜索维度独立生效（AND 关系），
+// 文本维度（Source/Translated/EDID）可独立切换 Regex。
+// 简单搜索框与 Advanced Search 互斥：advSearch 为 null 时简单搜索生效。
+
+// Advanced Search 六个搜索维度（对应 Delphi ButtonedEdit1-6）
+export interface AdvSearchCriteria {
+  // Source：搜索源文本
+  source: string;
+  // Translated：搜索译文
+  translated: string;
+  // EDID/FormID：EDID 文本子串或 $/0x 前缀十六进制 FormID 精确匹配
+  edid: string;
+  // REC：记录签名（如 "INFO"），可与 FIELD 联合（REC:FIELD 语法见 REC 框）
+  rec: string;
+  // FIELD：字段签名（如 "FULL"）
+  field: string;
+  // Keyword：记录关键字。当前数据管道未提供 keyword 字典，此维度保留但暂不生效
+  keyword: string;
+}
+
+// 每个文本维度的独立 Regex 开关（对应 Delphi sSearchUseRegex[1..4]）
+export interface AdvSearchRegexFlags {
+  source: boolean;
+  translated: boolean;
+  edid: boolean;
+  keyword: boolean;
+}
+
+// Source/Translated 比较模式（对应 Delphi PopupMenu1）
+// any: (.*)||(.*) 无比较约束；eq: (.*)=(.*) 两者相等；neq: (.*)!=(.*) 两者不等
+export type AdvCompareMode = "any" | "eq" | "neq";
+
+export interface AdvSearchState {
+  criteria: AdvSearchCriteria;
+  useRegex: AdvSearchRegexFlags;
+  compareMode: AdvCompareMode;
+}
+
+// 默认空 Advanced Search 状态
+export function emptyAdvSearch(): AdvSearchState {
+  return {
+    criteria: { source: "", translated: "", edid: "", rec: "", field: "", keyword: "" },
+    useRegex: { source: false, translated: false, edid: false, keyword: false },
+    compareMode: "any",
+  };
+}
+
+// 是否所有 Advanced Search 条件均为空（无实际过滤效果）
+export function isAdvSearchEmpty(state: AdvSearchState): boolean {
+  const c = state.criteria;
+  return !c.source && !c.translated && !c.edid && !c.rec && !c.field && !c.keyword;
 }
 
 const THEME_STORAGE_KEY = "xtranslator-theme";
@@ -269,6 +327,10 @@ interface AppState {
   setVmadFilter: (enabled: boolean) => void;
   setListIndex: (index: number | null) => void;
   setSort: (field: string, dir?: "asc" | "desc") => void;
+  // Advanced Search（DP-04）：null 表示未激活（简单搜索生效）；非空时由 Advanced Search 接管文本过滤
+  advSearch: AdvSearchState | null;
+  setAdvSearch: (adv: AdvSearchState | null) => void;
+  clearAdvSearch: () => void;
   replaceAll: () => Promise<void>;
   undo: () => Promise<void>;
   redo: () => Promise<void>;
@@ -327,7 +389,7 @@ function getInitialTheme(): Theme {
 const THEME_LABELS: Record<Theme, string> = { obsidian: "Obsidian", dark: "Obsidian", light: "Light", slate: "Slate", auto: "Auto" };
 const THEME_NEXT: Record<Theme, Theme> = { obsidian: "slate", slate: "light", light: "auto", auto: "obsidian", dark: "obsidian" };
 
-function applyFilterAndSort(
+export function applyFilterAndSort(
   allItems: SkyStringDTO[],
   filter: string,
   useRegex: boolean,
@@ -336,7 +398,8 @@ function applyFilterAndSort(
   vmadFilter: boolean,
   listIndex: number | null,
   sortField: string,
-  sortDir: "asc" | "desc"
+  sortDir: "asc" | "desc",
+  advSearch: AdvSearchState | null = null
 ): SkyStringDTO[] {
   let result = allItems;
 
@@ -360,8 +423,10 @@ function applyFilterAndSort(
     result = result.filter((item) => item.is_vmad);
   }
 
-  // 文本过滤
-  if (filter) {
+  // 文本过滤：Advanced Search 激活时由其接管，简单搜索仅在未激活时生效
+  if (advSearch) {
+    result = applyAdvancedFilter(result, advSearch);
+  } else if (filter) {
     if (useRegex) {
       try {
         const regex = new RegExp(filter, "i");
@@ -409,6 +474,121 @@ function applyFilterAndSort(
   return result;
 }
 
+// ============================================================================
+// Advanced Search 过滤核心（DP-04）
+// ============================================================================
+//
+// 对齐 Delphi `TESVT_main.pas::launchSearchTimer` 的 Advanced 分支：
+//   - s[1] Source  → SearchInString(s, item.source)
+//   - s[2] Translated → SearchInString(s, item.translation)
+//   - s[3] EDID/FormID → FormID 精确匹配或 EDID 文本搜索
+//   - s[5] REC → getRecSig 相等
+//   - s[6] FIELD → getFieldSig 相等
+//   - compare mode → 比较 Source/Translated 后捕获值（eq/neq）
+// Keyword 维度依赖 ESP keyword 字典数据管道，当前未提供则跳过。
+
+// 构造单个文本条件的匹配谓词；无效 Regex 视为全不匹配（与 Delphi 一致）
+export function makeTextMatcher(pattern: string, useRegex: boolean): (s: string) => boolean {
+  const lower = pattern.toLowerCase();
+  if (!useRegex) {
+    return (s: string) => s.toLowerCase().includes(lower);
+  }
+  let regex: RegExp;
+  try {
+    regex = new RegExp(pattern, "i");
+  } catch {
+    return () => false;
+  }
+  return (s: string) => regex.test(s);
+}
+
+// 判断输入是否为 FormID 形式（$ 或 0x 前缀 + 十六进制），返回归一化后的数值字符串
+export function parseFormIdInput(input: string): string | null {
+  const trimmed = input.trim();
+  const m = trimmed.match(/^(?:0x|\$)([0-9a-fA-F]+)$/);
+  if (!m) return null;
+  // 归一化：去掉前导零，统一小写，便于比较
+  return m[1].toLowerCase().replace(/^0+/, "") || "0";
+}
+
+// 归一化 DTO 的 form_id（"0x00012345" → "12345"）
+export function normalizeDtoFormId(formId: string): string {
+  const m = formId.trim().match(/^(?:0x|\$)?([0-9a-fA-F]+)$/);
+  if (!m) return formId.toLowerCase();
+  return m[1].toLowerCase().replace(/^0+/, "") || "0";
+}
+
+export function applyAdvancedFilter(items: SkyStringDTO[], adv: AdvSearchState): SkyStringDTO[] {
+  const c = adv.criteria;
+
+  // 预编译各文本维度的匹配谓词（一次遍历，避免逐行 new RegExp）
+  const matchSource = c.source ? makeTextMatcher(c.source, adv.useRegex.source) : null;
+  const matchTranslated = c.translated ? makeTextMatcher(c.translated, adv.useRegex.translated) : null;
+  const matchEdid = c.edid ? makeTextMatcher(c.edid, adv.useRegex.edid) : null;
+  const matchKeyword = c.keyword ? makeTextMatcher(c.keyword, adv.useRegex.keyword) : null;
+
+  // REC:FIELD 联合：REC 框支持 "REC:FIELD" 语法自动拆分；
+  // 单独的 rec/field 框分别匹配记录签名与字段签名。
+  let recCriterion: string | null = null;
+  let fieldCriterion: string | null = null;
+  if (c.rec) {
+    const colonIdx = c.rec.indexOf(":");
+    if (colonIdx >= 0) {
+      recCriterion = c.rec.slice(0, colonIdx).trim().toUpperCase() || null;
+      fieldCriterion = c.rec.slice(colonIdx + 1).trim().toUpperCase() || null;
+    } else {
+      recCriterion = c.rec.trim().toUpperCase();
+    }
+  }
+  if (c.field && !fieldCriterion) {
+    fieldCriterion = c.field.trim().toUpperCase();
+  } else if (c.field && fieldCriterion && c.field.trim().toUpperCase() !== fieldCriterion) {
+    // REC 框与 FIELD 框同时填了不同的 FIELD：取 FIELD 框为准（更明确）
+    fieldCriterion = c.field.trim().toUpperCase();
+  }
+
+  // FormID 精确匹配（EDID 框为 $/0x 十六进制时）
+  const formIdTarget = c.edid ? parseFormIdInput(c.edid) : null;
+
+  // Source/Translated 比较模式：需要取回两者的“捕获值”。
+  // 简化实现：eq → source.toLowerCase() === translated.toLowerCase()；
+  // neq → 两者不同。Regex 时按整体匹配结果比较（Delphi 比较捕获组拼接结果）。
+  const compareMode = adv.compareMode;
+  const needCompare = compareMode !== "any" && !!c.source && !!c.translated;
+
+  return items.filter((item) => {
+    // Source
+    if (matchSource && !matchSource(item.source)) return false;
+    // Translated
+    if (matchTranslated && !matchTranslated(item.translation)) return false;
+    // EDID/FormID
+    if (matchEdid && c.edid) {
+      if (formIdTarget !== null) {
+        // FormID 精确匹配（忽略大小写与 0x 前缀）
+        if (normalizeDtoFormId(item.form_id) !== formIdTarget) return false;
+      } else {
+        // EDID 文本搜索
+        const edidText = item.edid ?? "";
+        if (!matchEdid(edidText)) return false;
+      }
+    }
+    // REC
+    if (recCriterion && item.record_sig.toUpperCase() !== recCriterion) return false;
+    // FIELD
+    if (fieldCriterion && item.field_sig.toUpperCase() !== fieldCriterion) return false;
+    // Keyword（数据管道未提供，占位）
+    if (matchKeyword) return false;
+    // Source/Translated 比较模式
+    if (needCompare) {
+      const src = item.source.toLowerCase();
+      const trans = item.translation.toLowerCase();
+      if (compareMode === "eq" && src !== trans) return false;
+      if (compareMode === "neq" && src === trans) return false;
+    }
+    return true;
+  });
+}
+
 export function computeTranslationProgress(allItems: SkyStringDTO[]): { translated: number; total: number } {
   const total = allItems.length;
   const translated = allItems.filter((s) => s.translation && s.translation.trim() !== '').length;
@@ -439,7 +619,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       state.vmadFilter,
       state.listIndex,
       state.sortField,
-      state.sortDir
+      state.sortDir,
+      state.advSearch
     );
     set({
       allItems: mockItems,
@@ -499,6 +680,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   listIndex: null,
   sortField: "id",
   sortDir: "asc",
+  advSearch: null,
   selectedId: null,
   selectedItem: null,
   theme: getInitialTheme(),
@@ -543,7 +725,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       state.vmadFilter,
       state.listIndex,
       state.sortField,
-      state.sortDir
+      state.sortDir,
+      state.advSearch
     );
     set({
       allItems,
@@ -603,7 +786,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         state.vmadFilter,
         state.listIndex,
         state.sortField,
-        state.sortDir
+        state.sortDir,
+        state.advSearch
       );
       set({ items, filtered: items.length });
     }, FILTER_DEBOUNCE_MS);
@@ -620,7 +804,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       state.vmadFilter,
       state.listIndex,
       state.sortField,
-      state.sortDir
+      state.sortDir,
+      state.advSearch
     );
     set({ filter, items, filtered: items.length });
   },
@@ -636,7 +821,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       state.vmadFilter,
       state.listIndex,
       state.sortField,
-      state.sortDir
+      state.sortDir,
+      state.advSearch
     );
     set({ useRegex, items, filtered: items.length });
   },
@@ -667,7 +853,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       state.vmadFilter,
       state.listIndex,
       state.sortField,
-      state.sortDir
+      state.sortDir,
+      state.advSearch
     );
 
     if (candidates.length === 0) {
@@ -721,7 +908,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         state.vmadFilter,
         state.listIndex,
         state.sortField,
-        state.sortDir
+        state.sortDir,
+        state.advSearch
       );
       set({ allItems: newAllItems, items, filtered: items.length, isDirty: true });
     }
@@ -775,7 +963,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       state.vmadFilter,
       state.listIndex,
       state.sortField,
-      state.sortDir
+      state.sortDir,
+      state.advSearch
     );
     const selectedItem = state.selectedId === entry.id
       ? { ...state.selectedItem!, translation: entry.oldTranslation, status: entry.oldStatus }
@@ -824,7 +1013,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       state.vmadFilter,
       state.listIndex,
       state.sortField,
-      state.sortDir
+      state.sortDir,
+      state.advSearch
     );
     const selectedItem = state.selectedId === entry.id
       ? { ...state.selectedItem!, translation: entry.oldTranslation, status: entry.oldStatus }
@@ -843,7 +1033,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       state.vmadFilter,
       state.listIndex,
       state.sortField,
-      state.sortDir
+      state.sortDir,
+      state.advSearch
     );
     set({ statusFilter, items, filtered: items.length });
   },
@@ -859,7 +1050,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       state.vmadFilter,
       state.listIndex,
       state.sortField,
-      state.sortDir
+      state.sortDir,
+      state.advSearch
     );
     set({ recordFilter, items, filtered: items.length });
   },
@@ -875,7 +1067,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       vmadFilter,
       state.listIndex,
       state.sortField,
-      state.sortDir
+      state.sortDir,
+      state.advSearch
     );
     set({ vmadFilter, items, filtered: items.length });
   },
@@ -891,7 +1084,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       state.vmadFilter,
       listIndex,
       state.sortField,
-      state.sortDir
+      state.sortDir,
+      state.advSearch
     );
     set({ listIndex, items, filtered: items.length });
   },
@@ -909,9 +1103,45 @@ export const useAppStore = create<AppState>((set, get) => ({
       state.vmadFilter,
       state.listIndex,
       sortField,
-      sortDir
+      sortDir,
+      state.advSearch
     );
     set({ sortField, sortDir, items, filtered: items.length });
+  },
+
+  // Advanced Search（DP-04）：设置后立即按新条件重新过滤
+  setAdvSearch: (advSearch) => {
+    const state = get();
+    const items = applyFilterAndSort(
+      state.allItems,
+      state.filter,
+      state.useRegex,
+      state.statusFilter,
+      state.recordFilter,
+      state.vmadFilter,
+      state.listIndex,
+      state.sortField,
+      state.sortDir,
+      advSearch
+    );
+    set({ advSearch, items, filtered: items.length });
+  },
+
+  clearAdvSearch: () => {
+    const state = get();
+    const items = applyFilterAndSort(
+      state.allItems,
+      state.filter,
+      state.useRegex,
+      state.statusFilter,
+      state.recordFilter,
+      state.vmadFilter,
+      state.listIndex,
+      state.sortField,
+      state.sortDir,
+      null
+    );
+    set({ advSearch: null, items, filtered: items.length });
   },
 
   setEditorOpen: (open) => set({ editorOpen: open }),
@@ -964,7 +1194,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       state.vmadFilter,
       state.listIndex,
       state.sortField,
-      state.sortDir
+      state.sortDir,
+      state.advSearch
     );
     const selectedItem = state.selectedId === id
       ? { ...state.selectedItem!, translation, status: translation ? "translated" : "incomplete" }
@@ -1148,7 +1379,8 @@ export const useAppStore = create<AppState>((set, get) => ({
           state.vmadFilter,
           state.listIndex,
           state.sortField,
-          state.sortDir
+          state.sortDir,
+          state.advSearch
         );
         set({
           allItems: mockItems,
@@ -1339,6 +1571,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       recordFilter: null,
       vmadFilter: false,
       listIndex: null,
+      advSearch: null,
       selectedId: null,
       selectedItem: null,
       isDirty: false,

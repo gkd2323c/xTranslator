@@ -25,6 +25,7 @@ import {
 } from "../api/strings";
 import type { LoadSstResponse, XmlImportResponse, SupportedGameId, SstApplyOptions } from "../api/strings";
 import { ApplySstDialog } from "./ApplySstDialog";
+import { AdvSearchDialog } from "./AdvSearchDialog";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
@@ -232,6 +233,7 @@ export function GroupedMenuBar() {
   const [showSpellCheck, setShowSpellCheck] = useState(false);
   const [showMergeSst, setShowMergeSst] = useState(false);
   const [applySstDialogOpen, setApplySstDialogOpen] = useState(false);
+  const [advSearchOpen, setAdvSearchOpen] = useState(false);
   const [pendingSstPath, setPendingSstPath] = useState<string | null>(null);
   const [spellCheckCfg, setSpellCheckCfg] = useState<
     import("../api/strings").SpellCheckConfigDto | null
@@ -964,6 +966,11 @@ export function GroupedMenuBar() {
         id: "search",
         label: t("menu.search", { defaultValue: "Search" }),
         items: [
+          {
+            label: t("advSearch.title", { defaultValue: "Advanced Search" }),
+            onClick: () => setAdvSearchOpen(true),
+          },
+          { separator: true, label: "" },
           {
             label: t("common.translated"),
             onClick: () =>
@@ -1800,6 +1807,10 @@ export function GroupedMenuBar() {
           setApplySstDialogOpen(false);
           setPendingSstPath(null);
         }}
+      />
+      <AdvSearchDialog
+        open={advSearchOpen}
+        onClose={() => setAdvSearchOpen(false)}
       />
     </div>
   );

@@ -942,14 +942,15 @@ impl EspParser {
                         };
 
                         sk.esp_ptr = EspPointer {
-                            str_id: string_id as i32,
-                            form_id,
-                            record_sig: *record_sig,
+                            str_id: string_id as i32, // 实际的字符串 ID(关键：用于 XML 匹配)
+                            form_id,                  // 记录的 FormID
+                            record_sig: *record_sig,  // 记录类型
                             field_sig: field.header.name,
-                            index: field_index,
-                            index_max: 1,
-                            edid_hash: editor_id.map_or(0, |s| string_hash(s)),
+                            index: field_index,       // 字段索引
+                            index_max: 1,             // 字段总数
+                            edid_hash: editor_id.map_or(0, |s| string_hash(s)), // Editor ID 的 FNV-1a 哈希
                         };
+                        sk.edid = editor_id.map(|s| s.to_string());
 
                         sk.params.set(SkyStringParams::INCOMPLETE_TRANS, true);
                         sk.list_index = def.list_index;
@@ -964,7 +965,7 @@ impl EspParser {
 
             // 处理 VMAD 字段
             if &field.header.name == b"VMAD" && !field.buffer.is_empty() {
-                self.parse_vmad_strings(record_sig, form_id, &field.buffer, field_index);
+                self.parse_vmad_strings(record_sig, form_id, &field.buffer, field_index, editor_id);
             }
 
             field_index += 1;
@@ -1183,6 +1184,7 @@ impl EspParser {
                             index_max: 1,             // 字段总数
                             edid_hash: edid.as_ref().map_or(0, |s| string_hash(s)), // Editor ID 的 FNV-1a 哈希
                         };
+                        sk.edid = edid.clone();
 
                         // 初始状态：有源文、无译文 => 未完成翻译。
                         sk.params.set(SkyStringParams::INCOMPLETE_TRANS, true);
@@ -1196,7 +1198,7 @@ impl EspParser {
 
             // 处理 VMAD 字段中的脚本字符串
             if &sig == b"VMAD" && !field_data.is_empty() {
-                self.parse_vmad_strings(record_sig, form_id, field_data, field_index);
+                self.parse_vmad_strings(record_sig, form_id, field_data, field_index, edid.as_deref());
             }
 
             field_index += 1;
@@ -1212,6 +1214,7 @@ impl EspParser {
         form_id: u32,
         data: &[u8],
         field_index: u16,
+        editor_id: Option<&str>,
     ) {
         use crate::types::esp_pointer::string_hash;
 
@@ -1261,6 +1264,7 @@ impl EspParser {
                 index_max: vmad_str.length as u16,
                 edid_hash: string_hash(&script_prop_key),
             };
+            sk.edid = editor_id.map(|s| s.to_string());
 
             sk.internal_params.set(
                 crate::types::params::SkyStringInternalParams::IS_VMAD_STRING,

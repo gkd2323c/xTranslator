@@ -238,6 +238,7 @@ fn sky_string_to_dto(sk: &SkyString) -> SkyStringDTO {
         translation: sk.translation.clone(),
         record_sig: String::from_utf8_lossy(&sk.esp_ptr.record_sig).to_string(),
         field_sig: String::from_utf8_lossy(&sk.esp_ptr.field_sig).to_string(),
+        edid: sk.edid.clone(),
         form_id: format!("0x{:08X}", sk.esp_ptr.form_id),
         status: status_string(sk),
         list_index: sk.list_index,

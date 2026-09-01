@@ -37,7 +37,7 @@ Rust/Tauri 重写已经完成了绝大多数**核心翻译引擎**：ESP/ESM 解
 剩余差距主要集中在四类：
 
 - **主工作流没有真正接通的能力**：多游戏上下文、Localized/Hybrid 加载策略。
-- **原版高级工作流缩水**：Apply SST、Advanced Search、BatchProcessor、XML Export options。
+- **原版高级工作流缩水**：BatchProcessor、XML Export options；Apply SST、Advanced Search 已恢复（DP-03/DP-04）。
 - **格式级兼容差距**：PEX opcode、XML EDID 信息、归档注入。
 - **低频辅助工具未移植**：DEFUI Component Generator、Codepage 手动覆盖、部分旧式工具窗。
 
@@ -54,7 +54,7 @@ Rust/Tauri 重写已经完成了绝大多数**核心翻译引擎**：ESP/ESM 解
 | DP-01 | P0     | 多游戏上下文贯穿主流程            | ✅ **已完成**                   | `TESVT_main.pas` 游戏状态                                               | `game_detect.rs`, `appStore.ts`, `GroupedMenuBar.tsx`, `commands.rs::load_esp` |
 | DP-02 | P0     | PEX opcode / 反编译语义           | ⏳ **真实 LE fixture 待补**     | `TESVT_scriptPex.pas`                                                   | `crates/xt-core/src/pex/decompile.rs`                                          |
 | DP-03 | P0     | Apply SST 高级选项                | ⏳ **主体完成，VMAD/L3 待闭环** | `TESVT_ApplySSTOpts.*`                                                  | `matching.rs`, `commands.rs::load_sst`                                         |
-| DP-04 | P1     | Advanced Search                   | **明显缩水**                   | `TESVT_AdvSearch.*`                                                     | `ui/src/stores/appStore.ts`                                                    |
+| DP-04 | P1     | Advanced Search                   | ✅ **已完成**                   | `TESVT_AdvSearch.*`                                                     | `ui/src/components/AdvSearchDialog.tsx`, `appStore.ts`                        |
 | DP-05 | P1     | BatchProcessor 命令脚本           | **未实现**                     | `TESVT_commandProcessor.*`, `TESVT_main.pas::batchCommands/runCommands` | 当前 `BatchPanel` / `src-tauri/src/batch.rs` 不是等价实现                      |
 | DP-06 | P1     | BSA/BA2 注入                      | **未实现**                     | `TESVT_bsa.pas::InjectData`                                             | `crates/xt-core/src/bsa`, `ba2` 目前主要读取/提取                              |
 | DP-07 | P1     | Localized / Hybrid 加载策略       | **部分实现**                   | `TESVT_delocOpts.*`, MainLoader                                         | `commands.rs::load_esp`                                                        |
@@ -261,6 +261,10 @@ Rust/Tauri 重写已经完成了绝大多数**核心翻译引擎**：ESP/ESM 解
 
 ### DP-04 Advanced Search
 
+#### 状态
+
+✅ **2026-09-01 完成。** 独立 Advanced Search 面板已实现，简单搜索框保留作为快速搜索；两者互斥（Advanced Search 激活时接管文本过滤）。Keyword 维度因依赖 ESP keyword 字典数据管道（与 DP-09 同源）标记为占位，不在 UI 上假装生效。
+
 #### 原版能力
 
 `TESVT_AdvSearch` 支持独立条件：
@@ -288,13 +292,37 @@ Rust/Tauri 重写已经完成了绝大多数**核心翻译引擎**：ESP/ESM 解
 
 新增独立 Advanced Search 面板，简单搜索框继续保留作为快速搜索。
 
+#### 实现内容
+
+- **Rust 数据管道**：`SkyString` 新增 `edid: Option<String>` 字段，ESP 解析时从记录 EDID 字段填充（普通字段与 VMAD 字符串均覆盖），`SkyStringDTO` 暴露 `edid` 供前端搜索与展示。
+- **过滤核心（`appStore.ts`）**：新增 `AdvSearchState`（六维度 + 每字段独立 Regex + Source/Translated 比较模式），`applyAdvancedFilter()` 按 Delphi `launchSearchTimer` Advanced 分支语义实现：
+  - Source → 源文本子串/正则；
+  - Translated → 译文子串/正则；
+  - EDID/FormID → `$`/`0x` 十六进制 FormID 精确匹配（归一化去前缀），否则 EDID 文本子串/正则；
+  - REC / FIELD → 记录/字段签名精确匹配（大小写不敏感）；REC 框支持 `REC:FIELD` 联合语法；
+  - 比较模式 `(.*)||(.*)` / `(.*)=(.*)` / `(.*)!=(.*)` 对应 any / eq / neq。
+  - 匹配谓词预编译 + 一次遍历，避免大数据集逐行 `new RegExp`。
+- **`applyFilterAndSort`** 增加可选 `advSearch` 参数：非空时接管文本过滤；所有 store 重过滤路径（setAllItems / setFilter / setSort / replaceAll / undo-redo / 增量更新等）均传递当前 `advSearch`，保证激活期间条件持续生效。
+- **UI（`AdvSearchDialog.tsx`）**：六输入框（Source / Translated / EDID·FormID / REC : FIELD / Keyword 占位），Source/Translated/EDID/Keyword 各自独立 Regex 切换，比较模式单选，preset 保存 / 载入 / 删除（localStorage 持久化，`xtranslator-advsearch-presets`），Enter 应用并关闭，Esc 关闭。
+- **入口**：GroupedMenuBar → Search 菜单新增 "Advanced Search" 项。
+
 #### 验收
 
-- 每个搜索维度彼此独立。
-- Regex 开关按字段保存。
-- 支持 REC:FIELD 联合条件。
-- 支持保存、载入、删除 presets。
-- 大数据集仍保持客户端可接受性能；必要时使用预编译条件和一次遍历。
+- ✅ 每个搜索维度彼此独立（AND 组合）。
+- ✅ Regex 开关按字段保存（`useRegex.source/translated/edid/keyword`）。
+- ✅ 支持 REC:FIELD 联合条件（单框 `REC:FIELD` 语法 + 双框 REC/FIELD）。
+- ✅ 支持保存、载入、删除 presets（localStorage 持久化）。
+- ✅ 大数据集保持客户端可接受性能（预编译谓词 + 一次遍历）。
+- ⚠️ Keyword 维度：依赖 ESP keyword 字典数据管道（`getKwd`/`findKeyWord` 的 Rust 等价物），当前标记为占位不可用；与 DP-09（EDID 元数据）同源，数据管道建立后可激活。
+
+#### 验证结果
+
+- `cargo test --workspace` → **全部通过**；xt-core **322 passed / 0 failed**。
+- `cargo check -p xtranslator-tauri` → **通过**。
+- `npx tsc --noEmit` → **通过**。
+- `npx vitest run` → **57 passed / 0 failed**（5 个测试文件；新增 `advSearch.test.ts` 30 项：维度独立、Regex 分字段、EDID/FormID 匹配、比较模式、preset 状态、集成过滤）。
+- `git diff --check` → **通过**（仅 LF→CRLF 提示，无 whitespace error）。
+- **L3 注记**：搜索行为按 Delphi 源码逐条对齐（`TESVT_main.pas` 6195-6420 行 Advanced 分支），但未在 Delphi 原版上做自动化交叉验证；EDID 文本来源（解析期提取）与 Delphi `getEdidNameexport` 的差异已在实现中注明。
 
 ---
 
@@ -609,11 +637,11 @@ MS Word backend 属于 Windows 特有兼容功能，应作为可选 adapter，�
 
 ## 10. 推荐实施顺序
 
-DP-01 已完成，后续严格按下面顺序推进：
+DP-01、DP-04 已完成，后续严格按下面顺序推进：
 
 1. **DP-02 PEX opcode** — 修正已经发现的格式级风险。
 2. **DP-03 Apply SST options** — 恢复核心翻译工作流的用户控制能力。
-3. **DP-04 Advanced Search** — 恢复日常审校效率。
+3. ~~**DP-04 Advanced Search**~~ — ✅ 已完成（2026-09-01）：独立面板、六维度、按字段 Regex、REC:FIELD 联合、preset 持久化；Keyword 维度待数据管道。
 4. **DP-05 BatchProcessor** — 恢复原版自动化脚本能力。
 5. **DP-07 Localized/Hybrid loading** — 打通 archive 与 ESP 主流程。
 6. **DP-06 BSA/BA2 injection** — 在资源加载稳定后实现写回。
