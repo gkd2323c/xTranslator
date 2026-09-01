@@ -320,6 +320,9 @@ interface AppState {
   setSstLoaded: (path: string, stats: LoadSstResponse) => void;
   setTargetLang: (lang: string) => void;
   setGameSelection: (mode: GameSelectionMode, game?: SupportedGameId | null) => void;
+  // Strings 加载策略（DP-07）："disk" | "archive" | "manual"，持久化到 config
+  stringsStrategy: "disk" | "archive" | "manual";
+  setStringsStrategy: (strategy: "disk" | "archive" | "manual") => void;
   setFilter: (filter: string) => void;
   setFilterNow: (filter: string) => void;
   setUseRegex: (use: boolean) => void;
@@ -671,6 +674,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   gameSelectionMode: "auto",
   detectedGame: null,
   gameSource: null,
+  stringsStrategy: "disk",
   espStats: null,
   sstStats: null,
   filter: "",
@@ -788,6 +792,11 @@ export const useAppStore = create<AppState>((set, get) => ({
       game_selection_mode: gameSelectionMode,
       last_game: game ?? state.currentGame ?? undefined,
     }).catch(() => {});
+  },
+
+  setStringsStrategy: (stringsStrategy) => {
+    set({ stringsStrategy });
+    saveConfig({ strings_strategy: stringsStrategy }).catch(() => {});
   },
 
   setFilter: (filter) => {

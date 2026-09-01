@@ -36,7 +36,7 @@ Rust/Tauri 重写已经完成了绝大多数**核心翻译引擎**：ESP/ESM 解
 
 剩余差距主要集中在四类：
 
-- **主工作流没有真正接通的能力**：多游戏上下文、Localized/Hybrid 加载策略。
+- **主工作流没有真正接通的能力**：多游戏上下文、Localized/Hybrid 加载策略均已接通（DP-01/DP-07）。
 - **原版高级工作流缩水**：XML Export options；Apply SST、Advanced Search、BatchProcessor 已恢复（DP-03/DP-04/DP-05）。
 - **格式级兼容差距**：PEX opcode、XML EDID 信息、归档注入。
 - **低频辅助工具未移植**：DEFUI Component Generator、Codepage 手动覆盖、部分旧式工具窗。
@@ -57,7 +57,7 @@ Rust/Tauri 重写已经完成了绝大多数**核心翻译引擎**：ESP/ESM 解
 | DP-04 | P1     | Advanced Search                   | ✅ **已完成**                   | `TESVT_AdvSearch.*`                                                     | `ui/src/components/AdvSearchDialog.tsx`, `appStore.ts`                        |
 | DP-05 | P1     | BatchProcessor 命令脚本           | ✅ **已完成（L3 交叉验证待补）** | `TESVT_commandProcessor.*`, `TESVT_main.pas::batchCommands/runCommands` | `xt-core::command_processor`、`src-tauri::command_processor`、`CommandProcessorDialog.tsx` |
 | DP-06 | P1     | BSA/BA2 注入                      | **未实现**                     | `TESVT_bsa.pas::InjectData`                                             | `crates/xt-core/src/bsa`, `ba2` 目前主要读取/提取                              |
-| DP-07 | P1     | Localized / Hybrid 加载策略       | **部分实现**                   | `TESVT_delocOpts.*`, MainLoader                                         | `commands.rs::load_esp`                                                        |
+| DP-07 | P1     | Localized / Hybrid 加载策略       | ✅ **已完成（真实游戏交叉验证待补）** | `TESVT_delocOpts.*`, MainLoader                                         | `StringsLoadStrategy`, `commands.rs::load_esp`                                |
 | DP-08 | P1     | XML Export 选项                   | **缩水**                       | `TESVT_XMLExportOpts.*`                                                 | `XmlExportRequest`, `commands.rs::export_xml`                                  |
 | DP-09 | P2     | XML EDID 元数据完整性             | **部分缺失**                   | `TESVT_XMLFunc.pas`                                                     | `SkyString`, `xml/mod.rs`                                                      |
 | DP-10 | P2     | DEFUI Component Generator         | **未实现**                     | `TESVT_DefUIGen.*`, `doComponentGenerator`                              | 无对应实现                                                                     |
@@ -466,6 +466,10 @@ Rust 当前已有浏览、查找、提取和 GNRL 读取，但未实现 archive 
 
 ### DP-07 Localized / Hybrid 加载策略
 
+#### 状态
+
+✅ **2026-09-01 完成（真实游戏交叉验证待补）。** Strings 来源已抽象为显式策略并贯穿加载主流程，每个 STRINGS 文件的实际来源可追溯并展示在 UI。
+
 #### 原版能力
 
 原版针对 localized 插件允许用户选择：
@@ -490,11 +494,30 @@ Manual
 
 并在加载结果中记录**每个 STRINGS 文件实际来自哪里**，方便排错。
 
+#### 实现内容
+
+- **`StringsLoadStrategy` 枚举**（`crates/xt-core/src/esp/parser.rs`）：`DiskPreferred`（Delphi locOpts=0）/ `ArchivePreferred`（locOpts=1）/ `Manual`（locOpts=2），带字符串解析（"disk"/"archive"/"manual" 及数字别名）。
+- **`StringsSource` 来源追踪**：`StringsFiles` 新增 `sources: [StringsSource; 3]`（Disk / Archive / Missing），对齐 Delphi `loadAddonStrings` 的 `bfile[j]` 0/1/2 逐文件判定。
+- **`load_from_dir_with_strategy`**：统一加载入口。DiskPreferred 磁盘优先、缺失回退 archive（与既有 BSA/BA2 回退一致）；ArchivePreferred 先扫 archive 提取、缺失回退磁盘；Manual 返回空集由调用方手动填充。archive 遍历保持单次打开、Interface/Misc 归档优先、跳过 >512MB 纹理包。
+- **`load_esp` 新增 `strings_strategy` 参数**：Manual 时跳过自动发现；来源数组写入 `LoadEspResponse.strings_sources`（"disk"/"archive"/"missing"；缓存命中为 "cache"）。
+- **config 持久化**：`AppConfig` / `AppConfigDto` 新增 `strings_strategy`，启动时恢复。
+- **前端**：工具栏新增 Strings source 下拉（Disk / Archive / Manual，persist 到 config）；Manual 策略加载时弹目录选择（对齐 Delphi ChooseStrings）；加载日志输出 `Strings sources: STRINGS:disk, DLSTRINGS:archive, ...`；SidePanel 文件信息区显示每个 Strings 文件的来源缩写。
+
 #### 验收
 
-- 同一 localized ESP 可分别从 loose Strings 和 archive Strings 加载。
-- 用户手动选择可覆盖自动发现。
-- UI 明确显示 Strings 来源。
+- ✅ 同一 localized ESP 可分别从 loose Strings（DiskPreferred）和 archive Strings（ArchivePreferred）加载。
+- ✅ 用户手动选择可覆盖自动发现（Manual 弹目录选择）。
+- ✅ UI 明确显示 Strings 来源（SidePanel + 日志）。
+- ⚠️ L3：需在真实 Skyrim SE / Fallout 4 安装上分别用两种策略加载同一插件对比来源标记。
+
+#### 验证结果
+
+- `cargo test --workspace` → **全部通过**；xt-core **339 passed / 0 failed**（新增 4 项策略/来源测试：策略解析、sources 默认值、磁盘来源标记、Manual 空集）。
+- `cargo check -p xtranslator-tauri` → **通过**。
+- `npx tsc --noEmit` → **通过**。
+- `npx vitest run` → **59 passed / 0 failed**。
+- `npm run build` → **通过**。
+- `git diff --check` → **通过**（仅仓库行尾转换提示）。
 
 ---
 
@@ -684,13 +707,13 @@ MS Word backend 属于 Windows 特有兼容功能，应作为可选 adapter，�
 
 ## 10. 推荐实施顺序
 
-DP-01、DP-04、DP-05 已完成，后续严格按下面顺序推进：
+DP-01、DP-04、DP-05、DP-07 已完成，后续严格按下面顺序推进：
 
 1. **DP-02 PEX opcode** — 修正已经发现的格式级风险。
 2. **DP-03 Apply SST options** — 恢复核心翻译工作流的用户控制能力。
 3. ~~**DP-04 Advanced Search**~~ — ✅ 已完成（2026-09-01）：独立面板、六维度、按字段 Regex、REC:FIELD 联合、preset 持久化；Keyword 维度待数据管道。
 4. ~~**DP-05 BatchProcessor**~~ — ✅ 已完成（2026-09-01，L3 交叉验证待补）：完整白名单 parser + 全部 11 命令执行路径（含 GenerateDictionaries / LoadMasters / ApiTranslation）+ 独立 UI；ImportXml comparator 语义随 DP-09 闭环。
-5. **DP-07 Localized/Hybrid loading** — 打通 archive 与 ESP 主流程。
+5. ~~**DP-07 Localized/Hybrid loading**~~ — ✅ 已完成（2026-09-01，真实游戏交叉验证待补）：DiskPreferred / ArchivePreferred / Manual 三策略 + 逐文件来源追踪 + UI 展示。
 6. **DP-06 BSA/BA2 injection** — 在资源加载稳定后实现写回。
 7. **DP-08 / DP-09 XML export + EDID**。
 8. **DP-10 / DP-11 辅助工具**。

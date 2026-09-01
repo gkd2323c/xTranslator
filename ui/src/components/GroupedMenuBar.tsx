@@ -294,6 +294,8 @@ export function GroupedMenuBar() {
   const targetLang = useAppStore((s) => s.targetLang);
   const currentGame = useAppStore((s) => s.currentGame);
   const gameSelectionMode = useAppStore((s) => s.gameSelectionMode);
+  const stringsStrategy = useAppStore((s) => s.stringsStrategy);
+  const setStringsStrategy = useAppStore((s) => s.setStringsStrategy);
   const selectedId = useAppStore((s) => s.selectedId);
   const activePanel = useAppStore((s) => s.activePanel);
   const activeRightPanel = useAppStore((s) => s.activeRightPanel);
@@ -384,7 +386,22 @@ export function GroupedMenuBar() {
       warnIfBatchFile(path);
 
       const espDir = path.replace(/\\/g, "/").split("/").slice(0, -1).join("/");
-      const stringsDir = `${espDir}/Strings`;
+      let stringsDir = `${espDir}/Strings`;
+
+      // Manual 策略：让用户显式选择 Strings 目录（Delphi locOpts=2 ChooseStrings）
+      if (useAppStore.getState().stringsStrategy === "manual") {
+        const picked = await open({
+          multiple: false,
+          directory: true,
+          title: t("menu.chooseStringsDir", { defaultValue: "Choose Strings directory" }),
+        });
+        if (!picked || Array.isArray(picked)) {
+          toast(t("menu.manualStringsSkipped", { defaultValue: "Manual strings load cancelled; ESP loaded without Strings." }));
+          stringsDir = "";
+        } else {
+          stringsDir = picked;
+        }
+      }
 
       setParsing(true);
       setError(null);
@@ -398,7 +415,7 @@ export function GroupedMenuBar() {
         try {
           const gameState = useAppStore.getState();
           const requestedGame = requestedGameForLoad(gameState.gameSelectionMode, gameState.currentGame);
-          const stats = await loadEsp(path, stringsDir, language, requestedGame);
+          const stats = await loadEsp(path, stringsDir || undefined, language, requestedGame, gameState.stringsStrategy);
           setEspLoaded(path, stats, stringsDir);
           await loadAllStrings();
           setIsDirty(false);
@@ -414,6 +431,13 @@ export function GroupedMenuBar() {
             `Game context: ${stats.game_id} (${stats.game_source}); Data/${stats.game_id}`,
             "ESP",
           );
+          if (stats.strings_sources?.length) {
+            const labels = ["STRINGS", "DLSTRINGS", "ILSTRINGS"];
+            const src = stats.strings_sources
+              .map((s, i) => `${labels[i]}:${s}`)
+              .join(", ");
+            store.addLog("info", `Strings sources: ${src}`, "ESP");
+          }
           if (stats.game_source === "fallback") {
             store.addLog("warn", "Game auto-detection failed; select a game explicitly and reload the plugin.", "ESP");
             toast.error(
@@ -1637,6 +1661,17 @@ export function GroupedMenuBar() {
             {SUPPORTED_GAME_IDS.map((game) => (
               <option key={game} value={game}>{game}</option>
             ))}
+          </select>
+          <select
+            value={stringsStrategy}
+            onChange={(e) => setStringsStrategy(e.target.value as "disk" | "archive" | "manual")}
+            className="lang-select"
+            title={t("menu.stringsStrategy", { defaultValue: "Strings source" })}
+            aria-label={t("menu.stringsStrategy", { defaultValue: "Strings source" })}
+          >
+            <option value="disk">{t("menu.stringsDisk", { defaultValue: "Strings: Disk" })}</option>
+            <option value="archive">{t("menu.stringsArchive", { defaultValue: "Strings: Archive" })}</option>
+            <option value="manual">{t("menu.stringsManual", { defaultValue: "Strings: Manual" })}</option>
           </select>
           <select
             value={targetLang}

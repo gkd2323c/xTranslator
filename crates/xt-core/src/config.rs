@@ -33,6 +33,10 @@ pub struct AppConfig {
     /// Game selection mode: "auto" detects from ESP; "manual" uses `last_game`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub game_selection_mode: Option<String>,
+    /// Strings 加载策略（DP-07）: "disk" | "archive" | "manual"。
+    /// 控制 localized 插件的 Strings 来源优先级。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub strings_strategy: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub proxy_server: Option<String>,
     #[serde(default)]

@@ -95,6 +95,9 @@ export interface LoadEspResponse {
   detected_game_id?: SupportedGameId;
   // Source used to resolve the game context.
   game_source: GameSource;
+  // 每个 Strings 文件的实际来源（0=.STRINGS, 1=.DLSTRINGS, 2=.ILSTRINGS）。
+  // 值为 "disk" | "archive" | "missing"；缓存命中时为 "cache"。
+  strings_sources?: string[];
 }
 
 // SST 加载响应
@@ -215,8 +218,9 @@ export async function loadEsp(
   stringsDir?: string,
   language?: string,
   game?: SupportedGameId,
+  stringsStrategy?: "disk" | "archive" | "manual",
 ): Promise<LoadEspResponse> {
-  return invoke("load_esp", { espPath, stringsDir, language, game });
+  return invoke("load_esp", { espPath, stringsDir, language, game, stringsStrategy });
 }
 
 // SST 高级选项定义 (DP-03 Delphi 对齐)
@@ -1042,6 +1046,7 @@ export interface AppConfigDto {
   language?: string;
   last_game?: SupportedGameId;
   game_selection_mode?: GameSelectionMode;
+  strings_strategy?: "disk" | "archive" | "manual";
   proxy_server?: string;
   proxy_port?: number;
   proxy_username?: string;

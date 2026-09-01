@@ -17,6 +17,7 @@ use xt_shared::dto::{
 
 use crate::commands::{self, AppState};
 use xt_core::esp::header::{GenericHeader, RecordHeaderData};
+use xt_core::esp::parser::StringsLoadStrategy;
 use xt_core::types::esp_pointer::split_form_id_identity;
 use xt_core::types::game_id::GameId;
 use xt_core::types::params::SkyStringParams;
@@ -227,6 +228,7 @@ impl TauriCommandProcessorHost {
             strings_dir.clone(),
             rule.lang_source.clone(),
             self.game.clone(),
+            Some(StringsLoadStrategy::DiskPreferred.as_str().to_string()),
         )
         .await?;
         self.file_context_changed = true;
@@ -656,6 +658,7 @@ impl TauriCommandProcessorHost {
                 Some(strings_dir.to_string_lossy().into_owned()),
                 Some(source.to_string()),
                 Some(game.as_str().to_string()),
+                Some(StringsLoadStrategy::DiskPreferred.as_str().to_string()),
             )
             .await
             {

@@ -4,7 +4,7 @@ use tauri::Emitter;
 use xt_core::batch_queue::BatchQueue;
 use xt_core::cache_index::CacheIndex;
 use xt_core::esp::game_detect;
-use xt_core::esp::parser::{EspParser, StringsFiles};
+use xt_core::esp::parser::{EspParser, StringsFiles, StringsLoadStrategy};
 use xt_core::esp::record_tree::EspFile;
 use xt_core::matching::{apply_dictionary_entries_with_policy, ApplyPolicy, DictionaryApplyEntry};
 use xt_core::pex::types::PexTranslatableString;
@@ -298,11 +298,16 @@ pub async fn load_esp(
     strings_dir: Option<String>,
     language: Option<String>,
     game: Option<String>,
+    strings_strategy: Option<String>,
 ) -> Result<LoadEspResponse, String> {
     let esp_path_clone = esp_path.clone();
     let strings_dir_clone = strings_dir.clone();
     let language_clone = language.clone();
     let game_clone = game.clone();
+    let strategy = StringsLoadStrategy::from_str_value(
+        strings_strategy.as_deref().unwrap_or("disk"),
+    )
+    .ok_or_else(|| format!("invalid strings strategy: {:?}", strings_strategy))?;
 
     let c_dir = cache_dir();
 
@@ -377,6 +382,8 @@ pub async fn load_esp(
                             game_id: resolved_game_id.as_str().to_string(),
                             detected_game_id: detected_game_id.map(|g| g.as_str().to_string()),
                             game_source: game_source.as_str().to_string(),
+                            // 缓存命中：无法回溯每个文件的来源，标记为缓存来源
+                            strings_sources: vec!["cache".to_string(); 3],
                         },
                         esp_file,
                     ));
@@ -452,26 +459,51 @@ pub async fn load_esp(
 
             let mut strings_loaded = 0u8;
 
-            if let Some(ref dir) = strings_dir_clone {
+            if strategy == StringsLoadStrategy::Manual {
+                // Manual 策略：调用方负责提供已解析的 StringsFiles，此处保持空集
+                parser.strings_files = StringsFiles::default();
+            } else if let Some(ref dir) = strings_dir_clone {
                 let dir_path = std::path::Path::new(dir);
                 if let Some(ref table) = codepage_table {
-                    parser.strings_files =
-                        StringsFiles::load_from_dir_with_language(dir_path, base_name, lang, table);
+                    parser.strings_files = StringsFiles::load_from_dir_with_strategy(
+                        dir_path,
+                        base_name,
+                        lang,
+                        Some(table),
+                        strategy,
+                    );
                 } else {
-                    parser.load_strings_files(dir_path, base_name);
+                    parser.strings_files = StringsFiles::load_from_dir_with_strategy(
+                        dir_path,
+                        base_name,
+                        lang,
+                        None,
+                        strategy,
+                    );
                 }
                 strings_loaded = parser.strings_files.loaded_count() as u8;
             }
 
-            if strings_loaded == 0 {
+            if strings_loaded == 0 && strategy != StringsLoadStrategy::Manual {
                 let esp_dir = std::path::Path::new(&esp_path_clone)
                     .parent()
                     .unwrap_or_else(|| std::path::Path::new("."));
                 if let Some(ref table) = codepage_table {
-                    parser.strings_files =
-                        StringsFiles::load_from_dir_with_language(esp_dir, base_name, lang, table);
+                    parser.strings_files = StringsFiles::load_from_dir_with_strategy(
+                        esp_dir,
+                        base_name,
+                        lang,
+                        Some(table),
+                        strategy,
+                    );
                 } else {
-                    parser.load_strings_files(esp_dir, base_name);
+                    parser.strings_files = StringsFiles::load_from_dir_with_strategy(
+                        esp_dir,
+                        base_name,
+                        lang,
+                        None,
+                        strategy,
+                    );
                 }
                 strings_loaded = parser.strings_files.loaded_count() as u8;
             }
@@ -591,6 +623,12 @@ pub async fn load_esp(
                     game_id: game_id.as_str().to_string(),
                     detected_game_id: detected_game_id.map(|g| g.as_str().to_string()),
                     game_source: game_source.as_str().to_string(),
+                    strings_sources: parser
+                        .strings_files
+                        .sources
+                        .iter()
+                        .map(|s| s.as_str().to_string())
+                        .collect(),
                 },
                 esp_file,
             ))
@@ -3945,6 +3983,7 @@ fn config_to_dto(cfg: &xt_core::config::AppConfig) -> AppConfigDto {
         language: cfg.language.clone(),
         last_game: cfg.last_game.clone(),
         game_selection_mode: cfg.game_selection_mode.clone(),
+        strings_strategy: cfg.strings_strategy.clone(),
         proxy_server: cfg.proxy_server.clone(),
         proxy_port: cfg.proxy_port,
         proxy_username: cfg.proxy_username.clone(),
@@ -3971,6 +4010,7 @@ fn dto_to_config(dto: &AppConfigDto) -> xt_core::config::AppConfig {
         language: dto.language.clone(),
         last_game: dto.last_game.clone(),
         game_selection_mode: dto.game_selection_mode.clone(),
+        strings_strategy: dto.strings_strategy.clone(),
         proxy_server: dto.proxy_server.clone(),
         proxy_port: dto.proxy_port,
         proxy_username: dto.proxy_username.clone(),

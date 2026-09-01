@@ -59,6 +59,14 @@ export function SidePanel() {
       <Section icon={<FileText size={16} />} title={t("sidebar.fileInfo")}>
         <KeyValueRow label="ESP" value={espPath?.split(/[\\/]/).pop() || "—"} />
         <KeyValueRow label={t("sidebar.strings")} value={`${espStats.strings_loaded} ${t("sidebar.filesLoaded")}`} />
+        {espStats.strings_sources?.length ? (
+          <KeyValueRow
+            label={t("sidebar.stringsSources", { defaultValue: "Strings from" })}
+            value={espStats.strings_sources
+              .map((s, i) => `${["S", "D", "I"][i]}:${s}`)
+              .join("  ")}
+          />
+        ) : null}
         <KeyValueRow label={t("sidebar.parseTime")} value={`${espStats.parse_time_ms}ms`} />
         <KeyValueRow
           label={t("sidebar.saveMode")}

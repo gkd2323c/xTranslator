@@ -134,6 +134,10 @@ pub struct LoadEspResponse {
     /// "fallback" is not trusted and requires explicit user selection downstream.
     #[serde(default)]
     pub game_source: String,
+    /// 每个 Strings 文件的实际来源（0=.STRINGS, 1=.DLSTRINGS, 2=.ILSTRINGS）。
+    /// 值为 "disk" | "archive" | "missing"（DP-07，对齐 Delphi bfile[j] 判定）。
+    #[serde(default)]
+    pub strings_sources: Vec<String>,
 }
 
 /// ESP 文件加载进度事件
@@ -969,6 +973,9 @@ pub struct AppConfigDto {
     pub last_game: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub game_selection_mode: Option<String>,
+    /// Strings 加载策略（DP-07）: "disk" | "archive" | "manual"。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub strings_strategy: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub proxy_server: Option<String>,
     #[serde(default)]

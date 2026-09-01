@@ -200,6 +200,7 @@ function App() {
       if (cfg.current_provider) setTranslationProvider(cfg.current_provider);
       if (cfg.esp_mode !== undefined) useAppStore.getState().setEspMode(cfg.esp_mode);
       if (cfg.editor_mode) useAppStore.getState().setEditorMode(cfg.editor_mode as any);
+      if (cfg.strings_strategy) useAppStore.getState().setStringsStrategy(cfg.strings_strategy as any);
       useAppStore.setState(restoreGameSelection(cfg.game_selection_mode, cfg.last_game));
     }).catch(() => {});
   }, []);

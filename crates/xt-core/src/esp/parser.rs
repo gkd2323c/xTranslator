@@ -276,6 +276,57 @@ impl TranslatableField {
     }
 }
 
+/// Strings 文件来源策略（DP-07，对齐 Delphi locOpts）
+///
+/// - `DiskPreferred`：磁盘优先（locOpts=0）。磁盘存在则用磁盘，缺失才从 archive 提取。
+/// - `ArchivePreferred`：archive 优先（locOpts=1）。archive 存在则用 archive，缺失才回退磁盘。
+/// - `Manual`：手动指定（locOpts=2）。不自动发现，由调用方直接提供已解析的 StringsFiles。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum StringsLoadStrategy {
+    #[default]
+    DiskPreferred,
+    ArchivePreferred,
+    Manual,
+}
+
+impl StringsLoadStrategy {
+    pub fn from_str_value(s: &str) -> Option<Self> {
+        match s.to_ascii_lowercase().as_str() {
+            "disk" | "diskpreferred" | "0" => Some(Self::DiskPreferred),
+            "archive" | "archivepreferred" | "1" => Some(Self::ArchivePreferred),
+            "manual" | "2" => Some(Self::Manual),
+            _ => None,
+        }
+    }
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::DiskPreferred => "disk",
+            Self::ArchivePreferred => "archive",
+            Self::Manual => "manual",
+        }
+    }
+}
+
+/// 单个 Strings 文件的实际来源（DP-07）
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum StringsSource {
+    Disk,
+    Archive,
+    #[default]
+    Missing,
+}
+
+impl StringsSource {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Disk => "disk",
+            Self::Archive => "archive",
+            Self::Missing => "missing",
+        }
+    }
+}
+
 /// Strings 文件集合
 #[derive(Default)]
 pub struct StringsFiles {
@@ -283,6 +334,9 @@ pub struct StringsFiles {
     pub dlstrings: Option<StringsFile>, // .DLSTRINGS
     pub ilstrings: Option<StringsFile>, // .ILSTRINGS
     pub codepage_table: Option<CodepageTable>,
+    /// 每个 Strings 文件的实际来源（0=.STRINGS, 1=.DLSTRINGS, 2=.ILSTRINGS）
+    /// 用于前端展示与排错（对齐 Delphi `bfile[j]` 0/1/2 判定）
+    pub sources: [StringsSource; 3],
 }
 
 impl StringsFiles {
@@ -314,16 +368,41 @@ impl StringsFiles {
         language: &str,
         table: &CodepageTable,
     ) -> Self {
-        Self::load_from_dir_with_config(dir, base_name, language, Some(table), None)
+        Self::load_from_dir_with_strategy(
+            dir,
+            base_name,
+            language,
+            Some(table),
+            StringsLoadStrategy::DiskPreferred,
+        )
     }
 
-    /// 内部统一加载入口：直接从磁盘读取，如果磁盘文件不存在则尝试从同目录 BSA/BA2 内提取
+    /// 使用显式来源策略加载（DP-07）
+    ///
+    /// `strategy` 控制磁盘与 archive 的优先级：
+    /// - `DiskPreferred`：磁盘优先，缺失回退 archive（Delphi locOpts=0）
+    /// - `ArchivePreferred`：archive 优先，缺失回退磁盘（Delphi locOpts=1）
+    /// - `Manual`：不自动发现，调用方需手动填充 `strings/dlstrings/ilstrings`
+    pub fn load_from_dir_with_strategy<P: AsRef<Path>>(
+        dir: P,
+        base_name: &str,
+        language: &str,
+        table: Option<&CodepageTable>,
+        strategy: StringsLoadStrategy,
+    ) -> Self {
+        if strategy == StringsLoadStrategy::Manual {
+            return Self::default();
+        }
+        Self::load_from_dir_with_config(dir, base_name, language, table, Some(strategy))
+    }
+
+    /// 内部统一加载入口：从磁盘读取，并根据策略决定 archive 回退方向
     fn load_from_dir_with_config<P: AsRef<Path>>(
         dir: P,
         base_name: &str,
         language: &str,
         table: Option<&CodepageTable>,
-        _codepage: Option<crate::strings::CodepageConfig>,
+        strategy: Option<StringsLoadStrategy>,
     ) -> Self {
         use std::ffi::OsStr;
         let dir = dir.as_ref();
@@ -333,12 +412,12 @@ impl StringsFiles {
             ("ILSTRINGS", StringsFormat::LengthPrefixed),
         ];
 
-        // 1. 快速路径：磁盘直接加载
         let mut strings: Option<StringsFile> = None;
         let mut dlstrings: Option<StringsFile> = None;
         let mut ilstrings: Option<StringsFile> = None;
-        let mut missing = [false; 3];
+        let mut sources = [StringsSource::Missing; 3];
 
+        // 1. 磁盘加载（DiskPreferred 优先；ArchivePreferred 作为回退）
         for (i, (ext, fmt)) in formats.iter().enumerate() {
             let filename = format!("{}_{}.{}", base_name, language, ext);
             let path = dir.join(&filename);
@@ -354,12 +433,18 @@ impl StringsFiles {
                     2 => ilstrings = Some(sf),
                     _ => unreachable!(),
                 }
-            } else {
-                missing[i] = true;
+                sources[i] = StringsSource::Disk;
             }
         }
 
-        // 2. BSA/BA2 回退：单次遍历，每个归档打开一次，同时提取所有缺失格式
+        // 2. BSA/BA2 提取（DiskPreferred 只补缺失；ArchivePreferred 覆盖已有磁盘来源）
+        let archive_preferred = matches!(strategy, Some(StringsLoadStrategy::ArchivePreferred));
+        let mut missing = sources.map(|s| s == StringsSource::Missing);
+        if archive_preferred {
+            // ArchivePreferred：即使磁盘已有也尝试从 archive 覆盖
+            missing = [true; 3];
+        }
+
         if missing.iter().any(|&m| m) {
             let mut archive_paths: Vec<(std::path::PathBuf, bool)> = Vec::new();
             if let Ok(entries) = std::fs::read_dir(dir) {
@@ -440,12 +525,38 @@ impl StringsFiles {
                                 2 => ilstrings = Some(sf),
                                 _ => unreachable!(),
                             }
+                            sources[i] = StringsSource::Archive;
                             missing[i] = false;
                         }
                     }
                 }
                 if !missing.iter().any(|&m| m) {
                     break;
+                }
+            }
+
+            // ArchivePreferred 回退：archive 缺失的项允许使用磁盘来源
+            if archive_preferred {
+                for (i, (ext, fmt)) in formats.iter().enumerate() {
+                    if sources[i] != StringsSource::Missing {
+                        continue;
+                    }
+                    let filename = format!("{}_{}.{}", base_name, language, ext);
+                    let path = dir.join(&filename);
+                    let loaded = if let Some(t) = table {
+                        StringsFile::load_with_codepage_table(&path, t).ok()
+                    } else {
+                        StringsFile::load_with_format(&path, *fmt).ok()
+                    };
+                    if let Some(sf) = loaded {
+                        match i {
+                            0 => strings = Some(sf),
+                            1 => dlstrings = Some(sf),
+                            2 => ilstrings = Some(sf),
+                            _ => unreachable!(),
+                        }
+                        sources[i] = StringsSource::Disk;
+                    }
                 }
             }
         }
@@ -455,6 +566,7 @@ impl StringsFiles {
             dlstrings,
             ilstrings,
             codepage_table: table.cloned(),
+            sources,
         }
     }
 
@@ -1708,5 +1820,111 @@ Def_:CNAM=DOOR=0-proc5
         if let Some(s) = sf.get(0, 1) {
             println!("String ID 1 (list 0): {}", s);
         }
+    }
+
+    #[test]
+    fn test_strings_load_strategy_parsing() {
+        assert_eq!(
+            StringsLoadStrategy::from_str_value("disk"),
+            Some(StringsLoadStrategy::DiskPreferred)
+        );
+        assert_eq!(
+            StringsLoadStrategy::from_str_value("0"),
+            Some(StringsLoadStrategy::DiskPreferred)
+        );
+        assert_eq!(
+            StringsLoadStrategy::from_str_value("archive"),
+            Some(StringsLoadStrategy::ArchivePreferred)
+        );
+        assert_eq!(
+            StringsLoadStrategy::from_str_value("1"),
+            Some(StringsLoadStrategy::ArchivePreferred)
+        );
+        assert_eq!(
+            StringsLoadStrategy::from_str_value("manual"),
+            Some(StringsLoadStrategy::Manual)
+        );
+        assert_eq!(StringsLoadStrategy::from_str_value("bogus"), None);
+        assert_eq!(StringsLoadStrategy::default(), StringsLoadStrategy::DiskPreferred);
+    }
+
+    #[test]
+    fn test_strings_sources_default_to_missing() {
+        let sf = StringsFiles::default();
+        assert_eq!(sf.sources, [StringsSource::Missing; 3]);
+        assert_eq!(sf.loaded_count(), 0);
+        assert_eq!(sf.sources[0].as_str(), "missing");
+        assert_eq!(StringsSource::Disk.as_str(), "disk");
+        assert_eq!(StringsSource::Archive.as_str(), "archive");
+    }
+
+    #[test]
+    fn test_strings_load_from_dir_marks_disk_sources() {
+        // 构造临时目录：只放 .STRINGS 磁盘文件，验证来源标记为 Disk
+        let temp = std::env::temp_dir().join(format!(
+            "xtranslator-strings-disk-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&temp);
+        std::fs::create_dir_all(&temp).unwrap();
+
+        // 写一个最小 .STRINGS：count(4) + data_size(4) + 目录项[id+offset] + 数据区
+        // 目录区：id(4) + offset(4)；数据区：null-terminated text
+        let text = b"Hello\0";
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(&1u32.to_le_bytes()); // count
+        bytes.extend_from_slice(&(text.len() as u32).to_le_bytes()); // data size
+        bytes.extend_from_slice(&42u32.to_le_bytes()); // id
+        bytes.extend_from_slice(&0u32.to_le_bytes()); // offset → 数据区起点
+        bytes.extend_from_slice(text);
+        std::fs::write(temp.join("test_english.STRINGS"), &bytes).unwrap();
+
+        let sf = StringsFiles::load_from_dir_with_language(
+            &temp,
+            "test",
+            "english",
+            &CodepageTable::new(),
+        );
+
+        assert_eq!(sf.sources[0], StringsSource::Disk);
+        assert_eq!(sf.sources[1], StringsSource::Missing);
+        assert_eq!(sf.sources[2], StringsSource::Missing);
+        assert_eq!(sf.loaded_count(), 1);
+        assert_eq!(sf.get(0, 42).map(String::as_str), Some("Hello"));
+
+        let _ = std::fs::remove_dir_all(temp);
+    }
+
+    #[test]
+    fn test_strings_manual_strategy_returns_empty() {
+        // Manual 策略不自动发现：返回空集，由调用方手动填充
+        let temp = std::env::temp_dir().join(format!(
+            "xtranslator-strings-manual-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&temp);
+        std::fs::create_dir_all(&temp).unwrap();
+
+        let text = b"Hello\0";
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(&1u32.to_le_bytes());
+        bytes.extend_from_slice(&(text.len() as u32).to_le_bytes());
+        bytes.extend_from_slice(&42u32.to_le_bytes());
+        bytes.extend_from_slice(&0u32.to_le_bytes());
+        bytes.extend_from_slice(text);
+        std::fs::write(temp.join("test_english.STRINGS"), &bytes).unwrap();
+
+        let sf = StringsFiles::load_from_dir_with_strategy(
+            &temp,
+            "test",
+            "english",
+            Some(&CodepageTable::new()),
+            StringsLoadStrategy::Manual,
+        );
+
+        assert_eq!(sf.loaded_count(), 0);
+        assert_eq!(sf.sources, [StringsSource::Missing; 3]);
+
+        let _ = std::fs::remove_dir_all(temp);
     }
 }
