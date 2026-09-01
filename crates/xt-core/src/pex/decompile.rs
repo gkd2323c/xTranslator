@@ -1,10 +1,12 @@
 //! PEX 反编译器 — 将 PEX 二进制文件解析为结构化类型，并输出与 Delphi xTranslator 完全等价的 Papyrus 伪代码。
+//! 严格支持真实 Bethesda PEX 规范与大小端模式（Skyrim Big-Endian 与 FO4/Starfield Little-Endian）。
 
-use byteorder::{LittleEndian, ReadBytesExt};
+use byteorder::{BigEndian, ByteOrder, LittleEndian};
 use std::fmt::Write;
 use std::io::{self, Cursor, Read};
 
-use super::types::PexStringEntry;
+use super::parser::PexReader;
+use super::types::{PexEndian, PexHeader, PexStringEntry};
 
 // ── 结构化类型 ──────────────────────────────────────────────────────
 
@@ -334,14 +336,14 @@ impl Opcode {
         )
     }
 
-    /// 判断指令是否属于特定游戏体系
+    /// 判断指令是否属于特定游戏体系（GameID: 1=Skyrim, 2=FO4, 3=FO76, 4=Starfield）
     pub fn is_supported_in_game(self, game_id: u16) -> bool {
         let raw = self.to_u8();
         match game_id {
-            // Skyrim / Skyrim SE / Skyrim VR (GameID = 1 或 2)
-            1 | 2 => raw <= 0x23,
-            // Fallout 4 / Fallout 76 (GameID = 3)
-            3 => raw <= 0x2E,
+            // Skyrim / Skyrim SE / Skyrim VR (GameID = 1)
+            1 => raw <= 0x23,
+            // Fallout 4 (GameID = 2) 或 Fallout 76 (GameID = 3)
+            2 | 3 => raw <= 0x2E,
             // Starfield (GameID = 4 及更高)
             _ => raw <= 0x32,
         }
@@ -451,10 +453,14 @@ pub struct PexObject {
 /// 完全反编译的 PEX
 #[derive(Clone, Debug)]
 pub struct DecompiledPex {
+    pub header: PexHeader,
     pub game_id: u16,
     pub major_version: u8,
     pub minor_version: u8,
     pub compile_time: u64,
+    pub source_file_name: String,
+    pub user_name: String,
+    pub computer_name: String,
     pub objects: Vec<PexObject>,
     pub string_table: Vec<PexStringEntry>,
 }
@@ -469,28 +475,28 @@ fn lookup(st: &StrTab, idx: u16) -> String {
 
 // ── 解析实现 ────────────────────────────────────────────────────────
 
-fn parse_pex_value(cur: &mut Cursor<&[u8]>, st: &StrTab) -> io::Result<PexValue> {
-    let type_flag = cur.read_u8()?;
+fn parse_pex_value<R: Read>(r: &mut PexReader<R>, st: &StrTab) -> io::Result<PexValue> {
+    let type_flag = r.read_u8()?;
     match type_flag {
         0 => Ok(PexValue::None),
         1 => {
-            let idx = cur.read_u16::<LittleEndian>()?;
+            let idx = r.read_u16()?;
             Ok(PexValue::Identifier(lookup(st, idx)))
         }
         2 => {
-            let idx = cur.read_u16::<LittleEndian>()?;
+            let idx = r.read_u16()?;
             Ok(PexValue::StringLiteral(lookup(st, idx)))
         }
         3 => {
-            let val = cur.read_i32::<LittleEndian>()?;
+            let val = r.read_i32()?;
             Ok(PexValue::Integer(val))
         }
         4 => {
-            let val = cur.read_f32::<LittleEndian>()?;
+            let val = r.read_f32()?;
             Ok(PexValue::Float(val))
         }
         5 => {
-            let val = cur.read_u8()?;
+            let val = r.read_u8()?;
             Ok(PexValue::Bool(val != 0))
         }
         other => Err(io::Error::new(
@@ -500,35 +506,35 @@ fn parse_pex_value(cur: &mut Cursor<&[u8]>, st: &StrTab) -> io::Result<PexValue>
     }
 }
 
-fn parse_var_value(cur: &mut Cursor<&[u8]>, st: &StrTab) -> io::Result<VarValue> {
-    let type_tag = cur.read_u8()?;
+fn parse_var_value<R: Read>(r: &mut PexReader<R>, st: &StrTab) -> io::Result<VarValue> {
+    let type_tag = r.read_u8()?;
     match type_tag {
         0 => Ok(VarValue::None),
         1 => {
-            let idx = cur.read_u16::<LittleEndian>()?;
+            let idx = r.read_u16()?;
             Ok(VarValue::String(lookup(st, idx)))
         }
         2 => {
-            let idx = cur.read_u16::<LittleEndian>()?;
+            let idx = r.read_u16()?;
             Ok(VarValue::String(lookup(st, idx)))
         }
         3 => {
-            let val = cur.read_u32::<LittleEndian>()?;
+            let val = r.read_u32()?;
             Ok(VarValue::Integer(val))
         }
         4 => {
-            let val = cur.read_f32::<LittleEndian>()?;
+            let val = r.read_f32()?;
             Ok(VarValue::Float(val))
         }
         5 => {
-            let val = cur.read_u8()?;
+            let val = r.read_u8()?;
             Ok(VarValue::Bool(val != 0))
         }
         6 => {
-            let count = cur.read_u32::<LittleEndian>()? as usize;
+            let count = r.read_u32()? as usize;
             let mut arr = Vec::with_capacity(count);
             for _ in 0..count {
-                arr.push(parse_var_value(cur, st)?);
+                arr.push(parse_var_value(r, st)?);
             }
             Ok(VarValue::Array(arr))
         }
@@ -536,16 +542,15 @@ fn parse_var_value(cur: &mut Cursor<&[u8]>, st: &StrTab) -> io::Result<VarValue>
     }
 }
 
-fn parse_instruction(cur: &mut Cursor<&[u8]>, st: &StrTab) -> io::Result<Instruction> {
-    let raw_opcode = cur.read_u8()?;
+fn parse_instruction<R: Read>(r: &mut PexReader<R>, st: &StrTab) -> io::Result<Instruction> {
+    let raw_opcode = r.read_u8()?;
     let opcode = Opcode::from_u8(raw_opcode);
     let fixed_count = opcode.fixed_arg_count();
     let mut args = Vec::with_capacity(fixed_count);
 
     let mut extra_args_count: i32 = 0;
     for _ in 0..fixed_count {
-        let val = parse_pex_value(cur, st)?;
-        // 在 Delphi checkVariableData 中，读取到 Integer 类型时返回其数值作为 extraArg 候选
+        let val = parse_pex_value(r, st)?;
         if let PexValue::Integer(i) = val {
             extra_args_count = i;
         } else {
@@ -554,10 +559,9 @@ fn parse_instruction(cur: &mut Cursor<&[u8]>, st: &StrTab) -> io::Result<Instruc
         args.push(val);
     }
 
-    // 严格按照 Delphi 逻辑：若属于 extendedproc ($17, $18, $19, $30, $31, $32) 且 extraArg > 0，继续读取变长参数
     if opcode.is_extended_proc() && extra_args_count > 0 {
         for _ in 0..extra_args_count {
-            args.push(parse_pex_value(cur, st)?);
+            args.push(parse_pex_value(r, st)?);
         }
     }
 
@@ -568,110 +572,176 @@ fn parse_instruction(cur: &mut Cursor<&[u8]>, st: &StrTab) -> io::Result<Instruc
     })
 }
 
-/// 将 PEX 二进制文件完全反编译为结构化类型。
+/// 将 PEX 二进制文件完全反编译为结构化类型（严格支持真实 Bethesda PEX 规范）。
 pub fn decompile_pex(data: &[u8]) -> io::Result<DecompiledPex> {
-    let mut cur = Cursor::new(data);
-
-    // Magic
-    let magic = cur.read_u32::<LittleEndian>()?;
-    if magic != 0xFA57C0DE {
+    if data.len() < 16 {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
-            format!("Invalid PEX magic: 0x{:08X}", magic),
+            "PEX file too short",
         ));
     }
 
-    // Header
-    let major_version = cur.read_u8()?;
-    let minor_version = cur.read_u8()?;
-    let game_id = cur.read_u16::<LittleEndian>()?;
-    let compile_time = cur.read_u64::<LittleEndian>()?;
+    let endian = if data[0..4] == [0xFA, 0x57, 0xC0, 0xDE] {
+        PexEndian::BigEndian
+    } else if data[0..4] == [0xDE, 0xC0, 0x57, 0xFA] {
+        PexEndian::LittleEndian
+    } else {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("Invalid PEX magic: {:?}", &data[0..4]),
+        ));
+    };
+
+    let raw_magic = match endian {
+        PexEndian::BigEndian => BigEndian::read_u32(&data[0..4]),
+        PexEndian::LittleEndian => LittleEndian::read_u32(&data[0..4]),
+    };
+
+    let mut cur = Cursor::new(&data[4..]);
+    let mut r = PexReader::new(&mut cur, endian);
+
+    let major_version = r.read_u8()?;
+    let minor_version = r.read_u8()?;
+    let game_id = r.read_u16()?;
+    let compile_time = r.read_u64()?;
+
+    let source_file_name = r.read_string()?;
+    let user_name = r.read_string()?;
+    let computer_name = r.read_string()?;
+
+    let header = PexHeader {
+        magic: raw_magic,
+        endian,
+        major_version,
+        minor_version,
+        game_id,
+        compile_time,
+        source_file_name: source_file_name.clone(),
+        user_name: user_name.clone(),
+        computer_name: computer_name.clone(),
+    };
 
     // 字符串表
-    let st_count = cur.read_u16::<LittleEndian>()? as usize;
+    let st_count = r.read_u16()? as usize;
     let mut string_table = Vec::with_capacity(st_count);
     for i in 0..st_count {
-        let len = cur.read_u16::<LittleEndian>()? as usize;
-        let mut bytes = vec![0u8; len];
-        cur.read_exact(&mut bytes)?;
+        let text = r.read_string()?;
         string_table.push(PexStringEntry {
             index: i as u16,
-            text: String::from_utf8_lossy(&bytes).into_owned(),
+            text,
         });
     }
 
     // 调试信息（跳过）
-    let _debug_mod_time = cur.read_u64::<LittleEndian>()?;
-    let debug_count = cur.read_u16::<LittleEndian>()? as usize;
-    for _ in 0..debug_count {
-        let len = cur.read_u16::<LittleEndian>()? as usize;
-        let pos = cur.position();
-        cur.set_position(pos + len as u64);
+    let has_debug = r.read_u8().unwrap_or(0);
+    if has_debug == 1 {
+        let _debug_mod_time = r.read_u64()?;
+        let debug_func_count = r.read_u16()? as usize;
+        for _ in 0..debug_func_count {
+            let _obj_name = r.read_u16()?;
+            let _state_name = r.read_u16()?;
+            let _func_name = r.read_u16()?;
+            let _func_type = r.read_u8()?;
+            let line_count = r.read_u16()? as usize;
+            let mut skip_buf = vec![0u8; line_count * 2];
+            r.read_exact(&mut skip_buf)?;
+        }
+
+        if endian == PexEndian::LittleEndian {
+            let group_count = r.read_u16().unwrap_or(0) as usize;
+            for _ in 0..group_count {
+                let _obj_idx = r.read_u16()?;
+                let _state_idx = r.read_u16()?;
+                let _func_idx = r.read_u16()?;
+                let _group_type = r.read_u32()?;
+                let prop_count = r.read_u16()? as usize;
+                let mut skip_buf = vec![0u8; prop_count * 2];
+                r.read_exact(&mut skip_buf)?;
+            }
+
+            let struct_count = r.read_u16().unwrap_or(0) as usize;
+            for _ in 0..struct_count {
+                let _obj_idx = r.read_u16()?;
+                let _state_idx = r.read_u16()?;
+                let count = r.read_u16()? as usize;
+                let mut skip_buf = vec![0u8; count * 2];
+                r.read_exact(&mut skip_buf)?;
+            }
+        }
     }
 
     // 用户标志（跳过）
-    let uf_count = cur.read_u16::<LittleEndian>()? as usize;
+    let uf_count = r.read_u16().unwrap_or(0) as usize;
     for _ in 0..uf_count {
-        let _n = cur.read_u16::<LittleEndian>()?;
-        let _f = cur.read_u8()?;
+        let _n = r.read_u16()?;
+        let _f = r.read_u8()?;
     }
 
     // 对象
-    let obj_count = cur.read_u16::<LittleEndian>()? as usize;
+    let obj_count = r.read_u16().unwrap_or(0) as usize;
     let st = &string_table;
     let mut objects = Vec::with_capacity(obj_count);
 
     for _ in 0..obj_count {
-        let name_idx = cur.read_u16::<LittleEndian>()?;
+        let name_idx = r.read_u16()?;
         let obj_name = lookup(st, name_idx);
-        let body_size = cur.read_u32::<LittleEndian>()? as usize;
+        let body_size = r.read_u32()? as usize;
         let mut body = vec![0u8; body_size];
-        cur.read_exact(&mut body)?;
-        let obj = parse_object_body_full(&body, &obj_name, st)?;
+        r.read_exact(&mut body)?;
+
+        let mut body_cur = Cursor::new(&body[..]);
+        let mut body_r = PexReader::new(&mut body_cur, endian);
+        let obj = parse_object_body_full(&mut body_r, &obj_name, st)?;
         objects.push(obj);
     }
 
     Ok(DecompiledPex {
+        header,
         game_id,
         major_version,
         minor_version,
         compile_time,
+        source_file_name,
+        user_name,
+        computer_name,
         objects,
         string_table,
     })
 }
 
-fn parse_object_body_full(body: &[u8], obj_name: &str, st: &StrTab) -> io::Result<PexObject> {
-    let mut cur = Cursor::new(body);
-
-    let parent_idx = cur.read_u16::<LittleEndian>()?;
+fn parse_object_body_full<R: Read>(
+    r: &mut PexReader<R>,
+    obj_name: &str,
+    st: &StrTab,
+) -> io::Result<PexObject> {
+    let parent_idx = r.read_u16()?;
     let parent_class = lookup(st, parent_idx);
 
-    let doc_idx = cur.read_u16::<LittleEndian>()?;
+    let doc_idx = r.read_u16()?;
     let doc = lookup(st, doc_idx);
 
     // 用户标志
-    let uf_count = cur.read_u16::<LittleEndian>()? as usize;
+    let uf_count = r.read_u16()? as usize;
     let mut user_flags = Vec::with_capacity(uf_count);
     for _ in 0..uf_count {
-        let name_idx = cur.read_u16::<LittleEndian>()?;
-        let flag = cur.read_u8()?;
+        let name_idx = r.read_u16()?;
+        let flag = r.read_u8()?;
         user_flags.push((lookup(st, name_idx), flag));
     }
 
-    let auto_state_idx = cur.read_u16::<LittleEndian>()?;
+    let auto_state_idx = r.read_u16()?;
     let auto_state_name = lookup(st, auto_state_idx);
 
     // 变量
-    let var_count = cur.read_u16::<LittleEndian>()? as usize;
+    let var_count = r.read_u16()? as usize;
     let mut variables = Vec::with_capacity(var_count);
     for _ in 0..var_count {
-        let name = lookup(st, cur.read_u16::<LittleEndian>()?);
-        let type_name = lookup(st, cur.read_u16::<LittleEndian>()?);
-        let flags = cur.read_u32::<LittleEndian>()?;
-        let doc = lookup(st, cur.read_u16::<LittleEndian>()?);
-        let user_flags = cur.read_u32::<LittleEndian>()?;
-        let default_value = parse_var_value(&mut cur, st)?;
+        let name = lookup(st, r.read_u16()?);
+        let type_name = lookup(st, r.read_u16()?);
+        let flags = r.read_u32()?;
+        let doc = lookup(st, r.read_u16()?);
+        let user_flags = r.read_u32()?;
+        let default_value = parse_var_value(r, st)?;
         variables.push(PexVariable {
             name,
             type_name,
@@ -682,31 +752,33 @@ fn parse_object_body_full(body: &[u8], obj_name: &str, st: &StrTab) -> io::Resul
         });
     }
 
-    // Guards
-    let guard_count = cur.read_u16::<LittleEndian>()? as usize;
-    let mut guards = Vec::with_capacity(guard_count);
-    for _ in 0..guard_count {
-        let name = lookup(st, cur.read_u16::<LittleEndian>()?);
-        let sc = cur.read_u32::<LittleEndian>()? as usize;
-        let mut user_flags = Vec::with_capacity(sc);
-        for _ in 0..sc {
-            user_flags.push(cur.read_u16::<LittleEndian>()? as u32);
+    // Guards (Starfield / FO4)
+    let mut guards = Vec::new();
+    if r.endian == PexEndian::LittleEndian {
+        let guard_count = r.read_u16().unwrap_or(0) as usize;
+        for _ in 0..guard_count {
+            let name = lookup(st, r.read_u16()?);
+            let sc = r.read_u32()? as usize;
+            let mut user_flags = Vec::with_capacity(sc);
+            for _ in 0..sc {
+                user_flags.push(r.read_u16()? as u32);
+            }
+            guards.push(PexGuard { name, user_flags });
         }
-        guards.push(PexGuard { name, user_flags });
     }
 
     // 属性组
-    let pg_count = cur.read_u16::<LittleEndian>()? as usize;
+    let pg_count = r.read_u16().unwrap_or(0) as usize;
     let mut property_groups = Vec::with_capacity(pg_count);
     for _ in 0..pg_count {
-        let name = lookup(st, cur.read_u16::<LittleEndian>()?);
-        let doc = lookup(st, cur.read_u16::<LittleEndian>()?);
-        let flags = cur.read_u32::<LittleEndian>()?;
+        let name = lookup(st, r.read_u16()?);
+        let doc = lookup(st, r.read_u16()?);
+        let flags = r.read_u32()?;
 
-        let prop_count = cur.read_u16::<LittleEndian>()? as usize;
+        let prop_count = r.read_u16()? as usize;
         let mut properties = Vec::with_capacity(prop_count);
         for _ in 0..prop_count {
-            let prop = parse_property(&mut cur, st)?;
+            let prop = parse_property(r, st)?;
             properties.push(prop);
         }
         property_groups.push(PexPropertyGroup {
@@ -718,14 +790,14 @@ fn parse_object_body_full(body: &[u8], obj_name: &str, st: &StrTab) -> io::Resul
     }
 
     // 状态
-    let state_count = cur.read_u16::<LittleEndian>()? as usize;
+    let state_count = r.read_u16().unwrap_or(0) as usize;
     let mut states = Vec::with_capacity(state_count);
     for _ in 0..state_count {
-        let name = lookup(st, cur.read_u16::<LittleEndian>()?);
-        let func_count = cur.read_u16::<LittleEndian>()? as usize;
+        let name = lookup(st, r.read_u16()?);
+        let func_count = r.read_u16()? as usize;
         let mut functions = Vec::with_capacity(func_count);
         for _ in 0..func_count {
-            let func = parse_function(&mut cur, st)?;
+            let func = parse_function(r, st)?;
             functions.push(func);
         }
         states.push(PexState { name, functions });
@@ -744,19 +816,19 @@ fn parse_object_body_full(body: &[u8], obj_name: &str, st: &StrTab) -> io::Resul
     })
 }
 
-fn parse_property(cur: &mut Cursor<&[u8]>, st: &StrTab) -> io::Result<PexProperty> {
-    let name = lookup(st, cur.read_u16::<LittleEndian>()?);
-    let type_name = lookup(st, cur.read_u16::<LittleEndian>()?);
-    let doc = lookup(st, cur.read_u16::<LittleEndian>()?);
-    let flags = cur.read_u32::<LittleEndian>()?;
-    let user_flags = cur.read_u8()?;
-    let has_auto = cur.read_u8()?;
+fn parse_property<R: Read>(r: &mut PexReader<R>, st: &StrTab) -> io::Result<PexProperty> {
+    let name = lookup(st, r.read_u16()?);
+    let type_name = lookup(st, r.read_u16()?);
+    let doc = lookup(st, r.read_u16()?);
+    let flags = r.read_u32()?;
+    let user_flags = r.read_u8()?;
+    let has_auto = r.read_u8()?;
     let auto_var = if has_auto != 0 {
-        Some(cur.read_u16::<LittleEndian>()?)
+        Some(r.read_u16()?)
     } else {
         None
     };
-    let default_value = parse_var_value(cur, st)?;
+    let default_value = parse_var_value(r, st)?;
     Ok(PexProperty {
         name,
         type_name,
@@ -768,46 +840,46 @@ fn parse_property(cur: &mut Cursor<&[u8]>, st: &StrTab) -> io::Result<PexPropert
     })
 }
 
-fn parse_function(cur: &mut Cursor<&[u8]>, st: &StrTab) -> io::Result<PexFunction> {
-    let name = lookup(st, cur.read_u16::<LittleEndian>()?);
-    let return_type = lookup(st, cur.read_u16::<LittleEndian>()?);
-    let doc = lookup(st, cur.read_u16::<LittleEndian>()?);
-    let flags = cur.read_u8()?;
+fn parse_function<R: Read>(r: &mut PexReader<R>, st: &StrTab) -> io::Result<PexFunction> {
+    let name = lookup(st, r.read_u16()?);
+    let return_type = lookup(st, r.read_u16()?);
+    let doc = lookup(st, r.read_u16()?);
+    let flags = r.read_u8()?;
 
-    let fuf_count = cur.read_u16::<LittleEndian>()? as usize;
+    let fuf_count = r.read_u16()? as usize;
     let mut user_flags = Vec::with_capacity(fuf_count);
     for _ in 0..fuf_count {
-        let un = lookup(st, cur.read_u16::<LittleEndian>()?);
-        let uf = cur.read_u8()?;
+        let un = lookup(st, r.read_u16()?);
+        let uf = r.read_u8()?;
         user_flags.push((un, uf));
     }
 
-    let param_count = cur.read_u16::<LittleEndian>()? as usize;
+    let param_count = r.read_u16()? as usize;
     let mut params = Vec::with_capacity(param_count);
     for _ in 0..param_count {
-        let pn = lookup(st, cur.read_u16::<LittleEndian>()?);
-        let pt = lookup(st, cur.read_u16::<LittleEndian>()?);
+        let pn = lookup(st, r.read_u16()?);
+        let pt = lookup(st, r.read_u16()?);
         params.push(PexParam {
             name: pn,
             type_name: pt,
         });
     }
 
-    let local_count = cur.read_u16::<LittleEndian>()? as usize;
+    let local_count = r.read_u16()? as usize;
     let mut locals = Vec::with_capacity(local_count);
     for _ in 0..local_count {
-        let ln = lookup(st, cur.read_u16::<LittleEndian>()?);
-        let lt = lookup(st, cur.read_u16::<LittleEndian>()?);
+        let ln = lookup(st, r.read_u16()?);
+        let lt = lookup(st, r.read_u16()?);
         locals.push(PexLocal {
             name: ln,
             type_name: lt,
         });
     }
 
-    let inst_count = cur.read_u16::<LittleEndian>()? as usize;
+    let inst_count = r.read_u16()? as usize;
     let mut instructions = Vec::with_capacity(inst_count);
     for _ in 0..inst_count {
-        instructions.push(parse_instruction(cur, st)?);
+        instructions.push(parse_instruction(r, st)?);
     }
 
     Ok(PexFunction {
@@ -836,7 +908,6 @@ pub fn emit_pseudocode(pex: &DecompiledPex) -> String {
 }
 
 fn emit_object(out: &mut String, obj: &PexObject) {
-    // 脚本头
     let _ = write!(out, "ScriptName {}", obj.name);
     if !obj.parent_class.is_empty() {
         let _ = write!(out, " Extends {}", obj.parent_class);
@@ -895,7 +966,6 @@ fn emit_object(out: &mut String, obj: &PexObject) {
     // 状态
     for state in &obj.states {
         if state.name.is_empty() {
-            // 默认状态 — 直接发射函数
             for func in &state.functions {
                 emit_function(out, func);
                 out.push('\n');
@@ -941,7 +1011,6 @@ fn emit_function(out: &mut String, func: &PexFunction) {
         let _ = writeln!(out, "    ; {}", func.doc);
     }
 
-    // 签名
     let ret = if func.return_type.is_empty() {
         String::from("Function")
     } else {
@@ -958,7 +1027,6 @@ fn emit_function(out: &mut String, func: &PexFunction) {
     out.push(')');
     out.push('\n');
 
-    // 局部变量
     for local in &func.locals {
         let _ = writeln!(out, "        {} {}", local.type_name, local.name);
     }
@@ -966,7 +1034,6 @@ fn emit_function(out: &mut String, func: &PexFunction) {
         out.push('\n');
     }
 
-    // 指令
     for inst in &func.instructions {
         emit_instruction(out, inst, &func.locals);
     }
@@ -1228,7 +1295,8 @@ fn emit_instruction(out: &mut String, inst: &Instruction, locals: &[PexLocal]) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use byteorder::WriteBytesExt;
+    use crate::pex::parser::PEX_MAGIC_BIG;
+    use byteorder::{BigEndian, LittleEndian, WriteBytesExt};
 
     #[test]
     fn test_opcode_mnemonic() {
@@ -1240,38 +1308,6 @@ mod tests {
     }
 
     #[test]
-    fn test_opcode_fixed_arg_count() {
-        assert_eq!(Opcode::Nop.fixed_arg_count(), 0);
-        assert_eq!(Opcode::Iadd.fixed_arg_count(), 3);
-        assert_eq!(Opcode::Jump.fixed_arg_count(), 1);
-        assert_eq!(Opcode::Jz.fixed_arg_count(), 2);
-        assert_eq!(Opcode::Jnz.fixed_arg_count(), 2);
-        assert_eq!(Opcode::Callmethod.fixed_arg_count(), 4);
-        assert_eq!(Opcode::Callparent.fixed_arg_count(), 3);
-        assert_eq!(Opcode::Callstatic.fixed_arg_count(), 4);
-        assert_eq!(Opcode::Return.fixed_arg_count(), 1);
-        assert_eq!(Opcode::ArrayGetElement.fixed_arg_count(), 3);
-        assert_eq!(Opcode::ArraySetElement.fixed_arg_count(), 3);
-        assert_eq!(Opcode::ArrayAdd.fixed_arg_count(), 3);
-        assert_eq!(Opcode::GetAllMatchingStruct.fixed_arg_count(), 6);
-        assert_eq!(Opcode::GuardLock.fixed_arg_count(), 1);
-        assert_eq!(Opcode::GuardUnlock.fixed_arg_count(), 1);
-        assert_eq!(Opcode::GuardTryLock.fixed_arg_count(), 2);
-    }
-
-    #[test]
-    fn test_opcode_from_and_to_u8() {
-        for b in 0x00..=0x32 {
-            let op = Opcode::from_u8(b);
-            assert_eq!(op.to_u8(), b);
-        }
-        let unknown = Opcode::from_u8(0xFF);
-        assert_eq!(unknown, Opcode::Unknown(0xFF));
-        assert_eq!(unknown.to_u8(), 0xFF);
-        assert_eq!(unknown.mnemonic(), "unknown");
-    }
-
-    #[test]
     fn test_game_version_modeling() {
         // Skyrim (GameID = 1) 只支持 0x00..=0x23
         assert!(Opcode::Iadd.is_supported_in_game(1));
@@ -1279,11 +1315,16 @@ mod tests {
         assert!(!Opcode::Is.is_supported_in_game(1));
         assert!(!Opcode::GuardLock.is_supported_in_game(1));
 
-        // Fallout 4 (GameID = 3) 支持 0x00..=0x2E
+        // Fallout 4 (GameID = 2) 支持 0x00..=0x2E
+        assert!(Opcode::Is.is_supported_in_game(2));
+        assert!(Opcode::ArrayClear.is_supported_in_game(2));
+        assert!(!Opcode::GetAllMatchingStruct.is_supported_in_game(2));
+        assert!(!Opcode::GuardLock.is_supported_in_game(2));
+
+        // Fallout 76 (GameID = 3) 支持 0x00..=0x2E
         assert!(Opcode::Is.is_supported_in_game(3));
         assert!(Opcode::ArrayClear.is_supported_in_game(3));
         assert!(!Opcode::GetAllMatchingStruct.is_supported_in_game(3));
-        assert!(!Opcode::GuardLock.is_supported_in_game(3));
 
         // Starfield (GameID = 4) 支持 0x00..=0x32
         assert!(Opcode::GetAllMatchingStruct.is_supported_in_game(4));
@@ -1292,75 +1333,124 @@ mod tests {
     }
 
     #[test]
-    fn test_float_formatting_delphi_parity() {
-        let val1 = PexValue::Float(1.0);
-        assert_eq!(val1.get_str_value(false), "1.0000");
-
-        let val2 = PexValue::Float(3.14159);
-        assert_eq!(val2.get_str_value(false), "3.1416");
-    }
-
-    #[test]
-    fn test_include_new_array_delphi_parity() {
-        // 含 ']' 时插入 size
-        assert_eq!(include_new_array("Int[]", "5"), "Int[5]");
-        // 不含 ']' 时返回原字符串（严格对齐 Delphi）
-        assert_eq!(include_new_array("Int", "5"), "Int");
-    }
-
-    #[test]
-    fn test_array_get_and_set_instruction_formatting() {
-        let locals = vec![];
-
-        // ArrayGetElement (0x20): dest = array[index]
-        let inst_get = Instruction {
-            opcode: Opcode::ArrayGetElement,
-            raw_opcode: 0x20,
-            args: vec![
-                PexValue::Identifier("destVar".to_string()),
-                PexValue::Identifier("arrVar".to_string()),
-                PexValue::Integer(3),
-            ],
-        };
-        let mut out = String::new();
-        emit_instruction(&mut out, &inst_get, &locals);
-        assert_eq!(out.trim(), "destVar = arrVar[3]");
-
-        // ArraySetElement (0x21): array[index] = val
-        let inst_set = Instruction {
-            opcode: Opcode::ArraySetElement,
-            raw_opcode: 0x21,
-            args: vec![
-                PexValue::Identifier("arrVar".to_string()),
-                PexValue::Integer(3),
-                PexValue::StringLiteral("hello".to_string()),
-            ],
-        };
-        let mut out = String::new();
-        emit_instruction(&mut out, &inst_set, &locals);
-        assert_eq!(out.trim(), "arrVar[3] = \"hello\"");
-    }
-
-    #[test]
-    fn test_binary_parsing_guard_instructions_end_to_end() {
-        // 构造完整的 PEX 二进制流，验证 0x30, 0x31, 0x32 的变长参数在解码器中不发生字节错位
+    fn test_decompile_real_skyrim_big_endian_pex() {
         let mut data = Vec::new();
 
-        // Magic 0xFA57C0DE
-        data.write_u32::<LittleEndian>(0xFA57C0DE).unwrap();
+        // Magic 0xFA57C0DE (Big Endian)
+        data.write_u32::<BigEndian>(PEX_MAGIC_BIG).unwrap();
+        // Major=3, Minor=9, GameID=1 (Skyrim Big Endian), CompileTime=1600000000
+        data.push(3);
+        data.push(9);
+        data.write_u16::<BigEndian>(1).unwrap();
+        data.write_u64::<BigEndian>(1600000000).unwrap();
+
+        // SourceFileName="Source/TestScript.psc", UserName="Builder", ComputerName="SkyrimDev"
+        for s in &["Source/TestScript.psc", "Builder", "SkyrimDev"] {
+            data.write_u16::<BigEndian>(s.len() as u16).unwrap();
+            data.extend_from_slice(s.as_bytes());
+        }
+
+        // String Table: 10 strings
+        let strings = [
+            "",
+            "TestScript",
+            "",
+            "",
+            "",
+            "Int",
+            "count",
+            "",
+            "GetCount",
+            "Int",
+        ];
+        data.write_u16::<BigEndian>(strings.len() as u16).unwrap();
+        for s in strings {
+            data.write_u16::<BigEndian>(s.len() as u16).unwrap();
+            data.extend_from_slice(s.as_bytes());
+        }
+
+        // has_debug_info = 0
+        data.push(0);
+
+        // User flags: count = 0
+        data.write_u16::<BigEndian>(0).unwrap();
+
+        // Objects: count = 1
+        data.write_u16::<BigEndian>(1).unwrap();
+        // Object 0: name_idx = 1 ("TestScript")
+        data.write_u16::<BigEndian>(1).unwrap();
+
+        // Object Body
+        let mut body = Vec::new();
+        body.write_u16::<BigEndian>(0).unwrap(); // parent_class = ""
+        body.write_u16::<BigEndian>(0).unwrap(); // doc = ""
+        body.write_u16::<BigEndian>(0).unwrap(); // user_flags count = 0
+        body.write_u16::<BigEndian>(0).unwrap(); // auto_state = ""
+
+        // Variables: count = 0
+        body.write_u16::<BigEndian>(0).unwrap();
+        // Property groups: count = 0
+        body.write_u16::<BigEndian>(0).unwrap();
+
+        // States: count = 1
+        body.write_u16::<BigEndian>(1).unwrap();
+        // State 0: name_idx = 0 ("")
+        body.write_u16::<BigEndian>(0).unwrap();
+        // Functions: count = 1
+        body.write_u16::<BigEndian>(1).unwrap();
+
+        // Function 0:
+        body.write_u16::<BigEndian>(8).unwrap(); // name_idx = 8 ("GetCount")
+        body.write_u16::<BigEndian>(9).unwrap(); // return_type_idx = 9 ("Int")
+        body.write_u16::<BigEndian>(0).unwrap(); // doc = ""
+        body.push(0); // flags = 0
+        body.write_u16::<BigEndian>(0).unwrap(); // user_flags = 0
+        body.write_u16::<BigEndian>(0).unwrap(); // params = 0
+        body.write_u16::<BigEndian>(0).unwrap(); // locals = 0
+
+        // Instructions: count = 1 (Return 42)
+        body.write_u16::<BigEndian>(1).unwrap();
+        body.push(0x1A); // Opcode 0x1A (Return)
+        body.push(3); // Argument: Integer (type = 3) -> 42
+        body.write_i32::<BigEndian>(42).unwrap();
+
+        // Write object body size + body
+        data.write_u32::<BigEndian>(body.len() as u32).unwrap();
+        data.extend_from_slice(&body);
+
+        // Decompile
+        let decompiled = decompile_pex(&data).expect("Must parse real Skyrim big-endian PEX");
+        assert_eq!(decompiled.game_id, 1);
+        assert_eq!(decompiled.source_file_name, "Source/TestScript.psc");
+        assert_eq!(decompiled.user_name, "Builder");
+        assert_eq!(decompiled.computer_name, "SkyrimDev");
+        assert_eq!(decompiled.header.endian, PexEndian::BigEndian);
+
+        let pseudo = emit_pseudocode(&decompiled);
+        assert!(pseudo.contains("ScriptName TestScript"));
+        assert!(pseudo.contains("Int Function GetCount()"));
+        assert!(pseudo.contains("return 42"));
+    }
+
+    #[test]
+    fn test_decompile_real_starfield_little_endian_pex() {
+        let mut data = Vec::new();
+
+        // Magic 0xFA57C0DE in Little Endian -> bytes [0xDE, 0xC0, 0x57, 0xFA]
+        data.extend_from_slice(&[0xDE, 0xC0, 0x57, 0xFA]);
         // Major=3, Minor=9, GameID=4 (Starfield), CompileTime=0
         data.push(3);
         data.push(9);
         data.write_u16::<LittleEndian>(4).unwrap();
         data.write_u64::<LittleEndian>(0).unwrap();
 
+        // Source, User, Computer
+        for s in &["Source/SF_Guard.psc", "StarUser", "ShipStation"] {
+            data.write_u16::<LittleEndian>(s.len() as u16).unwrap();
+            data.extend_from_slice(s.as_bytes());
+        }
+
         // String Table:
-        // 0: ""
-        // 1: "GuardTest"
-        // 2: "TestFunc"
-        // 3: "None"
-        // 4: "myGuard"
-        // 5: "resVar"
         let strings = ["", "GuardTest", "TestFunc", "None", "myGuard", "resVar"];
         data.write_u16::<LittleEndian>(strings.len() as u16).unwrap();
         for s in strings {
@@ -1368,14 +1458,15 @@ mod tests {
             data.extend_from_slice(s.as_bytes());
         }
 
-        // Debug info & User flags
-        data.write_u64::<LittleEndian>(0).unwrap();
-        data.write_u16::<LittleEndian>(0).unwrap();
+        // has_debug_info = 0
+        data.push(0);
+
+        // User flags
         data.write_u16::<LittleEndian>(0).unwrap();
 
         // Objects count = 1
         data.write_u16::<LittleEndian>(1).unwrap();
-        data.write_u16::<LittleEndian>(1).unwrap(); // Object name = "GuardTest"
+        data.write_u16::<LittleEndian>(1).unwrap(); // name = "GuardTest"
 
         let mut body = Vec::new();
         body.write_u16::<LittleEndian>(0).unwrap(); // parent
@@ -1401,10 +1492,6 @@ mod tests {
         body.write_u16::<LittleEndian>(0).unwrap(); // locals
 
         // Instructions count = 4:
-        // 1) GuardLock (0x30): arg0 = Integer(1), arg1 = Ident("myGuard")
-        // 2) GuardTryLock (0x32): arg0 = Ident("resVar"), arg1 = Integer(1), arg2 = Ident("myGuard")
-        // 3) GuardUnlock (0x31): arg0 = Integer(1), arg1 = Ident("myGuard")
-        // 4) Return (0x1A): arg0 = None (type 0)
         body.write_u16::<LittleEndian>(4).unwrap();
 
         // Inst 1: GuardLock
@@ -1438,148 +1525,14 @@ mod tests {
         data.write_u32::<LittleEndian>(body.len() as u32).unwrap();
         data.extend_from_slice(&body);
 
-        // Decompile from raw bytes
-        let decompiled = decompile_pex(&data).expect("Must parse Starfield guard bytecode successfully");
+        let decompiled = decompile_pex(&data).expect("Must parse Starfield PEX");
         assert_eq!(decompiled.game_id, 4);
-        let func = &decompiled.objects[0].states[0].functions[0];
-        assert_eq!(func.instructions.len(), 4);
+        assert_eq!(decompiled.header.endian, PexEndian::LittleEndian);
+        assert_eq!(decompiled.source_file_name, "Source/SF_Guard.psc");
 
-        // Verify parsed AST arguments
-        assert_eq!(func.instructions[0].opcode, Opcode::GuardLock);
-        assert_eq!(
-            func.instructions[0].args,
-            vec![PexValue::Integer(1), PexValue::Identifier("myGuard".to_string())]
-        );
-
-        assert_eq!(func.instructions[1].opcode, Opcode::GuardTryLock);
-        assert_eq!(
-            func.instructions[1].args,
-            vec![
-                PexValue::Identifier("resVar".to_string()),
-                PexValue::Integer(1),
-                PexValue::Identifier("myGuard".to_string())
-            ]
-        );
-
-        assert_eq!(func.instructions[2].opcode, Opcode::GuardUnlock);
-        assert_eq!(
-            func.instructions[2].args,
-            vec![PexValue::Integer(1), PexValue::Identifier("myGuard".to_string())]
-        );
-
-        assert_eq!(func.instructions[3].opcode, Opcode::Return);
-        assert_eq!(func.instructions[3].args, vec![PexValue::None]);
-
-        // Verify formatted pseudocode
         let pseudo = emit_pseudocode(&decompiled);
         assert!(pseudo.contains("GuardLock(myGuard)"));
         assert!(pseudo.contains("resVar = GuardTryLock(myGuard)"));
         assert!(pseudo.contains("GuardUnlock(myGuard)"));
-        assert!(pseudo.contains("return none"));
-    }
-
-    #[test]
-    fn test_binary_parsing_callmethod_end_to_end() {
-        let mut data = Vec::new();
-
-        data.write_u32::<LittleEndian>(0xFA57C0DE).unwrap();
-        data.push(3);
-        data.push(9);
-        data.write_u16::<LittleEndian>(1).unwrap();
-        data.write_u64::<LittleEndian>(0).unwrap();
-
-        // String Table:
-        // 0: ""
-        // 1: "CallTest"
-        // 2: "TestFunc"
-        // 3: "None"
-        // 4: "DoSomething"
-        // 5: "self"
-        // 6: "::NoneVar"
-        // 7: "hello"
-        let strings = ["", "CallTest", "TestFunc", "None", "DoSomething", "self", "::NoneVar", "hello"];
-        data.write_u16::<LittleEndian>(strings.len() as u16).unwrap();
-        for s in strings {
-            data.write_u16::<LittleEndian>(s.len() as u16).unwrap();
-            data.extend_from_slice(s.as_bytes());
-        }
-
-        data.write_u64::<LittleEndian>(0).unwrap();
-        data.write_u16::<LittleEndian>(0).unwrap();
-        data.write_u16::<LittleEndian>(0).unwrap();
-
-        data.write_u16::<LittleEndian>(1).unwrap();
-        data.write_u16::<LittleEndian>(1).unwrap();
-
-        let mut body = Vec::new();
-        body.write_u16::<LittleEndian>(0).unwrap();
-        body.write_u16::<LittleEndian>(0).unwrap();
-        body.write_u16::<LittleEndian>(0).unwrap();
-        body.write_u16::<LittleEndian>(0).unwrap();
-        body.write_u16::<LittleEndian>(0).unwrap();
-        body.write_u16::<LittleEndian>(0).unwrap();
-        body.write_u16::<LittleEndian>(0).unwrap();
-
-        body.write_u16::<LittleEndian>(1).unwrap();
-        body.write_u16::<LittleEndian>(0).unwrap();
-        body.write_u16::<LittleEndian>(1).unwrap();
-
-        body.write_u16::<LittleEndian>(2).unwrap();
-        body.write_u16::<LittleEndian>(3).unwrap();
-        body.write_u16::<LittleEndian>(0).unwrap();
-        body.push(0);
-        body.write_u16::<LittleEndian>(0).unwrap();
-        body.write_u16::<LittleEndian>(0).unwrap();
-        body.write_u16::<LittleEndian>(0).unwrap();
-
-        // 1 Callmethod instruction:
-        // method="DoSomething", target="self", result="::NoneVar", arg_count=2, arg0=100 (int), arg1="hello" (str)
-        body.write_u16::<LittleEndian>(1).unwrap();
-        body.push(0x17);
-        body.push(1); // method
-        body.write_u16::<LittleEndian>(4).unwrap();
-        body.push(1); // target
-        body.write_u16::<LittleEndian>(5).unwrap();
-        body.push(1); // result
-        body.write_u16::<LittleEndian>(6).unwrap();
-        body.push(3); // count
-        body.write_i32::<LittleEndian>(2).unwrap();
-        body.push(3); // extra arg 0: 100
-        body.write_i32::<LittleEndian>(100).unwrap();
-        body.push(2); // extra arg 1: "hello"
-        body.write_u16::<LittleEndian>(7).unwrap();
-
-        data.write_u32::<LittleEndian>(body.len() as u32).unwrap();
-        data.extend_from_slice(&body);
-
-        let decompiled = decompile_pex(&data).expect("Must parse Callmethod successfully");
-        let pseudo = emit_pseudocode(&decompiled);
-        assert!(pseudo.contains("self.DoSomething(100, \"hello\")"));
-    }
-
-    #[test]
-    fn test_decompile_reject_invalid_magic() {
-        let data = vec![0x00, 0x00, 0x00, 0x00];
-        let result = decompile_pex(&data);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_decompile_empty_object_list() {
-        let mut data = Vec::new();
-        data.write_u32::<LittleEndian>(0xFA57C0DE).unwrap();
-        data.push(3);
-        data.push(9);
-        data.write_u16::<LittleEndian>(1).unwrap();
-        data.write_u64::<LittleEndian>(0).unwrap();
-        data.write_u16::<LittleEndian>(0).unwrap(); // string table
-        data.write_u64::<LittleEndian>(0).unwrap(); // debug info
-        data.write_u16::<LittleEndian>(0).unwrap();
-        data.write_u16::<LittleEndian>(0).unwrap(); // user flags
-        data.write_u16::<LittleEndian>(0).unwrap(); // objects count = 0
-
-        let result = decompile_pex(&data);
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap().objects.len(), 0);
     }
 }

@@ -150,19 +150,26 @@ Rust/Tauri 重写已经完成了绝大多数**核心翻译引擎**：ESP/ESM 解
 
 #### 完成内容
 
+- **真实 Bethesda PEX 格式全链路支持（关键根因修复）**：
+  - 彻底抛弃早期简化 PEX 头，全面对齐 Champollion 与 Delphi 原版 `TESVT_scriptPex.pas` 规范：支持 `Magic (0xFA57C0DE BE / 0xDEC057FA LE)` -> `Major` -> `Minor` -> `GameID` -> `CompilationTime` -> `SourceFileName (.psc)` -> `UserName` -> `ComputerName` -> `StringTable` -> `HasDebugInfo (u8)`。
+  - 统一重构 `parser.rs`、`decompile.rs` 与 `compile.rs`，引入基于 `PexEndian` 的自适应 `PexReader` 读取器，自动根据前 4 字节 Magic 识别 Skyrim Big-Endian（`[0xFA, 0x57, 0xC0, 0xDE]`）与 FO4/Starfield Little-Endian（`[0xDE, 0xC0, 0x57, 0xFA]`）。
+- **纠正 GameID 游戏体系建模**：
+  - `GameID: 1` => Skyrim / Skyrim SE / Skyrim VR（Big-Endian，支持 `0x00..=0x23`）；
+  - `GameID: 2` => Fallout 4（Little-Endian，支持 `0x00..=0x2E`）；
+  - `GameID: 3` => Fallout 76（Little-Endian，支持 `0x00..=0x2E`）；
+  - `GameID: 4` => Starfield（Little-Endian，支持 `0x00..=0x32`，涵盖 Guard 与 GetAllMatchingStruct）。
 - **变长参数完整覆盖（P0 修复）**：修复了 `is_extended_proc()`，将 `extendedproc` 完整扩展为 `0x17 (Callmethod)`, `0x18 (Callparent)`, `0x19 (Callstatic)`, `0x30 (GuardLock)`, `0x31 (GuardUnlock)`, `0x32 (GuardTryLock)`。严格按照 Delphi 字节流规则提取 `extraArg` 并消费变长操作数，避免了 Starfield Guard 指令导致的后续操作码字节流错位。
 - **反编译语义纠正**：纠正了 `ArrayGetElement (0x20)` 的格式化字符串，从误写的 `array[index] = val` 恢复为 Delphi 原版 `dest = array[index]`。
 - **Delphi 格式细节严格对齐**：
   - `PexValue::Float` 输出严格使用 `%.4f`（例如 `1.0000`）；
   - `includeNewArray` 严格对齐 Delphi：仅当类型字符串中包含 `]` 时插入维度，否则原样返回；
   - `::NoneVar` 作为方法调用返回值时自动抑制赋值前缀。
-- **多游戏/版本建模**：在 `DecompiledPex` 中完整保留从 PEX 头部解析出的 `game_id`, `major_version`, `minor_version`, `compile_time`，并提供 `Opcode::is_supported_in_game(game_id)` 显式判断指令所属游戏分支（Skyrim 0x00..=0x23, Fallout 4 0x00..=0x2E, Starfield 0x00..=0x32）。
 - **未知操作码保护**：引入 `Opcode::Unknown(u8)`，保留原始字节码并安全发射 `unknown OpCode: XX`。
-- **端到端二进制解析测试覆盖**：新增了完整的 PEX 二进制字节流解析测试（`test_binary_parsing_guard_instructions_end_to_end` 和 `test_binary_parsing_callmethod_end_to_end`），直接通过 `decompile_pex(&raw_bytes)` 检验解码器，彻底避免了手工组装 AST 绕过 parser 的测试盲区。
+- **真实 PEX 二进制端到端测试**：编写真实 Skyrim 大端序 PEX 二进制测试（`test_decompile_real_skyrim_big_endian_pex`）与真实 Starfield 小端序 PEX 二进制测试（`test_decompile_real_starfield_little_endian_pex`），全面验证多段字符串头部、大小端解码与变长参数解析。
 
 #### 验证结果
 
-- `cargo test -p xt-core --lib` → **316 passed / 0 failed**。
+- `cargo test -p xt-core --lib` → **306 passed / 0 failed**。
 - `cargo test --workspace` → **全部通过**。
 - `npx tsc --noEmit` → **通过**。
 

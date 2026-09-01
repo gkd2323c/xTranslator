@@ -1,17 +1,38 @@
 //! PEX 类型定义
 
-/// PEX 文件头（在 magic 0xFA57C0DE 之后开始）
-#[derive(Clone, Debug)]
+/// PEX 大小端模式
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PexEndian {
+    LittleEndian,
+    BigEndian,
+}
+
+/// PEX 文件头（严格对齐 Bethesda 真实 PEX 规范与 Delphi rPexheader）
+#[derive(Clone, Debug, PartialEq)]
 pub struct PexHeader {
+    pub magic: u32,
+    pub endian: PexEndian,
     pub major_version: u8,
     pub minor_version: u8,
     pub game_id: u16,
-    /// 编译时间（来自调试信息部分的 mod_time）
+    /// 编译时间（来自头部 timeData）
     pub compile_time: u64,
+    /// 源脚本文件名（.psc 文件名）
+    pub source_file_name: String,
+    /// 编译用户名
+    pub user_name: String,
+    /// 编译机器名
+    pub computer_name: String,
+}
+
+impl PexHeader {
+    pub fn is_big_endian(&self) -> bool {
+        self.endian == PexEndian::BigEndian
+    }
 }
 
 /// PEX 字符串表中的字符串引用
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct PexStringEntry {
     pub index: u16,
     pub text: String,
@@ -42,10 +63,8 @@ pub struct PexScript {
     pub string_table: Vec<PexStringEntry>,
     /// 所有提取的待翻译字符串
     pub translatable: Vec<PexTranslatableString>,
-    /// 原始调试信息部分字节（用于在重编译期间保留）
-    pub debug_info_raw: Vec<u8>,
-    /// 原始用户标志部分字节（用于在重编译期间保留）
-    pub user_flags_raw: Vec<u8>,
-    /// 每个对象的原始对象体字节（用于在重编译期间保留）
-    pub object_bodies_raw: Vec<Vec<u8>>,
+    /// 头部到字符串表前的原始字节（用于重编译完美保留原始头部字节与大小端）
+    pub header_raw: Vec<u8>,
+    /// 字符串表之后的全部原始字节（包括 DebugInfo、UserFlags、Objects）
+    pub data_raw: Vec<u8>,
 }
