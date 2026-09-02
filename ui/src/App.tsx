@@ -29,6 +29,10 @@ const DialogView = lazy(() => import("./components/DialogView").then(m => ({ def
 const McmPanel = lazy(() => import("./components/McmPanel").then(m => ({ default: m.McmPanel })));
 const FinalizePanel = lazy(() => import("./components/FinalizePanel").then(m => ({ default: m.FinalizePanel })));
 const DataConfigsPanel = lazy(() => import("./components/DataConfigsPanel").then(m => ({ default: m.DataConfigsPanel })));
+const DefUiGenDialog = lazy(() => import("./components/DefUiGenDialog").then(m => ({ default: m.DefUiGenDialog })));
+const ChooseCpDialog = lazy(() => import("./components/ChooseCpDialog").then(m => ({ default: m.ChooseCpDialog })));
+const AddIdDialog = lazy(() => import("./components/AddIdDialog").then(m => ({ default: m.AddIdDialog })));
+const RTLPreview = lazy(() => import("./components/RTLPreview").then(m => ({ default: m.RTLPreview })));
 import { autoBackupSst, loadConfig, setOpenAiApiKey, setDeeplApiKey, setBaiduApiKey, setYoudaoApiKey, setAzureApiKey, setTranslationProvider } from "./api/strings";
 import "./App.css";
 import "./components/ui/ui.css";
@@ -354,6 +358,26 @@ function App() {
         <Modal open onClose={() => setActivePanel(null)} title={t("dataConfigs.title")} size="lg">
           <Suspense fallback={<div className="modal-loading"><Loader size={24} /></div>}><DataConfigsPanel /></Suspense>
         </Modal>
+      )}
+      {activePanel === "defUiGen" && (
+        <Suspense fallback={<div className="modal-loading"><Loader size={24} /></div>}>
+          <DefUiGenDialog isOpen onClose={() => setActivePanel(null)} />
+        </Suspense>
+      )}
+      {activePanel === "chooseCp" && (
+        <Suspense fallback={<div className="modal-loading"><Loader size={24} /></div>}>
+          <ChooseCpDialog />
+        </Suspense>
+      )}
+      {activePanel === "addId" && (
+        <Suspense fallback={<div className="modal-loading"><Loader size={24} /></div>}>
+          <AddIdDialog />
+        </Suspense>
+      )}
+      {activePanel === "rtlPreview" && (
+        <Suspense fallback={<div className="modal-loading"><Loader size={24} /></div>}>
+          <RTLPreview isOpen onClose={() => setActivePanel(null)} />
+        </Suspense>
       )}
       
       {/* 菜单栏（分组下拉菜单 + 工具栏） */}

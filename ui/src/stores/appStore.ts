@@ -21,6 +21,10 @@ export type ActivePanel =
   | "espCompare" // ESP 对比
   | "finalize"   // 最终化工作流
   | "dataConfigs"// 数据配置
+  | "defUiGen"   // DEF_UI 组件标签生成器
+  | "chooseCp"   // Codepage 代码页覆盖选择器
+  | "addId"      // FormID 批量偏移工具
+  | "rtlPreview" // RTL 实时预览工具
   | null;        // 无面板打开
 
 // 底部标签页类型（从 10 个精简为 5 个）

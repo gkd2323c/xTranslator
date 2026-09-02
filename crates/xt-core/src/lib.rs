@@ -1,4 +1,5 @@
 pub mod ba2;
+pub mod add_id;
 pub mod archive_inject;
 pub mod batch_queue;
 pub mod bsa;
@@ -7,6 +8,7 @@ pub mod cache_index;
 pub mod command_processor;
 pub mod config;
 pub mod data_config;
+pub mod def_ui;
 pub mod dial_html;
 pub mod esp;
 pub mod fuz;

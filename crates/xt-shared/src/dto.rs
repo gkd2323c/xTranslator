@@ -1280,3 +1280,75 @@ pub struct SstApplyOptionsDto {
     #[serde(default)]
     pub filtered_ids: Option<Vec<u32>>,
 }
+
+// ── DEF_UI / Component Generator DTOs (DP-10) ──────────────────────────
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DefUiOptionsDto {
+    pub use_source_for_string: bool,
+    pub use_source_for_components: bool,
+    pub clean_base: bool,
+    pub clean_compo: bool,
+    pub add_quantity: bool,
+    pub use_first_char: bool,
+    pub do_auto_header: bool,
+    pub regex_clean_base: String,
+    pub regex_clean_compo: String,
+    pub template: String,
+    pub template_with_weight: Option<String>,
+    pub component_separator: String,
+    pub quantity_indicator1: String,
+    pub quantity_indicator2: String,
+    pub ignore_list: Vec<String>,
+    pub scope: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DefUiApplyResultDto {
+    pub modified_count: u32,
+    pub total_misc_records: u32,
+    pub details: Vec<DefUiItemPreviewDto>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DefUiItemPreviewDto {
+    pub string_id: u32,
+    pub form_id: u32,
+    pub edid: String,
+    pub original: String,
+    pub generated: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodepageInfoDto {
+    pub current_codepage: String,
+    pub supported_codepages: Vec<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodepageOverrideRequestDto {
+    pub codepage: String,
+    pub save_as_default: bool,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AddIdRequestDto {
+    pub offset_value: i64,
+    pub apply_to_form_id: bool,
+    pub scope: String, // "all" | "only_untranslated" | "only_selected"
+    pub selected_ids: Option<Vec<u32>>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AddIdResultDto {
+    pub modified_count: u32,
+    pub total_processed: u32,
+}
+

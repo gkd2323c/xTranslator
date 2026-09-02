@@ -140,6 +140,15 @@ impl CodepageConfig {
         }
     }
 
+    /// 从名字创建单一编码配置（如 "utf8", "936", "1252" 等）
+    pub fn from_name(name: &str) -> Option<Self> {
+        let id = CodepageId::from_str_value(name)?;
+        Some(Self {
+            primary: id,
+            fallback: None,
+        })
+    }
+
     /// UTF-8 + 降级编码
     pub fn utf8_with_fallback(fallback: CodepageId) -> Self {
         Self {
@@ -208,6 +217,11 @@ impl CodepageConfig {
     }
 }
 
+/// 支持的手动覆盖代码页列表（对齐 Delphi supportedCodepage）
+pub const SUPPORTED_CODEPAGES: &[&str] = &[
+    "utf8", "utf16", "1250", "1251", "1252", "1253", "1254", "1256", "932", "936", "950",
+];
+
 /// Codepage 配置表（按语言名索引）
 #[derive(Clone, Debug, Default)]
 pub struct CodepageTable {
@@ -242,6 +256,18 @@ impl CodepageTable {
     /// 根据语言名查询编码配置
     pub fn get(&self, language: &str) -> Option<&CodepageConfig> {
         self.entries.get(&language.to_lowercase())
+    }
+
+    /// 注册或覆盖语言的 codepage 配置
+    pub fn register(&mut self, language: &str, config: CodepageConfig) {
+        self.entries.insert(language.to_lowercase(), config);
+    }
+
+    /// 使用特定的强制代码页覆盖某个语言条目（如 "utf8", "936", "1252" 等）
+    pub fn set_override(&mut self, language: &str, codepage: &str) {
+        if let Some(cfg) = CodepageConfig::from_name(codepage) {
+            self.entries.insert(language.to_lowercase(), cfg);
+        }
     }
 
     /// 根据语言名查询，找不到则返回 UTF-8 默认

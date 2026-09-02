@@ -1392,3 +1392,78 @@ export async function toolboxLoadExceptionWords(
 export async function toolboxGetExceptionWords(): Promise<string[]> {
   return invoke("toolbox_get_exception_words");
 }
+
+// ── DEF_UI 组件标签生成器 ──────────────────────────────────────
+
+export interface DefUiOptionsDto {
+  use_source_for_string: boolean;
+  use_source_for_components: boolean;
+  clean_components: boolean;
+  clean_base: boolean;
+  add_weight: boolean;
+  format_full: string;
+  format_weight: string;
+  clean_base_regex: string;
+  clean_compo_regex: string;
+  use_custom_indicators: boolean;
+  custom_indicators: string;
+  ignore_list: string[];
+}
+
+export interface DefUiGenerateRequestDto {
+  options: DefUiOptionsDto;
+  scope: "all" | "only_untranslated" | "only_selected";
+  selected_ids: number[];
+  dry_run: boolean;
+}
+
+export interface DefUiGenerateResultDto {
+  matched_count: number;
+  modified_count: number;
+  skipped_count: number;
+  sample_previews: Array<[string, string]>;
+}
+
+export async function getDefaultDefUiOptions(game?: string): Promise<DefUiOptionsDto> {
+  return invoke("get_default_def_ui_options", { game });
+}
+
+export async function applyDefUiGenerator(
+  request: DefUiGenerateRequestDto,
+): Promise<DefUiGenerateResultDto> {
+  return invoke("apply_def_ui_generator", { request });
+}
+
+export interface CodepageInfoDto {
+  currentCodepage: string;
+  supportedCodepages: string[];
+}
+
+export interface AddIdRequestDto {
+  offsetValue: number;
+  applyToFormId: boolean;
+  scope: "all" | "only_untranslated" | "only_selected";
+  selectedIds?: number[];
+}
+
+export interface AddIdResultDto {
+  modifiedCount: number;
+  totalProcessed: number;
+}
+
+export async function applyAddIdOffset(
+  request: AddIdRequestDto,
+): Promise<AddIdResultDto> {
+  return invoke("apply_add_id_offset", { request });
+}
+
+export async function getCodepageInfo(): Promise<CodepageInfoDto> {
+  return invoke("get_codepage_info");
+}
+
+export async function reloadWithCodepage(
+  codepage: string,
+): Promise<LoadEspResponse> {
+  return invoke("reload_with_codepage", { codepage });
+}
+

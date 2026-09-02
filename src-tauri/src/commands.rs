@@ -27,10 +27,11 @@ use xt_core::xml::{
 };
 use xt_shared::dto::{
     ApplyCacheResponse, AutoBackupRequest, AutoBackupResponse, BatchConfig, BatchEntry,
-    BatchStatus, BsaFileEntryDto, BsaFileListDto, CheckPendingCacheResponse, CtdaFuncDto,
-    DataConfigsDto, DialogInfoDto, DialogTreeDto, EspComparePairDto, EspCompareResultDto,
-    EspLoadProgress, FieldSizeInfoDto, FinalizeRequest, FinalizeResponse, FuzLipDataResponse,
-    FuzMapping, FuzScanResponse, HeuristicMatchDTO, HeuristicSearchRequest, InjectArchiveRequest,
+    BatchStatus, BsaFileEntryDto, BsaFileListDto, CheckPendingCacheResponse, CodepageInfoDto,
+    CtdaFuncDto, DataConfigsDto, DialogInfoDto, DialogTreeDto, EspComparePairDto,
+    EspCompareResultDto, EspLoadProgress, FieldSizeInfoDto, FinalizeRequest, FinalizeResponse,
+    FuzLipDataResponse, FuzMapping, FuzScanResponse, HeuristicMatchDTO, HeuristicSearchRequest,
+    InjectArchiveRequest,
     InjectArchiveResponse, LipDataDto,
     LipKeyframeDto, LoadEspResponse, LoadSstResponse,
     McmComparePolicy, McmCompareRequest, McmCompareResult, McmEntryDto, McmFileDto, McmSaveRequest,
@@ -56,6 +57,8 @@ pub struct EspFileInfo {
     pub strings_dir: Option<String>,
     /// 字符串文件的语言标识（如 "english", "chinese"）
     pub language: String,
+    /// 强制覆盖的代码页（如果用户手动选择了代码页）
+    pub forced_codepage: Option<String>,
 }
 
 /// 应用状态：持有所有加载的文件数据
@@ -652,6 +655,7 @@ pub async fn load_esp(
         esp_path: esp_path.clone(),
         strings_dir,
         language: language.unwrap_or_else(|| "english".to_string()),
+        forced_codepage: None,
     });
 
     // 复用解析时构建的 ESP 树（避免重复解析）
@@ -3337,6 +3341,246 @@ pub async fn spell_check_ignore(
     checker
         .save_ignore_list(&resolved_ignore_path.to_string_lossy())
         .map_err(|e| e.to_string())
+}
+
+// ── DEF_UI / Component Generator Commands (DP-10) ───────────────────
+
+use xt_core::def_ui::{generate_def_ui_translations, DefUiOptions};
+use xt_shared::dto::{DefUiApplyResultDto, DefUiItemPreviewDto, DefUiOptionsDto};
+
+/// 获取针对特定游戏的默认 DEF_UI 配置
+#[tauri::command]
+pub fn get_default_def_ui_options(game: Option<String>) -> Result<DefUiOptionsDto, String> {
+    let game_id = match game.as_deref() {
+        Some("Skyrim") => xt_core::types::game_id::GameId::Skyrim,
+        Some("SkyrimSE") => xt_core::types::game_id::GameId::SkyrimSE,
+        Some("Fallout4") => xt_core::types::game_id::GameId::Fallout4,
+        Some("FalloutNV") => xt_core::types::game_id::GameId::FalloutNV,
+        Some("Fallout76") => xt_core::types::game_id::GameId::Fallout76,
+        Some("Starfield") => xt_core::types::game_id::GameId::Starfield,
+        _ => xt_core::types::game_id::GameId::Fallout4,
+    };
+    let opts = DefUiOptions::for_game(game_id);
+    Ok(DefUiOptionsDto {
+        use_source_for_string: opts.use_source_for_string,
+        use_source_for_components: opts.use_source_for_components,
+        clean_base: opts.clean_base,
+        clean_compo: opts.clean_compo,
+        add_quantity: opts.add_quantity,
+        use_first_char: opts.use_first_char,
+        do_auto_header: opts.do_auto_header,
+        regex_clean_base: opts.regex_clean_base,
+        regex_clean_compo: opts.regex_clean_compo,
+        template: opts.template,
+        template_with_weight: opts.template_with_weight,
+        component_separator: opts.component_separator,
+        quantity_indicator1: opts.quantity_indicator1,
+        quantity_indicator2: opts.quantity_indicator2,
+        ignore_list: opts.ignore_list,
+        scope: opts.scope,
+    })
+}
+
+/// 预览或应用 DEF_UI 组件生成器
+#[tauri::command]
+pub fn apply_def_ui_generator(
+    state: tauri::State<'_, Arc<AppState>>,
+    options: DefUiOptionsDto,
+    selected_ids: Option<Vec<u32>>,
+    preview_only: bool,
+) -> Result<DefUiApplyResultDto, String> {
+    let mut strings = state.strings.lock().map_err(|e| e.to_string())?;
+    let esp_file_guard = state.esp_file.lock().map_err(|e| e.to_string())?;
+    let esp_file = esp_file_guard.as_ref();
+
+    let def_opts = DefUiOptions {
+        use_source_for_string: options.use_source_for_string,
+        use_source_for_components: options.use_source_for_components,
+        clean_base: options.clean_base,
+        clean_compo: options.clean_compo,
+        add_quantity: options.add_quantity,
+        use_first_char: options.use_first_char,
+        do_auto_header: options.do_auto_header,
+        regex_clean_base: options.regex_clean_base,
+        regex_clean_compo: options.regex_clean_compo,
+        template: options.template,
+        template_with_weight: options.template_with_weight,
+        component_separator: options.component_separator,
+        quantity_indicator1: options.quantity_indicator1,
+        quantity_indicator2: options.quantity_indicator2,
+        ignore_list: options.ignore_list,
+        scope: options.scope,
+    };
+
+    let selected_set = selected_ids.map(|ids| ids.into_iter().collect());
+
+    let (mutations, total_misc) = generate_def_ui_translations(
+        &strings,
+        esp_file,
+        &def_opts,
+        selected_set.as_ref(),
+        GameId::Fallout4,
+    );
+
+    let mut details = Vec::new();
+    let modified_count = mutations.len() as u32;
+
+    for (str_id, new_trans, orig) in &mutations {
+        let sk_opt = strings.iter().find(|s| s.id == *str_id);
+        let form_id = sk_opt.map(|s| s.esp_ptr.form_id).unwrap_or(0);
+        let edid = sk_opt.and_then(|s| s.edid.clone()).unwrap_or_default();
+        details.push(DefUiItemPreviewDto {
+            string_id: *str_id,
+            form_id,
+            edid,
+            original: orig.clone(),
+            generated: new_trans.clone(),
+        });
+    }
+
+    if !preview_only {
+        for (str_id, new_trans, _) in mutations {
+            if let Some(sk) = strings.iter_mut().find(|s| s.id == str_id) {
+                sk.translation = new_trans;
+                sk.params.set(SkyStringParams::TRANSLATED, true);
+            }
+        }
+    }
+
+    Ok(DefUiApplyResultDto {
+        modified_count,
+        total_misc_records: total_misc,
+        details,
+    })
+}
+
+// ── Codepage Override & Reload Commands ─────────────────────────────
+
+/// 获取当前文件的代码页信息与所有支持的代码页列表
+#[tauri::command]
+pub fn get_codepage_info(
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<CodepageInfoDto, String> {
+    let file_info_guard = state.file_info.lock().map_err(|e| e.to_string())?;
+    let current_codepage = if let Some(info) = file_info_guard.as_ref() {
+        if let Some(forced) = &info.forced_codepage {
+            forced.clone()
+        } else {
+            let cp_table = state.codepage_table.lock().map_err(|e| e.to_string())?;
+            if let Some(table) = cp_table.as_ref() {
+                table
+                    .get(&info.language)
+                    .map(|c| c.primary.to_string())
+                    .unwrap_or_else(|| "utf8".to_string())
+            } else {
+                "utf8".to_string()
+            }
+        }
+    } else {
+        "utf8".to_string()
+    };
+
+    let supported_codepages = xt_core::strings::codepage::SUPPORTED_CODEPAGES
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+
+    Ok(CodepageInfoDto {
+        current_codepage,
+        supported_codepages,
+    })
+}
+
+/// 强制使用指定代码页重新解析当前已加载的 ESP 文件
+#[tauri::command]
+pub async fn reload_with_codepage(
+    window: tauri::Window,
+    state: tauri::State<'_, Arc<AppState>>,
+    codepage: String,
+) -> Result<LoadEspResponse, String> {
+    let (esp_path, strings_dir, language) = {
+        let file_info = state.file_info.lock().map_err(|e| e.to_string())?;
+        let info = file_info.as_ref().ok_or_else(|| "No ESP file currently loaded".to_string())?;
+        (info.esp_path.clone(), info.strings_dir.clone(), info.language.clone())
+    };
+
+    // 更新/覆盖当前 AppState 中的 codepage_table
+    {
+        let mut cp_table = state.codepage_table.lock().map_err(|e| e.to_string())?;
+        if let Some(table) = cp_table.as_mut() {
+            table.set_override(&language, &codepage);
+        } else {
+            let mut table = CodepageTable::new();
+            table.set_override(&language, &codepage);
+            *cp_table = Some(table);
+        }
+    }
+
+    // 调用内部 load_esp 重新加载
+    let resp = load_esp(
+        window,
+        state.clone(),
+        esp_path,
+        strings_dir,
+        Some(language),
+        None,
+        None,
+    )
+    .await?;
+
+    // 记录 forced_codepage 到 file_info
+    {
+        let mut file_info = state.file_info.lock().map_err(|e| e.to_string())?;
+        if let Some(info) = file_info.as_mut() {
+            info.forced_codepage = Some(codepage);
+        }
+    }
+
+    Ok(resp)
+}
+
+/// 批量计算并应用 FormID 偏移
+#[tauri::command]
+pub fn apply_add_id_offset(
+    state: tauri::State<'_, Arc<AppState>>,
+    request: xt_shared::dto::AddIdRequestDto,
+) -> Result<xt_shared::dto::AddIdResultDto, String> {
+    let mut strings = state.strings.lock().map_err(|e| e.to_string())?;
+    let mut modified_count = 0u32;
+    let mut total_processed = 0u32;
+
+    let selected_set: Option<std::collections::HashSet<u32>> =
+        request.selected_ids.map(|ids| ids.into_iter().collect());
+
+    for s in strings.iter_mut() {
+        total_processed += 1;
+
+        // 根据范围过滤
+        let in_scope = match request.scope.as_str() {
+            "all" => true,
+            "only_selected" => selected_set.as_ref().map_or(false, |set| set.contains(&s.id)),
+            _ => s.translation.is_empty(), // "only_untranslated"
+        };
+
+        if !in_scope {
+            continue;
+        }
+
+        if request.apply_to_form_id {
+            let old_id = s.esp_ptr.form_id;
+            let new_id = xt_core::add_id::calculate_offset_form_id(old_id, request.offset_value);
+            if new_id != old_id {
+                s.esp_ptr.form_id = new_id;
+                s.params.set(SkyStringParams::TRANSLATED, true);
+                modified_count += 1;
+            }
+        }
+    }
+
+    Ok(xt_shared::dto::AddIdResultDto {
+        modified_count,
+        total_processed,
+    })
 }
 
 // ── Header Processor Commands ──────────────────────────────────────

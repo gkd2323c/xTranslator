@@ -72,4 +72,8 @@ ui/e2e/.auth/
 skyrim_strings.txt
 test_output.txt
 test_output2.txt
-\".reasonix/\" 
+.reasonix/
+.a2a/
+.serena/
+codegraph-mcp.bat
+codegraph-watch.ps1

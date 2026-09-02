@@ -10,6 +10,8 @@ mod command_processor;
 use crate::batch::BatchExecutor;
 use crate::command_processor::run_command_processor;
 use commands::{
+    apply_def_ui_generator, get_default_def_ui_options,
+    get_codepage_info, reload_with_codepage, apply_add_id_offset,
     apply_translation_cache, auto_backup_sst, batch_update_translations, build_dialog_tree,
     cancel_batch_job, cancel_string_batch_translate, check_aliases, check_pending_cache,
     colab_assign, colab_filter, colab_get_labels, colab_set_label, compare_esp_files,
@@ -148,6 +150,11 @@ fn main() {
             colab_assign,
             colab_filter,
             // 头部处理器
+            get_default_def_ui_options,
+            apply_def_ui_generator,
+            get_codepage_info,
+            reload_with_codepage,
+            apply_add_id_offset,
             header_rules_load,
             header_rules_list,
             header_rules_toggle,

@@ -987,6 +987,10 @@ export function MenuBar() {
         { label: t("mcm.title"), onClick: () => setActivePanel("mcm") },
         { label: t("espCompare.title"), onClick: () => setActivePanel("espCompare") },
         { label: t("dataConfigs.title"), onClick: () => setActivePanel("dataConfigs") },
+        { label: "DEF_UI / Component Generator", onClick: () => setActivePanel("defUiGen") },
+        { label: "选择代码页 / 强制编码重载 (Codepage)", onClick: () => setActivePanel("chooseCp") },
+        { label: "FormID 批量偏移工具 (AddId)", onClick: () => setActivePanel("addId") },
+        { label: "RTL 实时预览 / 字符重塑 (RTL Preview)", onClick: () => setActivePanel("rtlPreview") },
       ],
     },
     {

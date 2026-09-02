@@ -536,6 +536,30 @@ impl EspFile {
         Ok(())
     }
 
+    /// 根据 FormID 在所有 GRUP 中递归查找记录
+    pub fn find_record_by_form_id(&self, form_id: u32) -> Option<&EspRecord> {
+        for grup in &self.top_level_grups {
+            if let Some(rec) = Self::find_record_in_grup(grup, form_id) {
+                return Some(rec);
+            }
+        }
+        None
+    }
+
+    fn find_record_in_grup<'a>(grup: &'a EspGrup, form_id: u32) -> Option<&'a EspRecord> {
+        for rec in &grup.records {
+            if rec.record_header_data.form_id == form_id {
+                return Some(rec);
+            }
+        }
+        for sub_grup in &grup.children {
+            if let Some(rec) = Self::find_record_in_grup(sub_grup, form_id) {
+                return Some(rec);
+            }
+        }
+        None
+    }
+
     /// 将 ESP 文件保存到磁盘（自动备份）
     ///
     /// 写入前在 `<path>.backup.<timestamp>` 创建原始文件备份，

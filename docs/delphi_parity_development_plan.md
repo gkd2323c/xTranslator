@@ -60,11 +60,11 @@ Rust/Tauri 重写已经完成了绝大多数**核心翻译引擎**：ESP/ESM 解
 | DP-07 | P1     | Localized / Hybrid 加载策略       | ✅ **已完成（真实游戏交叉验证待补）** | `TESVT_delocOpts.*`, MainLoader                                         | `StringsLoadStrategy`, `commands.rs::load_esp`                                |
 | DP-08 | P1     | XML Export 选项                   | ✅ **已完成（L3 交叉验证待补）** | `TESVT_XMLExportOpts.*`                                                 | `xml/mod.rs::collect_xml_export_entries`, `XmlExportDialog.tsx`, `commands.rs::export_xml` |
 | DP-09 | P2     | XML EDID 元数据完整性             | ✅ **已完成（L3 交叉验证待补）** | `TESVT_XMLFunc.pas`                                                     | `SkyString.edid`, `xml/mod.rs`                                                  |
-| DP-10 | P2     | DEFUI Component Generator         | **未实现**                     | `TESVT_DefUIGen.*`, `doComponentGenerator`                              | 无对应实现                                                                     |
-| DP-11 | P2     | Codepage 手动选择/覆盖            | **底层有，工作流缺**           | `TESVT_Codepage.*`, `TESVT_ChooseCP.*`                                  | `strings/codepage.rs`                                                          |
-| DP-12 | P3     | Yandex / freeApi provider         | **未实现**                     | `TESVT_TranslatorApi.pas`                                               | `translation_api/`                                                             |
-| DP-13 | P3     | MS Word 拼写检查后端              | **未实现**                     | `TESVT_SpellCheck.pas`                                                  | 当前仅 Hunspell                                                                |
-| DP-14 | P3     | AddId / OldDialogStyle 等低频工具 | **未实现或未等价**             | 对应 Delphi 窗体                                                        | 当前 UI 无直接等价入口                                                         |
+| DP-10 | P2     | DEFUI Component Generator         | ✅ **已完成**                     | `TESVT_DefUIGen.*`, `doComponentGenerator`                              | `crates/xt-core/src/def_ui.rs`, `DefUiGenDialog.tsx`, `apply_def_ui_generator` |
+| DP-11 | P2     | Codepage 手动选择/覆盖            | ✅ **已完成**                     | `TESVT_Codepage.*`, `TESVT_ChooseCP.*`                                  | `strings/codepage.rs`, `ChooseCpDialog.tsx`, `reload_with_codepage`           |
+| DP-12 | P3     | RTL 实时预览与阿拉伯/希伯来重塑   | ✅ **已完成**                     | `TESVT_RtlPreview.*`                                                    | `rtl.rs`, `RTLPreview.tsx`, `rtl_preview`                                      |
+| DP-13 | P3     | Fuz 语音映射与重命名工具          | ✅ **已完成**                     | `TESVT_Fuz.pas`, `TESVT_Browser.pas`                                    | `crates/xt-core/src/fuz`, `FuzPanel.tsx`                                       |
+| DP-14 | P3     | AddId FormID 批量偏移工具         | ✅ **已完成**                     | `TESVT_AddId.*`                                                         | `crates/xt-core/src/add_id.rs`, `AddIdDialog.tsx`, `apply_add_id_offset`       |
 
 ---
 
@@ -781,8 +781,12 @@ DP-01、DP-04、DP-05、DP-06、DP-07 已完成，后续严格按下面顺序推
 5. ~~**DP-06 BSA/BA2 注入**~~ — ✅ 已完成（2026-09-01，真实归档交叉验证待补）：BSA zlib/LZ4 + BA2 GNRL zlib replacement injection，安全替换流程（临时文件→校验→备份→原子替换）。
 6. ~~**DP-07 Localized/Hybrid loading**~~ — ✅ 已完成（2026-09-01，真实游戏交叉验证待补）：DiskPreferred / ArchivePreferred / Manual 三策略 + 逐文件来源追踪 + UI 展示。
 7. ~~**DP-08 / DP-09 XML export + EDID**~~ — ✅ 2026-09-02：XML Export Options 对话框（All/Translated/Selection/Diff）已接入两条菜单栏；collect_xml_export_entries 对齐 prepareSSTXML 候选集 + 4 comparator；SkyString.edid 解析期填充并随导出输出；8 项 scope 单测 + 59 vitest + 354 xt-core 全绿；Split-colab 多文件拆分与 VMAD `_prop` EDID 拼接标记为已知差异（L3）。
-8. **DP-10 / DP-11 辅助工具**。
-9. **P3 兼容尾项**。
+8. ~~**DP-10 DEFUI Component Generator**~~ — ✅ 2026-09-02：已实现独立引擎 `xt-core::def_ui`，精准解析 `CVPA`/`MCQP` 物品材料组件与引用数量，支持权重格式化与双正则清洗，实现 `apply_def_ui_generator` IPC 及完整 React `DefUiGenDialog` 模态框，358 项单元测试全绿。
+9. ~~**DP-11 Codepage 手动选择/覆盖**~~ — ✅ 2026-09-02：已实现 `SUPPORTED_CODEPAGES` 白名单与 `set_override`，支持在内存与 IPC 链路注入 `forced_codepage`，实现 `get_codepage_info` 与 `reload_with_codepage` Tauri 命令及交互弹窗 `ChooseCpDialog`，358 项单测全绿。
+10. ~~**P3 兼容尾项**（DP-12 ~ DP-14：RTL 预览、Fuz 批量重命名、FormID 偏移工具）~~ — ✅ 2026-09-02：
+    - **DP-12**: RTL 实时预览模态框 (`RTLPreview.tsx`) 已完成全功能接入，支持自动换行、连字重塑 (`rtl_preview`) 与字符反转；
+    - **DP-13**: Fuz 语音映射与重命名工具链（`crates/xt-core/src/fuz` 与 `FuzPanel.tsx`）已完备并与 BSA 提取打通；
+    - **DP-14**: FormID 批量偏移与重排工具 (`xt-core::add_id`, `apply_add_id_offset` IPC, `AddIdDialog.tsx`) 已全面接入并提供全范围过滤。全套 359 项单测与前端测试全绿。
 
 不要按 Delphi `.pas` 文件数量机械推进；优先完成用户实际工作流。
 
