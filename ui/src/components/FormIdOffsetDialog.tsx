@@ -5,14 +5,14 @@ import { useAppStore } from '../stores/appStore';
 import { applyAddIdOffset } from '../api/strings';
 import toast from 'react-hot-toast';
 
-export const AddIdDialog: React.FC = () => {
+export const FormIdOffsetDialog: React.FC = () => {
   const activePanel = useAppStore((s) => s.activePanel);
   const setActivePanel = useAppStore((s) => s.setActivePanel);
   const selectedIds = useAppStore((s) => s.selectedIds);
   const loadAllStrings = useAppStore((s) => s.loadAllStrings);
   const addLog = useAppStore((s) => s.addLog);
 
-  const isOpen = activePanel === 'addId';
+  const isOpen = activePanel === 'formIdOffset';
   const onClose = () => setActivePanel(null);
 
   const [offsetStr, setOffsetStr] = useState<string>('0');

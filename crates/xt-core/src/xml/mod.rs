@@ -743,6 +743,16 @@ pub fn import_xml_to_sky_strings(
     crate::matching::apply_xml_dictionary_entries(strings, xml_entries)
 }
 
+/// 带应用策略的 XML 导入：processor 的 ImportXml 按与 SST 相同的
+/// scope / match_mode comparator 家族执行，未匹配条目不保留 OLD_DATA。
+pub fn import_xml_to_sky_strings_with_policy(
+    strings: &mut [SkyString],
+    xml_entries: &[XmlStringEntry],
+    policy: crate::matching::ApplyPolicy,
+) -> crate::matching::MatchResult {
+    crate::matching::apply_xml_dictionary_entries_with_policy(strings, xml_entries, policy)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -23,7 +23,8 @@ export type ActivePanel =
   | "dataConfigs"// 数据配置
   | "defUiGen"   // DEF_UI 组件标签生成器
   | "chooseCp"   // Codepage 代码页覆盖选择器
-  | "addId"      // FormID 批量偏移工具
+  | "formIdOffset" // FormID 批量偏移工具（Rust 新增，非 Delphi parity）
+  | "addIdToStrings" // Delphi AddIdToStrings 等价
   | "rtlPreview" // RTL 实时预览工具
   | null;        // 无面板打开
 

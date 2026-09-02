@@ -269,7 +269,9 @@ Rust/Tauri 重写已经完成了绝大多数**核心翻译引擎**：ESP/ESM 解
 
 #### 状态
 
-✅ **2026-09-01 完成。** 独立 Advanced Search 面板已实现，简单搜索框保留作为快速搜索；两者互斥（Advanced Search 激活时接管文本过滤）。Keyword 维度因依赖 ESP keyword 字典数据管道（与 DP-09 同源）标记为占位，不在 UI 上假装生效。
+✅ **2026-09-01 完成（Keyword 维度除外）。** 独立 Advanced Search 面板已实现，简单搜索框保留作为快速搜索；两者互斥（Advanced Search 激活时接管文本过滤）。Keyword 维度因依赖 ESP keyword 字典数据管道（与 DP-09 同源）标记为占位，不在 UI 上假装生效。
+
+**R-06 更新（2026-09-02）**：Delphi `getKwd`/`findKeyWord` 语义已侦察完毕（`TESVT_espDefinition.pas`），涉及 COBJ/OMOD/GBFM/INNR 等多记录类型的 keyword 提取逻辑。完整数据管道（record tree → SkyString keywords → 前端过滤）待后续实现；当前 UI 保持 disabled，文档明确标记为未完成。
 
 #### 原版能力
 
@@ -336,7 +338,7 @@ Rust/Tauri 重写已经完成了绝大多数**核心翻译引擎**：ESP/ESM 解
 
 #### 状态
 
-✅ **2026-09-01 完成（除 L3 交叉验证）。** 已直接对照仓库内 Delphi `TESVT_commandProcessor.dfm`、`TESVT_main.pas::batchCommands/runCommands` 落地完整白名单 parser，并把 processor 执行接入现有 ESP/SST/XML/Finalize 能力。全部 11 个原版命令均已有真实执行路径；剩余仅为原版示例/真实游戏文件的端到端交叉验证（L3）。
+✅ **2026-09-01 完成（R-04 于 2026-09-02 闭环；L3 交叉验证待补）。** 已直接对照仓库内 Delphi `TESVT_commandProcessor.dfm`、`TESVT_main.pas::batchCommands/runCommands` 落地完整白名单 parser，并把 processor 执行接入现有 ESP/SST/XML/Finalize 能力。全部 11 个原版命令均已有真实执行路径。R-04 经 `TESVT_main.pas::batcherImportFile` 核对确认 ImportXml 与 ApplySst/ImportSst 共用同一套 comparator 参数，已复用 `processor_sst_options` + `apply_xml_dictionary_entries_with_policy` 并删除 parity warning；scope/match_mode 矩阵单测已锁定。
 
 #### 原版能力
 
@@ -399,7 +401,7 @@ Rust/Tauri 重写已经完成了绝大多数**核心翻译引擎**：ESP/ESM 解
 - `Finalize` 已按 TES4 localized 标志分流：localized 插件只导出目标语言 Strings；非 localized 插件走 ESP 字段写回，避免把字符串 ID 型字段错误改成内联文本。
 - `CloseFile` / `CloseAll` 已清理 Rust 当前单活动 loader 的完整后端状态；由于 Rust 重写目前只有一个活动文件，两者在应用层效果等价。
 - `SaveDictionary` 已接通 SST 保存；存在 `Global_VocabFolder` 时按 Delphi `${addon}_${LangSource}_${LangDest}.sst` 命名。Rust 尚无 Delphi `SSTUserFolder` 全局设置，因此未提供该 fallback 时会明确报错而不是猜目录。
-- `ImportXml` 已可执行现有 Rust XML 导入，但当前 XML 管线仍使用通用 T1-T4 matcher；processor 的 `0/1/2` EDID/Strict/Relax comparator 语义依赖 DP-09 XML EDID/FormID 元数据闭环。执行报告会显式返回 warning，不宣称已经等价。
+- `ImportXml` 已接入高级 SST comparator 家族（R-04，2026-09-02）：经 `TESVT_main.pas::batcherImportFile` 核对，ImportXml 与 ApplySst/ImportSst 共用同一套参数（param1 → `getfProcCompareOpt` 五档 overwrite scope，param2 → `getProcSortCompare` 四档 match mode），执行函数为 `XMLImportbase`；Rust 侧 processor ImportXml 现复用 `processor_sst_options` 映射并经 `apply_xml_dictionary_entries_with_policy` 执行，未匹配 XML 条目不保留 OLD_DATA（与 Delphi XMLImportbase 一致）。scope/match_mode 矩阵已有单测锁定；执行时不再发 parity warning。旧文档所述“`0/1/2` EDID/Strict/Relax”实为 UI 菜单路径（`importXMLDirect` 使用全局 `iApplySSTModeOpt`）的描述，processor 路径并不使用该语义。
 - `Global_ImportFolder` 已接入 import 路径解析；`Global_ExportFolder` 在 Rust 中作为显式输出基目录使用。需注明：Delphi 当前 `runCommands()` 虽解析该字段，但实际 `Finalize` 路径没有消费它，因此这是兼容脚本字段的现代化补全，不作为逐字节 parity 依据。
 - 新增独立 `CommandProcessorDialog`：支持 `.txt` 打开/保存、localStorage 草稿恢复、Data 目录选择、Stop/Continue 策略、实时执行日志、失败/警告报告；现有现代 `BatchPanel` 保持不变。
 - processor 执行结果会返回最后的活动文件上下文；前端同步 `espPath` / `stringsDir` / `currentGame`，脚本 `CloseFile/CloseAll` 后也会清除旧上下文，避免后端与 UI 状态漂移。
@@ -407,7 +409,6 @@ Rust/Tauri 重写已经完成了绝大多数**核心翻译引擎**：ESP/ESM 解
 - **`ApiTranslation`**：按 Delphi `aApiBaseName` 数字 ID 映射到 Rust provider（0→azure、2→baidu、3→youdao、5→google、6→deepl、7→openai；1=Yandex、4=freeApi 明确报"未实现"，不猜映射）。候选集按 Delphi `StartApiTranslationArray(false,...)` 的 `compareOptNoTransAndPartialsExLocked` 语义排除 VMAD/locked/translated/incomplete/validated；等源字符串复用同一次 API 结果；成功后重置状态为 incomplete。`noTransOnly=1` 的 NoTranslation 预标记请求会显式返回 warning（Rust 无 lRulesNoTransListIn/Out 规则集）。
 - **`GenerateDictionaries`**：读取 `Data/<Game>/vocabulary.txt` 的 STRINGS= 列表，逐个加载插件、按目标语言 Strings 回填翻译、按 Delphi `${addon}_${LangSource}_${LangDest}.sst` 命名生成 SST 到 `Global_VocabFolder`。执行前对当前 AppState 做快照、结束后恢复，避免污染用户正在编辑的工作区。
 - **`LoadMasters`**：解析当前插件 TES4 声明的 masters，把继承的 FormID（本插件内无 EDID 的字符串）按 master slot 解析回 EDID 并回填 `sk.edid` / `edid_hash`。非 Starfield 按 Delphi 高字节规则，Starfield 按 FE/FD 与 normal/medium/light 分桶重建 owner slot（对齐 Delphi `buildInheritedData` 的 `getPluginType` 语义）。
-- `ImportXml` 已可执行现有 Rust XML 导入，但当前 XML 管线仍使用通用 T1-T4 matcher；processor 的 `0/1/2` EDID/Strict/Relax comparator 语义依赖 DP-09 XML EDID/FormID 元数据闭环。执行报告会显式返回 warning，不宣称已经等价。
 
 #### 当前验证
 
@@ -424,7 +425,7 @@ Rust/Tauri 重写已经完成了绝大多数**核心翻译引擎**：ESP/ESM 解
 #### 下一步（L3）
 
 1. 用原版 Delphi processor 示例和真实 Skyrim SE 文件跑 `LoadFile → ApplySst/ImportXml → Finalize → CloseFile` 端到端交叉验证，并锁成 fixture/E2E。
-2. 随 DP-09 补齐 processor `ImportXml` 的 EDID/Strict/Relax comparator 语义及 fake `[FormID]` EDID hash 规则。
+2. ~~随 DP-09 补齐 processor `ImportXml` 的 comparator 语义~~ → 已随 R-04 闭环（2026-09-02）；Delphi fake `[FormID]` EDID hash 规则若在真实样本中发现差异再补。
 
 #### 验收
 

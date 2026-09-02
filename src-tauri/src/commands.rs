@@ -21,7 +21,8 @@ use xt_core::types::game_id::GameId;
 use xt_core::types::params::SkyStringParams;
 use xt_core::types::sky_string::SkyString;
 use xt_core::xml::{
-    collect_xml_export_entries, import_xml_to_sky_strings, parse_xml_file,
+    collect_xml_export_entries, import_xml_to_sky_strings, import_xml_to_sky_strings_with_policy,
+    parse_xml_file,
     sky_strings_to_xml_entries, write_xml_file, XmlExportOptions, XmlExportScope,
     XmlExportParams,
 };
@@ -57,6 +58,10 @@ pub struct EspFileInfo {
     pub strings_dir: Option<String>,
     /// 字符串文件的语言标识（如 "english", "chinese"）
     pub language: String,
+    /// 当前已解析的游戏上下文（可信来源：TES4 检测或用户显式选择）
+    pub game: Option<String>,
+    /// 当前 Strings 加载策略（"disk" | "archive" | "manual"）
+    pub strings_strategy: Option<String>,
     /// 强制覆盖的代码页（如果用户手动选择了代码页）
     pub forced_codepage: Option<String>,
 }
@@ -279,7 +284,7 @@ fn append_old_data_entries(entries: &mut Vec<SkyString>, old_data: &[SkyString])
 /// - 解析会覆盖当前 `AppState.strings`（相当于重新打开文件）。
 /// - 若提供 `strings_dir`，会尝试加载对应语言的 STRINGS 文件。
 /// - 返回值中的统计信息用于前端侧边栏和加载反馈。
-/// - 先检查本地缓存（基于 ESP 文件 SHA-256 哈希），命中则直接返回。
+/// - 先检查本地缓存（基于 ESP 文件 SHA-256 哈希 + 加载上下文），命中则直接返回。
 /// - 通过 Tauri 事件系统实时发送进度更新。
 ///
 /// 参数：
@@ -287,6 +292,8 @@ fn append_old_data_entries(entries: &mut Vec<SkyString>, old_data: &[SkyString])
 /// - `strings_dir`: Strings 文件所在目录（可选，默认使用 ESP 所在目录）
 /// - `language`: 字符串文件的语言标识（可选，默认 "english"）
 /// - `game`: 游戏类型（可选，用于加载正确的 record_defs）
+/// - `strings_strategy`: Strings 来源策略（"disk" | "archive" | "manual"，可选默认 disk）
+/// - `forced_codepage`: 强制代码页（可选，如 "936"/"1252"/"utf8"，进入实际解码路径）
 ///
 /// 返回：
 /// - `LoadEspResponse`: 包含解析统计和缓存状态
@@ -295,6 +302,31 @@ fn append_old_data_entries(entries: &mut Vec<SkyString>, old_data: &[SkyString])
 /// - 文件不存在或无读权限 → 返回错误
 /// - 文件格式无效 → 返回错误
 /// - Strings 文件加载失败 → 继续（不中断主流程）
+/// 加载上下文的复合缓存键哈希。
+///
+/// 同一 ESP 在不同语言 / Strings 目录 / 加载策略 / 强制代码页下解码结果不同，
+/// 这些维度必须全部纳入 cache identity，否则缓存命中会返回旧解码结果。
+fn load_context_hash(
+    game: Option<&str>,
+    language: &str,
+    strings_dir: Option<&str>,
+    strategy: &str,
+    forced_codepage: Option<&str>,
+) -> String {
+    use std::hash::{Hash, Hasher};
+    let context = format!(
+        "{}|{}|{}|{}|{}",
+        game.unwrap_or(""),
+        language,
+        strings_dir.unwrap_or(""),
+        strategy,
+        forced_codepage.unwrap_or(""),
+    );
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    context.hash(&mut h);
+    format!("{:016x}", h.finish())
+}
+
 #[tauri::command]
 pub async fn load_esp(
     window: tauri::Window,
@@ -304,6 +336,7 @@ pub async fn load_esp(
     language: Option<String>,
     game: Option<String>,
     strings_strategy: Option<String>,
+    forced_codepage: Option<String>,
 ) -> Result<LoadEspResponse, String> {
     let esp_path_clone = esp_path.clone();
     let strings_dir_clone = strings_dir.clone();
@@ -314,9 +347,33 @@ pub async fn load_esp(
     )
     .ok_or_else(|| format!("invalid strings strategy: {:?}", strings_strategy))?;
 
+    // 解析强制代码页配置（进入 StringsFiles 解码路径，而非只写入 AppState）
+    let forced_cp_config = forced_codepage
+        .as_deref()
+        .map(|cp| {
+            let lang = language.as_deref().unwrap_or("english");
+            xt_core::strings::codepage::CodepageConfig::from_name(cp)
+                .ok_or_else(|| format!("unknown codepage: {cp}"))
+                .map(|cfg| (lang.to_string(), cfg))
+        })
+        .transpose()?;
+
     let c_dir = cache_dir();
 
+    // 缓存上下文：同一 ESP 在不同语言/Strings 目录/策略/强制代码页下是不同的解码结果，
+    // 必须全部纳入 cache identity，否则会返回旧语言/旧编码的字符串缓存。
+    let cache_context_hash = load_context_hash(
+        game.as_deref(),
+        language.as_deref().unwrap_or("english"),
+        strings_dir.as_deref(),
+        strategy.as_str(),
+        forced_codepage.as_deref(),
+    );
+
     // ESP 解析是 CPU 密集型任务，放到阻塞线程池里执行，避免卡住异步运行时。
+    let game_for_state = game.clone();
+    let strategy_for_state = strings_strategy.clone();
+    let forced_cp_for_state = forced_codepage.clone();
     let result = tokio::task::spawn_blocking(
         move || -> Result<(Vec<SkyString>, LoadEspResponse, Option<EspFile>), String> {
             let start = std::time::Instant::now();
@@ -333,7 +390,9 @@ pub async fn load_esp(
                 .or_else(|| xt_core::cache::hash_file(esp_path_ref).ok());
 
             if let Some(ref hash) = file_hash {
-                if let Some(cached) = cache.lookup(hash) {
+                // 复合缓存键：ESP 内容哈希 + 加载上下文哈希
+                let cache_key = format!("{hash}.{cache_context_hash}");
+                if let Some(cached) = cache.lookup(&cache_key) {
                     let _ = window.emit(
                         "esp-load-progress",
                         EspLoadProgress {
@@ -349,7 +408,7 @@ pub async fn load_esp(
                     );
 
                     let total = cached.strings.len() as u32;
-                    let record_counts = cache.compute_record_counts(hash).unwrap_or_default();
+                    let record_counts = cache.compute_record_counts(&cache_key).unwrap_or_default();
 
                     // 缓存命中：字符串已就绪，但 ESP 树仍需构建（write-back 需要）
                     // 在阻塞线程内解析文件结构以构建记录树
@@ -464,28 +523,45 @@ pub async fn load_esp(
 
             let mut strings_loaded = 0u8;
 
+            // 解码路径的 codepage 表：codepage.txt 基表 + 强制 override。
+            // forced_codepage 必须真正进入 StringsFiles 解码，而非只存在 AppState。
+            let decode_table = {
+                let mut table = codepage_table.unwrap_or_default();
+                if let Some((ref lang_name, ref cfg)) = forced_cp_config {
+                    table.register(lang_name, cfg.clone());
+                }
+                table
+            };
+
             if strategy == StringsLoadStrategy::Manual {
-                // Manual 策略：调用方负责提供已解析的 StringsFiles，此处保持空集
-                parser.strings_files = StringsFiles::default();
+                // Manual 策略：禁止自动发现，但必须读取用户显式选择的目录。
+                match strings_dir_clone.as_deref() {
+                    Some(dir) => {
+                        let dir_path = std::path::Path::new(dir);
+                        parser.strings_files = StringsFiles::load_from_dir_with_strategy(
+                            dir_path,
+                            base_name,
+                            lang,
+                            Some(&decode_table),
+                            strategy,
+                        );
+                        strings_loaded = parser.strings_files.loaded_count() as u8;
+                    }
+                    None => {
+                        return Err(
+                            "Manual strings strategy requires an explicit strings directory; please select one".to_string(),
+                        );
+                    }
+                }
             } else if let Some(ref dir) = strings_dir_clone {
                 let dir_path = std::path::Path::new(dir);
-                if let Some(ref table) = codepage_table {
-                    parser.strings_files = StringsFiles::load_from_dir_with_strategy(
-                        dir_path,
-                        base_name,
-                        lang,
-                        Some(table),
-                        strategy,
-                    );
-                } else {
-                    parser.strings_files = StringsFiles::load_from_dir_with_strategy(
-                        dir_path,
-                        base_name,
-                        lang,
-                        None,
-                        strategy,
-                    );
-                }
+                parser.strings_files = StringsFiles::load_from_dir_with_strategy(
+                    dir_path,
+                    base_name,
+                    lang,
+                    Some(&decode_table),
+                    strategy,
+                );
                 strings_loaded = parser.strings_files.loaded_count() as u8;
             }
 
@@ -493,23 +569,13 @@ pub async fn load_esp(
                 let esp_dir = std::path::Path::new(&esp_path_clone)
                     .parent()
                     .unwrap_or_else(|| std::path::Path::new("."));
-                if let Some(ref table) = codepage_table {
-                    parser.strings_files = StringsFiles::load_from_dir_with_strategy(
-                        esp_dir,
-                        base_name,
-                        lang,
-                        Some(table),
-                        strategy,
-                    );
-                } else {
-                    parser.strings_files = StringsFiles::load_from_dir_with_strategy(
-                        esp_dir,
-                        base_name,
-                        lang,
-                        None,
-                        strategy,
-                    );
-                }
+                parser.strings_files = StringsFiles::load_from_dir_with_strategy(
+                    esp_dir,
+                    base_name,
+                    lang,
+                    Some(&decode_table),
+                    strategy,
+                );
                 strings_loaded = parser.strings_files.loaded_count() as u8;
             }
 
@@ -592,13 +658,15 @@ pub async fn load_esp(
 
             // 存储解析结果到 SQLite 缓存（静默失败，不影响主流程）
             if let Some(ref hash) = file_hash {
+                // 复合缓存键：不同加载上下文各自独立存储，互不污染
+                let cache_key = format!("{hash}.{cache_context_hash}");
                 let cache_payload = xt_core::sqlite_cache::CachePayload {
                     version: 2,
                     strings: parser.strings.clone(),
                     compressed_records,
                     strings_loaded,
                 };
-                let _ = cache.store(hash, &cache_payload);
+                let _ = cache.store(&cache_key, &cache_payload);
                 // 更新索引：下次加载时通过 mtime+size 直接获取哈希
                 cache_index.store(esp_path_ref, hash);
                 cache_index.save(&c_dir);
@@ -655,7 +723,9 @@ pub async fn load_esp(
         esp_path: esp_path.clone(),
         strings_dir,
         language: language.unwrap_or_else(|| "english".to_string()),
-        forced_codepage: None,
+        game: game_for_state,
+        strings_strategy: strategy_for_state,
+        forced_codepage: forced_cp_for_state,
     });
 
     // 复用解析时构建的 ESP 树（避免重复解析）
@@ -1670,6 +1740,7 @@ pub async fn import_xml(
     window: tauri::Window,
     state: tauri::State<'_, Arc<AppState>>,
     xml_path: String,
+    options: Option<SstApplyOptionsDto>,
 ) -> Result<XmlImportResponse, String> {
     emit_xml_progress(&window, "parsing", 0, 2, "Parsing XML file...");
 
@@ -1687,8 +1758,60 @@ pub async fn import_xml(
         &format!("Merging {} entries...", total),
     );
 
+    // Delphi batcherImportFile：ImportXml 与 ApplySst/ImportSst 共用同一套
+    // comparator 参数（param1 → 五档 overwrite scope，param2 → 四档 match mode）。
+    // 提供了 options 时按高级策略执行；未提供时保持通用 T1-T4 匹配（UI 菜单路径）。
+    let provided_options = options.is_some();
+    let policy = match options {
+        Some(opts) => {
+            let core_scope = match opts.overwrite_scope {
+                SstOverwriteScopeDto::All => xt_core::matching::SstOverwriteScope::All,
+                SstOverwriteScopeDto::NoTransExclusive => {
+                    xt_core::matching::SstOverwriteScope::NoTransExclusive
+                }
+                SstOverwriteScopeDto::NoTransAndPartial => {
+                    xt_core::matching::SstOverwriteScope::NoTransAndPartial
+                }
+                SstOverwriteScopeDto::PartialOnly => {
+                    xt_core::matching::SstOverwriteScope::PartialOnly
+                }
+                SstOverwriteScopeDto::Selection => {
+                    xt_core::matching::SstOverwriteScope::Selection
+                }
+            };
+            let core_mode = match opts.match_mode {
+                SstMatchModeDto::FormIdOnly => xt_core::matching::SstMatchMode::FormIdOnly,
+                SstMatchModeDto::FormIdStrictString => {
+                    xt_core::matching::SstMatchMode::FormIdStrictString
+                }
+                SstMatchModeDto::FormIdRelaxedString => {
+                    xt_core::matching::SstMatchMode::FormIdRelaxedString
+                }
+                SstMatchModeDto::StringOnly => xt_core::matching::SstMatchMode::StringOnly,
+            };
+            let mut p = ApplyPolicy::sst_load_with_options(xt_core::matching::SstApplyOptions {
+                overwrite_scope: core_scope,
+                match_mode: core_mode,
+                tag_only: opts.tag_only,
+                reset_state: opts.reset_state,
+                restrict_to_filter: opts.restrict_to_filter,
+                selected_ids: opts.selected_ids,
+                filtered_ids: opts.filtered_ids,
+            });
+            p.same_language = opts.same_language;
+            // XML 导入不保留未匹配条目（Delphi XMLImportbase 无 OLD_DATA 路径）
+            p.preserve_old_data = false;
+            p
+        }
+        None => ApplyPolicy::default(),
+    };
+
     let mut strings = state.strings.lock().map_err(|e| e.to_string())?;
-    let result = import_xml_to_sky_strings(&mut strings, &xml_entries);
+    let result = if provided_options {
+        import_xml_to_sky_strings_with_policy(&mut strings, &xml_entries, policy)
+    } else {
+        import_xml_to_sky_strings(&mut strings, &xml_entries)
+    };
 
     emit_xml_progress(&window, "done", 2, 2, "Import complete");
 
@@ -3346,7 +3469,44 @@ pub async fn spell_check_ignore(
 // ── DEF_UI / Component Generator Commands (DP-10) ───────────────────
 
 use xt_core::def_ui::{generate_def_ui_translations, DefUiOptions};
-use xt_shared::dto::{DefUiApplyResultDto, DefUiItemPreviewDto, DefUiOptionsDto};
+use xt_shared::dto::{
+    def_ui_scope, DefUiApplyRequestDto, DefUiApplyResultDto, DefUiItemPreviewDto,
+    DefUiOptionsDto,
+};
+
+/// Map shared scope constant to core internal scope alias.
+fn core_scope_from_shared(scope: &str) -> Result<&'static str, String> {
+    match scope {
+        def_ui_scope::ALL => Ok("all"),
+        def_ui_scope::ONLY_UNTRANSLATED => Ok("untranslated"),
+        def_ui_scope::ONLY_SELECTED => Ok("selection"),
+        other => Err(format!(
+            "Unknown DefUI scope: `{other}` (expected one of: {} / {} / {})",
+            def_ui_scope::ALL,
+            def_ui_scope::ONLY_UNTRANSLATED,
+            def_ui_scope::ONLY_SELECTED
+        )),
+    }
+}
+
+/// Resolve GameId for game-specific DefUI rules.
+/// Priority: explicit request value → TES4 form-version detection of loaded ESP.
+fn resolve_def_ui_game_id(
+    game: Option<&str>,
+    esp_file: Option<&EspFile>,
+) -> Result<GameId, String> {
+    if let Some(g) = game {
+        return GameId::from_alias(g)
+            .ok_or_else(|| format!("Unknown game: {g}"));
+    }
+    esp_file
+        .and_then(|f| {
+            game_detect::game_from_form_version(f.tes4.record_header_data.f_version)
+        })
+        .ok_or_else(||
+            "No game context available: provide `game` explicitly or load an ESP first".to_string()
+        )
+}
 
 /// 获取针对特定游戏的默认 DEF_UI 配置
 #[tauri::command]
@@ -3377,50 +3537,51 @@ pub fn get_default_def_ui_options(game: Option<String>) -> Result<DefUiOptionsDt
         quantity_indicator1: opts.quantity_indicator1,
         quantity_indicator2: opts.quantity_indicator2,
         ignore_list: opts.ignore_list,
-        scope: opts.scope,
     })
 }
 
-/// 预览或应用 DEF_UI 组件生成器
+/// 预览或应用 DEF_UI 组件生成器（单一 request DTO 契约）
 #[tauri::command]
 pub fn apply_def_ui_generator(
     state: tauri::State<'_, Arc<AppState>>,
-    options: DefUiOptionsDto,
-    selected_ids: Option<Vec<u32>>,
-    preview_only: bool,
+    request: DefUiApplyRequestDto,
 ) -> Result<DefUiApplyResultDto, String> {
     let mut strings = state.strings.lock().map_err(|e| e.to_string())?;
     let esp_file_guard = state.esp_file.lock().map_err(|e| e.to_string())?;
     let esp_file = esp_file_guard.as_ref();
 
-    let def_opts = DefUiOptions {
-        use_source_for_string: options.use_source_for_string,
-        use_source_for_components: options.use_source_for_components,
-        clean_base: options.clean_base,
-        clean_compo: options.clean_compo,
-        add_quantity: options.add_quantity,
-        use_first_char: options.use_first_char,
-        do_auto_header: options.do_auto_header,
-        regex_clean_base: options.regex_clean_base,
-        regex_clean_compo: options.regex_clean_compo,
-        template: options.template,
-        template_with_weight: options.template_with_weight,
-        component_separator: options.component_separator,
-        quantity_indicator1: options.quantity_indicator1,
-        quantity_indicator2: options.quantity_indicator2,
-        ignore_list: options.ignore_list,
-        scope: options.scope,
+    let core_scope = core_scope_from_shared(&request.scope)?;
+    let game_id = resolve_def_ui_game_id(request.game.as_deref(), esp_file)?;
+
+    let mut def_opts = DefUiOptions {
+        use_source_for_string: request.options.use_source_for_string,
+        use_source_for_components: request.options.use_source_for_components,
+        clean_base: request.options.clean_base,
+        clean_compo: request.options.clean_compo,
+        add_quantity: request.options.add_quantity,
+        use_first_char: request.options.use_first_char,
+        do_auto_header: request.options.do_auto_header,
+        regex_clean_base: request.options.regex_clean_base,
+        regex_clean_compo: request.options.regex_clean_compo,
+        template: request.options.template,
+        template_with_weight: request.options.template_with_weight,
+        component_separator: request.options.component_separator,
+        quantity_indicator1: request.options.quantity_indicator1,
+        quantity_indicator2: request.options.quantity_indicator2,
+        ignore_list: request.options.ignore_list,
+        scope: core_scope.to_string(),
     };
 
-    let selected_set = selected_ids.map(|ids| ids.into_iter().collect());
+    let selected_set = if core_scope == "selection" {
+        Some(request.selected_ids.iter().copied().collect::<std::collections::HashSet<u32>>())
+    } else {
+        None
+    };
+    // Prevent accidental scope drift between options.scope and top-level request.scope
+    def_opts.scope = core_scope.to_string();
 
-    let (mutations, total_misc) = generate_def_ui_translations(
-        &strings,
-        esp_file,
-        &def_opts,
-        selected_set.as_ref(),
-        GameId::Fallout4,
-    );
+    let (mutations, total_misc) =
+        generate_def_ui_translations(&strings, esp_file, &def_opts, selected_set.as_ref(), game_id);
 
     let mut details = Vec::new();
     let modified_count = mutations.len() as u32;
@@ -3438,7 +3599,7 @@ pub fn apply_def_ui_generator(
         });
     }
 
-    if !preview_only {
+    if !request.preview_only {
         for (str_id, new_trans, _) in mutations {
             if let Some(sk) = strings.iter_mut().find(|s| s.id == str_id) {
                 sk.translation = new_trans;
@@ -3498,10 +3659,16 @@ pub async fn reload_with_codepage(
     state: tauri::State<'_, Arc<AppState>>,
     codepage: String,
 ) -> Result<LoadEspResponse, String> {
-    let (esp_path, strings_dir, language) = {
+    let (esp_path, strings_dir, language, game, strings_strategy) = {
         let file_info = state.file_info.lock().map_err(|e| e.to_string())?;
         let info = file_info.as_ref().ok_or_else(|| "No ESP file currently loaded".to_string())?;
-        (info.esp_path.clone(), info.strings_dir.clone(), info.language.clone())
+        (
+            info.esp_path.clone(),
+            info.strings_dir.clone(),
+            info.language.clone(),
+            info.game.clone(),
+            info.strings_strategy.clone(),
+        )
     };
 
     // 更新/覆盖当前 AppState 中的 codepage_table
@@ -3516,25 +3683,19 @@ pub async fn reload_with_codepage(
         }
     }
 
-    // 调用内部 load_esp 重新加载
+    // 调用内部 load_esp 重新加载；保留显式游戏选择与 Strings strategy，
+    // forced_codepage 作为 load 参数进入真实解码路径（不再只是 AppState 状态）。
     let resp = load_esp(
         window,
         state.clone(),
         esp_path,
         strings_dir,
         Some(language),
-        None,
-        None,
+        game,
+        strings_strategy,
+        Some(codepage),
     )
     .await?;
-
-    // 记录 forced_codepage 到 file_info
-    {
-        let mut file_info = state.file_info.lock().map_err(|e| e.to_string())?;
-        if let Some(info) = file_info.as_mut() {
-            info.forced_codepage = Some(codepage);
-        }
-    }
 
     Ok(resp)
 }
@@ -3580,6 +3741,48 @@ pub fn apply_add_id_offset(
     Ok(xt_shared::dto::AddIdResultDto {
         modified_count,
         total_processed,
+    })
+}
+
+/// 执行 AddIdToStrings（Delphi `addIdToStringEx` 等价）
+#[tauri::command]
+pub fn apply_add_id_to_strings(
+    state: tauri::State<'_, Arc<AppState>>,
+    request: xt_shared::dto::AddIdToStringsRequestDto,
+) -> Result<xt_shared::dto::AddIdToStringsResultDto, String> {
+    use xt_core::add_id_to_strings::{
+        AddIdToStringsOptions, AddIdToStringsScope, add_id_to_strings,
+    };
+
+    let mut strings = state.strings.lock().map_err(|e| e.to_string())?;
+    let esp_file = state.esp_file.lock().map_err(|e| e.to_string())?;
+
+    let scope = match request.scope.as_str() {
+        "everything" => AddIdToStringsScope::Everything,
+        "selection" => AddIdToStringsScope::Selection,
+        _ => AddIdToStringsScope::NoTransValid,
+    };
+
+    let selected_ids = request.selected_ids.map(|ids| ids.into_iter().collect());
+
+    let opts = AddIdToStringsOptions {
+        scope,
+        selected_ids,
+        add_string_id: request.add_string_id,
+        add_form_id: request.add_form_id,
+        add_record_ref: request.add_record_ref,
+        add_dial_ref: request.add_dial_ref,
+    };
+
+    let result = add_id_to_strings(&mut strings, esp_file.as_ref(), &opts);
+
+    if result.modified_count > 0 {
+        *state.is_dirty.lock().map_err(|e| e.to_string())? = true;
+    }
+
+    Ok(xt_shared::dto::AddIdToStringsResultDto {
+        modified_count: result.modified_count,
+        total_processed: result.total_processed,
     })
 }
 
@@ -5482,4 +5685,134 @@ pub fn write_text_file(path: String, content: String) -> Result<(), String> {
 #[tauri::command]
 pub fn read_text_file(path: String) -> Result<String, String> {
     std::fs::read_to_string(&path).map_err(|e| format!("Failed to read text file: {e}"))
+}
+
+#[cfg(test)]
+mod def_ui_command_tests {
+    use super::*;
+
+    #[test]
+    fn def_ui_request_dto_roundtrips_frontend_shape() {
+        // Exact JSON shape the frontend sends: camelCase, single `request` object
+        let frontend_json = r#"{
+            "game": "Fallout4",
+            "options": {
+                "useSourceForString": true,
+                "useSourceForComponents": true,
+                "cleanBase": true,
+                "cleanCompo": true,
+                "addQuantity": true,
+                "useFirstChar": false,
+                "doAutoHeader": false,
+                "regexCleanBase": "^(.+)\\{\\{.+\\}\\}$",
+                "regexCleanCompo": "^\\[(.+)\\](.+)$",
+                "template": "%BASE% {{{%COMPOS%}}}",
+                "templateWithWeight": null,
+                "componentSeparator": ", ",
+                "quantityIndicator1": "*",
+                "quantityIndicator2": "**",
+                "ignoreList": ["Bottlecap", "0x0001EC8B"]
+            },
+            "scope": "only_selected",
+            "selectedIds": [1, 2, 3],
+            "previewOnly": true
+        }"#;
+
+        let req: DefUiApplyRequestDto =
+            serde_json::from_str(frontend_json).expect("frontend JSON deserializes");
+        assert_eq!(req.game.as_deref(), Some("Fallout4"));
+        assert_eq!(req.scope, "only_selected");
+        assert_eq!(req.selected_ids, vec![1, 2, 3]);
+        assert!(req.preview_only);
+        assert_eq!(req.options.ignore_list, vec!["Bottlecap", "0x0001EC8B"]);
+
+        // Round-trip: serializing back must stay in camelCase shape
+        let back = serde_json::to_string(&req).expect("serialize");
+        assert!(back.contains("\"useSourceForString\""));
+        assert!(back.contains("\"ignoreList\""));
+        assert!(back.contains("\"previewOnly\""));
+        assert!(!back.contains("use_source_for_string"));
+    }
+
+    #[test]
+    fn def_ui_scope_mapping_covers_shared_constants() {
+        assert_eq!(core_scope_from_shared("all"), Ok("all"));
+        assert_eq!(core_scope_from_shared("only_untranslated"), Ok("untranslated"));
+        assert_eq!(core_scope_from_shared("only_selected"), Ok("selection"));
+        assert!(core_scope_from_shared("selection").is_err());
+        assert!(core_scope_from_shared("").is_err());
+    }
+
+    #[test]
+    fn load_context_hash_separates_different_decode_contexts() {
+        let base = load_context_hash(None, "english", None, "disk", None);
+
+        // 同一上下文：稳定一致
+        assert_eq!(base, load_context_hash(None, "english", None, "disk", None));
+
+        // 不同强制代码页：必须不同（R-02 核心回归）
+        assert_ne!(
+            base,
+            load_context_hash(None, "english", None, "disk", Some("936"))
+        );
+        assert_ne!(
+            load_context_hash(None, "english", None, "disk", Some("936")),
+            load_context_hash(None, "english", None, "disk", Some("1252"))
+        );
+
+        // 不同语言 / 策略 / 目录 / 游戏：各自不同
+        assert_ne!(
+            base,
+            load_context_hash(None, "chinese", None, "disk", None)
+        );
+        assert_ne!(
+            base,
+            load_context_hash(None, "english", None, "manual", None)
+        );
+        assert_ne!(
+            base,
+            load_context_hash(None, "english", Some("D:/strings"), "disk", None)
+        );
+        assert_ne!(
+            base,
+            load_context_hash(Some("Fallout4"), "english", None, "disk", None)
+        );
+    }
+
+    #[test]
+    fn def_ui_game_id_prefers_explicit_over_detection() {
+        use xt_core::esp::record_tree::{EspFile, Tes4Header};
+        use xt_core::esp::header::{GenericHeader, RecordHeaderData};
+
+        // Minimal ESP whose TES4 f_version maps to SkyrimSE
+        let esp = EspFile {
+            tes4: Tes4Header {
+                generic: GenericHeader { name: *b"TES4", dsize: 0 },
+                record_header_data: RecordHeaderData {
+                    flags: 0,
+                    form_id: 0,
+                    version: 0,
+                    f_version: 44,
+                    v_info: 0,
+                },
+                field_data: Vec::new(),
+            },
+            top_level_grups: vec![],
+        };
+
+        // Explicit request wins over TES4 detection
+        assert_eq!(
+            resolve_def_ui_game_id(Some("Fallout76"), Some(&esp)).unwrap(),
+            GameId::Fallout76
+        );
+        // No explicit: TES4 detection used
+        assert_eq!(
+            resolve_def_ui_game_id(None, Some(&esp)).unwrap(),
+            GameId::SkyrimSE
+        );
+        // Neither: explicit error, never silently Fallout4
+        assert!(resolve_def_ui_game_id(None, None).is_err());
+        // Invalid alias: explicit error
+        assert!(resolve_def_ui_game_id(Some("oblivion"), Some(&esp)).is_err());
+    }
 }

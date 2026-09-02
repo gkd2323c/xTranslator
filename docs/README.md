@@ -28,6 +28,7 @@ This directory is organized by reader need. Start with the repository entry poin
 |----------|------------|
 | [`feature_comparison.md`](feature_comparison.md) | Gap analysis against Delphi xTranslator and next-priority candidates |
 | [`delphi_parity_development_plan.md`](delphi_parity_development_plan.md) | 当前源码核对后的 Delphi 1.6.0 功能等价开发计划；记录真实缺口、优先级与验收标准 |
+| [`delphi_parity_remediation_plan.md`](delphi_parity_remediation_plan.md) | 2026-09-02 parity 验收后的整改计划；记录误报完成项、主链路阻塞、修复顺序与重新验收标准 |
 | [`ui_reproduction_plan.md`](ui_reproduction_plan.md) | Active Delphi UI recreation plan based on current screenshots, form mapping, and implementation gaps |
 | [`development_roadmap.md`](development_roadmap.md) | Comprehensive Delphi parity gaps and development roadmap with priorities and effort estimates |
 | [`delphi_analysis.md`](delphi_analysis.md) | Delphi source findings mapped to Rust implementation areas |

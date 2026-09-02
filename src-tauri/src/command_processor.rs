@@ -229,6 +229,7 @@ impl TauriCommandProcessorHost {
             rule.lang_source.clone(),
             self.game.clone(),
             Some(StringsLoadStrategy::DiskPreferred.as_str().to_string()),
+            None,
         )
         .await?;
         self.file_context_changed = true;
@@ -257,15 +258,24 @@ impl TauriCommandProcessorHost {
             .map(|_| ())
     }
 
-    async fn import_xml(&self, path: PathBuf) -> Result<(), String> {
+    async fn import_xml(
+        &self,
+        path: PathBuf,
+        options: Option<SstApplyOptionsDto>,
+    ) -> Result<(), String> {
         if !path.is_file() {
             return Err(format!("XML file does not exist: {}", path.display()));
         }
         let window = self.window.clone();
         let state = window.state::<Arc<AppState>>();
-        commands::import_xml(window.clone(), state, path.to_string_lossy().into_owned())
-            .await
-            .map(|_| ())
+        commands::import_xml(
+            window.clone(),
+            state,
+            path.to_string_lossy().into_owned(),
+            options,
+        )
+        .await
+        .map(|_| ())
     }
 
     async fn finalize_rule(
@@ -660,6 +670,7 @@ impl TauriCommandProcessorHost {
                 Some(source.to_string()),
                 Some(game.as_str().to_string()),
                 Some(StringsLoadStrategy::DiskPreferred.as_str().to_string()),
+                None,
             )
             .await
             {
@@ -1137,20 +1148,15 @@ impl CommandProcessorHost for TauriCommandProcessorHost {
                 path,
             } => match self.resolve_import_path(globals, path) {
                 Ok(path) => {
-                    let result = self.import_xml(path).await;
-                    if result.is_ok() {
-                        self.add_warning(
-                            format!(
-                                "rule {rule_number}, line {} ImportXml:{compare_option}:{apply_mode}: \
-                                 XML import currently uses the Rust T1-T4 matcher; Delphi processor \
-                                 comparator modes will be closed with DP-09 XML metadata parity",
-                                command.line
-                            ),
-                            rule_number,
-                            command,
-                        );
-                    }
-                    result
+                    // Delphi batcherImportFile：ImportXml 与 ApplySst/ImportSst 共用同一套
+                    // comparator 参数（param1 → 五档 overwrite scope，param2 → 四档 match mode），
+                    // 执行函数为 XMLImportbase（未匹配条目不保留 OLD_DATA，由 commands 层处理）。
+                    let same_language = languages_match(
+                        rule.lang_source.as_deref(),
+                        rule.lang_dest.as_deref(),
+                    );
+                    let options = processor_sst_options(*compare_option, *apply_mode, same_language)?;
+                    self.import_xml(path, Some(options)).await
                 }
                 Err(error) => Err(error),
             },

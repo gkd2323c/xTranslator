@@ -1283,6 +1283,34 @@ pub struct SstApplyOptionsDto {
 
 // ── DEF_UI / Component Generator DTOs (DP-10) ──────────────────────────
 
+/// Shared scope enum for DefUI / AddId style batch tools.
+/// Canonical values are the string literals below; UI and core must use them verbatim.
+pub mod def_ui_scope {
+    pub const ALL: &str = "all";
+    pub const ONLY_UNTRANSLATED: &str = "only_untranslated";
+    pub const ONLY_SELECTED: &str = "only_selected";
+}
+
+/// Single request DTO for `apply_def_ui_generator`.
+/// Single-object contract so frontend/backend parameter shapes cannot drift again.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DefUiApplyRequestDto {
+    /// Explicit game context (frontend `currentGame`). Optional: when omitted,
+    /// backend falls back to TES4 form-version detection of the loaded ESP.
+    #[serde(default)]
+    pub game: Option<String>,
+    pub options: DefUiOptionsDto,
+    /// Scope: one of `def_ui_scope` constants ("all" | "only_untranslated" | "only_selected")
+    pub scope: String,
+    /// Selected row IDs; required when scope == only_selected
+    #[serde(default)]
+    pub selected_ids: Vec<u32>,
+    /// Preview only (do not mutate AppState)
+    #[serde(default)]
+    pub preview_only: bool,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DefUiOptionsDto {
@@ -1301,7 +1329,6 @@ pub struct DefUiOptionsDto {
     pub quantity_indicator1: String,
     pub quantity_indicator2: String,
     pub ignore_list: Vec<String>,
-    pub scope: String,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -1348,6 +1375,30 @@ pub struct AddIdRequestDto {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AddIdResultDto {
+    pub modified_count: u32,
+    pub total_processed: u32,
+}
+
+/// AddIdToStrings 请求 DTO（Delphi `addIdToStringEx` 的 Rust 等价）
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AddIdToStringsRequestDto {
+    /// 作用范围："everything" | "no_trans_valid" | "selection"
+    pub scope: String,
+    pub selected_ids: Option<Vec<u32>>,
+    /// 添加 String ID 前缀 `[%.5x]`
+    pub add_string_id: bool,
+    /// 添加 FormID 前缀 `[%.8x]`
+    pub add_form_id: bool,
+    /// 添加记录/字段引用 `[REC:FIELD]`
+    pub add_record_ref: bool,
+    /// 添加 DIAL master 引用 `[@%.8x]`（仅 INFO 记录）
+    pub add_dial_ref: bool,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AddIdToStringsResultDto {
     pub modified_count: u32,
     pub total_processed: u32,
 }

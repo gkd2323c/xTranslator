@@ -983,6 +983,28 @@ pub fn apply_xml_dictionary_entries(
     apply_dictionary_entries(strings, &entries)
 }
 
+/// 带策略的 XML 导入入口点（processor / 高级 XML 导入使用）。
+///
+/// Delphi `XMLImportbase`（TESVT_XMLFunc.pas）与 `batcherImportFile` 语义：
+/// - 覆盖范围 / 匹配模式与 SST 应用共用同一套 comparator 家族
+///   （param1 → `getfProcCompareOpt` 五档 overwrite scope，param2 →
+///   `getProcSortCompare` 的 V4Edid/V4Strict/V4Relax + fallback）；
+/// - 未匹配的 XML 条目直接丢弃，不生成 OLD_DATA（与 SST 加载不同），
+///   因此这里强制 `preserve_old_data = false`。
+pub fn apply_xml_dictionary_entries_with_policy(
+    strings: &mut [SkyString],
+    xml_entries: &[XmlStringEntry],
+    policy: ApplyPolicy,
+) -> MatchResult {
+    let mut policy = policy;
+    policy.preserve_old_data = false;
+    let entries: Vec<DictionaryApplyEntry> = xml_entries
+        .iter()
+        .map(DictionaryApplyEntry::from_xml_entry)
+        .collect();
+    apply_dictionary_entries_with_policy(strings, &entries, policy)
+}
+
 /// 保持向下兼容的 XML 导入入口点。
 pub fn enhanced_import_match(
     strings: &mut [SkyString],
@@ -2186,6 +2208,214 @@ mod tests {
             index: 0,
             index_max: 0,
         }
+    }
+
+    fn make_xml_entry(
+        str_id: i32,
+        edid: Option<&str>,
+        record_sig: [u8; 4],
+        field_sig: [u8; 4],
+        source: &str,
+        translation: &str,
+    ) -> crate::xml::XmlStringEntry {
+        crate::xml::XmlStringEntry {
+            list_index: 0,
+            str_id,
+            edid: edid.map(String::from),
+            record_sig,
+            field_sig,
+            index: 0,
+            index_max: 0,
+            source: source.to_string(),
+            translation: translation.to_string(),
+        }
+    }
+
+    fn xml_policy(scope: SstOverwriteScope, mode: SstMatchMode) -> ApplyPolicy {
+        let mut p = ApplyPolicy::sst_load_with_options(SstApplyOptions {
+            overwrite_scope: scope,
+            match_mode: mode,
+            ..Default::default()
+        });
+        p.preserve_old_data = false;
+        p
+    }
+
+    #[test]
+    fn test_xml_import_overwrite_scope_matrix() {
+        // R-04：Delphi batcherImportFile 的 ImportXml 与 ApplySst 共用
+        // param1（五档 overwrite scope）与 param2（四档 match mode）。
+        // 同一输入在不同 scope 下必须产生可预测差异。
+        fn build_strings() -> Vec<SkyString> {
+            let mut sk1 = make_sk(0, "Apple", 10, *b"INGR", *b"FULL", 0);
+            sk1.params.set(SkyStringParams::TRANSLATED, true);
+            sk1.translation = "旧苹果".to_string();
+            let mut sk2 = make_sk(1, "Banana", 11, *b"INGR", *b"FULL", 0);
+            sk2.params.set(SkyStringParams::INCOMPLETE_TRANS, true);
+            sk2.translation = "香蕉部分".to_string();
+            let sk3 = make_sk(2, "Cherry", 12, *b"INGR", *b"FULL", 0);
+            vec![sk1, sk2, sk3]
+        }
+        let entries = vec![
+            make_xml_entry(10, None, *b"INGR", *b"FULL", "Apple", "新苹果"),
+            make_xml_entry(11, None, *b"INGR", *b"FULL", "Banana", "新香蕉"),
+            make_xml_entry(12, None, *b"INGR", *b"FULL", "Cherry", "潔桃"),
+        ];
+
+        // All：覆盖全部（含已翻译/部分翻译）
+        let mut strings = build_strings();
+        let result = apply_xml_dictionary_entries_with_policy(
+            &mut strings,
+            &entries,
+            xml_policy(SstOverwriteScope::All, SstMatchMode::FormIdStrictString),
+        );
+        assert_eq!(result.total_matched(), 3);
+        assert_eq!(strings[0].translation, "新苹果");
+        assert_eq!(strings[1].translation, "新香蕉");
+        assert_eq!(strings[2].translation, "潔桃");
+
+        // NoTransExclusive：已翻译项被排除，未翻译/部分翻译可命中
+        let mut strings = build_strings();
+        let result = apply_xml_dictionary_entries_with_policy(
+            &mut strings,
+            &entries,
+            xml_policy(
+                SstOverwriteScope::NoTransExclusive,
+                SstMatchMode::FormIdStrictString,
+            ),
+        );
+        assert_eq!(strings[0].translation, "旧苹果");
+        assert_eq!(strings[1].translation, "新香蕉");
+        assert_eq!(strings[2].translation, "潔桃");
+        assert!(result.total_matched() >= 2);
+
+        // NoTransAndPartial：incomplete 也被排除
+        let mut strings = build_strings();
+        apply_xml_dictionary_entries_with_policy(
+            &mut strings,
+            &entries,
+            xml_policy(
+                SstOverwriteScope::NoTransAndPartial,
+                SstMatchMode::FormIdStrictString,
+            ),
+        );
+        assert_eq!(strings[0].translation, "旧苹果");
+        assert_eq!(strings[1].translation, "香蕉部分");
+        assert_eq!(strings[2].translation, "潔桃");
+
+        // PartialOnly：仅 incomplete 项可命中
+        let mut strings = build_strings();
+        apply_xml_dictionary_entries_with_policy(
+            &mut strings,
+            &entries,
+            xml_policy(
+                SstOverwriteScope::PartialOnly,
+                SstMatchMode::FormIdStrictString,
+            ),
+        );
+        assert_eq!(strings[0].translation, "旧苹果");
+        assert_eq!(strings[1].translation, "新香蕉");
+        assert_eq!(strings[2].translation, "");
+
+        // Selection：无 selected_ids 时 fail-closed，全部不命中
+        let mut strings = build_strings();
+        let result = apply_xml_dictionary_entries_with_policy(
+            &mut strings,
+            &entries,
+            xml_policy(SstOverwriteScope::Selection, SstMatchMode::FormIdStrictString),
+        );
+        assert_eq!(result.total_matched(), 0);
+        assert_eq!(strings[0].translation, "旧苹果");
+
+        // Selection + selected_ids：仅选中项命中
+        let mut strings = build_strings();
+        let policy = {
+            let mut p = xml_policy(SstOverwriteScope::Selection, SstMatchMode::FormIdStrictString);
+            if let Some(opts) = p.sst_options.as_mut() {
+                opts.selected_ids = Some(vec![2]);
+            }
+            p
+        };
+        apply_xml_dictionary_entries_with_policy(&mut strings, &entries, policy);
+        assert_eq!(strings[0].translation, "旧苹果");
+        assert_eq!(strings[2].translation, "潔桃");
+    }
+
+    #[test]
+    fn test_xml_import_match_mode_matrix() {
+        // R-04：param2 四档 match mode 在 XML 导入下的差异。
+        // XML 条目的 form_id 恒为 0（无法从 XML 获取），FormID 模式依赖
+        // str_id/EDID/REC/FIELD 元数据；StringOnly 忽略 FormID 仅按原文匹配。
+        fn build_strings() -> Vec<SkyString> {
+            let mut sk1 = make_sk(0, "Iron Sword", 100, *b"WEAP", *b"FULL", 0);
+            sk1.esp_ptr.form_id = 0x0100_0042;
+            let sk2 = make_sk(1, "Iron Sword", 200, *b"WEAP", *b"FULL", 0);
+            let sk3 = make_sk(2, "Silver Sword", 300, *b"WEAP", *b"FULL", 0);
+            vec![sk1, sk2, sk3]
+        }
+        // 同一 XML 源文对应两个不同 str_id 的目标行
+        let entries = vec![
+            make_xml_entry(100, None, *b"WEAP", *b"FULL", "Iron Sword", "铁剑"),
+        ];
+
+        // FormIdStrictString：XML 条目 form_id=0，候选为 form_id=0 的目标行；
+        // 源文精确校验后仅命中同源文的 sk2，sk1（真实 FormID）不受影响。
+        let mut strings = build_strings();
+        let result = apply_xml_dictionary_entries_with_policy(
+            &mut strings,
+            &entries,
+            xml_policy(SstOverwriteScope::All, SstMatchMode::FormIdStrictString),
+        );
+        assert_eq!(result.total_matched(), 1);
+        assert_eq!(strings[0].translation, "");
+        assert_eq!(strings[1].translation, "铁剑");
+
+        // FormIdOnly：无源文校验时 sk2/sk3 同键候选 → 歧义不应用。
+        let mut strings = build_strings();
+        let result = apply_xml_dictionary_entries_with_policy(
+            &mut strings,
+            &entries,
+            xml_policy(SstOverwriteScope::All, SstMatchMode::FormIdOnly),
+        );
+        assert_eq!(result.total_matched(), 0);
+        assert_eq!(result.ambiguous, 1);
+
+        // StringOnly：忽略 FormID，同源文的目标行全部命中
+        // （Delphi findStrMatchEx 是 target-centric，同一源文允许多目标）
+        let mut strings = build_strings();
+        let result = apply_xml_dictionary_entries_with_policy(
+            &mut strings,
+            &entries,
+            xml_policy(SstOverwriteScope::All, SstMatchMode::StringOnly),
+        );
+        assert_eq!(result.total_matched(), 2);
+        assert_eq!(strings[0].translation, "铁剑");
+        assert_eq!(strings[1].translation, "铁剑");
+        assert_eq!(strings[2].translation, "");
+    }
+
+    #[test]
+    fn test_xml_import_no_old_data_preserved() {
+        // Delphi XMLImportbase 未匹配条目直接丢弃，不生成 OLD_DATA。
+        let strings_seed = vec![make_sk(0, "Apple", 10, *b"INGR", *b"FULL", 0)];
+        let entries = vec![make_xml_entry(
+            999,
+            None,
+            *b"INGR",
+            *b"FULL",
+            "不存在的条目",
+            "不应保留",
+        )];
+        let mut strings = strings_seed.clone();
+        let result = apply_xml_dictionary_entries_with_policy(
+            &mut strings,
+            &entries,
+            xml_policy(SstOverwriteScope::All, SstMatchMode::FormIdStrictString),
+        );
+        assert_eq!(result.unmatched, 1);
+        assert_eq!(result.old_data_preserved, 0);
+        assert!(result.old_data_entries.is_empty());
+        assert_eq!(strings.len(), 1); // 未追加 OLD_DATA 行
     }
 
     #[test]

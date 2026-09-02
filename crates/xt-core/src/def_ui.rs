@@ -288,6 +288,18 @@ pub fn generate_def_ui_translations(
     let mut mutations = Vec::new();
     let mut total_misc = 0u32;
 
+    // Pre-parse ignore list entries: EDID/keyword fragments (lowercase) and FormIDs (hex)
+    let ignore_keywords: Vec<String> = opts
+        .ignore_list
+        .iter()
+        .filter(|e| !e.trim().is_empty())
+        .map(|e| e.trim().to_lowercase())
+        .collect();
+    let ignore_form_ids: Vec<u32> = ignore_keywords
+        .iter()
+        .filter_map(|e| u32::from_str_radix(e.trim_start_matches("0x"), 16).ok())
+        .collect();
+
     // 1. 构建 Component 名称查找表 (CMPO record FormID -> (Source Name, Trans Name))
     let mut compo_map: HashMap<u32, (String, String)> = HashMap::new();
     for s in strings {
@@ -303,6 +315,20 @@ pub fn generate_def_ui_translations(
         }
         total_misc += 1;
 
+        // Ignore list: skip by FormID match or EDID/keyword fragment (case-insensitive)
+        if ignore_form_ids.contains(&s.esp_ptr.form_id) {
+            continue;
+        }
+        if let Some(edid) = &s.edid {
+            let edid_lower = edid.to_lowercase();
+            if ignore_keywords
+                .iter()
+                .any(|kw| edid_lower.contains(kw.as_str()))
+            {
+                continue;
+            }
+        }
+
         // 根据作用域过滤
         if let Some(set) = selected_ids {
             if opts.scope == "selection" && !set.contains(&s.id) {
@@ -312,7 +338,6 @@ pub fn generate_def_ui_translations(
         if opts.scope == "untranslated" && !s.translation.trim().is_empty() {
             continue;
         }
-
         // 3. 从 ESP 记录树查找对应的 CVPA / MCQP 与 DATA (Weight)
         let mut components = Vec::new();
         let mut weight = 0.0f32;
@@ -457,5 +482,164 @@ mod tests {
             GameId::Fallout4,
         );
         assert_eq!(out, "Desk Fan {{{Steel*, Spring**}}}");
+    }
+
+    use super::*;
+    use crate::esp::header::{FieldHeader, GenericHeader, GrupHeader, RecordHeaderData};
+    use crate::esp::record_tree::{EspField, EspGrup, EspFile, EspRecord, Tes4Header};
+
+    /// Build a minimal EspFile containing one MISC record (with CVPA + DATA fields)
+    /// and one CMPO record, both non-compressed.
+    fn minimal_esp_file() -> EspFile {
+        let misc_form_id = 0x0001EC8Bu32;
+        let cmpo_form_id = 0x00010001u32;
+
+        // CVPA: one component entry (FormId + count)
+        let mut cvpa_buf = Vec::new();
+        cvpa_buf.extend_from_slice(&cmpo_form_id.to_le_bytes());
+        cvpa_buf.extend_from_slice(&3u32.to_le_bytes());
+        // DATA: Value(u32) + Weight(f32)
+        let mut data_buf = Vec::new();
+        data_buf.extend_from_slice(&5u32.to_le_bytes());
+        data_buf.extend_from_slice(&1.5f32.to_le_bytes());
+
+        let misc_rec = EspRecord {
+            header: GenericHeader { name: *b"MISC", dsize: 0 },
+            record_header_data: RecordHeaderData {
+                flags: 0,
+                form_id: misc_form_id,
+                version: 44,
+                f_version: 131,
+                v_info: 0,
+            },
+            fields: vec![
+                EspField {
+                    header: FieldHeader { name: *b"CVPA", dsize: cvpa_buf.len() as u16 },
+                    buffer: cvpa_buf,
+                    is_size_xxxx: false,
+                },
+                EspField {
+                    header: FieldHeader { name: *b"DATA", dsize: data_buf.len() as u16 },
+                    buffer: data_buf,
+                    is_size_xxxx: false,
+                },
+            ],
+            compressed: false,
+            raw: false,
+            form_id: misc_form_id,
+            editor_id: None,
+            original_raw_data: Vec::new(),
+        };
+
+        let cmpo_rec = EspRecord {
+            header: GenericHeader { name: *b"CMPO", dsize: 0 },
+            record_header_data: RecordHeaderData {
+                flags: 0,
+                form_id: cmpo_form_id,
+                version: 44,
+                f_version: 131,
+                v_info: 0,
+            },
+            fields: vec![],
+            compressed: false,
+            raw: false,
+            form_id: cmpo_form_id,
+            editor_id: None,
+            original_raw_data: Vec::new(),
+        };
+
+        let grup = EspGrup {
+            header: GenericHeader { name: *b"GRUP", dsize: 0 },
+            grup_header: GrupHeader {
+                s_ident: *b"MISC",
+                s_type: 0,
+                s_tstamp: 0,
+                param1: 0,
+                param2: 0,
+                param3: 0,
+            },
+            records: vec![misc_rec, cmpo_rec],
+            children: vec![],
+        };
+
+        EspFile {
+            tes4: Tes4Header {
+                generic: GenericHeader { name: *b"TES4", dsize: 0 },
+                record_header_data: RecordHeaderData {
+                    flags: 0,
+                    form_id: 0,
+                    version: 0,
+                    f_version: 131,
+                    v_info: 0,
+                },
+                field_data: Vec::new(),
+            },
+            top_level_grups: vec![grup],
+        }
+    }
+
+    #[test]
+    fn test_generate_respects_ignore_list() {
+        let mut s1 = SkyString::new(1, "Desk Fan".to_string(), "".to_string(), *b"MISC", *b"FULL");
+        s1.esp_ptr.form_id = 0x0001EC8B;
+        s1.edid = Some("DN101_DeskFan".to_string());
+        let strings = vec![s1];
+
+        let esp = minimal_esp_file();
+
+        // Without ignore list: mutation produced from CVPA components
+        let mut opts = DefUiOptions::default();
+        opts.scope = "all".to_string();
+        let (mutations, total) =
+            generate_def_ui_translations(&strings, Some(&esp), &opts, None, GameId::Fallout4);
+        assert_eq!(total, 1);
+        assert_eq!(mutations.len(), 1, "no ignore list: mutation generated");
+        assert!(mutations[0].1.contains("Desk Fan"));
+
+        // With EDID keyword ignore list: no mutation
+        opts.ignore_list = vec!["deskfan".to_string()];
+        let (mutations, total) =
+            generate_def_ui_translations(&strings, Some(&esp), &opts, None, GameId::Fallout4);
+        assert_eq!(total, 1, "ignored strings still counted in total_misc");
+        assert!(mutations.is_empty(), "EDID keyword match should be ignored");
+    }
+
+    #[test]
+    fn test_generate_ignore_list_by_form_id() {
+        let mut s1 = SkyString::new(1, "Desk Fan".to_string(), "".to_string(), *b"MISC", *b"FULL");
+        s1.esp_ptr.form_id = 0x0001EC8B;
+        let strings = vec![s1];
+
+        let esp = minimal_esp_file();
+
+        let mut opts = DefUiOptions::default();
+        opts.scope = "all".to_string();
+        opts.ignore_list = vec!["0001EC8B".to_string()];
+
+        let (mutations, _) =
+            generate_def_ui_translations(&strings, Some(&esp), &opts, None, GameId::Fallout4);
+        assert!(mutations.is_empty(), "FormID hex entry should be ignored");
+    }
+
+    #[test]
+    fn test_scope_values_match_shared_contract() {
+        // Guard: core scope aliases must stay aligned with xt-shared def_ui_scope
+        assert_eq!(xt_shared::dto::def_ui_scope::ALL, "all");
+        assert_eq!(xt_shared::dto::def_ui_scope::ONLY_UNTRANSLATED, "only_untranslated");
+        assert_eq!(xt_shared::dto::def_ui_scope::ONLY_SELECTED, "only_selected");
+        // Core consumes canonical values via a thin alias map
+        assert_eq!(core_scope("all"), "all");
+        assert_eq!(core_scope("only_untranslated"), "untranslated");
+        assert_eq!(core_scope("only_selected"), "selection");
+    }
+
+    /// Map shared scope constant to core internal alias.
+    fn core_scope(shared: &str) -> &'static str {
+        match shared {
+            "all" => "all",
+            "only_untranslated" => "untranslated",
+            "only_selected" => "selection",
+            _ => "all",
+        }
     }
 }

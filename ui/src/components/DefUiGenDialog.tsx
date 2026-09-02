@@ -4,7 +4,8 @@ import {
   getDefaultDefUiOptions,
   applyDefUiGenerator,
   type DefUiOptionsDto,
-  type DefUiGenerateResultDto,
+  type DefUiApplyResultDto,
+  type DefUiScope,
 } from "../api/strings";
 import { Modal, Button, Section, Input, Textarea } from "./ui";
 import { Sparkles, Play, Eye, RotateCcw } from "lucide-react";
@@ -24,10 +25,10 @@ export const DefUiGenDialog: React.FC<DefUiGenDialogProps> = ({
   const loadAllStrings = useAppStore((s) => s.loadAllStrings);
 
   const [options, setOptions] = useState<DefUiOptionsDto | null>(null);
-  const [scope, setScope] = useState<"all" | "only_untranslated" | "only_selected">("all");
+  const [scope, setScope] = useState<DefUiScope>("all");
   const [isLoading, setIsLoading] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
-  const [previewResult, setPreviewResult] = useState<DefUiGenerateResultDto | null>(null);
+  const [previewResult, setPreviewResult] = useState<DefUiApplyResultDto | null>(null);
   const [ignoreListText, setIgnoreListText] = useState("");
 
   // 加载当前游戏的默认配置
@@ -37,7 +38,7 @@ export const DefUiGenDialog: React.FC<DefUiGenDialogProps> = ({
       getDefaultDefUiOptions(currentGame ?? undefined)
         .then((opts) => {
           setOptions(opts);
-          setIgnoreListText(opts.ignore_list.join("\n"));
+          setIgnoreListText(opts.ignoreList.join("\n"));
         })
         .catch((err) => {
           console.error("Failed to load DefUI options:", err);
@@ -50,7 +51,7 @@ export const DefUiGenDialog: React.FC<DefUiGenDialogProps> = ({
   if (!isOpen || !options) return null;
 
   const handleScopeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setScope(e.target.value as "all" | "only_untranslated" | "only_selected");
+    setScope(e.target.value as DefUiScope);
   };
 
   const handleOptionChange = <K extends keyof DefUiOptionsDto>(
@@ -66,21 +67,25 @@ export const DefUiGenDialog: React.FC<DefUiGenDialogProps> = ({
       .split("\n")
       .map((s) => s.trim())
       .filter(Boolean);
-    handleOptionChange("ignore_list", list);
+    handleOptionChange("ignoreList", list);
   };
 
+  const buildRequest = (previewOnly: boolean) => ({
+    game: currentGame ?? undefined,
+    options,
+    scope,
+    selectedIds: Array.from(selectedIds),
+    previewOnly,
+  });
+
   const handlePreview = async () => {
-    if (!options) return;
     setIsRunning(true);
     try {
-      const res = await applyDefUiGenerator({
-        options,
-        scope,
-        selected_ids: Array.from(selectedIds),
-        dry_run: true,
-      });
+      const res = await applyDefUiGenerator(buildRequest(true));
       setPreviewResult(res);
-      toast.success(`预览完成：找到 ${res.matched_count} 条匹配记录`);
+      toast.success(
+        `预览完成：匹配 ${res.totalMiscRecords} 条 MISC，将更新 ${res.modifiedCount} 条译文`
+      );
     } catch (err: any) {
       toast.error(`预览失败: ${err.message || String(err)}`);
     } finally {
@@ -89,16 +94,10 @@ export const DefUiGenDialog: React.FC<DefUiGenDialogProps> = ({
   };
 
   const handleApply = async () => {
-    if (!options) return;
     setIsRunning(true);
     try {
-      const res = await applyDefUiGenerator({
-        options,
-        scope,
-        selected_ids: Array.from(selectedIds),
-        dry_run: false,
-      });
-      toast.success(`生成成功：更新了 ${res.modified_count} 条译文`);
+      const res = await applyDefUiGenerator(buildRequest(false));
+      toast.success(`生成成功：更新了 ${res.modifiedCount} 条译文`);
       await loadAllStrings();
       onClose();
     } catch (err: any) {
@@ -113,7 +112,7 @@ export const DefUiGenDialog: React.FC<DefUiGenDialogProps> = ({
     try {
       const opts = await getDefaultDefUiOptions(currentGame ?? undefined);
       setOptions(opts);
-      setIgnoreListText(opts.ignore_list.join("\n"));
+      setIgnoreListText(opts.ignoreList.join("\n"));
       setPreviewResult(null);
       toast.success("已重置为默认配置");
     } catch (err) {
@@ -184,8 +183,8 @@ export const DefUiGenDialog: React.FC<DefUiGenDialogProps> = ({
                 完整模板 (Full Format, 支持 %BASE%, %COMPOS%, %WEIGHT%)
               </label>
               <Input
-                value={options.format_full}
-                onChange={(e) => handleOptionChange("format_full", e.target.value)}
+                value={options.template}
+                onChange={(e) => handleOptionChange("template", e.target.value)}
                 placeholder="%BASE% {{{%COMPOS%}}}"
               />
             </div>
@@ -194,8 +193,13 @@ export const DefUiGenDialog: React.FC<DefUiGenDialogProps> = ({
                 带重量模板 (Weight Format)
               </label>
               <Input
-                value={options.format_weight}
-                onChange={(e) => handleOptionChange("format_weight", e.target.value)}
+                value={options.templateWithWeight ?? ""}
+                onChange={(e) =>
+                  handleOptionChange(
+                    "templateWithWeight",
+                    e.target.value === "" ? null : e.target.value
+                  )
+                }
                 placeholder="%BASE% {{{%WEIGHT%lb, %COMPOS%}}}"
               />
             </div>
@@ -207,8 +211,8 @@ export const DefUiGenDialog: React.FC<DefUiGenDialogProps> = ({
                 基础名清洗正则 (Clean Base RegEx)
               </label>
               <Input
-                value={options.clean_base_regex}
-                onChange={(e) => handleOptionChange("clean_base_regex", e.target.value)}
+                value={options.regexCleanBase}
+                onChange={(e) => handleOptionChange("regexCleanBase", e.target.value)}
                 placeholder="^(.+)\{\{\{.*\}\}\}$"
               />
             </div>
@@ -217,8 +221,8 @@ export const DefUiGenDialog: React.FC<DefUiGenDialogProps> = ({
                 组件名清洗正则 (Clean Component RegEx)
               </label>
               <Input
-                value={options.clean_compo_regex}
-                onChange={(e) => handleOptionChange("clean_compo_regex", e.target.value)}
+                value={options.regexCleanCompo}
+                onChange={(e) => handleOptionChange("regexCleanCompo", e.target.value)}
                 placeholder="^\[.+\](.+)$"
               />
             </div>
@@ -231,90 +235,119 @@ export const DefUiGenDialog: React.FC<DefUiGenDialogProps> = ({
             <label className="flex items-center gap-2 cursor-pointer">
               <input
                 type="checkbox"
-                checked={options.use_source_for_string}
-                onChange={(e) => handleOptionChange("use_source_for_string", e.target.checked)}
+                checked={options.useSourceForString}
+                onChange={(e) => handleOptionChange("useSourceForString", e.target.checked)}
               />
               使用英文原文作为基础名 (Use Source for Base Name)
             </label>
             <label className="flex items-center gap-2 cursor-pointer">
               <input
                 type="checkbox"
-                checked={options.use_source_for_components}
-                onChange={(e) => handleOptionChange("use_source_for_components", e.target.checked)}
+                checked={options.useSourceForComponents}
+                onChange={(e) => handleOptionChange("useSourceForComponents", e.target.checked)}
               />
               使用英文原文作为组件名 (Use Source for Components)
             </label>
             <label className="flex items-center gap-2 cursor-pointer">
               <input
                 type="checkbox"
-                checked={options.clean_base}
-                onChange={(e) => handleOptionChange("clean_base", e.target.checked)}
+                checked={options.cleanBase}
+                onChange={(e) => handleOptionChange("cleanBase", e.target.checked)}
               />
               清洗基础名中已有的标签/后缀 (Clean Base Tag)
             </label>
             <label className="flex items-center gap-2 cursor-pointer">
               <input
                 type="checkbox"
-                checked={options.clean_components}
-                onChange={(e) => handleOptionChange("clean_components", e.target.checked)}
+                checked={options.cleanCompo}
+                onChange={(e) => handleOptionChange("cleanCompo", e.target.checked)}
               />
               清洗组件名中已有的标签 (Clean Component Tag)
             </label>
             <label className="flex items-center gap-2 cursor-pointer">
               <input
                 type="checkbox"
-                checked={options.add_weight}
-                onChange={(e) => handleOptionChange("add_weight", e.target.checked)}
+                checked={options.addQuantity}
+                onChange={(e) => handleOptionChange("addQuantity", e.target.checked)}
               />
-              附加重量信息 (Add Weight)
+              启用数量等级指示符 (*, **)
             </label>
             <label className="flex items-center gap-2 cursor-pointer">
               <input
                 type="checkbox"
-                checked={options.use_custom_indicators}
-                onChange={(e) => handleOptionChange("use_custom_indicators", e.target.checked)}
+                checked={options.useFirstChar}
+                onChange={(e) => handleOptionChange("useFirstChar", e.target.checked)}
               />
-              启用数量等级指示符 (*, **, ***, ****)
+              组件名只取首字母 (Use First Char)
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={options.doAutoHeader}
+                onChange={(e) => handleOptionChange("doAutoHeader", e.target.checked)}
+              />
+              单组件时自动生成 Header (Auto Header)
             </label>
           </div>
 
-          {options.use_custom_indicators && (
-            <div className="mt-2">
-              <label className="text-xs font-semibold block mb-1">
-                自定义数量等级指示符 (用分号 ; 分隔 1, 2, 3, 4 级)
-              </label>
-              <Input
-                value={options.custom_indicators}
-                onChange={(e) => handleOptionChange("custom_indicators", e.target.value)}
-                placeholder=";*;**;***;****"
-              />
+          {options.addQuantity && (
+            <div className="grid grid-cols-2 gap-3 mt-2">
+              <div>
+                <label className="text-xs font-semibold block mb-1">
+                  数量指示符 1 (小量, Level 1)
+                </label>
+                <Input
+                  value={options.quantityIndicator1}
+                  onChange={(e) => handleOptionChange("quantityIndicator1", e.target.value)}
+                  placeholder="*"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold block mb-1">
+                  数量指示符 2 (大量, Level 2)
+                </label>
+                <Input
+                  value={options.quantityIndicator2}
+                  onChange={(e) => handleOptionChange("quantityIndicator2", e.target.value)}
+                  placeholder="**"
+                />
+              </div>
             </div>
           )}
         </Section>
 
+        {/* 组件分隔符 */}
+        <Section title="组件分隔符 (Component Separator)">
+          <Input
+            value={options.componentSeparator}
+            onChange={(e) => handleOptionChange("componentSeparator", e.target.value)}
+            placeholder=", "
+          />
+        </Section>
+
         {/* 忽略关键词列表 */}
-        <Section title="忽略列表 (Ignore List, 每行一个关键词/FormID)">
+        <Section title="忽略列表 (Ignore List, 每行一个 EDID 关键词/FormID)">
           <Textarea
             rows={3}
             value={ignoreListText}
             onChange={(e) => handleIgnoreListChange(e.target.value)}
-            placeholder="Shipment&#10;Bottlecap"
+            placeholder="Shipment&#10;Bottlecap&#10;0x0001EC8B"
             className="text-xs font-mono"
           />
         </Section>
 
         {/* 预览窗口 */}
         {previewResult && (
-          <Section title={`预览结果 (Preview: 匹配 ${previewResult.matched_count} 条)`}>
+          <Section title={`预览结果 (Preview: 将更新 ${previewResult.modifiedCount} 条)`}>
             <div className="bg-[var(--bg-primary)] border border-[var(--border-color)] rounded p-2 max-h-40 overflow-y-auto font-mono text-xs space-y-1">
-              {previewResult.sample_previews.length === 0 ? (
+              {previewResult.details.length === 0 ? (
                 <div className="text-[var(--text-secondary)] italic p-2">未找到符合条件的 MISC 条目</div>
               ) : (
-                previewResult.sample_previews.map(([orig, target], i) => (
+                previewResult.details.map((d, i) => (
                   <div key={i} className="flex items-center justify-between border-b border-[var(--border-color)] pb-1 last:border-none">
-                    <span className="text-[var(--text-secondary)] truncate w-5/12">{orig}</span>
+                    <span className="text-[var(--text-secondary)] truncate w-5/12" title={d.edid}>{d.original}</span>
                     <span className="text-[var(--text-accent)] w-1/12 text-center">➔</span>
-                    <span className="text-green-400 font-semibold truncate w-6/12">{target}</span>
+                    <span className="text-green-400 font-semibold truncate w-6/12">{d.generated}</span>
                   </div>
                 ))
               )}

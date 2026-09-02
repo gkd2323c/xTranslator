@@ -31,7 +31,8 @@ const FinalizePanel = lazy(() => import("./components/FinalizePanel").then(m => 
 const DataConfigsPanel = lazy(() => import("./components/DataConfigsPanel").then(m => ({ default: m.DataConfigsPanel })));
 const DefUiGenDialog = lazy(() => import("./components/DefUiGenDialog").then(m => ({ default: m.DefUiGenDialog })));
 const ChooseCpDialog = lazy(() => import("./components/ChooseCpDialog").then(m => ({ default: m.ChooseCpDialog })));
-const AddIdDialog = lazy(() => import("./components/AddIdDialog").then(m => ({ default: m.AddIdDialog })));
+const FormIdOffsetDialog = lazy(() => import("./components/FormIdOffsetDialog").then(m => ({ default: m.FormIdOffsetDialog })));
+const AddIdToStringsDialog = lazy(() => import("./components/AddIdToStringsDialog").then(m => ({ default: m.AddIdToStringsDialog })));
 const RTLPreview = lazy(() => import("./components/RTLPreview").then(m => ({ default: m.RTLPreview })));
 import { autoBackupSst, loadConfig, setOpenAiApiKey, setDeeplApiKey, setBaiduApiKey, setYoudaoApiKey, setAzureApiKey, setTranslationProvider } from "./api/strings";
 import "./App.css";
@@ -369,9 +370,14 @@ function App() {
           <ChooseCpDialog />
         </Suspense>
       )}
-      {activePanel === "addId" && (
+      {activePanel === "formIdOffset" && (
         <Suspense fallback={<div className="modal-loading"><Loader size={24} /></div>}>
-          <AddIdDialog />
+          <FormIdOffsetDialog />
+        </Suspense>
+      )}
+      {activePanel === "addIdToStrings" && (
+        <Suspense fallback={<div className="modal-loading"><Loader size={24} /></div>}>
+          <AddIdToStringsDialog />
         </Suspense>
       )}
       {activePanel === "rtlPreview" && (

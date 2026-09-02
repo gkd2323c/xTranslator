@@ -204,12 +204,13 @@ export async function getStats(): Promise<string> {
 // 2. 加载关联的 Strings 文件
 // 3. 构建 ESP 记录树（用于后续的回写操作）
 // 4. 缓存解析结果以加速重复加载
-///
 // 参数：
 // - `espPath`: ESP/ESM 文件的完整路径
 // - `stringsDir`: Strings 文件所在目录（可选，默认使用 ESP 所在目录）
 // - `language`: 字符串文件的语言标识（可选，默认 "english"）
 // - `game`: 游戏类型（可选，用于加载正确的 record_defs）
+// - `stringsStrategy`: Strings 来源策略（可选，默认 "disk"）
+// - `forcedCodepage`: 强制代码页（可选，进入实际解码路径）
 ///
 // 返回：
 // - `LoadEspResponse`: 包含解析统计和缓存状态
@@ -219,8 +220,9 @@ export async function loadEsp(
   language?: string,
   game?: SupportedGameId,
   stringsStrategy?: "disk" | "archive" | "manual",
+  forcedCodepage?: string,
 ): Promise<LoadEspResponse> {
-  return invoke("load_esp", { espPath, stringsDir, language, game, stringsStrategy });
+  return invoke("load_esp", { espPath, stringsDir, language, game, stringsStrategy, forcedCodepage });
 }
 
 // SST 高级选项定义 (DP-03 Delphi 对齐)
@@ -632,8 +634,11 @@ export async function exportXml(request: XmlExportRequest): Promise<number> {
   return invoke("export_xml", { request });
 }
 
-export async function importXml(xmlPath: string): Promise<XmlImportResponse> {
-  return invoke("import_xml", { xmlPath });
+export async function importXml(
+  xmlPath: string,
+  options?: SstApplyOptions,
+): Promise<XmlImportResponse> {
+  return invoke("import_xml", { xmlPath, options });
 }
 
 export async function getAllStrings(): Promise<SkyStringDTO[]> {
@@ -1395,33 +1400,47 @@ export async function toolboxGetExceptionWords(): Promise<string[]> {
 
 // ── DEF_UI 组件标签生成器 ──────────────────────────────────────
 
+// Contract mirror of xt-shared::DefUiOptionsDto (keep in sync; source of truth is Rust)
 export interface DefUiOptionsDto {
-  use_source_for_string: boolean;
-  use_source_for_components: boolean;
-  clean_components: boolean;
-  clean_base: boolean;
-  add_weight: boolean;
-  format_full: string;
-  format_weight: string;
-  clean_base_regex: string;
-  clean_compo_regex: string;
-  use_custom_indicators: boolean;
-  custom_indicators: string;
-  ignore_list: string[];
+  useSourceForString: boolean;
+  useSourceForComponents: boolean;
+  cleanBase: boolean;
+  cleanCompo: boolean;
+  addQuantity: boolean;
+  useFirstChar: boolean;
+  doAutoHeader: boolean;
+  regexCleanBase: string;
+  regexCleanCompo: string;
+  template: string;
+  templateWithWeight: string | null;
+  componentSeparator: string;
+  quantityIndicator1: string;
+  quantityIndicator2: string;
+  ignoreList: string[];
 }
 
-export interface DefUiGenerateRequestDto {
+export type DefUiScope = "all" | "only_untranslated" | "only_selected";
+
+export interface DefUiApplyRequestDto {
+  game?: string;
   options: DefUiOptionsDto;
-  scope: "all" | "only_untranslated" | "only_selected";
-  selected_ids: number[];
-  dry_run: boolean;
+  scope: DefUiScope;
+  selectedIds: number[];
+  previewOnly: boolean;
 }
 
-export interface DefUiGenerateResultDto {
-  matched_count: number;
-  modified_count: number;
-  skipped_count: number;
-  sample_previews: Array<[string, string]>;
+export interface DefUiItemPreviewDto {
+  stringId: number;
+  formId: number;
+  edid: string;
+  original: string;
+  generated: string;
+}
+
+export interface DefUiApplyResultDto {
+  modifiedCount: number;
+  totalMiscRecords: number;
+  details: DefUiItemPreviewDto[];
 }
 
 export async function getDefaultDefUiOptions(game?: string): Promise<DefUiOptionsDto> {
@@ -1429,8 +1448,8 @@ export async function getDefaultDefUiOptions(game?: string): Promise<DefUiOption
 }
 
 export async function applyDefUiGenerator(
-  request: DefUiGenerateRequestDto,
-): Promise<DefUiGenerateResultDto> {
+  request: DefUiApplyRequestDto,
+): Promise<DefUiApplyResultDto> {
   return invoke("apply_def_ui_generator", { request });
 }
 
@@ -1455,6 +1474,26 @@ export async function applyAddIdOffset(
   request: AddIdRequestDto,
 ): Promise<AddIdResultDto> {
   return invoke("apply_add_id_offset", { request });
+}
+
+export interface AddIdToStringsRequestDto {
+  scope: "everything" | "no_trans_valid" | "selection";
+  selectedIds?: number[];
+  addStringId: boolean;
+  addFormId: boolean;
+  addRecordRef: boolean;
+  addDialRef: boolean;
+}
+
+export interface AddIdToStringsResultDto {
+  modifiedCount: number;
+  totalProcessed: number;
+}
+
+export async function applyAddIdToStrings(
+  request: AddIdToStringsRequestDto,
+): Promise<AddIdToStringsResultDto> {
+  return invoke("apply_add_id_to_strings", { request });
 }
 
 export async function getCodepageInfo(): Promise<CodepageInfoDto> {

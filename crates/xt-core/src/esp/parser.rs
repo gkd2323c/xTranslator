@@ -382,7 +382,9 @@ impl StringsFiles {
     /// `strategy` 控制磁盘与 archive 的优先级：
     /// - `DiskPreferred`：磁盘优先，缺失回退 archive（Delphi locOpts=0）
     /// - `ArchivePreferred`：archive 优先，缺失回退磁盘（Delphi locOpts=1）
-    /// - `Manual`：不自动发现，调用方需手动填充 `strings/dlstrings/ilstrings`
+    /// - `Manual`：禁止自动发现，但必须读取调用方显式提供的目录。
+    ///   仅从 `dir` 直读磁盘文件，永不尝试 BSA/BA2 提取。
+    ///   （目录缺失文件时结果为空；调用方应提示用户选择有效目录）
     pub fn load_from_dir_with_strategy<P: AsRef<Path>>(
         dir: P,
         base_name: &str,
@@ -390,9 +392,6 @@ impl StringsFiles {
         table: Option<&CodepageTable>,
         strategy: StringsLoadStrategy,
     ) -> Self {
-        if strategy == StringsLoadStrategy::Manual {
-            return Self::default();
-        }
         Self::load_from_dir_with_config(dir, base_name, language, table, Some(strategy))
     }
 
@@ -438,6 +437,8 @@ impl StringsFiles {
         }
 
         // 2. BSA/BA2 提取（DiskPreferred 只补缺失；ArchivePreferred 覆盖已有磁盘来源）
+        //    Manual 策略禁止自动发现：即使缺失也绝不尝试 archive 提取。
+        let manual = matches!(strategy, Some(StringsLoadStrategy::Manual));
         let archive_preferred = matches!(strategy, Some(StringsLoadStrategy::ArchivePreferred));
         let mut missing = sources.map(|s| s == StringsSource::Missing);
         if archive_preferred {
@@ -445,7 +446,7 @@ impl StringsFiles {
             missing = [true; 3];
         }
 
-        if missing.iter().any(|&m| m) {
+        if !manual && missing.iter().any(|&m| m) {
             let mut archive_paths: Vec<(std::path::PathBuf, bool)> = Vec::new();
             if let Ok(entries) = std::fs::read_dir(dir) {
                 for entry in entries.flatten() {
@@ -1896,8 +1897,8 @@ Def_:CNAM=DOOR=0-proc5
     }
 
     #[test]
-    fn test_strings_manual_strategy_returns_empty() {
-        // Manual 策略不自动发现：返回空集，由调用方手动填充
+    fn test_strings_manual_strategy_reads_explicit_dir_without_archive() {
+        // Manual 语义：禁止自动发现（不读 archive），但必须读取用户显式提供的目录
         let temp = std::env::temp_dir().join(format!(
             "xtranslator-strings-manual-{}",
             std::process::id()
@@ -1922,9 +1923,29 @@ Def_:CNAM=DOOR=0-proc5
             StringsLoadStrategy::Manual,
         );
 
-        assert_eq!(sf.loaded_count(), 0);
-        assert_eq!(sf.sources, [StringsSource::Missing; 3]);
+        // 用户显式选择的目录被读取
+        assert_eq!(sf.loaded_count(), 1);
+        assert_eq!(sf.get(0, 42).map(String::as_str), Some("Hello"));
+        assert_eq!(sf.sources[0], StringsSource::Disk);
+
+        // 空目录：Manual 不自动发现，结果为空
+        let empty = std::env::temp_dir().join(format!(
+            "xtranslator-strings-manual-empty-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&empty);
+        std::fs::create_dir_all(&empty).unwrap();
+        let sf_empty = StringsFiles::load_from_dir_with_strategy(
+            &empty,
+            "test",
+            "english",
+            Some(&CodepageTable::new()),
+            StringsLoadStrategy::Manual,
+        );
+        assert_eq!(sf_empty.loaded_count(), 0);
+        assert_eq!(sf_empty.sources, [StringsSource::Missing; 3]);
 
         let _ = std::fs::remove_dir_all(temp);
+        let _ = std::fs::remove_dir_all(empty);
     }
 }
