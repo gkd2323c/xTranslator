@@ -25,7 +25,10 @@ pub fn load_exception_words(words: &str) {
 
 /// 检查单词是否在例外列表中（不区分大小写）。
 pub fn is_exception_word(word: &str) -> bool {
-    EXCEPTION_WORDS.read().unwrap().contains(&word.to_lowercase())
+    EXCEPTION_WORDS
+        .read()
+        .unwrap()
+        .contains(&word.to_lowercase())
 }
 
 /// 获取所有已排序的例外词向量。

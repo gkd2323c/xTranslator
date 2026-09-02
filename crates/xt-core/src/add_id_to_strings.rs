@@ -11,9 +11,9 @@
 //!   d) `[@%.8x]` INFO 记录的 DIAL master FormID（需 record tree）
 //! - 最终格式：`prefix + ' ' + 原译文`（即使 prefix 为空也保留前导空格，与 Delphi 一致）。
 
-use crate::types::sky_string::SkyString;
-use crate::types::params::{SkyStringParams, SkyStringInternalParams};
 use crate::esp::record_tree::{EspFile, EspGrup};
+use crate::types::params::SkyStringInternalParams;
+use crate::types::sky_string::SkyString;
 use std::collections::{HashMap, HashSet};
 
 /// AddIdToStrings 作用范围
@@ -64,14 +64,10 @@ pub fn add_id_to_strings(
     let mut result = AddIdToStringsResult::default();
 
     // 预构建 INFO → DIAL master 映射（d 选项需要）
-    let info_dial_map: HashMap<u32, u32> = esp_file
-        .map(build_info_dial_map)
-        .unwrap_or_default();
+    let info_dial_map: HashMap<u32, u32> = esp_file.map(build_info_dial_map).unwrap_or_default();
 
-    let has_any_prefix = opts.add_string_id
-        || opts.add_form_id
-        || opts.add_record_ref
-        || opts.add_dial_ref;
+    let has_any_prefix =
+        opts.add_string_id || opts.add_form_id || opts.add_record_ref || opts.add_dial_ref;
 
     if !has_any_prefix {
         return result;
@@ -199,6 +195,7 @@ fn is_ascii_label(bytes: &[u8; 4]) -> bool {
 mod tests {
     use super::*;
     use crate::types::esp_pointer::EspPointer;
+    use crate::types::params::SkyStringParams;
 
     fn make_sk(
         id: u32,
@@ -209,7 +206,13 @@ mod tests {
         record_sig: [u8; 4],
         field_sig: [u8; 4],
     ) -> SkyString {
-        let mut sk = SkyString::new(id, source.to_string(), translation.to_string(), record_sig, field_sig);
+        let mut sk = SkyString::new(
+            id,
+            source.to_string(),
+            translation.to_string(),
+            record_sig,
+            field_sig,
+        );
         sk.esp_ptr = EspPointer {
             str_id,
             form_id,
@@ -235,10 +238,7 @@ mod tests {
         let result = add_id_to_strings(&mut strings, None, &opts);
         assert_eq!(result.modified_count, 1);
         // [%.5x] = 0002a, [%.8x] = 0001a4b2, [INFO:NAM1]
-        assert_eq!(
-            strings[0].translation,
-            "[0002a][0001a4b2][INFO:NAM1] 你好"
-        );
+        assert_eq!(strings[0].translation, "[0002a][0001a4b2][INFO:NAM1] 你好");
     }
 
     #[test]
@@ -261,7 +261,8 @@ mod tests {
     #[test]
     fn test_locked_and_empty_skipped() {
         let mut sk1 = make_sk(0, "A", "a", 1, 0, *b"QUST", *b"FULL");
-        sk1.internal_params.set(SkyStringInternalParams::PEX_NO_TRANS, true);
+        sk1.internal_params
+            .set(SkyStringInternalParams::PEX_NO_TRANS, true);
         let sk2 = make_sk(1, "", "", 2, 0, *b"QUST", *b"FULL");
         let mut strings = vec![sk1, sk2];
         let opts = AddIdToStringsOptions {

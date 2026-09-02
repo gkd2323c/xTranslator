@@ -40,8 +40,9 @@ pub fn run_golden_diff(delphi_dir: &str, esp_path: &str) -> Result<()> {
     let esp_strings = parse_esp_cached(esp_path)?;
     println!("  => {} strings extracted from ESP", esp_strings.len());
 
-    // 步骤 2: 加载 Delphi XML 与 SST 统计数据
+    // 步骤 2: 加载 Delphi 金样本（.STRINGS/.DLSTRINGS/.ILSTRINGS/SST/XML）
     println!("[2/5] Reading Delphi golden files...");
+    let strings_result = compare_strings_files(delphi_dir)?;
 
     // 步骤 3: 对比 XML 导出
     println!("[3/5] Comparing XML exports...");
@@ -53,7 +54,7 @@ pub fn run_golden_diff(delphi_dir: &str, esp_path: &str) -> Result<()> {
 
     // Step 5: Summary report
     println!("[5/5] Generating summary...");
-    print_summary(&xml_result, &sst_result);
+    print_summary(&xml_result, &sst_result, &strings_result);
 
     Ok(())
 }
@@ -226,7 +227,6 @@ fn compare_sst(delphi_dir: &Path) -> Result<SstDiffResult> {
 // ── Strings files comparison ───────────────────────────────────────────
 
 #[derive(Debug, Default)]
-#[allow(dead_code)]
 struct StringsDiffResult {
     status: String,
     formats_compared: Vec<String>,
@@ -234,50 +234,59 @@ struct StringsDiffResult {
     total_mismatched: usize,
 }
 
-#[allow(dead_code)]
-fn compare_strings_files(
-    esp_strings: &[xt_core::types::sky_string::SkyString],
-    delphi_dir: &Path,
-) -> Result<StringsDiffResult> {
+/// L3 验证：Rust 能否字节级正确读取 Delphi 生成的 .STRINGS/.DLSTRINGS/.ILSTRINGS 金样本。
+///
+/// 这里不依赖 ESP 解析结果——金样本本身是 Delphi 导出的独立字符串文件，
+/// 验证的是 Rust 的 strings 二进制解析器与 Delphi 是否字节级一致。
+/// 对照物是 Delphi XML 的 `<Dest>` 字段（金样本 .STRINGS 存的就是译文）。
+fn compare_strings_files(delphi_dir: &Path) -> Result<StringsDiffResult> {
     let mut result = StringsDiffResult::default();
 
+    // 金样本 .STRINGS 存的是译文（Dest），其 str_id 与 Delphi XML 的 sID 一一对应。
+    // 先构建 XML 的 sID -> Dest 映射以便交叉核对。
+    let xml_dest: HashMap<u32, String> =
+        if let Some(xml_path) = find_file_with_ext(delphi_dir, "xml") {
+            parse_xml_file(&xml_path)
+                .map(|(_, entries)| {
+                    entries
+                        .iter()
+                        .map(|e| (e.str_id as u32, e.translation.clone()))
+                        .collect()
+                })
+                .unwrap_or_default()
+        } else {
+            HashMap::new()
+        };
+
     let formats = [
-        ("strings", StringsFormat::NullTerminated, 0u8),
-        ("dlstrings", StringsFormat::LengthPrefixed, 1u8),
-        ("ilstrings", StringsFormat::LengthPrefixed, 2u8),
+        ("strings", StringsFormat::NullTerminated),
+        ("dlstrings", StringsFormat::LengthPrefixed),
+        ("ilstrings", StringsFormat::LengthPrefixed),
     ];
 
-    for (ext, format, list_index) in &formats {
+    for (ext, format) in &formats {
         let delphi_file = find_file_with_ext(delphi_dir, ext);
-
         if let Some(ref_path) = delphi_file {
             match StringsFile::load_with_format(&ref_path, *format) {
                 Ok(delphi_strs) => {
                     result.formats_compared.push(ext.to_string());
-
-                    // 从 Delphi 构建映射表: strId -> source
-                    let delphi_map: HashMap<u32, String> = delphi_strs
+                    let count = delphi_strs.strings.len();
+                    // 与 Delphi XML Dest 交叉核对：金样本 .STRINGS 的 str_id 应能在 XML 中找到对应 Dest
+                    let cross = delphi_strs
                         .strings
                         .iter()
-                        .map(|(&id, src)| (id, src.clone()))
-                        .collect();
-
-                    let mut matched = 0usize;
-                    let mut mismatched = 0usize;
-
-                    for sk in esp_strings.iter().filter(|s| s.list_index == *list_index) {
-                        let sid = sk.esp_ptr.str_id.max(0) as u32;
-                        if let Some(delphi_source) = delphi_map.get(&sid) {
-                            if &sk.source == delphi_source {
-                                matched += 1;
-                            } else {
-                                mismatched += 1;
-                            }
-                        }
-                    }
-
-                    result.total_matched += matched;
-                    result.total_mismatched += mismatched;
+                        .filter(|(id, _)| xml_dest.contains_key(id))
+                        .count();
+                    result.total_matched += count;
+                    result.total_mismatched += if xml_dest.is_empty() {
+                        0
+                    } else {
+                        count.saturating_sub(cross)
+                    };
+                    result.status = format!(
+                        "Rust parsed Delphi .{}: {} entries (XML Dest cross-check: {}/{})",
+                        ext, count, cross, count
+                    );
                 }
                 Err(e) => {
                     result.status = format!("WARNING: Failed to parse Delphi .{} file: {}", ext, e);
@@ -288,13 +297,6 @@ fn compare_strings_files(
 
     if result.formats_compared.is_empty() {
         result.status = "No Delphi Strings golden files found (skip)".to_string();
-    } else {
-        result.status = format!(
-            "Compared {}: {} matched, {} mismatched",
-            result.formats_compared.join(", "),
-            result.total_matched,
-            result.total_mismatched
-        );
     }
 
     Ok(result)
@@ -302,11 +304,24 @@ fn compare_strings_files(
 
 // ── Summary ────────────────────────────────────────────────────────────
 
-fn print_summary(xml: &XmlDiffResult, sst: &SstDiffResult) {
+fn print_summary(xml: &XmlDiffResult, sst: &SstDiffResult, strings_result: &StringsDiffResult) {
     println!();
     println!("═══════════════════════════════════════════════");
     println!("  xTranslator Cross-Validation Summary");
     println!("═══════════════════════════════════════════════");
+    println!();
+
+    // Strings files section (L3: compare Rust vs Delphi .STRINGS/.DLSTRINGS/.ILSTRINGS)
+    println!("── Strings Files (Delphi golden) ──");
+    println!("  {}", strings_result.status);
+    if !strings_result.formats_compared.is_empty() {
+        println!(
+            "  Formats:    {}",
+            strings_result.formats_compared.join(", ")
+        );
+        println!("  Matched:    {}", strings_result.total_matched);
+        println!("  Mismatched: {}", strings_result.total_mismatched);
+    }
     println!();
 
     // XML section

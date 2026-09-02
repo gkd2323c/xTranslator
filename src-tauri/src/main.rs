@@ -4,37 +4,37 @@
 )]
 
 mod batch;
-mod commands;
 mod command_processor;
+mod commands;
 
 use crate::batch::BatchExecutor;
 use crate::command_processor::run_command_processor;
 use commands::{
-    apply_def_ui_generator, get_default_def_ui_options,
-    get_codepage_info, reload_with_codepage, apply_add_id_offset, apply_add_id_to_strings,
-    apply_translation_cache, auto_backup_sst, batch_update_translations, build_dialog_tree,
-    cancel_batch_job, cancel_string_batch_translate, check_aliases, check_pending_cache,
-    colab_assign, colab_filter, colab_get_labels, colab_set_label, compare_esp_files,
-    compare_source_dest, compile_pex, decompile_pex, delocalize_esp, deshape_arabic,
-    discard_translation_cache, export_dial_html, export_xml, extract_ba2_file, extract_ba2_folder,
-    extract_bsa_file, extract_bsa_folder, finalize, finalize_esp, get_all_strings, get_api_config,
-    get_batch_status, get_esp_header, get_fuz_audio_data, get_fuz_lip_data, get_is_dirty, get_stats,
-    get_strings_chunk, get_strings_count, get_translation_providers, header_batch_process,
-    header_rules_add, header_rules_apply, header_rules_delete, header_rules_list,
-    header_rules_load, header_rules_move, header_rules_save, header_rules_toggle,
-    header_rules_update, header_templates_delete, header_templates_list, header_templates_load,
-    header_templates_save, heuristic_search, import_xml, inject_archive, list_ba2_files, list_bsa_files,
-    list_esp_files, load_config, load_data_configs, load_esp, load_mcm_file, load_sst,
-    load_vocabulary, mcm_compare, parse_pex_strings, preproc_opts_delete, preproc_opts_list,
-    preproc_opts_load, preproc_opts_save, preproc_opts_set, query_strings_command, rtl_preview,
-    read_text_file, rtl_reverse, save_config, save_esp, save_mcm_file, save_sst, save_strings, scan_fuz_directory,
+    apply_add_id_offset, apply_add_id_to_strings, apply_def_ui_generator, apply_translation_cache,
+    auto_backup_sst, batch_update_translations, build_dialog_tree, cancel_batch_job,
+    cancel_string_batch_translate, check_aliases, check_pending_cache, colab_assign, colab_filter,
+    colab_get_labels, colab_set_label, compare_esp_files, compare_source_dest, compile_pex,
+    decompile_pex, delocalize_esp, deshape_arabic, discard_translation_cache, export_dial_html,
+    export_xml, extract_ba2_file, extract_ba2_folder, extract_bsa_file, extract_bsa_folder,
+    finalize, finalize_esp, get_all_strings, get_api_config, get_batch_status, get_codepage_info,
+    get_default_def_ui_options, get_esp_header, get_fuz_audio_data, get_fuz_lip_data, get_is_dirty,
+    get_stats, get_strings_chunk, get_strings_count, get_translation_providers,
+    header_batch_process, header_rules_add, header_rules_apply, header_rules_delete,
+    header_rules_list, header_rules_load, header_rules_move, header_rules_save,
+    header_rules_toggle, header_rules_update, header_templates_delete, header_templates_list,
+    header_templates_load, header_templates_save, heuristic_search, import_xml, inject_archive,
+    list_ba2_files, list_bsa_files, list_esp_files, load_config, load_data_configs, load_esp,
+    load_mcm_file, load_sst, load_vocabulary, mcm_compare, parse_pex_strings, preproc_opts_delete,
+    preproc_opts_list, preproc_opts_load, preproc_opts_save, preproc_opts_set,
+    query_strings_command, read_text_file, reload_with_codepage, rtl_preview, rtl_reverse,
+    save_config, save_esp, save_mcm_file, save_sst, save_strings, scan_fuz_directory,
     set_azure_api_key, set_baidu_api_key, set_deepl_api_key, set_openai_api_key,
     set_translation_provider, set_yooudao_api_key, shape_arabic, spell_check_config,
     spell_check_ignore, spell_check_load, spell_check_suggestions, spell_check_text,
     spell_check_toggle, spell_check_unload, sst_merge, start_batch_export, start_batch_translate,
-    start_string_batch_translate, tcsc_batch_convert, tcsc_convert, toolbox_transform,
-    toolbox_load_exception_words, toolbox_get_exception_words, translate_string,
-    update_translation, write_text_file, AppState,
+    start_string_batch_translate, tcsc_batch_convert, tcsc_convert, toolbox_get_exception_words,
+    toolbox_load_exception_words, toolbox_transform, translate_string, update_translation,
+    write_text_file, AppState,
 };
 use std::sync::Arc;
 

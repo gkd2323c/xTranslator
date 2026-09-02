@@ -657,8 +657,7 @@ pub fn xml_scope_matches(sk: &SkyString, params: SkyStringParams, opts: &XmlExpo
     match opts.scope {
         XmlExportScope::Everything => true,
         XmlExportScope::TranslatedAndValidated => {
-            params.is_set(SkyStringParams::TRANSLATED)
-                || params.is_set(SkyStringParams::VALIDATED)
+            params.is_set(SkyStringParams::TRANSLATED) || params.is_set(SkyStringParams::VALIDATED)
         }
         XmlExportScope::Selection => opts
             .selected_ids

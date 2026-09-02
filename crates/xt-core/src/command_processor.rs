@@ -412,7 +412,12 @@ fn parse_api_translation(
     line: usize,
     command: &str,
 ) -> Result<ProcessorCommandKind, CommandProcessorParseError> {
-    let args = require_text(args, line, command, "API id and auto-no-translation-tag flag")?;
+    let args = require_text(
+        args,
+        line,
+        command,
+        "API id and auto-no-translation-tag flag",
+    )?;
     let mut parts = args.splitn(2, ':');
     let api_id = parse_u8(parts.next(), line, command, "API id")?;
     let no_trans_raw = require_text(parts.next(), line, command, "auto-no-translation-tag flag")?;

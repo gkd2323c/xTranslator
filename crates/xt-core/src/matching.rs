@@ -366,10 +366,7 @@ impl MatchIndex {
                 .push(idx);
 
             form_id
-                .entry((
-                    sanitize_form_id(sk.esp_ptr.form_id),
-                    sk.esp_ptr.edid_hash,
-                ))
+                .entry((sanitize_form_id(sk.esp_ptr.form_id), sk.esp_ptr.edid_hash))
                 .or_insert_with(Vec::new)
                 .push(idx);
 
@@ -519,7 +516,10 @@ fn is_candidate_eligible(
             }
             SstOverwriteScope::NoTransAndPartial => {
                 // Delphi 名称虽叫 NoTransAndPartials，实际比较器明确排除 incompleteTrans。
-                if sk.params.is_translated() || sk.params.is_validated() || sk.params.is_incomplete() {
+                if sk.params.is_translated()
+                    || sk.params.is_validated()
+                    || sk.params.is_incomplete()
+                {
                     return false;
                 }
             }
@@ -604,12 +604,7 @@ pub fn apply_dictionary_entries_with_policy(
             strings
                 .iter()
                 .filter(|sk| {
-                    is_candidate_eligible(
-                        sk,
-                        &policy,
-                        selected_set.as_ref(),
-                        filtered_set.as_ref(),
-                    )
+                    is_candidate_eligible(sk, &policy, selected_set.as_ref(), filtered_set.as_ref())
                 })
                 .map(|sk| sk.id)
                 .collect()
@@ -627,9 +622,7 @@ pub fn apply_dictionary_entries_with_policy(
                 .filter(|sk| {
                     eligible_ids.contains(&sk.id)
                         && (opts.reset_state
-                            || sk
-                                .internal_params
-                                .is_set(SkyStringInternalParams::N_TRANS))
+                            || sk.internal_params.is_set(SkyStringInternalParams::N_TRANS))
                 })
                 .map(|sk| sk.id)
                 .collect()
@@ -720,12 +713,7 @@ fn apply_sst_string_only_target_centric(
     for target_idx in 0..strings.len() {
         // VMAD 项在 Delphi 中受 `getfProcCompareOptVMADString` 控制（由 `is_candidate_eligible` 精确判定）：
         // 在 StringOnly 模式下，All / NoTrans 自动屏蔽，仅在 PartialOnly / Selection 显式范围下允许匹配。
-        if !is_candidate_eligible(
-            &strings[target_idx],
-            policy,
-            selected_set,
-            filtered_set,
-        ) {
+        if !is_candidate_eligible(&strings[target_idx], policy, selected_set, filtered_set) {
             continue;
         }
 
@@ -772,11 +760,9 @@ fn apply_sst_string_only_target_centric(
             .filter(|&entry_idx| entries[entry_idx].source == source)
             .collect();
 
-        let Some((entry_idx, ambiguous_source)) = choose_string_only_entry(
-            &strings[target_idx],
-            entries,
-            &candidates,
-        ) else {
+        let Some((entry_idx, ambiguous_source)) =
+            choose_string_only_entry(&strings[target_idx], entries, &candidates)
+        else {
             // Legacy StringOnly 的危险但真实语义：非同语言时，未命中的 eligible 行也 resetTrans。
             // Tag Only 在 Delphi 这里本身是坏的（仍会改文本）；现代 UI 明确承诺“只打标签”，
             // 因而 tag_only 时有意不复制这个 legacy bug。
@@ -948,22 +934,54 @@ fn match_entry_with_policy(
         }
     } else {
         // 标准 4-Tier 匹配流程 (T1 -> T2 -> T3 -> T4)
-        match find_tier1_filtered(strings, index, entry, matched_ids, policy, selected_set, filtered_set) {
+        match find_tier1_filtered(
+            strings,
+            index,
+            entry,
+            matched_ids,
+            policy,
+            selected_set,
+            filtered_set,
+        ) {
             TierMatch::Unique(idx) => return EntryOutcome::Matched(MatchTier::Exact, idx),
             TierMatch::Ambiguous => return EntryOutcome::Ambiguous,
             TierMatch::None => {}
         }
-        match find_tier2_filtered(strings, index, entry, matched_ids, policy, selected_set, filtered_set) {
+        match find_tier2_filtered(
+            strings,
+            index,
+            entry,
+            matched_ids,
+            policy,
+            selected_set,
+            filtered_set,
+        ) {
             TierMatch::Unique(idx) => return EntryOutcome::Matched(MatchTier::Edid, idx),
             TierMatch::Ambiguous => return EntryOutcome::Ambiguous,
             TierMatch::None => {}
         }
-        match find_tier3_filtered(strings, index, entry, matched_ids, policy, selected_set, filtered_set) {
+        match find_tier3_filtered(
+            strings,
+            index,
+            entry,
+            matched_ids,
+            policy,
+            selected_set,
+            filtered_set,
+        ) {
             TierMatch::Unique(idx) => return EntryOutcome::Matched(MatchTier::Normalized, idx),
             TierMatch::Ambiguous => return EntryOutcome::Ambiguous,
             TierMatch::None => {}
         }
-        match find_tier4_filtered(strings, index, entry, matched_ids, policy, selected_set, filtered_set) {
+        match find_tier4_filtered(
+            strings,
+            index,
+            entry,
+            matched_ids,
+            policy,
+            selected_set,
+            filtered_set,
+        ) {
             TierMatch::Unique(idx) => EntryOutcome::Matched(MatchTier::Vocab, idx),
             TierMatch::Ambiguous => EntryOutcome::Ambiguous,
             TierMatch::None => EntryOutcome::Unmatched,
@@ -1029,7 +1047,9 @@ fn find_tier1_filtered(
     let mut found = None;
     for &idx in candidates {
         let sk = &strings[idx];
-        if matched_ids.contains(&sk.id) || !is_candidate_eligible(sk, policy, selected_set, filtered_set) {
+        if matched_ids.contains(&sk.id)
+            || !is_candidate_eligible(sk, policy, selected_set, filtered_set)
+        {
             continue;
         }
         if found.is_some() {
@@ -1067,7 +1087,8 @@ fn find_tier2_filtered(
         .copied()
         .filter(|&idx| {
             let sk = &strings[idx];
-            !matched_ids.contains(&sk.id) && is_candidate_eligible(sk, policy, selected_set, filtered_set)
+            !matched_ids.contains(&sk.id)
+                && is_candidate_eligible(sk, policy, selected_set, filtered_set)
         })
         .collect();
 
@@ -1107,7 +1128,8 @@ fn find_sst_form_id_match(
             || !is_candidate_eligible(sk, policy, selected_set, filtered_set)
             || sk.esp_ptr.field_sig != entry.field_sig
             || is_vmad_string(sk) != entry_is_vmad
-            || (require_source && (sk.hash != string_hash(&entry.source) || sk.source != entry.source))
+            || (require_source
+                && (sk.hash != string_hash(&entry.source) || sk.source != entry.source))
             || (require_index && sk.esp_ptr.index != entry.index)
         {
             continue;
@@ -1187,7 +1209,9 @@ fn find_tier3_filtered(
     let mut found = None;
     for &idx in candidates {
         let sk = &strings[idx];
-        if matched_ids.contains(&sk.id) || !is_candidate_eligible(sk, policy, selected_set, filtered_set) {
+        if matched_ids.contains(&sk.id)
+            || !is_candidate_eligible(sk, policy, selected_set, filtered_set)
+        {
             continue;
         }
         if found.is_some() {
@@ -1230,7 +1254,9 @@ fn find_tier4_filtered(
 
     for &i in index.record_field_candidates((entry.record_sig, entry.field_sig)) {
         let sk = &strings[i];
-        if matched_ids.contains(&sk.id) || !is_candidate_eligible(sk, policy, selected_set, filtered_set) {
+        if matched_ids.contains(&sk.id)
+            || !is_candidate_eligible(sk, policy, selected_set, filtered_set)
+        {
             continue;
         }
         let sk_words = &index.word_sets[i];
@@ -2322,7 +2348,10 @@ mod tests {
         let result = apply_xml_dictionary_entries_with_policy(
             &mut strings,
             &entries,
-            xml_policy(SstOverwriteScope::Selection, SstMatchMode::FormIdStrictString),
+            xml_policy(
+                SstOverwriteScope::Selection,
+                SstMatchMode::FormIdStrictString,
+            ),
         );
         assert_eq!(result.total_matched(), 0);
         assert_eq!(strings[0].translation, "旧苹果");
@@ -2330,7 +2359,10 @@ mod tests {
         // Selection + selected_ids：仅选中项命中
         let mut strings = build_strings();
         let policy = {
-            let mut p = xml_policy(SstOverwriteScope::Selection, SstMatchMode::FormIdStrictString);
+            let mut p = xml_policy(
+                SstOverwriteScope::Selection,
+                SstMatchMode::FormIdStrictString,
+            );
             if let Some(opts) = p.sst_options.as_mut() {
                 opts.selected_ids = Some(vec![2]);
             }
@@ -2354,9 +2386,14 @@ mod tests {
             vec![sk1, sk2, sk3]
         }
         // 同一 XML 源文对应两个不同 str_id 的目标行
-        let entries = vec![
-            make_xml_entry(100, None, *b"WEAP", *b"FULL", "Iron Sword", "铁剑"),
-        ];
+        let entries = vec![make_xml_entry(
+            100,
+            None,
+            *b"WEAP",
+            *b"FULL",
+            "Iron Sword",
+            "铁剑",
+        )];
 
         // FormIdStrictString：XML 条目 form_id=0，候选为 form_id=0 的目标行；
         // 源文精确校验后仅命中同源文的 sk2，sk1（真实 FormID）不受影响。
@@ -2541,14 +2578,7 @@ mod tests {
         assert!(!strings[0].params.is_translated());
 
         // Delphi StringOnly 不做规范化/T4 模糊匹配。
-        let fuzzy_entry = make_dict_entry(
-            11,
-            None,
-            *b"WEAP",
-            *b"FULL",
-            "iron  sword!",
-            "不应命中",
-        );
+        let fuzzy_entry = make_dict_entry(11, None, *b"WEAP", *b"FULL", "iron  sword!", "不应命中");
         let fuzzy_result = apply_dictionary_entries_with_policy(
             &mut vec![make_sk(2, "Iron Sword", 123, *b"WEAP", *b"FULL", 0)],
             &[fuzzy_entry],
@@ -2828,14 +2858,7 @@ mod tests {
         target.set_translation("旧普通译文".to_string());
         target.params.set(SkyStringParams::LOCKED_TRANS, true);
 
-        let mut entry = make_dict_entry(
-            99,
-            None,
-            *b"QUST",
-            *b"FULL",
-            "Normal text",
-            "普通新译文",
-        );
+        let mut entry = make_dict_entry(99, None, *b"QUST", *b"FULL", "Normal text", "普通新译文");
         entry.form_id = 0x0100_0042;
         entry.edid_hash = Some(0x1122_3344);
         entry.index = 3;
@@ -2869,14 +2892,7 @@ mod tests {
             target
         };
         let make_entry = |source: &str, index: u16| {
-            let mut entry = make_dict_entry(
-                -32,
-                None,
-                *b"QUST",
-                *b"VMAD",
-                source,
-                "任务脚本文本",
-            );
+            let mut entry = make_dict_entry(-32, None, *b"QUST", *b"VMAD", source, "任务脚本文本");
             entry.form_id = 0x0100_0042;
             entry.edid_hash = Some(edid_hash);
             entry.index = index;
@@ -2929,14 +2945,7 @@ mod tests {
     #[test]
     fn test_sst_vmad_form_id_apply_uses_review_status_for_changed_translation() {
         let edid_hash = string_hash("QuestScript\0DisplayName");
-        let mut target = make_sk(
-            0,
-            "Quest script text",
-            -32,
-            *b"QUST",
-            *b"VMAD",
-            edid_hash,
-        );
+        let mut target = make_sk(0, "Quest script text", -32, *b"QUST", *b"VMAD", edid_hash);
         target.esp_ptr.form_id = 0x0100_0042;
         target.esp_ptr.index = 3;
         target
@@ -2974,14 +2983,7 @@ mod tests {
     #[test]
     fn test_sst_vmad_form_id_apply_marks_identical_translation_translated() {
         let edid_hash = string_hash("QuestScript\0DisplayName");
-        let mut target = make_sk(
-            0,
-            "Quest script text",
-            -32,
-            *b"QUST",
-            *b"VMAD",
-            edid_hash,
-        );
+        let mut target = make_sk(0, "Quest script text", -32, *b"QUST", *b"VMAD", edid_hash);
         target.esp_ptr.form_id = 0x0100_0042;
         target.esp_ptr.index = 3;
         target
@@ -3020,14 +3022,7 @@ mod tests {
     #[test]
     fn test_sst_vmad_same_language_keeps_review_status_when_source_differs() {
         let edid_hash = string_hash("QuestScript\0DisplayName");
-        let mut target = make_sk(
-            0,
-            "Quest script text",
-            -32,
-            *b"QUST",
-            *b"VMAD",
-            edid_hash,
-        );
+        let mut target = make_sk(0, "Quest script text", -32, *b"QUST", *b"VMAD", edid_hash);
         target.esp_ptr.form_id = 0x0100_0042;
         target.esp_ptr.index = 3;
         target
@@ -3068,14 +3063,7 @@ mod tests {
     #[test]
     fn test_sst_vmad_reset_replays_for_existing_n_trans_marker() {
         let edid_hash = string_hash("QuestScript\0DisplayName");
-        let mut target = make_sk(
-            0,
-            "Current VMAD text",
-            -32,
-            *b"QUST",
-            *b"VMAD",
-            edid_hash,
-        );
+        let mut target = make_sk(0, "Current VMAD text", -32, *b"QUST", *b"VMAD", edid_hash);
         target.esp_ptr.form_id = 0x0100_0042;
         target.esp_ptr.index = 3;
         target
@@ -3166,9 +3154,18 @@ mod tests {
     #[test]
     fn test_sst_vmad_protection_in_string_only_mode() {
         let mut vmad_item = make_sk(0, "QuestScriptVar", 10, *b"VMAD", *b"EDID", 0);
-        vmad_item.internal_params.set(SkyStringInternalParams::IS_VMAD_STRING, true);
+        vmad_item
+            .internal_params
+            .set(SkyStringInternalParams::IS_VMAD_STRING, true);
 
-        let entry = make_dict_entry(99, None, *b"VMAD", *b"EDID", "QuestScriptVar", "任务脚本变量");
+        let entry = make_dict_entry(
+            99,
+            None,
+            *b"VMAD",
+            *b"EDID",
+            "QuestScriptVar",
+            "任务脚本变量",
+        );
 
         // 1. StringOnly + All: VMAD 项被 Delphi compareOptBlock 保护屏蔽，不应被覆盖
         let mut strings_all = vec![vmad_item.clone()];
@@ -3214,7 +3211,9 @@ mod tests {
 
         // 4. StringOnly + PartialOnly: 当且仅当 VMAD 项被标记为 Partial (F2) 时，允许覆盖
         let mut vmad_partial = vmad_item.clone();
-        vmad_partial.params.set(SkyStringParams::INCOMPLETE_TRANS, true);
+        vmad_partial
+            .params
+            .set(SkyStringParams::INCOMPLETE_TRANS, true);
         let mut strings_partial = vec![vmad_partial];
         let res_partial = apply_dictionary_entries_with_policy(
             &mut strings_partial,

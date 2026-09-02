@@ -1,8 +1,8 @@
 use crate::esp::header::{GenericHeader, GrupHeader, RecordHeaderData};
 use crate::esp::record_tree::{EspField, EspFile, EspGrup, EspRecord, Tes4Header};
 use crate::strings::{CodepageTable, StringsFile, StringsFormat};
-use crate::types::esp_pointer::{string_hash, EspPointer};
 use crate::types::esp_pointer::split_form_id_identity;
+use crate::types::esp_pointer::{string_hash, EspPointer};
 use crate::types::game_id::GameId;
 use crate::types::params::SkyStringParams;
 use crate::types::sky_string::SkyString;
@@ -140,7 +140,10 @@ fn scan_edid_container<R: Read + Seek>(
             if header.dsize < 24 {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
-                    format!("invalid GRUP size {} at offset {header_start}", header.dsize),
+                    format!(
+                        "invalid GRUP size {} at offset {header_start}",
+                        header.dsize
+                    ),
                 ));
             }
             let _grup_header = GrupHeader::read_from(reader)?;
@@ -204,12 +207,11 @@ fn extract_edid_field(data: &[u8]) -> Option<String> {
             if size < 4 || pos.checked_add(size)? > data.len() {
                 return None;
             }
-            extended_size = Some(u32::from_le_bytes([
-                data[pos],
-                data[pos + 1],
-                data[pos + 2],
-                data[pos + 3],
-            ]) as usize);
+            extended_size =
+                Some(
+                    u32::from_le_bytes([data[pos], data[pos + 1], data[pos + 2], data[pos + 3]])
+                        as usize,
+                );
             pos += size;
             continue;
         }
@@ -222,7 +224,10 @@ fn extract_edid_field(data: &[u8]) -> Option<String> {
 
         if &sig == b"EDID" {
             let bytes = &data[pos..field_end];
-            let len = bytes.iter().position(|&byte| byte == 0).unwrap_or(bytes.len());
+            let len = bytes
+                .iter()
+                .position(|&byte| byte == 0)
+                .unwrap_or(bytes.len());
             if len == 0 {
                 return None;
             }
@@ -448,7 +453,21 @@ impl StringsFiles {
 
         if !manual && missing.iter().any(|&m| m) {
             let mut archive_paths: Vec<(std::path::PathBuf, bool)> = Vec::new();
-            if let Ok(entries) = std::fs::read_dir(dir) {
+            let mut scanned = std::collections::HashSet::new();
+            // Delphi `getBSAFileName(..., GetParentDirectory(folder), addon)`：
+            // BSA 与 ESP 同级（`<Data>/`），而 strings 文件位于 `<Data>/Strings/`。
+            // 因此先在 strings 目录内找，再回退到其父目录。
+            let dir_path: &std::path::Path = dir.as_ref();
+            let mut scan_dirs: Vec<std::path::PathBuf> = vec![dir_path.to_path_buf()];
+            if let Some(parent) = dir_path.parent() {
+                if parent != dir_path {
+                    scan_dirs.push(parent.to_path_buf());
+                }
+            }
+            for scan_dir in &scan_dirs {
+                let Ok(entries) = std::fs::read_dir(scan_dir) else {
+                    continue;
+                };
                 for entry in entries.flatten() {
                     let path = entry.path();
                     let ext_lower = path
@@ -466,7 +485,9 @@ impl StringsFiles {
                             continue;
                         }
                     }
-                    archive_paths.push((path, is_ba2));
+                    if scanned.insert(path.clone()) {
+                        archive_paths.push((path, is_ba2));
+                    }
                 }
             }
 
@@ -1212,8 +1233,8 @@ impl EspParser {
                             form_id,                  // 记录的 FormID
                             record_sig: *record_sig,  // 记录类型
                             field_sig: field.header.name,
-                            index: field_index,       // 字段索引
-                            index_max: 1,             // 字段总数
+                            index: field_index, // 字段索引
+                            index_max: 1,       // 字段总数
                             edid_hash: editor_id.map_or(0, |s| string_hash(s)), // Editor ID 的 FNV-1a 哈希
                         };
                         sk.edid = editor_id.map(|s| s.to_string());
@@ -1464,7 +1485,13 @@ impl EspParser {
 
             // 处理 VMAD 字段中的脚本字符串
             if &sig == b"VMAD" && !field_data.is_empty() {
-                self.parse_vmad_strings(record_sig, form_id, field_data, field_index, edid.as_deref());
+                self.parse_vmad_strings(
+                    record_sig,
+                    form_id,
+                    field_data,
+                    field_index,
+                    edid.as_deref(),
+                );
             }
 
             field_index += 1;
@@ -1846,7 +1873,10 @@ Def_:CNAM=DOOR=0-proc5
             Some(StringsLoadStrategy::Manual)
         );
         assert_eq!(StringsLoadStrategy::from_str_value("bogus"), None);
-        assert_eq!(StringsLoadStrategy::default(), StringsLoadStrategy::DiskPreferred);
+        assert_eq!(
+            StringsLoadStrategy::default(),
+            StringsLoadStrategy::DiskPreferred
+        );
     }
 
     #[test]
@@ -1862,10 +1892,8 @@ Def_:CNAM=DOOR=0-proc5
     #[test]
     fn test_strings_load_from_dir_marks_disk_sources() {
         // 构造临时目录：只放 .STRINGS 磁盘文件，验证来源标记为 Disk
-        let temp = std::env::temp_dir().join(format!(
-            "xtranslator-strings-disk-{}",
-            std::process::id()
-        ));
+        let temp =
+            std::env::temp_dir().join(format!("xtranslator-strings-disk-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&temp);
         std::fs::create_dir_all(&temp).unwrap();
 
@@ -1899,10 +1927,8 @@ Def_:CNAM=DOOR=0-proc5
     #[test]
     fn test_strings_manual_strategy_reads_explicit_dir_without_archive() {
         // Manual 语义：禁止自动发现（不读 archive），但必须读取用户显式提供的目录
-        let temp = std::env::temp_dir().join(format!(
-            "xtranslator-strings-manual-{}",
-            std::process::id()
-        ));
+        let temp =
+            std::env::temp_dir().join(format!("xtranslator-strings-manual-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&temp);
         std::fs::create_dir_all(&temp).unwrap();
 

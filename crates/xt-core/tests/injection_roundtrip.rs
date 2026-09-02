@@ -216,7 +216,8 @@ fn build_mini_ba2(files: &[(&str, &[u8])]) -> MiniBa2 {
     let mut packed_sizes: Vec<u32> = Vec::new();
     for (_, data) in files {
         data_offsets.push(buf.len() as u32);
-        let mut encoder = flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::default());
+        let mut encoder =
+            flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::default());
         encoder.write_all(data).unwrap();
         let compressed = encoder.finish().unwrap();
         packed_sizes.push(compressed.len() as u32);
@@ -263,7 +264,10 @@ fn build_mini_ba2(files: &[(&str, &[u8])]) -> MiniBa2 {
 fn ba2_injection_roundtrip_replaces_file_and_reopens() {
     let mini = build_mini_ba2(&[
         ("strings\\skyrim_english.strings", b"Hello World"),
-        ("strings\\skyrim_chinese.strings", b"\xe4\xbd\xa0\xe5\xa5\xbd"),
+        (
+            "strings\\skyrim_chinese.strings",
+            b"\xe4\xbd\xa0\xe5\xa5\xbd",
+        ),
     ]);
     let path = write_temp(&mini.bytes, "ba2-src");
     let ba2 = xt_core::ba2::Ba2Archive::open(&path).unwrap();

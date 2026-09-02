@@ -5,8 +5,9 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use tauri::{Emitter, Manager};
 use xt_core::command_processor::{
-    execute_command_processor, parse_command_processor, CommandErrorPolicy, CommandProcessorGlobals,
-    CommandProcessorHost, CommandRule, ProcessorCommand, ProcessorCommandKind,
+    execute_command_processor, parse_command_processor, CommandErrorPolicy,
+    CommandProcessorGlobals, CommandProcessorHost, CommandRule, ProcessorCommand,
+    ProcessorCommandKind,
 };
 use xt_shared::dto::{
     CommandProcessorActiveFileDto, CommandProcessorErrorPolicyDto, CommandProcessorFailureDto,
@@ -130,9 +131,10 @@ impl TauriCommandProcessorHost {
             let source = rule.lang_source.as_deref().ok_or_else(|| {
                 "ApplySst with Global_VocabFolder requires LangSource".to_string()
             })?;
-            let dest = rule.lang_dest.as_deref().ok_or_else(|| {
-                "ApplySst with Global_VocabFolder requires LangDest".to_string()
-            })?;
+            let dest = rule
+                .lang_dest
+                .as_deref()
+                .ok_or_else(|| "ApplySst with Global_VocabFolder requires LangDest".to_string())?;
             return Ok(PathBuf::from(folder).join(delphi_sst_filename(path, source, dest)?));
         }
 
@@ -144,7 +146,8 @@ impl TauriCommandProcessorHost {
         // The Delphi fallback uses its configured SSTUserFolder. The Rust rewrite does not
         // currently have an equivalent global SST folder, so allow a language-suffixed file
         // next to the command path before failing explicitly.
-        if let (Some(source), Some(dest)) = (rule.lang_source.as_deref(), rule.lang_dest.as_deref()) {
+        if let (Some(source), Some(dest)) = (rule.lang_source.as_deref(), rule.lang_dest.as_deref())
+        {
             let generated_name = delphi_sst_filename(path, source, dest)?;
             let generated = direct
                 .parent()
@@ -215,7 +218,10 @@ impl TauriCommandProcessorHost {
     async fn load_file(&mut self, rule: &CommandRule, path: &str) -> Result<(), String> {
         let esp_path = self.resolve_load_path(rule, path)?;
         if !esp_path.is_file() {
-            return Err(format!("LoadFile target does not exist: {}", esp_path.display()));
+            return Err(format!(
+                "LoadFile target does not exist: {}",
+                esp_path.display()
+            ));
         }
 
         let strings_dir = self.strings_dir_for_load(&esp_path);
@@ -397,7 +403,10 @@ impl TauriCommandProcessorHost {
         let state = self.window.state::<Arc<AppState>>();
         commands::save_sst(
             state,
-            PathBuf::from(folder).join(name).to_string_lossy().into_owned(),
+            PathBuf::from(folder)
+                .join(name)
+                .to_string_lossy()
+                .into_owned(),
             Some(masters),
         )
         .await
@@ -520,8 +529,10 @@ impl TauriCommandProcessorHost {
             sk.translation = translation.clone();
             // Delphi resetStatus([incompleteTrans]) after successful machine translation.
             sk.params = xt_core::types::params::SkyStringParams::new();
-            sk.params
-                .set(xt_core::types::params::SkyStringParams::INCOMPLETE_TRANS, true);
+            sk.params.set(
+                xt_core::types::params::SkyStringParams::INCOMPLETE_TRANS,
+                true,
+            );
             applied += 1;
         }
         drop(strings);
@@ -552,12 +563,12 @@ impl TauriCommandProcessorHost {
             "GenerateDictionaries requires the Bethesda Data directory in the run request"
                 .to_string()
         })?;
-        let game_name = self
-            .game
-            .as_deref()
-            .ok_or_else(|| "GenerateDictionaries requires an explicit game workspace".to_string())?;
-        let game = GameId::from_alias(game_name)
-            .ok_or_else(|| format!("unknown game workspace for GenerateDictionaries: {game_name}"))?;
+        let game_name = self.game.as_deref().ok_or_else(|| {
+            "GenerateDictionaries requires an explicit game workspace".to_string()
+        })?;
+        let game = GameId::from_alias(game_name).ok_or_else(|| {
+            format!("unknown game workspace for GenerateDictionaries: {game_name}")
+        })?;
         let source = rule
             .lang_source
             .clone()
@@ -567,8 +578,7 @@ impl TauriCommandProcessorHost {
             .clone()
             .ok_or_else(|| "GenerateDictionaries requires LangDest".to_string())?;
         let output_dir = globals.vocab_folder.as_deref().ok_or_else(|| {
-            "GenerateDictionaries requires Global_VocabFolder as the Rust output folder"
-                .to_string()
+            "GenerateDictionaries requires Global_VocabFolder as the Rust output folder".to_string()
         })?;
         std::fs::create_dir_all(output_dir)
             .map_err(|e| format!("failed to create Global_VocabFolder {output_dir}: {e}"))?;
@@ -756,12 +766,7 @@ impl TauriCommandProcessorHost {
             };
             let output = PathBuf::from(output_dir).join(delphi_sst_filename(name, source, dest)?);
             let state = self.window.state::<Arc<AppState>>();
-            commands::save_sst(
-                state,
-                output.to_string_lossy().into_owned(),
-                Some(masters),
-            )
-            .await?;
+            commands::save_sst(state, output.to_string_lossy().into_owned(), Some(masters)).await?;
             generated += 1;
 
             if index == 0 || (index + 1) % 10 == 0 || index + 1 == names.len() {
@@ -909,8 +914,8 @@ impl TauriCommandProcessorHost {
                     continue;
                 };
                 let (_, local_id) = split_form_id_identity(form_id);
-                if let Some(edid) = master_edids[master_slot]
-                    .get(&(local_id, sk.esp_ptr.record_sig))
+                if let Some(edid) =
+                    master_edids[master_slot].get(&(local_id, sk.esp_ptr.record_sig))
                 {
                     sk.edid = Some(edid.clone());
                     sk.esp_ptr.edid_hash = xt_core::types::esp_pointer::string_hash(edid);
@@ -962,7 +967,10 @@ fn read_master_plugin_type(path: &Path) -> Result<MasterPluginType, String> {
     let header = GenericHeader::read_from(&mut file)
         .map_err(|e| format!("failed to read TES4 header from {}: {e}", path.display()))?;
     if !header.is_tes4() {
-        return Err(format!("{} does not start with a TES4 record", path.display()));
+        return Err(format!(
+            "{} does not start with a TES4 record",
+            path.display()
+        ));
     }
     let record = RecordHeaderData::read_from(&mut file)
         .map_err(|e| format!("failed to read TES4 flags from {}: {e}", path.display()))?;
@@ -1118,10 +1126,8 @@ impl CommandProcessorHost for TauriCommandProcessorHost {
                 path,
             } => match self.resolve_apply_sst_path(globals, rule, path) {
                 Ok(path) => {
-                    let same_language = languages_match(
-                        rule.lang_source.as_deref(),
-                        rule.lang_dest.as_deref(),
-                    );
+                    let same_language =
+                        languages_match(rule.lang_source.as_deref(), rule.lang_dest.as_deref());
                     self.apply_sst(path, *compare_option, *apply_mode, same_language)
                         .await
                 }
@@ -1133,10 +1139,8 @@ impl CommandProcessorHost for TauriCommandProcessorHost {
                 path,
             } => match self.resolve_import_path(globals, path) {
                 Ok(path) => {
-                    let same_language = languages_match(
-                        rule.lang_source.as_deref(),
-                        rule.lang_dest.as_deref(),
-                    );
+                    let same_language =
+                        languages_match(rule.lang_source.as_deref(), rule.lang_dest.as_deref());
                     self.apply_sst(path, *compare_option, *apply_mode, same_language)
                         .await
                 }
@@ -1151,11 +1155,10 @@ impl CommandProcessorHost for TauriCommandProcessorHost {
                     // Delphi batcherImportFile：ImportXml 与 ApplySst/ImportSst 共用同一套
                     // comparator 参数（param1 → 五档 overwrite scope，param2 → 四档 match mode），
                     // 执行函数为 XMLImportbase（未匹配条目不保留 OLD_DATA，由 commands 层处理）。
-                    let same_language = languages_match(
-                        rule.lang_source.as_deref(),
-                        rule.lang_dest.as_deref(),
-                    );
-                    let options = processor_sst_options(*compare_option, *apply_mode, same_language)?;
+                    let same_language =
+                        languages_match(rule.lang_source.as_deref(), rule.lang_dest.as_deref());
+                    let options =
+                        processor_sst_options(*compare_option, *apply_mode, same_language)?;
                     self.import_xml(path, Some(options)).await
                 }
                 Err(error) => Err(error),
@@ -1170,14 +1173,8 @@ impl CommandProcessorHost for TauriCommandProcessorHost {
                 api_id,
                 auto_no_trans_tag,
             } => {
-                self.api_translation(
-                    rule_number,
-                    rule,
-                    command,
-                    *api_id,
-                    *auto_no_trans_tag,
-                )
-                .await
+                self.api_translation(rule_number, rule, command, *api_id, *auto_no_trans_tag)
+                    .await
             }
         };
 
@@ -1252,9 +1249,7 @@ pub async fn run_command_processor(
 
 fn languages_match(source: Option<&str>, destination: Option<&str>) -> bool {
     match (source, destination) {
-        (Some(source), Some(destination)) => {
-            source.trim().eq_ignore_ascii_case(destination.trim())
-        }
+        (Some(source), Some(destination)) => source.trim().eq_ignore_ascii_case(destination.trim()),
         _ => false,
     }
 }
@@ -1381,9 +1376,11 @@ mod tests {
         ));
         assert!(matches!(opts.match_mode, SstMatchModeDto::StringOnly));
         assert!(!opts.same_language);
-        assert!(processor_sst_options(0, 1, true)
-            .expect("same-language options")
-            .same_language);
+        assert!(
+            processor_sst_options(0, 1, true)
+                .expect("same-language options")
+                .same_language
+        );
         assert!(processor_sst_options(5, 1, false).is_err());
         assert!(processor_sst_options(0, 4, false).is_err());
         assert!(languages_match(Some("English"), Some(" english ")));
@@ -1487,10 +1484,8 @@ mod tests {
             std::fs::write(path, bytes).unwrap();
         }
 
-        let temp = std::env::temp_dir().join(format!(
-            "xtranslator-master-flags-{}",
-            std::process::id()
-        ));
+        let temp =
+            std::env::temp_dir().join(format!("xtranslator-master-flags-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&temp);
         std::fs::create_dir_all(&temp).unwrap();
         let normal = temp.join("normal.esm");
@@ -1500,9 +1495,18 @@ mod tests {
         write_tes4(&light, 0x0000_0100);
         write_tes4(&medium, 0x0000_0400);
 
-        assert_eq!(read_master_plugin_type(&normal).unwrap(), MasterPluginType::Normal);
-        assert_eq!(read_master_plugin_type(&light).unwrap(), MasterPluginType::Light);
-        assert_eq!(read_master_plugin_type(&medium).unwrap(), MasterPluginType::Medium);
+        assert_eq!(
+            read_master_plugin_type(&normal).unwrap(),
+            MasterPluginType::Normal
+        );
+        assert_eq!(
+            read_master_plugin_type(&light).unwrap(),
+            MasterPluginType::Light
+        );
+        assert_eq!(
+            read_master_plugin_type(&medium).unwrap(),
+            MasterPluginType::Medium
+        );
 
         let _ = std::fs::remove_dir_all(temp);
     }

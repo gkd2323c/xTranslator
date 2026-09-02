@@ -22,9 +22,8 @@ use xt_core::types::params::SkyStringParams;
 use xt_core::types::sky_string::SkyString;
 use xt_core::xml::{
     collect_xml_export_entries, import_xml_to_sky_strings, import_xml_to_sky_strings_with_policy,
-    parse_xml_file,
-    sky_strings_to_xml_entries, write_xml_file, XmlExportOptions, XmlExportScope,
-    XmlExportParams,
+    parse_xml_file, sky_strings_to_xml_entries, write_xml_file, XmlExportOptions, XmlExportParams,
+    XmlExportScope,
 };
 use xt_shared::dto::{
     ApplyCacheResponse, AutoBackupRequest, AutoBackupResponse, BatchConfig, BatchEntry,
@@ -32,15 +31,12 @@ use xt_shared::dto::{
     CtdaFuncDto, DataConfigsDto, DialogInfoDto, DialogTreeDto, EspComparePairDto,
     EspCompareResultDto, EspLoadProgress, FieldSizeInfoDto, FinalizeRequest, FinalizeResponse,
     FuzLipDataResponse, FuzMapping, FuzScanResponse, HeuristicMatchDTO, HeuristicSearchRequest,
-    InjectArchiveRequest,
-    InjectArchiveResponse, LipDataDto,
-    LipKeyframeDto, LoadEspResponse, LoadSstResponse,
-    McmComparePolicy, McmCompareRequest, McmCompareResult, McmEntryDto, McmFileDto, McmSaveRequest,
-    NpcDialogDto, PexScriptDto, PexTranslatableDto, QueryRequest, QueryResponse, RecoveryInfo,
-    SaveStringsRequest, SaveStringsResponse, SkyStringDTO,
-    SstApplyOptionsDto, SstMatchModeDto, SstOverwriteScopeDto,
-    TranslateRequest, XmlExportRequest, XmlExportScopeDto,
-    XmlImportResponse, XmlProgress,
+    InjectArchiveRequest, InjectArchiveResponse, LipDataDto, LipKeyframeDto, LoadEspResponse,
+    LoadSstResponse, McmComparePolicy, McmCompareRequest, McmCompareResult, McmEntryDto,
+    McmFileDto, McmSaveRequest, NpcDialogDto, PexScriptDto, PexTranslatableDto, QueryRequest,
+    QueryResponse, RecoveryInfo, SaveStringsRequest, SaveStringsResponse, SkyStringDTO,
+    SstApplyOptionsDto, SstMatchModeDto, SstOverwriteScopeDto, TranslateRequest, XmlExportRequest,
+    XmlExportScopeDto, XmlImportResponse, XmlProgress,
 };
 
 use crate::batch::BatchExecutor;
@@ -342,10 +338,9 @@ pub async fn load_esp(
     let strings_dir_clone = strings_dir.clone();
     let language_clone = language.clone();
     let game_clone = game.clone();
-    let strategy = StringsLoadStrategy::from_str_value(
-        strings_strategy.as_deref().unwrap_or("disk"),
-    )
-    .ok_or_else(|| format!("invalid strings strategy: {:?}", strings_strategy))?;
+    let strategy =
+        StringsLoadStrategy::from_str_value(strings_strategy.as_deref().unwrap_or("disk"))
+            .ok_or_else(|| format!("invalid strings strategy: {:?}", strings_strategy))?;
 
     // 解析强制代码页配置（进入 StringsFiles 解码路径，而非只写入 AppState）
     let forced_cp_config = forced_codepage
@@ -788,9 +783,7 @@ pub async fn load_sst(
                 SstOverwriteScopeDto::PartialOnly => {
                     xt_core::matching::SstOverwriteScope::PartialOnly
                 }
-                SstOverwriteScopeDto::Selection => {
-                    xt_core::matching::SstOverwriteScope::Selection
-                }
+                SstOverwriteScopeDto::Selection => xt_core::matching::SstOverwriteScope::Selection,
             };
             let core_mode = match opts.match_mode {
                 SstMatchModeDto::FormIdOnly => xt_core::matching::SstMatchMode::FormIdOnly,
@@ -803,15 +796,16 @@ pub async fn load_sst(
                 SstMatchModeDto::StringOnly => xt_core::matching::SstMatchMode::StringOnly,
             };
 
-            let mut policy = ApplyPolicy::sst_load_with_options(xt_core::matching::SstApplyOptions {
-                overwrite_scope: core_scope,
-                match_mode: core_mode,
-                tag_only: opts.tag_only,
-                reset_state: opts.reset_state,
-                restrict_to_filter: opts.restrict_to_filter,
-                selected_ids: opts.selected_ids,
-                filtered_ids: opts.filtered_ids,
-            });
+            let mut policy =
+                ApplyPolicy::sst_load_with_options(xt_core::matching::SstApplyOptions {
+                    overwrite_scope: core_scope,
+                    match_mode: core_mode,
+                    tag_only: opts.tag_only,
+                    reset_state: opts.reset_state,
+                    restrict_to_filter: opts.restrict_to_filter,
+                    selected_ids: opts.selected_ids,
+                    filtered_ids: opts.filtered_ids,
+                });
             policy.same_language = opts.same_language;
             policy
         }
@@ -1687,10 +1681,11 @@ pub async fn export_xml(
     });
     let entries = match scope {
         Some(scope) => {
-            let selected_ids = request
-                .selected_ids
-                .as_ref()
-                .map(|ids| ids.iter().copied().collect::<std::collections::HashSet<u32>>());
+            let selected_ids = request.selected_ids.as_ref().map(|ids| {
+                ids.iter()
+                    .copied()
+                    .collect::<std::collections::HashSet<u32>>()
+            });
             collect_xml_export_entries(
                 &strings,
                 &XmlExportOptions {
@@ -1775,9 +1770,7 @@ pub async fn import_xml(
                 SstOverwriteScopeDto::PartialOnly => {
                     xt_core::matching::SstOverwriteScope::PartialOnly
                 }
-                SstOverwriteScopeDto::Selection => {
-                    xt_core::matching::SstOverwriteScope::Selection
-                }
+                SstOverwriteScopeDto::Selection => xt_core::matching::SstOverwriteScope::Selection,
             };
             let core_mode = match opts.match_mode {
                 SstMatchModeDto::FormIdOnly => xt_core::matching::SstMatchMode::FormIdOnly,
@@ -2398,10 +2391,7 @@ pub async fn inject_archive(
 
 /// 解析 PEX 文件并提取可翻译的字符串
 #[tauri::command]
-pub async fn parse_pex_strings(
-    pex_path: String,
-    game: String,
-) -> Result<PexScriptDto, String> {
+pub async fn parse_pex_strings(pex_path: String, game: String) -> Result<PexScriptDto, String> {
     let mut file =
         std::fs::File::open(&pex_path).map_err(|e| format!("Failed to open PEX: {}", e))?;
 
@@ -3345,9 +3335,7 @@ use xt_core::toolbox::{get_exception_words, load_exception_words};
 /// 从配置中加载工具箱例外词，并应用到运行时。
 /// 在应用程序启动且加载配置后调用。
 #[tauri::command]
-pub async fn toolbox_load_exception_words(
-    words: Option<String>,
-) -> Result<String, String> {
+pub async fn toolbox_load_exception_words(words: Option<String>) -> Result<String, String> {
     if let Some(ref w) = words {
         load_exception_words(w);
     }
@@ -3470,8 +3458,7 @@ pub async fn spell_check_ignore(
 
 use xt_core::def_ui::{generate_def_ui_translations, DefUiOptions};
 use xt_shared::dto::{
-    def_ui_scope, DefUiApplyRequestDto, DefUiApplyResultDto, DefUiItemPreviewDto,
-    DefUiOptionsDto,
+    def_ui_scope, DefUiApplyRequestDto, DefUiApplyResultDto, DefUiItemPreviewDto, DefUiOptionsDto,
 };
 
 /// Map shared scope constant to core internal scope alias.
@@ -3496,16 +3483,13 @@ fn resolve_def_ui_game_id(
     esp_file: Option<&EspFile>,
 ) -> Result<GameId, String> {
     if let Some(g) = game {
-        return GameId::from_alias(g)
-            .ok_or_else(|| format!("Unknown game: {g}"));
+        return GameId::from_alias(g).ok_or_else(|| format!("Unknown game: {g}"));
     }
     esp_file
-        .and_then(|f| {
-            game_detect::game_from_form_version(f.tes4.record_header_data.f_version)
-        })
-        .ok_or_else(||
+        .and_then(|f| game_detect::game_from_form_version(f.tes4.record_header_data.f_version))
+        .ok_or_else(|| {
             "No game context available: provide `game` explicitly or load an ESP first".to_string()
-        )
+        })
 }
 
 /// 获取针对特定游戏的默认 DEF_UI 配置
@@ -3573,15 +3557,26 @@ pub fn apply_def_ui_generator(
     };
 
     let selected_set = if core_scope == "selection" {
-        Some(request.selected_ids.iter().copied().collect::<std::collections::HashSet<u32>>())
+        Some(
+            request
+                .selected_ids
+                .iter()
+                .copied()
+                .collect::<std::collections::HashSet<u32>>(),
+        )
     } else {
         None
     };
     // Prevent accidental scope drift between options.scope and top-level request.scope
     def_opts.scope = core_scope.to_string();
 
-    let (mutations, total_misc) =
-        generate_def_ui_translations(&strings, esp_file, &def_opts, selected_set.as_ref(), game_id);
+    let (mutations, total_misc) = generate_def_ui_translations(
+        &strings,
+        esp_file,
+        &def_opts,
+        selected_set.as_ref(),
+        game_id,
+    );
 
     let mut details = Vec::new();
     let modified_count = mutations.len() as u32;
@@ -3661,7 +3656,9 @@ pub async fn reload_with_codepage(
 ) -> Result<LoadEspResponse, String> {
     let (esp_path, strings_dir, language, game, strings_strategy) = {
         let file_info = state.file_info.lock().map_err(|e| e.to_string())?;
-        let info = file_info.as_ref().ok_or_else(|| "No ESP file currently loaded".to_string())?;
+        let info = file_info
+            .as_ref()
+            .ok_or_else(|| "No ESP file currently loaded".to_string())?;
         (
             info.esp_path.clone(),
             info.strings_dir.clone(),
@@ -3719,7 +3716,9 @@ pub fn apply_add_id_offset(
         // 根据范围过滤
         let in_scope = match request.scope.as_str() {
             "all" => true,
-            "only_selected" => selected_set.as_ref().map_or(false, |set| set.contains(&s.id)),
+            "only_selected" => selected_set
+                .as_ref()
+                .map_or(false, |set| set.contains(&s.id)),
             _ => s.translation.is_empty(), // "only_untranslated"
         };
 
@@ -3751,7 +3750,7 @@ pub fn apply_add_id_to_strings(
     request: xt_shared::dto::AddIdToStringsRequestDto,
 ) -> Result<xt_shared::dto::AddIdToStringsResultDto, String> {
     use xt_core::add_id_to_strings::{
-        AddIdToStringsOptions, AddIdToStringsScope, add_id_to_strings,
+        add_id_to_strings, AddIdToStringsOptions, AddIdToStringsScope,
     };
 
     let mut strings = state.strings.lock().map_err(|e| e.to_string())?;
@@ -5737,7 +5736,10 @@ mod def_ui_command_tests {
     #[test]
     fn def_ui_scope_mapping_covers_shared_constants() {
         assert_eq!(core_scope_from_shared("all"), Ok("all"));
-        assert_eq!(core_scope_from_shared("only_untranslated"), Ok("untranslated"));
+        assert_eq!(
+            core_scope_from_shared("only_untranslated"),
+            Ok("untranslated")
+        );
         assert_eq!(core_scope_from_shared("only_selected"), Ok("selection"));
         assert!(core_scope_from_shared("selection").is_err());
         assert!(core_scope_from_shared("").is_err());
@@ -5761,10 +5763,7 @@ mod def_ui_command_tests {
         );
 
         // 不同语言 / 策略 / 目录 / 游戏：各自不同
-        assert_ne!(
-            base,
-            load_context_hash(None, "chinese", None, "disk", None)
-        );
+        assert_ne!(base, load_context_hash(None, "chinese", None, "disk", None));
         assert_ne!(
             base,
             load_context_hash(None, "english", None, "manual", None)
@@ -5781,13 +5780,16 @@ mod def_ui_command_tests {
 
     #[test]
     fn def_ui_game_id_prefers_explicit_over_detection() {
-        use xt_core::esp::record_tree::{EspFile, Tes4Header};
         use xt_core::esp::header::{GenericHeader, RecordHeaderData};
+        use xt_core::esp::record_tree::{EspFile, Tes4Header};
 
         // Minimal ESP whose TES4 f_version maps to SkyrimSE
         let esp = EspFile {
             tes4: Tes4Header {
-                generic: GenericHeader { name: *b"TES4", dsize: 0 },
+                generic: GenericHeader {
+                    name: *b"TES4",
+                    dsize: 0,
+                },
                 record_header_data: RecordHeaderData {
                     flags: 0,
                     form_id: 0,

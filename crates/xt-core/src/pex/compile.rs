@@ -206,7 +206,8 @@ pub mod tests {
             b.write_u16::<BigEndian>(0).unwrap(); // states count
             b
         };
-        data.write_u32::<BigEndian>((body.len() as u32) + 4).unwrap(); // size = body + 4 (size字段自身)
+        data.write_u32::<BigEndian>((body.len() as u32) + 4)
+            .unwrap(); // size = body + 4 (size字段自身)
         data.extend_from_slice(&body);
 
         data
@@ -222,7 +223,10 @@ pub mod tests {
         // 无翻译 roundtrip
         let (recompiled, updated, _) = compile_pex_bytes(&script, &[]).unwrap();
         assert_eq!(updated, 0, "无翻译时不应更新任何字符串");
-        assert_eq!(recompiled, original, "Big-Endian roundtrip 必须 byte-for-byte 相同");
+        assert_eq!(
+            recompiled, original,
+            "Big-Endian roundtrip 必须 byte-for-byte 相同"
+        );
     }
 
     /// 构造一个最小的真实 Starfield PEX（Little-Endian，含完整 Object Body 结构）
@@ -230,7 +234,8 @@ pub mod tests {
         use byteorder::{LittleEndian, WriteBytesExt};
         let mut data = Vec::new();
         data.extend_from_slice(&[0xDE, 0xC0, 0x57, 0xFA]); // Magic LE
-        data.push(3); data.push(9);
+        data.push(3);
+        data.push(9);
         data.write_u16::<LittleEndian>(4).unwrap(); // GameID = 4 (Starfield)
         data.write_u64::<LittleEndian>(0).unwrap();
         for s in &["Source/StarTest.psc", "StarUser", "StarPC"] {
@@ -238,7 +243,8 @@ pub mod tests {
             data.extend_from_slice(s.as_bytes());
         }
         let strings = &["", "StarScript", "DoIt", "None", "myGuard"];
-        data.write_u16::<LittleEndian>(strings.len() as u16).unwrap();
+        data.write_u16::<LittleEndian>(strings.len() as u16)
+            .unwrap();
         for s in strings {
             data.write_u16::<LittleEndian>(s.len() as u16).unwrap();
             data.extend_from_slice(s.as_bytes());
@@ -273,7 +279,8 @@ pub mod tests {
         body.push(0x1A); // Return
         body.push(0); // None
 
-        data.write_u32::<LittleEndian>((body.len() as u32) + 4).unwrap(); // size = body + 4
+        data.write_u32::<LittleEndian>((body.len() as u32) + 4)
+            .unwrap(); // size = body + 4
         data.extend_from_slice(&body);
         data
     }
@@ -287,6 +294,9 @@ pub mod tests {
 
         let (recompiled, updated, _) = compile_pex_bytes(&script, &[]).unwrap();
         assert_eq!(updated, 0, "无翻译时不应更新任何字符串");
-        assert_eq!(recompiled, original, "Little-Endian roundtrip 必须 byte-for-byte 相同");
+        assert_eq!(
+            recompiled, original,
+            "Little-Endian roundtrip 必须 byte-for-byte 相同"
+        );
     }
 }

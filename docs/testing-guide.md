@@ -140,8 +140,8 @@ cargo run --bin test_data_generator
 
 - **Purpose**: Test individual functions and modules
 - **Location**: `crates/xt-core/src/**/*.rs`
-- **Count**: 359 tests
-- **Coverage**: Core parsing, string handling, SST, XML, cache
+- **Count**: 374 tests (lib) + 4 L3 Delphi-golden integration tests (`tests/l3_delphi_golden.rs`)
+- **Coverage**: Core parsing, string handling, SST, XML, cache; Delphi 1.6.0 golden-file cross-validation
 
 ### 2. Smoke Tests
 

@@ -184,7 +184,8 @@ fn smoke_xml_roundtrip() {
     }
 
     let import_result = xml::parse_xml_file(&xml_path).unwrap();
-    let match_result = xt_core::matching::apply_xml_dictionary_entries(&mut import_strings, &import_result.1);
+    let match_result =
+        xt_core::matching::apply_xml_dictionary_entries(&mut import_strings, &import_result.1);
     let matched = match_result.total_matched() as usize;
 
     assert!(matched >= 3, "Too few matches: {}", matched);

@@ -1,7 +1,7 @@
-pub mod ba2;
 pub mod add_id;
 pub mod add_id_to_strings;
 pub mod archive_inject;
+pub mod ba2;
 pub mod batch_queue;
 pub mod bsa;
 pub mod cache;

@@ -45,7 +45,12 @@ fn compute_data_start(directory: &BsaDirectory) -> u64 {
 /// - `name_prefix_len`：flag 9 时写入的名字前缀长度（Delphi 的 addLen_flag）
 /// - archive COMPRESSFILES 置位：compressed → 长度（标志位 0）；未压缩 → 长度 | BSAFILE_COMPRESS
 /// - archive COMPRESSFILES 未置位：compressed → 长度 | BSAFILE_COMPRESS；未压缩 → 长度
-fn make_raw_size(header: &BsaHeader, packed_len: u32, name_prefix_len: u32, is_compressed: bool) -> u32 {
+fn make_raw_size(
+    header: &BsaHeader,
+    packed_len: u32,
+    name_prefix_len: u32,
+    is_compressed: bool,
+) -> u32 {
     let len_with_prefix = packed_len + name_prefix_len;
     let compress_flag_set = (header.archive_flags & BSAARCHIVE_COMPRESSFILES) != 0;
     if compress_flag_set {
@@ -120,10 +125,8 @@ fn write_file_data<W: Write + Seek, R: Read + Seek>(
                 out.write_all(&compressed)?;
                 new_size + 4 + compressed.len() as u32
             } else {
-                let mut encoder = flate2::write::ZlibEncoder::new(
-                    Vec::new(),
-                    flate2::Compression::default(),
-                );
+                let mut encoder =
+                    flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::default());
                 encoder
                     .write_all(new_data)
                     .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
@@ -222,8 +225,14 @@ pub fn inject_bsa<W: Write + Seek>(
         for (file_idx, file) in folder.files.iter().enumerate() {
             let rel_path = format!("{}/{}", folder.name, file.name);
             let was_injected = replacements.contains_key(&rel_path);
-            let (new_offset, new_raw_size) =
-                write_file_data(output, &mut source, header, &folder.name, file, replacements)?;
+            let (new_offset, new_raw_size) = write_file_data(
+                output,
+                &mut source,
+                header,
+                &folder.name,
+                file,
+                replacements,
+            )?;
             if was_injected {
                 injected += 1;
                 if let Some(pos) = requested.iter().position(|p| *p == &rel_path) {

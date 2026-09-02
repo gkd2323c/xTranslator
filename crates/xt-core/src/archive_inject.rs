@@ -73,8 +73,8 @@ fn inject_bsa_file(
     }
 
     let tmp_path = temp_sibling(archive_path, "inject");
-    let mut out = std::fs::File::create(&tmp_path)
-        .map_err(|e| format!("failed to create temp file: {e}"))?;
+    let mut out =
+        std::fs::File::create(&tmp_path).map_err(|e| format!("failed to create temp file: {e}"))?;
 
     let summary = archive
         .inject_file(&mut out, replacements)
@@ -116,8 +116,8 @@ fn inject_ba2_file(
     }
 
     let tmp_path = temp_sibling(archive_path, "inject");
-    let mut out = std::fs::File::create(&tmp_path)
-        .map_err(|e| format!("failed to create temp file: {e}"))?;
+    let mut out =
+        std::fs::File::create(&tmp_path).map_err(|e| format!("failed to create temp file: {e}"))?;
 
     let summary = archive
         .inject_file(&mut out, replacements)
@@ -184,8 +184,7 @@ fn replace_atomically(
                 .unwrap_or("archive"),
             stamp
         ));
-        std::fs::copy(target, &backup_path)
-            .map_err(|e| format!("failed to create backup: {e}"))?;
+        std::fs::copy(target, &backup_path).map_err(|e| format!("failed to create backup: {e}"))?;
         Some(backup_path)
     } else {
         None
@@ -196,8 +195,7 @@ fn replace_atomically(
         std::fs::remove_file(target)
             .map_err(|e| format!("failed to remove original for replace: {e}"))?;
     }
-    std::fs::rename(tmp, target)
-        .map_err(|e| format!("failed to replace archive: {e}"))?;
+    std::fs::rename(tmp, target).map_err(|e| format!("failed to replace archive: {e}"))?;
     Ok(backup)
 }
 
@@ -221,8 +219,7 @@ fn replace_atomically(
                 .unwrap_or("archive"),
             stamp
         ));
-        std::fs::copy(target, &backup_path)
-            .map_err(|e| format!("failed to create backup: {e}"))?;
+        std::fs::copy(target, &backup_path).map_err(|e| format!("failed to create backup: {e}"))?;
         Some(backup_path)
     } else {
         None

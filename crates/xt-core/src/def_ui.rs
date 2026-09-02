@@ -217,7 +217,11 @@ pub fn format_def_ui_string(
 
         // 首字母缩写
         if opts.use_first_char && !compo_name.is_empty() {
-            compo_name = compo_name.chars().next().map(|c| c.to_string()).unwrap_or(compo_name);
+            compo_name = compo_name
+                .chars()
+                .next()
+                .map(|c| c.to_string())
+                .unwrap_or(compo_name);
         }
 
         // 数量标记
@@ -376,7 +380,8 @@ pub fn generate_def_ui_translations(
             }
         }
 
-        let new_trans = format_def_ui_string(&s.source, &s.translation, &components, weight, opts, game);
+        let new_trans =
+            format_def_ui_string(&s.source, &s.translation, &components, weight, opts, game);
         let orig = if !s.translation.is_empty() {
             s.translation.clone()
         } else {
@@ -434,14 +439,7 @@ mod tests {
             },
         ];
 
-        let out = format_def_ui_string(
-            "Desk Fan",
-            "",
-            &comps,
-            0.0,
-            &opts,
-            GameId::Fallout4,
-        );
+        let out = format_def_ui_string("Desk Fan", "", &comps, 0.0, &opts, GameId::Fallout4);
         assert_eq!(out, "Desk Fan {{{Steel, Spring}}}");
 
         // Test with existing DEF_UI tag cleaned
@@ -473,20 +471,13 @@ mod tests {
             },
         ];
 
-        let out = format_def_ui_string(
-            "Desk Fan",
-            "",
-            &comps,
-            0.0,
-            &opts,
-            GameId::Fallout4,
-        );
+        let out = format_def_ui_string("Desk Fan", "", &comps, 0.0, &opts, GameId::Fallout4);
         assert_eq!(out, "Desk Fan {{{Steel*, Spring**}}}");
     }
 
     use super::*;
     use crate::esp::header::{FieldHeader, GenericHeader, GrupHeader, RecordHeaderData};
-    use crate::esp::record_tree::{EspField, EspGrup, EspFile, EspRecord, Tes4Header};
+    use crate::esp::record_tree::{EspField, EspFile, EspGrup, EspRecord, Tes4Header};
 
     /// Build a minimal EspFile containing one MISC record (with CVPA + DATA fields)
     /// and one CMPO record, both non-compressed.
@@ -504,7 +495,10 @@ mod tests {
         data_buf.extend_from_slice(&1.5f32.to_le_bytes());
 
         let misc_rec = EspRecord {
-            header: GenericHeader { name: *b"MISC", dsize: 0 },
+            header: GenericHeader {
+                name: *b"MISC",
+                dsize: 0,
+            },
             record_header_data: RecordHeaderData {
                 flags: 0,
                 form_id: misc_form_id,
@@ -514,12 +508,18 @@ mod tests {
             },
             fields: vec![
                 EspField {
-                    header: FieldHeader { name: *b"CVPA", dsize: cvpa_buf.len() as u16 },
+                    header: FieldHeader {
+                        name: *b"CVPA",
+                        dsize: cvpa_buf.len() as u16,
+                    },
                     buffer: cvpa_buf,
                     is_size_xxxx: false,
                 },
                 EspField {
-                    header: FieldHeader { name: *b"DATA", dsize: data_buf.len() as u16 },
+                    header: FieldHeader {
+                        name: *b"DATA",
+                        dsize: data_buf.len() as u16,
+                    },
                     buffer: data_buf,
                     is_size_xxxx: false,
                 },
@@ -532,7 +532,10 @@ mod tests {
         };
 
         let cmpo_rec = EspRecord {
-            header: GenericHeader { name: *b"CMPO", dsize: 0 },
+            header: GenericHeader {
+                name: *b"CMPO",
+                dsize: 0,
+            },
             record_header_data: RecordHeaderData {
                 flags: 0,
                 form_id: cmpo_form_id,
@@ -549,7 +552,10 @@ mod tests {
         };
 
         let grup = EspGrup {
-            header: GenericHeader { name: *b"GRUP", dsize: 0 },
+            header: GenericHeader {
+                name: *b"GRUP",
+                dsize: 0,
+            },
             grup_header: GrupHeader {
                 s_ident: *b"MISC",
                 s_type: 0,
@@ -564,7 +570,10 @@ mod tests {
 
         EspFile {
             tes4: Tes4Header {
-                generic: GenericHeader { name: *b"TES4", dsize: 0 },
+                generic: GenericHeader {
+                    name: *b"TES4",
+                    dsize: 0,
+                },
                 record_header_data: RecordHeaderData {
                     flags: 0,
                     form_id: 0,
@@ -580,7 +589,13 @@ mod tests {
 
     #[test]
     fn test_generate_respects_ignore_list() {
-        let mut s1 = SkyString::new(1, "Desk Fan".to_string(), "".to_string(), *b"MISC", *b"FULL");
+        let mut s1 = SkyString::new(
+            1,
+            "Desk Fan".to_string(),
+            "".to_string(),
+            *b"MISC",
+            *b"FULL",
+        );
         s1.esp_ptr.form_id = 0x0001EC8B;
         s1.edid = Some("DN101_DeskFan".to_string());
         let strings = vec![s1];
@@ -606,7 +621,13 @@ mod tests {
 
     #[test]
     fn test_generate_ignore_list_by_form_id() {
-        let mut s1 = SkyString::new(1, "Desk Fan".to_string(), "".to_string(), *b"MISC", *b"FULL");
+        let mut s1 = SkyString::new(
+            1,
+            "Desk Fan".to_string(),
+            "".to_string(),
+            *b"MISC",
+            *b"FULL",
+        );
         s1.esp_ptr.form_id = 0x0001EC8B;
         let strings = vec![s1];
 
@@ -625,7 +646,10 @@ mod tests {
     fn test_scope_values_match_shared_contract() {
         // Guard: core scope aliases must stay aligned with xt-shared def_ui_scope
         assert_eq!(xt_shared::dto::def_ui_scope::ALL, "all");
-        assert_eq!(xt_shared::dto::def_ui_scope::ONLY_UNTRANSLATED, "only_untranslated");
+        assert_eq!(
+            xt_shared::dto::def_ui_scope::ONLY_UNTRANSLATED,
+            "only_untranslated"
+        );
         assert_eq!(xt_shared::dto::def_ui_scope::ONLY_SELECTED, "only_selected");
         // Core consumes canonical values via a thin alias map
         assert_eq!(core_scope("all"), "all");

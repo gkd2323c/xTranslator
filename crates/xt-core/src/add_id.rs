@@ -76,7 +76,10 @@ mod tests {
     #[test]
     fn test_calculate_offset() {
         assert_eq!(calculate_offset_form_id(0x00012345, 0x01000000), 0x01012345);
-        assert_eq!(calculate_offset_form_id(0x02012345, -0x01000000), 0x01012345);
+        assert_eq!(
+            calculate_offset_form_id(0x02012345, -0x01000000),
+            0x01012345
+        );
         assert_eq!(calculate_offset_form_id(0x00000010, -100), 0);
     }
 }

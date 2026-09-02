@@ -288,7 +288,13 @@ impl SstDictionary {
                 continue;
             }
 
-            let mut sk = SkyString::new(0, source, translation, esp_ptr.record_sig, esp_ptr.field_sig);
+            let mut sk = SkyString::new(
+                0,
+                source,
+                translation,
+                esp_ptr.record_sig,
+                esp_ptr.field_sig,
+            );
             sk.esp_ptr = esp_ptr;
             sk.params = params;
             sk.colab_id = colab_id;
@@ -683,7 +689,7 @@ mod tests {
         let mut buf = Vec::new();
         buf.extend_from_slice(&0x38555353u32.to_le_bytes()); // v7 magic
         buf.push(0); // v4 placeholder flag
-        // Colab Label List (v7+): count(4) + [(id:4 + label)]
+                     // Colab Label List (v7+): count(4) + [(id:4 + label)]
         buf.extend_from_slice(&2i32.to_le_bytes()); // 2 labels
         buf.extend_from_slice(&1i32.to_le_bytes()); // label 1 id
         write_delphi_string(&mut buf, "Alice").unwrap();

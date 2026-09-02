@@ -52,7 +52,7 @@
 | R-07 | P2 | XML Export / EDID 尾项 | ✅ 核心完成 | DP-08/09 已标记 L2/L3 差异；split-colab、FUZ metadata、VMAD _prop EDID 为已知差异 |
 | R-08 | P2 | FUZ rename 工具 | ✅ 已确认 | Delphi 源码无 FUZ rename 功能；Rust 当前实现已覆盖全部 Delphi FUZ 能力（扫描、INFO 映射、音频播放、LIP 预览） |
 | R-09 | P2 | parity 文档状态重建 | ✅ 已闭环 | R-01~R-05 状态已同步；R-07/08 已确认；DP 编号 01-14 无冲突；development_plan 与 remediation_plan 交叉引用已校准 |
-| R-10 | P3 | L3 真实样本交叉验证 | ⚠️ 不完整 | FO76/Starfield、真实 archive、Delphi SST/XML 尚未全覆盖 |
+| R-10 | P3 | L3 真实样本交叉验证 | ✅ Skyrim SE 已闭环 | 2026-09-02：BSA 查找目录 bug 修复 + golden_diff 空壳修复 + 4 项 L3 golden 测试；FO4/76/Starfield 样本缺失（本机未安装） |
 | R-11 | P3 | Rust formatting / warning 清理 | ⚠️ 质量门禁 | `cargo fmt --check` 不通过，存在未使用代码告警 |
 
 ---
@@ -269,13 +269,17 @@
 
 | 能力 | Skyrim SE | Fallout 4 | Fallout 76 | Starfield | Delphi 对照 |
 |---|---|---|---|---|---|
-| ESP load / game detect | ✅ 已有真实 E2E | 待补 | 待补 | 待补 | 不适用/行为对照 |
-| PEX | ✅ fixture | ✅ fixture | 待补 | 待补 | 反编译输出抽样 |
-| SST apply | 待补 | 可选 | 可选 | 可选 | 必须 |
-| XML export/import | 待补 | 可选 | 可选 | 可选 | 必须 |
-| BSA injection | 待补真实 archive | - | - | - | 必须抽样 |
-| BA2 injection | - | 待补真实 archive | 可选 | 待补 | 必须抽样 |
-| Codepage override | 老 MOD 样本 | 老 MOD 样本 | 视样本 | 视样本 | 行为对照 |
+| ESP load / game detect | ✅ 已有真实 E2E | ⚠️ 样本缺失 | ⚠️ 样本缺失 | ⚠️ 样本缺失 | 不适用/行为对照 |
+| PEX | ✅ fixture | ✅ fixture | ⚠️ 样本缺失 | ⚠️ 样本缺失 | 反编译输出抽样 |
+| SST apply | ✅ 67390 条可读 | ⚠️ 样本缺失 | ⚠️ 样本缺失 | ⚠️ 样本缺失 | ✅ 必须（已验证） |
+| XML export/import | ✅ 67390 条 100% key 匹配 | ⚠️ 样本缺失 | ⚠️ 样本缺失 | ⚠️ 样本缺失 | ✅ 必须（已验证） |
+| BSA injection | ✅ 真实 archive 抽样 | - | - | - | ✅ 必须抽样（已验证） |
+| BA2 injection | -（Skyrim 无 BA2） | 🔲 待补真实 archive | ⚠️ 样本缺失 | ⚠️ 样本缺失 | 必须抽样 |
+| Codepage override | ⚠️ 老 MOD 样本缺失 | ⚠️ 样本缺失 | 视样本 | 视样本 | 行为对照 |
+
+图例：✅ 已验证 / ⚠️ 样本缺失（本机未安装对应游戏或缺少老 MOD）/ 🔲 待补 / - 不适用。
+
+详细结果与根因分析见 `docs/l3_verification_matrix.md`。
 
 Release E2E 当前在普通 shell 下会因 `libz-ng-sys` 找不到 Visual Studio CMake generator 失败。发布 QA 应使用已加载 VS Developer 环境的 shell，或把该前置条件写进 `docs/release_qa.md`。
 
