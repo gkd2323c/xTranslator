@@ -1,6 +1,8 @@
 # xTranslator - Rust 重写版
 
+[![Version: 1.2.0](https://img.shields.io/badge/Version-1.2.0-blue.svg)](RELEASE.md)
 [![License: MPL-2.0](https://img.shields.io/badge/License-MPL--2.0-brightgreen.svg)](LICENSE)
+[![Tests](https://img.shields.io/badge/Tests-359_+_64_E2E_passing-brightgreen.svg)](CHANGELOG.md)
 
 一款现代化的基于 Rust 的 Bethesda 游戏模组翻译工具（Skyrim、Skyrim SE、Fallout 4、Starfield）。这是原 Delphi xTranslator 工具的完整重写版本，采用 Tauri 桌面 UI 和 React 前端。
 
@@ -65,9 +67,9 @@ xTranslator/
 
 ## 项目状态
 
-**v1.1.0 已发布，Skyrim SE 验证硬化完成！** 🎉
+**v1.2.0 稳定版已发布！** 🎉
 
-重写版本已覆盖主要桌面翻译工作流。`SPEC.md` 跟踪 **100 个已完成任务** + **P6 扩展任务**，涵盖解析、编辑、ESP 写入、比较工具、归档支持、翻译 API、配置持久化和语言工具。
+重写版本已覆盖主要桌面翻译工作流，`SPEC.md` 跟踪 **100 个已完成任务**，涵盖解析、编辑、ESP 写入、比较工具、归档支持、翻译 API、配置持久化和语言工具。
 
 所有核心功能已实现并通过测试：
 - ✅ ESP 解析 + 记录树 + 写入（T42-T45）
@@ -89,11 +91,22 @@ xTranslator/
 - ✅ 虚拟滚动（react-window v2，76K+ 条）
 - ✅ 10 语言 i18n UI
 - ✅ 主题系统（Obsidian / Slate / Light / Auto）
+- ✅ 高级搜索面板（AdvSearchDialog，按字段正则 + 预设）
+- ✅ 命令脚本批处理器（CommandProcessor，Delphi 等价命令集）
+- ✅ BSA/BA2 注入式替换（原子安全写回）
+- ✅ DEF_UI 组件生成器（DefUiGenDialog）
+- ✅ 代码页手动选择/覆盖（ChooseCpDialog）
+- ✅ AddId FormID 批量偏移工具（AddIdDialog）
 
-近期新增（v1.1.0）：
+**Skyrim SE 验证已硬化** — golden snapshot 已锁存（75,754 字符串，118 个顶级 GRUP），回归脚本可用。Delphi 交叉验证仍待进行（需 Delphi 1.6.0 运行环境）。
+
+近期新增（v1.2.0）：
+- FUZ LIP 关键帧可视化 — 彩色条形图预览，带图例与时间轴
+- Skyrim SE 验证硬化 — L1/L2/L3 验证 + golden snapshot + 回归脚本
 - 工具箱例外词列表（P6）— Title Case 例外词编辑器，持久化到 config.json
-- SST v1-v7 向后读取兼容（P5.1）— 自动检测版本魔数
-- Skyrim SE 验证硬化 — L1/L2/L3 验证通过，golden snapshot 已锁存，回归脚本可用
+- SST v1-v8 版本枚举 — 自动检测魔数以支持旧版格式
+- E2E 测试套件全绿 — 64 项测试通过（12.4s）
+- Windows 环境变量空白符修复 — Windows 上 E2E mock alias 加载
 - Delphi 风格启发式评分（6 维复合评分）
 
 后续工作：Delphi 实机交叉验证仍待进行（需 Delphi 1.6.0 运行环境），UI 体验持续打磨。

@@ -2,7 +2,7 @@
 
 ## 当前版本
 - **版本**: 1.2.0 (正式版)
-- **测试**: `cargo test -p xt-core --lib` → 310 passed | `npm run test` → 25 passed | Playwright 当前 58 passed / 6 个既有 UI 选择器用例待修
+- **测试**: `cargo test -p xt-core --lib` → 359 passed | `npm run test` → 25 passed | Playwright 当前 58 passed / 6 个既有 UI 选择器用例待修
 - **构建**: `./build.bat` 一键 release
 
 ## 发布步骤

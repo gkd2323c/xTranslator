@@ -154,15 +154,18 @@ See `LAYOUT_REDESIGN_PLAN.md` for full details. All three phases completed.
 ```
 App
 ├── EditorDialog        (Modal xl, opened by double-click/Enter)
-├── 9× Tool Dialogs     (Modal lg, gated by activePanel store)
-│   ├── BatchPanel, BsaBrowser, PexPanel, FuzPanel, DialogView
-│   ├── McmPanel, EspComparePanel, FinalizePanel, DataConfigsPanel
-├── MenuBar             (compact 32px toolbar: search, filters, file ops, TCSC, tools, theme/lang)
+├── Tool/Dialog Panels   (gated by `activePanel` store; single-value mutex, 14 panel ids)
+│   ├── batch, commandProcessor, bsa, pex, fuz, dialog, mcm, espCompare
+│   ├── finalize, dataConfigs, defUiGen, chooseCp, addId, rtlPreview
+│   └── (see `ActivePanel` type in appStore.ts for the full list)
+├── DockablePanel / RightPanelContainer  (right-side dockable tool panels: BSA/PEX/FUZ/Compare)
+├── SplitPaneLayout      (react-split-pane based resizable layout)
+├── GroupedMenuBar       (compact toolbar: search, filters, file ops, TCSC, tools, theme/lang)
 ├── BatchTranslateBar   (inline progress bar for string-level batch)
-├── app-body
+├── RecoveryPromptModal (translation cache recovery prompt on startup)
 │   └── app-main
 │       ├── app-table-area  → StringTable (react-window v2)
-│       └── app-bottom-panel (flex:1, 10 tabs)
+│       └── app-bottom-panel (flex:1, 5 tabs)
 │           ├── home → SidePanel (stats cards + progress)
 │           ├── vocabulary → VocabularyPanel (searchable pairs)
 │           ├── log → LogPanel (color-coded, searchable, auto-scroll)
@@ -175,7 +178,7 @@ App
 ```
 
 ### Store State (appStore.ts)
-- **activePanel** — single-value mutex for 9 tool dialogs (replaces 9 booleans)
+- **activePanel** — single-value mutex for 14 tool/dialog panels (replaces 14 booleans; see `ActivePanel` type). Right-side dockable panels use a separate `activeRightPanel` field.
 - **editorOpen** — EditorDialog visibility
 - **selectedId/selectedItem** — current editing target
 - **allItems/items** — full dataset vs filtered display set
@@ -192,10 +195,10 @@ App
 - **Ctrl+Z/Y:** undo/redo translation changes
 
 ### Known Gaps vs Delphi Original (see docs/feature_comparison.md)
-- Syntax highlighting in editor (SynEdit → not yet implemented)
 - VirtualTreeView multi-select / inline edit (react-window v2 is simpler)
-- PEX script editor / FUZ LIP / BA2 texture archives
+- PEX script editor (full source editing / decompile-to-editable) and FUZ LIP are partial: PEX pseudo-code line numbers + copy, FUZ LIP keyframe visualization exist, but richer editor affordances remain
 - More auxiliary panels (File Browser, Quest Stage Editor)
+- BA2 texture-specific archive variants (general BA2 + BSA/BA2 injection already implemented, DP-06)
 
 ## Document Maintenance
 
@@ -236,4 +239,4 @@ If `.codegraph/` didn't exist, ask user to run `codegraph init -i`.
 
 - E2E tests need real Skyrim.esm.
 - `record_defs` loading is best-effort; falls back to generic parsing if missing.
-- BA2 texture-specific variants and archive injection are out of scope.
+- BA2 texture-specific archive variants are out of scope (general BA2 + BSA/BA2 injection already implemented, DP-06).

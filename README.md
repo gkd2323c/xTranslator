@@ -2,7 +2,7 @@
 
 [![Version: 1.2.0](https://img.shields.io/badge/Version-1.2.0-blue.svg)](RELEASE.md)
 [![License: MPL-2.0](https://img.shields.io/badge/License-MPL--2.0-brightgreen.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/Tests-299_+_64_E2E_passing-brightgreen.svg)](CHANGELOG.md)
+[![Tests](https://img.shields.io/badge/Tests-359_+_64_E2E_passing-brightgreen.svg)](CHANGELOG.md)
 
 [中文版](README_zh-CN.md)
 
@@ -105,6 +105,16 @@ Recent additions in v1.2.0:
 - SST v1-v8 version enum — auto-detect magic for legacy format support
 - E2E test suite fully green — 64 tests passing (12.4s)
 - Windows env var whitespace fix — E2E mock alias loading on Windows
+- Advanced Search panel (DP-04) — per-field regex with presets, integrated into the filter pipeline
+- BatchProcessor command script engine (DP-05) — Delphi-equivalent command set for multi-file automation
+- BSA/BA2 injection replacement (DP-06) — safe atomic in-place archive replacement
+- Localized/Hybrid strings loading strategies (DP-07) — source-tracked load modes
+- XML Export options + EDID metadata completeness (DP-08/DP-09) — Delphi-parity XML output
+- DEF_UI component generator (DP-10) — generate DEF_UI components from translation data
+- Codepage manual selection/override (DP-11) — `ChooseCpDialog` + runtime reload
+- RTL live preview and Arabic/Hebrew shaping (DP-12)
+- FUZ voice mapping and rename tool (DP-13)
+- AddId FormID batch offset tool (DP-14) — bulk FormID shift with full-range filtering
 
 ## Documentation
 

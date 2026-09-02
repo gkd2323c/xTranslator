@@ -200,7 +200,7 @@ Format: `sqlite_cache::CachePayload { version: u32, strings: Vec<SkyString>, com
 | File | Responsibility |
 |------|----------------|
 | `main.rs` | Tauri app builder: plugin initialization (`shell`, `dialog`), `AppState` management, command handler registration |
-| `commands.rs` | IPC command implementations (102 commands): `load_esp`, `load_sst`, `save_sst`, `update_translation`, `get_strings_chunk`, `query_strings_command`, `get_stats`, `heuristic_search`, `translate_string`, `set_openai_api_key`, `export_xml`, `import_xml`, `save_strings`, `list_bsa_files`, `extract_bsa_file`, `parse_pex_strings`, `scan_fuz_directory`, `get_fuz_audio_data`, `get_fuz_lip_data`, `build_dialog_tree`, `start_batch_translate`, `start_batch_export`, `cancel_batch_job`, `load_config`, `save_config`, `get_api_config`, `spell_check_load`, `spell_check_unload`, `spell_check_toggle`, `spell_check_config`, `spell_check_text`, `spell_check_suggestions`, `spell_check_ignore`, `sst_merge`, `export_dial_html`, `rtl_preview`, `colab_*` |
+| `commands.rs` | IPC command implementations (110 commands registered in `main.rs`): `load_esp`, `load_sst`, `save_sst`, `update_translation`, `get_strings_chunk`, `query_strings_command`, `get_stats`, `heuristic_search`, `translate_string`, `set_openai_api_key`, `export_xml`, `import_xml`, `save_strings`, `list_bsa_files`, `extract_bsa_file`, `parse_pex_strings`, `scan_fuz_directory`, `get_fuz_audio_data`, `get_fuz_lip_data`, `build_dialog_tree`, `start_batch_translate`, `start_batch_export`, `cancel_batch_job`, `load_config`, `save_config`, `get_api_config`, `spell_check_load`, `spell_check_unload`, `spell_check_toggle`, `spell_check_config`, `spell_check_text`, `spell_check_suggestions`, `spell_check_ignore`, `sst_merge`, `export_dial_html`, `rtl_preview`, `colab_*` |
 | `batch.rs` | Batch processor: sequential ESP file processing, cooperative cancellation, Tauri event emission |
 
 ### ui
@@ -279,7 +279,7 @@ Delphi xTranslator compatible:
 # Full backend build
 cargo build -p xtranslator-tauri
 
-# Core library unit tests (310 tests)
+# Core library unit tests (359 tests)
 cargo test -p xt-core --lib
 
 # End-to-end tests (requires Skyrim SE at D:\SteamLibrary\...)
