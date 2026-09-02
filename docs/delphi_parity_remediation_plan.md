@@ -53,7 +53,7 @@
 | R-08 | P2 | FUZ rename 工具 | ✅ 已确认 | Delphi 源码无 FUZ rename 功能；Rust 当前实现已覆盖全部 Delphi FUZ 能力（扫描、INFO 映射、音频播放、LIP 预览） |
 | R-09 | P2 | parity 文档状态重建 | ✅ 已闭环 | R-01~R-05 状态已同步；R-07/08 已确认；DP 编号 01-14 无冲突；development_plan 与 remediation_plan 交叉引用已校准 |
 | R-10 | P3 | L3 真实样本交叉验证 | ✅ Skyrim SE 已闭环 | 2026-09-02：BSA 查找目录 bug 修复 + golden_diff 空壳修复 + 4 项 L3 golden 测试；FO4/76/Starfield 样本缺失（本机未安装） |
-| R-11 | P3 | Rust formatting / warning 清理 | ⚠️ 质量门禁 | `cargo fmt --check` 不通过，存在未使用代码告警 |
+| R-11 | P3 | Rust formatting / warning 清理 | ✅ 已闭环 | 2026-09-02：`sst::v8` 的 V1-V7 兼容常量改为 `from_magic` 实际引用（匹配值不变），删除未使用的 `cmp_value` 与 `CURRENT` 别名；`cargo fmt --check` 通过、xt-core 0 告警、370 lib 测试通过；LNK4098 MSVCRTD 为第三方 C 静态库 Debug CRT 冲突（环境项，见 §9） |
 
 ---
 
@@ -295,6 +295,8 @@ Release E2E 当前在普通 shell 下会因 `libz-ng-sys` 找不到 Visual Studi
 - 清理本轮改动引入的 unused import / dead code。
 - 现有 `sst::v8` 未使用版本常量、旧 cache deprecated tests 等历史 warning 可单独开清理任务，不与 parity 行为修改混在同一提交。
 - 不允许为了消 warning 删除旧 SST 读取兼容常量或改变二进制行为。
+
+> **2026-09-02 闭环记录**：`cargo fmt --check` 已通过；`sst::v8` V1-V7 兼容常量保留并改为 `SstVersion::from_magic` 的实际引用（`match sst_magic::V1 => ...`，匹配值与原硬编码字面量一致，二进制行为不变）；删除的仅有从未被使用的私有方法 `cmp_value` 与别名常量 `CURRENT`。剩余唯一告警为 xt-cli/tauri 链接阶段的 `LNK4098 MSVCRTD` 冲突，来源是第三方依赖的 C 静态库（如 libz-ng-sys 的 `zlibstatic-ngd.lib`）以 Debug CRT 编译，属工具链环境项，不加 `/NODEFAULTLIB` 规避（有运行时 CRT 混用风险），debug 构建不影响产物正确性。
 
 ---
 

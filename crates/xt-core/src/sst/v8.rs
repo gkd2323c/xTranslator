@@ -26,8 +26,6 @@ mod sst_magic {
     pub const V7: u32 = 0x38555353; // $38555353
     /// v8: SSU9 (添加 master list)
     pub const V8: u32 = 0x39555353; // $39555353
-    /// 当前最新版本
-    pub const CURRENT: u32 = V8;
 }
 
 /// SST 版本号
@@ -47,14 +45,14 @@ impl SstVersion {
     /// 从魔数获取版本号
     pub fn from_magic(magic: u32) -> Option<Self> {
         match magic {
-            0x32555353 => Some(Self::V1),
-            0x33555353 => Some(Self::V2),
-            0x34555353 => Some(Self::V3),
-            0x35555353 => Some(Self::V4),
-            0x36555353 => Some(Self::V5),
-            0x37555353 => Some(Self::V6),
-            0x38555353 => Some(Self::V7),
-            0x39555353 => Some(Self::V8),
+            sst_magic::V1 => Some(Self::V1),
+            sst_magic::V2 => Some(Self::V2),
+            sst_magic::V3 => Some(Self::V3),
+            sst_magic::V4 => Some(Self::V4),
+            sst_magic::V5 => Some(Self::V5),
+            sst_magic::V6 => Some(Self::V6),
+            sst_magic::V7 => Some(Self::V7),
+            sst_magic::V8 => Some(Self::V8),
             _ => None,
         }
     }
@@ -71,11 +69,6 @@ impl SstVersion {
             Self::V7 => 7,
             Self::V8 => 8,
         }
-    }
-
-    /// 获取版本比较值（用于 >= 比较）
-    fn cmp_value(&self) -> u32 {
-        self.as_u32()
     }
 }
 
