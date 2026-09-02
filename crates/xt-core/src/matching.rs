@@ -174,12 +174,12 @@ pub enum SstOverwriteScope {
 /// SST 字典匹配模式（Delphi Form12 RadioGroup2）
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum SstMatchMode {
-    /// 0: FormID + EDID hash + field + index（Delphi V4Edid）
+    /// 0: 普通字符串使用 FormID + EDID hash + field + index（V4Edid）；VMAD 使用 V4Strict
     FormIdOnly = 0,
     /// 1: FormID + EDID hash + 严格源文本 + field + index（Delphi V4Strict）
     #[default]
     FormIdStrictString = 1,
-    /// 2: FormID + EDID hash + field + 严格源文本，忽略 index（Delphi V4Relax）
+    /// 2: 普通字符串使用 V4Relax；VMAD 仍使用 FormID + EDID hash + field + 源文 + index（V4Strict）
     FormIdRelaxedString = 2,
     /// 3: 仅源文本精确一致（忽略 FormID；重复项按 REC/FIELD 消歧）
     StringOnly = 3,
@@ -456,6 +456,16 @@ pub fn apply_dictionary_entries(
     apply_dictionary_entries_with_policy(strings, entries, ApplyPolicy::default())
 }
 
+/// 判断条目是否是 VMAD 脚本字符串。
+///
+/// 正常 ESP 解析会设置 `IS_VMAD_STRING`；负的 VMAD 偏移和 `VMAD` 字段
+/// 同时作为兼容旧缓存/反序列化条目的结构性兜底。
+fn is_vmad_string(sk: &SkyString) -> bool {
+    sk.internal_params
+        .is_set(SkyStringInternalParams::IS_VMAD_STRING)
+        || (sk.esp_ptr.str_id < 0 && sk.esp_ptr.field_sig == *b"VMAD")
+}
+
 /// 检查候选目标是否在覆盖范围和过滤范围内
 fn is_candidate_eligible(
     sk: &SkyString,
@@ -463,8 +473,11 @@ fn is_candidate_eligible(
     selected_set: Option<&HashSet<u32>>,
     filtered_set: Option<&HashSet<u32>>,
 ) -> bool {
-    // Delphi findEdidMatchEx/findStrMatchEx 都会跳过 lockedTrans / pexNoTrans。
-    if sk.params.is_locked()
+    let is_vmad = is_vmad_string(sk);
+    // 普通字符串由通用 comparator 排除 lockedTrans；SST 的专用 VMAD
+    // comparator 只判断 VMAD 与 scope，允许 locked VMAD 进入匹配。
+    let locked_vmad_is_sst_target = is_vmad && policy.sst_options.is_some();
+    if (sk.params.is_locked() && !locked_vmad_is_sst_target)
         || sk
             .internal_params
             .is_set(SkyStringInternalParams::PEX_NO_TRANS)
@@ -476,7 +489,6 @@ fn is_candidate_eligible(
         // Delphi VMAD 特殊保护逻辑 (getfProcCompareOptVMADString):
         // 在 StringOnly 模式下，All / NoTransExclusive / NoTransAndPartial 对 VMAD 脚本字符串直接屏蔽 (compareOptBlock)，
         // 仅允许在 PartialOnly 或 Selection 显式指定的目标范围内应用！
-        let is_vmad = sk.internal_params.is_set(SkyStringInternalParams::IS_VMAD_STRING);
         if is_vmad && opts.match_mode == SstMatchMode::StringOnly {
             match opts.overwrite_scope {
                 SstOverwriteScope::All
@@ -604,12 +616,24 @@ pub fn apply_dictionary_entries_with_policy(
         })
         .unwrap_or_default();
 
-    // Delphi 的 Reset StringState 在匹配前作用于“当前覆盖范围内”的目标行。
+    // Delphi 在显式 Reset StringState 或目标带有 nTrans 标记时，
+    // 都会在匹配前重置当前覆盖范围内的目标行；未命中项也保持重置结果。
     let reset_ids: HashSet<u32> = policy
         .sst_options
         .as_ref()
-        .filter(|opts| opts.reset_state)
-        .map(|_| eligible_ids.clone())
+        .map(|opts| {
+            strings
+                .iter()
+                .filter(|sk| {
+                    eligible_ids.contains(&sk.id)
+                        && (opts.reset_state
+                            || sk
+                                .internal_params
+                                .is_set(SkyStringInternalParams::N_TRANS))
+                })
+                .map(|sk| sk.id)
+                .collect()
+        })
         .unwrap_or_default();
 
     for entry in entries {
@@ -658,7 +682,11 @@ pub fn apply_dictionary_entries_with_policy(
 
     if !reset_ids.is_empty() {
         for sk in strings.iter_mut() {
-            if reset_ids.contains(&sk.id) && !matched_ids.contains(&sk.id) && reset_target(sk) {
+            let reset_vmad = is_vmad_string(sk);
+            if reset_ids.contains(&sk.id)
+                && !matched_ids.contains(&sk.id)
+                && reset_target(sk, reset_vmad)
+            {
                 push_updated_id(&mut result.updated_ids, sk.id);
             }
         }
@@ -701,14 +729,20 @@ fn apply_sst_string_only_target_centric(
             continue;
         }
 
-        // `findStrMatchEx` 在真正搜索前执行 Reset StringState。
-        if policy
+        // `findStrMatchEx` 在真正搜索前执行 Reset StringState；既有
+        // nTrans 标记时也会触发一次 resetTrans。
+        let reset_before_match = policy
             .sst_options
             .as_ref()
-            .map(|opts| opts.reset_state)
-            .unwrap_or(false)
-            && reset_target(&mut strings[target_idx])
-        {
+            .map(|opts| {
+                opts.reset_state
+                    || strings[target_idx]
+                        .internal_params
+                        .is_set(SkyStringInternalParams::N_TRANS)
+            })
+            .unwrap_or(false);
+        let reset_vmad = is_vmad_string(&strings[target_idx]);
+        if reset_before_match && reset_target(&mut strings[target_idx], reset_vmad) {
             push_updated_id(&mut result.updated_ids, strings[target_idx].id);
         }
 
@@ -746,8 +780,11 @@ fn apply_sst_string_only_target_centric(
             // Legacy StringOnly 的危险但真实语义：非同语言时，未命中的 eligible 行也 resetTrans。
             // Tag Only 在 Delphi 这里本身是坏的（仍会改文本）；现代 UI 明确承诺“只打标签”，
             // 因而 tag_only 时有意不复制这个 legacy bug。
-            if !policy.tag_only && reset_target(&mut strings[target_idx]) {
-                push_updated_id(&mut result.updated_ids, strings[target_idx].id);
+            if !policy.tag_only {
+                let reset_vmad = is_vmad_string(&strings[target_idx]);
+                if reset_target(&mut strings[target_idx], reset_vmad) {
+                    push_updated_id(&mut result.updated_ids, strings[target_idx].id);
+                }
             }
             continue;
         };
@@ -831,8 +868,12 @@ fn match_entry_with_policy(
     filtered_set: Option<&HashSet<u32>>,
 ) -> EntryOutcome {
     if let Some(opts) = &policy.sst_options {
+        // Delphi 的 doApplySst 将 VMAD 的 EDID 路径单独固定到 V4Strict；
+        // 因此三个 FormID 档位都要对 VMAD 强制原文与 index 精确校验。
+        let is_vmad_entry = entry.field_sig == *b"VMAD";
         match opts.match_mode {
             SstMatchMode::FormIdOnly => {
+                // Delphi 的 VMAD 分支固定使用 V4Strict；普通字符串仍使用 V4Edid。
                 match find_sst_form_id_match(
                     strings,
                     index,
@@ -841,7 +882,7 @@ fn match_entry_with_policy(
                     policy,
                     selected_set,
                     filtered_set,
-                    false,
+                    is_vmad_entry,
                     true,
                 ) {
                     TierMatch::Unique(idx) => EntryOutcome::Matched(MatchTier::Exact, idx),
@@ -867,6 +908,7 @@ fn match_entry_with_policy(
                 }
             }
             SstMatchMode::FormIdRelaxedString => {
+                // Delphi 的 VMAD 分支固定使用 V4Strict；普通字符串使用 V4Relax。
                 match find_sst_form_id_match(
                     strings,
                     index,
@@ -876,7 +918,7 @@ fn match_entry_with_policy(
                     selected_set,
                     filtered_set,
                     true,
-                    false,
+                    is_vmad_entry,
                 ) {
                     TierMatch::Unique(idx) => EntryOutcome::Matched(MatchTier::Exact, idx),
                     TierMatch::Ambiguous => EntryOutcome::Ambiguous,
@@ -1035,12 +1077,14 @@ fn find_sst_form_id_match(
         sanitize_form_id(entry.form_id),
         entry.edid_hash.unwrap_or(0),
     ));
+    let entry_is_vmad = entry.field_sig == *b"VMAD";
     let mut found = None;
     for &idx in candidates {
         let sk = &strings[idx];
         if matched_ids.contains(&sk.id)
             || !is_candidate_eligible(sk, policy, selected_set, filtered_set)
             || sk.esp_ptr.field_sig != entry.field_sig
+            || is_vmad_string(sk) != entry_is_vmad
             || (require_source && (sk.hash != string_hash(&entry.source) || sk.source != entry.source))
             || (require_index && sk.esp_ptr.index != entry.index)
         {
@@ -1208,9 +1252,15 @@ fn apply_match(
     let sk = &mut strings[idx];
     let mut changed = false;
 
+    let target_is_vmad = is_vmad_string(sk);
     if reset_state {
-        changed |= reset_target(sk);
+        changed |= reset_target(sk, target_is_vmad);
     }
+
+    // Delphi computes VMAD's `bCheckDiff` after any resetTrans call and before
+    // replacing the target translation. Preserve that pre-apply hash for the
+    // VMAD-specific status mapping below.
+    let target_hash_trans_before = sk.hash_trans;
 
     if policy.replace_string_id && sk.esp_ptr.str_id != entry.str_id {
         sk.esp_ptr.str_id = entry.str_id;
@@ -1235,7 +1285,7 @@ fn apply_match(
 
     if entry.params.map(|p| p.is_pending()).unwrap_or(false) {
         if entry.source_format == DictionarySourceFormat::Sst {
-            changed |= reset_target(sk);
+            changed |= reset_target(sk, target_is_vmad);
         }
         if changed {
             push_updated_id(&mut result.updated_ids, sk.id);
@@ -1251,7 +1301,7 @@ fn apply_match(
     let old_params = sk.params;
     let old_internal_params = sk.internal_params;
     clear_warning_flags(&mut sk.internal_params);
-    apply_status(sk, entry, policy);
+    apply_status(sk, entry, policy, target_hash_trans_before);
     apply_index_warning(sk, entry, tier, result);
     changed |= sk.params != old_params || sk.internal_params != old_internal_params;
 
@@ -1269,7 +1319,12 @@ fn preserve_old_data(entry: &DictionaryApplyEntry, policy: &ApplyPolicy, result:
     }
 }
 
-fn apply_status(sk: &mut SkyString, entry: &DictionaryApplyEntry, policy: &ApplyPolicy) {
+fn apply_status(
+    sk: &mut SkyString,
+    entry: &DictionaryApplyEntry,
+    policy: &ApplyPolicy,
+    target_hash_trans_before: u32,
+) {
     // Delphi resetStatus(v1) 会用 v1 整体替换 sparams，而不是只清四个翻译状态位。
     sk.params = SkyStringParams::new();
     let params = entry.params.unwrap_or_default();
@@ -1279,6 +1334,7 @@ fn apply_status(sk: &mut SkyString, entry: &DictionaryApplyEntry, policy: &Apply
             .as_ref()
             .map(|opts| opts.match_mode == SstMatchMode::StringOnly)
             .unwrap_or(false);
+    let is_sst_vmad = entry.source_format == DictionarySourceFormat::Sst && is_vmad_string(sk);
 
     if params.is_locked() {
         sk.params.set(SkyStringParams::LOCKED_TRANS, true);
@@ -1287,6 +1343,17 @@ fn apply_status(sk: &mut SkyString, entry: &DictionaryApplyEntry, policy: &Apply
     } else if is_sst_string_only {
         // doApplySst -> findStrMatchEx 固定传入 validatedTrans=[validated]。
         sk.params.set(SkyStringParams::VALIDATED, true);
+    } else if is_sst_vmad {
+        // The dedicated Delphi VMAD apply path uses appliedTrans=[validated]
+        // and validatedTrans=[translated]. A changed target therefore remains
+        // validated for review; an identical translation is fully translated.
+        if target_hash_trans_before != string_hash(&entry.translation)
+            || (policy.same_language && sk.hash != sk.hash_trans)
+        {
+            sk.params.set(SkyStringParams::VALIDATED, true);
+        } else {
+            sk.params.set(SkyStringParams::TRANSLATED, true);
+        }
     } else if policy.same_language {
         sk.params.set(SkyStringParams::VALIDATED, true);
     } else if !sk.translation.is_empty() {
@@ -1296,23 +1363,46 @@ fn apply_status(sk: &mut SkyString, entry: &DictionaryApplyEntry, policy: &Apply
     }
 }
 
-/// Rust 端“未翻译”以空 translation 表示；写回时会回退到 source，
-/// 等价于 Delphi resetTrans 的 `sTrans := s` + 清状态位。
-fn reset_target(sk: &mut SkyString) -> bool {
+/// 按 Delphi `resetTrans(bResetVmad)` 重置目标字符串。
+///
+/// 普通字符串以空译文表示回退到源文；VMAD 没有独立的空译文表示，专用 reset
+/// 会把译文设回源文，并按 Delphi `resetTrans` 的 `resetStatus([lockedTrans])`
+/// 语义设置 `lockedTrans`，避免再次被当作普通未翻译项消费。
+fn reset_target(sk: &mut SkyString, reset_vmad: bool) -> bool {
     let old_translation = sk.translation.clone();
     let old_params = sk.params;
     let old_internal_params = sk.internal_params;
+    let old_ld_result = sk.ld_result;
+    let old_ld_found = sk.ld_found;
+    let is_vmad_reset = reset_vmad && is_vmad_string(sk);
+    let was_locked_vmad = is_vmad_reset && sk.params.is_locked();
 
-    if !sk.translation.is_empty() {
-        sk.set_translation(String::new());
+    let reset_translation = if is_vmad_reset {
+        sk.source.clone()
+    } else {
+        String::new()
+    };
+    if sk.translation != reset_translation {
+        sk.set_translation(reset_translation);
     }
-    sk.params = SkyStringParams::new();
-    clear_warning_flags(&mut sk.internal_params);
-    sk.ld_found = 0;
+
+    if !was_locked_vmad {
+        sk.params = SkyStringParams::new();
+        if is_vmad_reset {
+            // Delphi resetTrans 对 VMAD 总是 resetStatus([lockedTrans])，即使
+            // reset 前目标尚未 lockedTrans 也会在此处落到 lockedTrans。
+            sk.params.set(SkyStringParams::LOCKED_TRANS, true);
+        }
+        clear_warning_flags(&mut sk.internal_params);
+        sk.ld_result = 99.0;
+        sk.ld_found = 0;
+    }
 
     sk.translation != old_translation
         || sk.params != old_params
         || sk.internal_params != old_internal_params
+        || sk.ld_result != old_ld_result
+        || sk.ld_found != old_ld_found
 }
 
 fn push_updated_id(updated_ids: &mut Vec<u32>, id: u32) {
@@ -2498,6 +2588,349 @@ mod tests {
         assert_eq!(result.total_matched(), 1);
         assert_eq!(strings[0].translation, "苹果");
         assert!(strings[1].translation.is_empty());
+    }
+
+    #[test]
+    fn test_sst_form_id_keeps_locked_normal_target_excluded() {
+        let mut target = make_sk(0, "Normal text", 10, *b"QUST", *b"FULL", 0x1122_3344);
+        target.esp_ptr.form_id = 0x0100_0042;
+        target.esp_ptr.index = 3;
+        target.set_translation("旧普通译文".to_string());
+        target.params.set(SkyStringParams::LOCKED_TRANS, true);
+
+        let mut entry = make_dict_entry(
+            99,
+            None,
+            *b"QUST",
+            *b"FULL",
+            "Normal text",
+            "普通新译文",
+        );
+        entry.form_id = 0x0100_0042;
+        entry.edid_hash = Some(0x1122_3344);
+        entry.index = 3;
+
+        let mut strings = vec![target];
+        let result = apply_dictionary_entries_with_policy(
+            &mut strings,
+            &[entry],
+            ApplyPolicy::sst_load_with_options(SstApplyOptions::default()),
+        );
+
+        assert_eq!(result.total_matched(), 0);
+        assert_eq!(strings[0].translation, "旧普通译文");
+        assert!(strings[0].params.is_locked());
+    }
+
+    #[test]
+    fn test_sst_vmad_form_id_modes_are_fixed_to_strict_route() {
+        let edid_hash = string_hash("QuestScript\0DisplayName");
+        let make_target = |source: &str, index: u16, locked: bool| {
+            let mut target = make_sk(0, source, -32, *b"QUST", *b"VMAD", edid_hash);
+            target.esp_ptr.form_id = 0x0100_0042;
+            target.esp_ptr.index = index;
+            target
+                .internal_params
+                .set(SkyStringInternalParams::IS_VMAD_STRING, true);
+            if locked {
+                target.set_translation("旧脚本文本".to_string());
+                target.params.set(SkyStringParams::LOCKED_TRANS, true);
+            }
+            target
+        };
+        let make_entry = |source: &str, index: u16| {
+            let mut entry = make_dict_entry(
+                -32,
+                None,
+                *b"QUST",
+                *b"VMAD",
+                source,
+                "任务脚本文本",
+            );
+            entry.form_id = 0x0100_0042;
+            entry.edid_hash = Some(edid_hash);
+            entry.index = index;
+            entry
+        };
+
+        // 三个用户可选的 FormID 档位都必须让 VMAD 走 V4Strict；即使目标为
+        // lockedTrans，专用 compareOptVMAD 仍允许它参与匹配。
+        for mode in [
+            SstMatchMode::FormIdOnly,
+            SstMatchMode::FormIdStrictString,
+            SstMatchMode::FormIdRelaxedString,
+        ] {
+            let mut strings = vec![make_target("Current text", 3, true)];
+            let result = apply_dictionary_entries_with_policy(
+                &mut strings,
+                &[make_entry("Current text", 3)],
+                ApplyPolicy::sst_load_with_options(SstApplyOptions {
+                    match_mode: mode,
+                    ..Default::default()
+                }),
+            );
+            assert_eq!(result.total_matched(), 1, "VMAD mode {mode:?} must match");
+            assert_eq!(strings[0].translation, "任务脚本文本");
+        }
+
+        // V4Edid 不能放宽 VMAD 的源文校验。
+        let source_drift_result = apply_dictionary_entries_with_policy(
+            &mut vec![make_target("Current text", 3, false)],
+            &[make_entry("Old text", 3)],
+            ApplyPolicy::sst_load_with_options(SstApplyOptions {
+                match_mode: SstMatchMode::FormIdOnly,
+                ..Default::default()
+            }),
+        );
+        assert_eq!(source_drift_result.total_matched(), 0);
+
+        // V4Relax 也不能放宽 VMAD 的 index 校验。
+        let index_drift_result = apply_dictionary_entries_with_policy(
+            &mut vec![make_target("Current text", 3, false)],
+            &[make_entry("Current text", 4)],
+            ApplyPolicy::sst_load_with_options(SstApplyOptions {
+                match_mode: SstMatchMode::FormIdRelaxedString,
+                ..Default::default()
+            }),
+        );
+        assert_eq!(index_drift_result.total_matched(), 0);
+    }
+
+    #[test]
+    fn test_sst_vmad_form_id_apply_uses_review_status_for_changed_translation() {
+        let edid_hash = string_hash("QuestScript\0DisplayName");
+        let mut target = make_sk(
+            0,
+            "Quest script text",
+            -32,
+            *b"QUST",
+            *b"VMAD",
+            edid_hash,
+        );
+        target.esp_ptr.form_id = 0x0100_0042;
+        target.esp_ptr.index = 3;
+        target
+            .internal_params
+            .set(SkyStringInternalParams::IS_VMAD_STRING, true);
+
+        let mut entry = make_dict_entry(
+            -32,
+            None,
+            *b"QUST",
+            *b"VMAD",
+            "Quest script text",
+            "任务脚本文本",
+        );
+        entry.form_id = 0x0100_0042;
+        entry.edid_hash = Some(edid_hash);
+        entry.index = 3;
+
+        let mut strings = vec![target];
+        let result = apply_dictionary_entries_with_policy(
+            &mut strings,
+            &[entry],
+            ApplyPolicy::sst_load_with_options(SstApplyOptions {
+                match_mode: SstMatchMode::FormIdStrictString,
+                ..Default::default()
+            }),
+        );
+
+        assert_eq!(result.total_matched(), 1);
+        assert_eq!(strings[0].translation, "任务脚本文本");
+        assert!(strings[0].params.is_validated());
+        assert!(!strings[0].params.is_translated());
+    }
+
+    #[test]
+    fn test_sst_vmad_form_id_apply_marks_identical_translation_translated() {
+        let edid_hash = string_hash("QuestScript\0DisplayName");
+        let mut target = make_sk(
+            0,
+            "Quest script text",
+            -32,
+            *b"QUST",
+            *b"VMAD",
+            edid_hash,
+        );
+        target.esp_ptr.form_id = 0x0100_0042;
+        target.esp_ptr.index = 3;
+        target
+            .internal_params
+            .set(SkyStringInternalParams::IS_VMAD_STRING, true);
+        target.set_translation("任务脚本文本".to_string());
+        target.params.set(SkyStringParams::TRANSLATED, true);
+
+        let mut entry = make_dict_entry(
+            -32,
+            None,
+            *b"QUST",
+            *b"VMAD",
+            "Quest script text",
+            "任务脚本文本",
+        );
+        entry.form_id = 0x0100_0042;
+        entry.edid_hash = Some(edid_hash);
+        entry.index = 3;
+
+        let mut strings = vec![target];
+        let result = apply_dictionary_entries_with_policy(
+            &mut strings,
+            &[entry],
+            ApplyPolicy::sst_load_with_options(SstApplyOptions {
+                match_mode: SstMatchMode::FormIdStrictString,
+                ..Default::default()
+            }),
+        );
+
+        assert_eq!(result.total_matched(), 1);
+        assert!(strings[0].params.is_translated());
+        assert!(!strings[0].params.is_validated());
+    }
+
+    #[test]
+    fn test_sst_vmad_same_language_keeps_review_status_when_source_differs() {
+        let edid_hash = string_hash("QuestScript\0DisplayName");
+        let mut target = make_sk(
+            0,
+            "Quest script text",
+            -32,
+            *b"QUST",
+            *b"VMAD",
+            edid_hash,
+        );
+        target.esp_ptr.form_id = 0x0100_0042;
+        target.esp_ptr.index = 3;
+        target
+            .internal_params
+            .set(SkyStringInternalParams::IS_VMAD_STRING, true);
+        target.set_translation("任务脚本文本".to_string());
+        target.params.set(SkyStringParams::TRANSLATED, true);
+
+        let mut entry = make_dict_entry(
+            -32,
+            None,
+            *b"QUST",
+            *b"VMAD",
+            "Quest script text",
+            "任务脚本文本",
+        );
+        entry.form_id = 0x0100_0042;
+        entry.edid_hash = Some(edid_hash);
+        entry.index = 3;
+
+        let mut strings = vec![target];
+        let result = apply_dictionary_entries_with_policy(
+            &mut strings,
+            &[entry],
+            ApplyPolicy {
+                same_language: true,
+                sst_options: Some(SstApplyOptions::default()),
+                ..Default::default()
+            },
+        );
+
+        assert_eq!(result.total_matched(), 1);
+        assert_eq!(strings[0].translation, "任务脚本文本");
+        assert!(strings[0].params.is_validated());
+        assert!(!strings[0].params.is_translated());
+    }
+
+    #[test]
+    fn test_sst_vmad_reset_replays_for_existing_n_trans_marker() {
+        let edid_hash = string_hash("QuestScript\0DisplayName");
+        let mut target = make_sk(
+            0,
+            "Current VMAD text",
+            -32,
+            *b"QUST",
+            *b"VMAD",
+            edid_hash,
+        );
+        target.esp_ptr.form_id = 0x0100_0042;
+        target.esp_ptr.index = 3;
+        target
+            .internal_params
+            .set(SkyStringInternalParams::IS_VMAD_STRING, true);
+        target.set_translation("旧脚本文本".to_string());
+        target.params.set(SkyStringParams::TRANSLATED, true);
+        target
+            .internal_params
+            .set(SkyStringInternalParams::N_TRANS, true);
+
+        let mut entry = make_dict_entry(
+            -32,
+            None,
+            *b"QUST",
+            *b"VMAD",
+            "Old VMAD text",
+            "旧脚本新译文",
+        );
+        entry.form_id = 0x0100_0042;
+        entry.edid_hash = Some(edid_hash);
+        entry.index = 3;
+
+        let mut strings = vec![target];
+        let result = apply_dictionary_entries_with_policy(
+            &mut strings,
+            &[entry],
+            ApplyPolicy::sst_load_with_options(SstApplyOptions::default()),
+        );
+
+        assert_eq!(result.total_matched(), 0);
+        assert_eq!(strings[0].translation, "Current VMAD text");
+        assert!(strings[0].params.is_locked());
+        assert!(!strings[0].params.is_translated());
+        assert!(!strings[0].params.is_incomplete());
+        assert!(!strings[0].params.is_validated());
+        assert!(!strings[0]
+            .internal_params
+            .is_set(SkyStringInternalParams::N_TRANS));
+        assert_eq!(strings[0].hash_trans, string_hash("Current VMAD text"));
+        assert_eq!(strings[0].ld_result, 99.0);
+        assert!(result.updated_ids.contains(&0));
+    }
+
+    #[test]
+    fn test_sst_vmad_matched_with_n_trans_resets_then_applies() {
+        let edid_hash = string_hash("QuestScript\0DisplayName");
+        let mut target = make_sk(0, "Current VMAD text", -32, *b"QUST", *b"VMAD", edid_hash);
+        target.esp_ptr.form_id = 0x0100_0042;
+        target.esp_ptr.index = 3;
+        target
+            .internal_params
+            .set(SkyStringInternalParams::IS_VMAD_STRING, true);
+        target.set_translation("旧脚本文本".to_string());
+        target.params.set(SkyStringParams::TRANSLATED, true);
+        target
+            .internal_params
+            .set(SkyStringInternalParams::N_TRANS, true);
+
+        let mut entry = make_dict_entry(
+            -32,
+            None,
+            *b"QUST",
+            *b"VMAD",
+            "Current VMAD text",
+            "新脚本文本",
+        );
+        entry.form_id = 0x0100_0042;
+        entry.edid_hash = Some(edid_hash);
+        entry.index = 3;
+
+        let mut strings = vec![target];
+        let result = apply_dictionary_entries_with_policy(
+            &mut strings,
+            &[entry],
+            ApplyPolicy::sst_load_with_options(SstApplyOptions::default()),
+        );
+
+        assert_eq!(result.total_matched(), 1);
+        assert_eq!(strings[0].translation, "新脚本文本");
+        assert!(!strings[0]
+            .internal_params
+            .is_set(SkyStringInternalParams::N_TRANS));
+        assert!(strings[0].params.is_validated());
+        assert!(!strings[0].params.is_locked());
     }
 
     #[test]

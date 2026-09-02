@@ -737,5 +737,16 @@
     "ratioLocked": "错误率锁定",
     "ratioLockedTooltip": "错误过多，已暂停高亮",
     "helpText": "将 OpenOffice/Mozilla 词典文件（.dic 和 .aff）放入词典目录，然后扫描以检测。"
+  },
+  "xmlExport": {
+    "title": "XML 导出选项",
+    "file": "文件",
+    "range": "导出范围",
+    "scopeAll": "全部（符合条件字符串）",
+    "scopeTranslated": "仅已翻译与已验证",
+    "scopeSelection": "仅当前选中项",
+    "scopeDiff": "源文 ≠ 译文（或含协作 ID）",
+    "scopeDiffHint": "协作 ID 非空或哈希不同",
+    "totalHint": "字符串总数：{{count}}"
   }
 }

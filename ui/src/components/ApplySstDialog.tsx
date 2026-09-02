@@ -108,7 +108,12 @@ export const ApplySstDialog: React.FC<ApplySstDialogProps> = ({
                 onChange={() => setOverwriteScope("all")}
                 className="text-primary focus:ring-primary h-4 w-4"
               />
-              <span>{t("applySst.scopeAll", "All (Everything unlocked)")}</span>
+              <span>
+                {t(
+                  "applySst.scopeAll",
+                  "All (Eligible strings, including locked VMAD)"
+                )}
+              </span>
             </label>
 
             <label className="flex items-center space-x-2 cursor-pointer hover:bg-muted/40 p-1 rounded transition-colors">

@@ -723,5 +723,16 @@
     "ratioLocked": "Ratio locked",
     "ratioLockedTooltip": "Too many errors detected, highlighting paused",
     "helpText": "Place .dic and .aff dictionary files from OpenOffice/Mozilla in the dictionaries folder, then scan to detect them."
+  },
+  "xmlExport": {
+    "title": "XML Export Options",
+    "file": "File",
+    "range": "Export Range",
+    "scopeAll": "All (Eligible strings)",
+    "scopeTranslated": "Translated & Validated",
+    "scopeSelection": "Selected Strings Only",
+    "scopeDiff": "Source ≠ Dest (or Colab)",
+    "scopeDiffHint": "Colab ID set or hash differs",
+    "totalHint": "Total strings: {{count}}"
   }
 }

@@ -21,7 +21,8 @@ use xt_core::types::game_id::GameId;
 use xt_core::types::params::SkyStringParams;
 use xt_core::types::sky_string::SkyString;
 use xt_core::xml::{
-    import_xml_to_sky_strings, parse_xml_file, sky_strings_to_xml_entries, write_xml_file,
+    collect_xml_export_entries, import_xml_to_sky_strings, parse_xml_file,
+    sky_strings_to_xml_entries, write_xml_file, XmlExportOptions, XmlExportScope,
     XmlExportParams,
 };
 use xt_shared::dto::{
@@ -36,7 +37,7 @@ use xt_shared::dto::{
     NpcDialogDto, PexScriptDto, PexTranslatableDto, QueryRequest, QueryResponse, RecoveryInfo,
     SaveStringsRequest, SaveStringsResponse, SkyStringDTO,
     SstApplyOptionsDto, SstMatchModeDto, SstOverwriteScopeDto,
-    TranslateRequest, XmlExportRequest,
+    TranslateRequest, XmlExportRequest, XmlExportScopeDto,
     XmlImportResponse, XmlProgress,
 };
 
@@ -680,7 +681,8 @@ pub async fn load_esp(
 
 /// 加载 SST 字典并合并到当前内存字符串。
 ///
-/// 使用共享字典匹配引擎，按 exact / EDID / normalized / vocab 顺序应用，或根据高级选项应用。
+/// 使用共享字典匹配引擎应用 SST；省略 `options` 时也使用默认高级 SST
+/// matcher（FormID + strict source/index），不会回退到通用 T1-T4 路径。
 /// 该命令仅更新匹配成功的条目，不会新增行。
 #[tauri::command]
 pub async fn load_sst(
@@ -727,7 +729,7 @@ pub async fn load_sst(
                 SstMatchModeDto::StringOnly => xt_core::matching::SstMatchMode::StringOnly,
             };
 
-            ApplyPolicy::sst_load_with_options(xt_core::matching::SstApplyOptions {
+            let mut policy = ApplyPolicy::sst_load_with_options(xt_core::matching::SstApplyOptions {
                 overwrite_scope: core_scope,
                 match_mode: core_mode,
                 tag_only: opts.tag_only,
@@ -735,9 +737,15 @@ pub async fn load_sst(
                 restrict_to_filter: opts.restrict_to_filter,
                 selected_ids: opts.selected_ids,
                 filtered_ids: opts.filtered_ids,
-            })
+            });
+            policy.same_language = opts.same_language;
+            policy
         }
-        None => ApplyPolicy::sst_load(),
+        None => {
+            // Omitted options still use the default SST advanced matcher. Keep
+            // this explicit so callers cannot silently fall back to generic T1-T4.
+            ApplyPolicy::sst_load_with_options(xt_core::matching::SstApplyOptions::default())
+        }
     };
 
     let result = apply_dictionary_entries_with_policy(&mut strings, &apply_entries, policy);
@@ -1595,8 +1603,31 @@ pub async fn export_xml(
         .map(|fi| fi.language.clone())
         .unwrap_or_else(|| "english".to_string());
 
-    // 仅导出"已有译文"的条目，行为与 Delphi 版本保持一致。
-    let entries = sky_strings_to_xml_entries(&strings);
+    // 无显式 scope 时保持旧版“已有译文”快速导出；
+    // 有 scope 时按 Delphi TFormXmlOpt 语义收集（prepareSSTXML 候选集 + comparator）。
+    let scope = request.scope.map(|s| match s {
+        XmlExportScopeDto::Everything => XmlExportScope::Everything,
+        XmlExportScopeDto::TranslatedAndValidated => XmlExportScope::TranslatedAndValidated,
+        XmlExportScopeDto::Selection => XmlExportScope::Selection,
+        XmlExportScopeDto::SourceDestDiff => XmlExportScope::SourceDestDiff,
+    });
+    let entries = match scope {
+        Some(scope) => {
+            let selected_ids = request
+                .selected_ids
+                .as_ref()
+                .map(|ids| ids.iter().copied().collect::<std::collections::HashSet<u32>>());
+            collect_xml_export_entries(
+                &strings,
+                &XmlExportOptions {
+                    scope,
+                    selected_ids,
+                    export_fuz: request.export_fuz,
+                },
+            )
+        }
+        None => sky_strings_to_xml_entries(&strings),
+    };
     let exported_count = entries.len() as u32;
 
     emit_xml_progress(

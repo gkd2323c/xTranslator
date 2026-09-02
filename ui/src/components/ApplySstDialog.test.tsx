@@ -26,7 +26,7 @@ describe("ApplySstDialog", () => {
     );
 
     expect(screen.getByText(/Apply SST Options/i)).toBeDefined();
-    expect(screen.getByText(/All \(Everything unlocked\)/i)).toBeDefined();
+    expect(screen.getByText(/All \(Eligible strings, including locked VMAD\)/i)).toBeDefined();
     expect(screen.getByText(/NoTrans \(Untranslated exclusive\)/i)).toBeDefined();
     expect(screen.getByText(/Selected Strings Only/i)).toBeDefined();
     expect(screen.getByText(/FORMID \+ Strict String Control/i)).toBeDefined();

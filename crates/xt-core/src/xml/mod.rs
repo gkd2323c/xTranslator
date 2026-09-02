@@ -1,10 +1,13 @@
 use anyhow::{Context, Result};
 use quick_xml::events::Event;
 use quick_xml::Reader;
+use std::collections::HashSet;
 use std::io::{BufRead, Write};
 use std::path::Path;
 
 use crate::types::esp_pointer::{EspPointer, HeaderSig};
+use crate::types::params::SkyStringInternalParams;
+use crate::types::params::SkyStringParams;
 use crate::types::sky_string::SkyString;
 
 /// Delphi xTranslator 的 XML 导出格式解析器
@@ -541,7 +544,7 @@ pub fn write_xml_file(
 ///
 /// # 注意
 /// - list_index 从 SkyString.list_index 读取（ESP 解析时已填充）
-/// - edid 当前未在 SkyString 中跟踪（可能需要扩展数据结构）
+/// - edid 取 SkyString.edid（ESP 解析期从记录 EDID 字段填充，普通与 VMAD 均覆盖）
 pub fn sky_strings_to_xml_entries(strings: &[SkyString]) -> Vec<XmlStringEntry> {
     strings
         .iter()
@@ -549,13 +552,172 @@ pub fn sky_strings_to_xml_entries(strings: &[SkyString]) -> Vec<XmlStringEntry> 
         .map(|sk| XmlStringEntry {
             list_index: sk.list_index,
             str_id: sk.esp_ptr.str_id,           // 字符串 ID（用于匹配）
-            edid: None,                          // 当前 SkyString 未跟踪 Editor ID
+            edid: sk.edid.clone(),               // 解析期提取的 Editor ID
             record_sig: sk.esp_ptr.record_sig,   // 记录类型签名
             field_sig: sk.esp_ptr.field_sig,     // 字段签名
             index: sk.esp_ptr.index,             // 字段索引
             index_max: sk.esp_ptr.index_max,     // 字段总数
             source: sk.source.clone(),           // 源文本
             translation: sk.translation.clone(), // 译文
+        })
+        .collect()
+}
+
+/// XML 导出的记录范围，对齐 Delphi `TFormXmlOpt.RadioGroup1` 的 4 档
+/// （`TESVT_XMLExportOpts.dfm` + `TESVT_main.pas` 中 `iXMLExportOpt` 的映射）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum XmlExportScope {
+    /// 0 - XMLExport_All：候选集内全部条目（Delphi `compareOptEverything`）
+    #[default]
+    Everything = 0,
+    /// 1 - XMLExport_Translated：仅已翻译或已验证（Delphi `compareOptTranslatedAndValidated`）
+    TranslatedAndValidated = 1,
+    /// 2 - XMLExport_Selection：仅当前选中项（Delphi `compareOptSelection`）
+    Selection = 2,
+    /// 3 - XMLExport_Diff：源文 != 译文，或带协作 ID（Delphi `compareSourceDestDiffandColab`）
+    SourceDestDiff = 3,
+}
+
+impl XmlExportScope {
+    /// 从 0..3 的 RadioGroup ItemIndex 解析（Delphi `iXMLExportOpt`）。
+    pub fn from_radio_index(i: i32) -> Option<Self> {
+        match i {
+            0 => Some(Self::Everything),
+            1 => Some(Self::TranslatedAndValidated),
+            2 => Some(Self::Selection),
+            3 => Some(Self::SourceDestDiff),
+            _ => None,
+        }
+    }
+}
+
+/// XML 导出选项（Delphi `TFormXmlOpt` 的对话框状态）。
+#[derive(Debug, Clone, Default)]
+pub struct XmlExportOptions {
+    /// 记录范围（对应 RadioGroup1.ItemIndex）。
+    pub scope: XmlExportScope,
+    /// Selection 范围使用的稳定 `u32 id` 集合（Delphi `compareOptSelection` 检查
+    /// `treearray[sk.listIndex].Selected[...]`，前端把多选集合映射为 id 集）。
+    pub selected_ids: Option<HashSet<u32>>,
+    /// 是否导出对话条目的 FUZ 数据（Delphi `chk_exportFuzData`）。当前 FUZ
+    /// 元数据尚未在 XML 导出层接通，保留该开关以对齐对话框行为。
+    pub export_fuz: bool,
+}
+
+/// 判断字符串是否满足 Delphi `tSkyStr.isEmpty`：源文与译文均为空。
+fn is_empty_sky(sk: &SkyString) -> bool {
+    sk.source.is_empty() && sk.translation.is_empty()
+}
+
+/// 判断字符串是否处于 Delphi `tSkyStr.lockedStatus`：
+/// `pexNoTrans in sInternalparams`（PEX 脚本无翻译）或
+/// `isVMADString in sInternalparams` 且 `lockedTrans in sparams`（isLockedVmad）。
+pub fn is_locked_status(sk: &SkyString) -> bool {
+    if sk
+        .internal_params
+        .is_set(SkyStringInternalParams::PEX_NO_TRANS)
+    {
+        return true;
+    }
+    sk.internal_params
+        .is_set(SkyStringInternalParams::IS_VMAD_STRING)
+        && sk.params.is_set(SkyStringParams::LOCKED_TRANS)
+}
+
+/// 判断字符串是否命中 Delphi `prepareSSTXML` 的排除条件：
+/// 内部标记 `[isDeleted, lowwarning, warning, bigwarning, nTrans]` 任一命中即排除。
+pub fn is_prepare_sstxml_excluded(sk: &SkyString) -> bool {
+    const EXCLUDED: u64 = SkyStringInternalParams::IS_DELETED
+        | SkyStringInternalParams::LOW_WARNING
+        | SkyStringInternalParams::WARNING
+        | SkyStringInternalParams::BIG_WARNING
+        | SkyStringInternalParams::N_TRANS;
+    sk.internal_params.0 & EXCLUDED != 0
+}
+
+/// 判断字符串是否命中 Delphi `XMLExportbase` 候选集要求：
+/// `sparams * [translated, lockedTrans, incompleteTrans, validated] <> []`
+/// （即至少有一个“参与导出”的状态位）。
+///
+/// `params` 应为归一化后的状态位（见 `normalize_export_params`）。
+fn has_export_state(params: SkyStringParams) -> bool {
+    const EXPORT_STATES: u8 = SkyStringParams::TRANSLATED
+        | SkyStringParams::LOCKED_TRANS
+        | SkyStringParams::INCOMPLETE_TRANS
+        | SkyStringParams::VALIDATED;
+    params.0 & EXPORT_STATES != 0
+}
+
+/// 按 Delphi `XMLExportbase` 的 scope comparator 判断 `sk` 是否导出。
+///
+/// `params` 应为候选集归一化后的状态位（见 `normalize_export_params`）；
+/// `prepareSSTXML` 对 lockedTrans 条目清掉 translated/incomplete/validated 后
+/// 才应用 `fProc`。Selection 无选中集合时按“无选中项”处理。
+pub fn xml_scope_matches(sk: &SkyString, params: SkyStringParams, opts: &XmlExportOptions) -> bool {
+    match opts.scope {
+        XmlExportScope::Everything => true,
+        XmlExportScope::TranslatedAndValidated => {
+            params.is_set(SkyStringParams::TRANSLATED)
+                || params.is_set(SkyStringParams::VALIDATED)
+        }
+        XmlExportScope::Selection => opts
+            .selected_ids
+            .as_ref()
+            .is_some_and(|ids| ids.contains(&sk.id)),
+        XmlExportScope::SourceDestDiff => {
+            // compareSourceDestDiffandColab: (colabId <> 0) or (hash <> hashTrans)
+            sk.colab_id != 0 || sk.hash != sk.hash_trans
+        }
+    }
+}
+
+/// Delphi `prepareSSTXML` 的 lockedTrans 归一化：lockedTrans 条目清掉
+/// translated / incompleteTrans / validated（只保留锁定状态）。
+pub fn normalize_export_params(params: SkyStringParams) -> SkyStringParams {
+    let mut p = params;
+    if p.is_set(SkyStringParams::LOCKED_TRANS) {
+        p.set(SkyStringParams::TRANSLATED, false);
+        p.set(SkyStringParams::INCOMPLETE_TRANS, false);
+        p.set(SkyStringParams::VALIDATED, false);
+    }
+    p
+}
+
+/// 收集要导出到 XML 的条目（Delphi `XMLExportbase` 等价语义）。
+///
+/// 分两步：
+/// 1. `prepareSSTXML` 候选集：排除空串 / `lockedStatus`（pexNoTrans、locked
+///    VMAD）/ 内部删除与警告标记 / 没有任何导出状态位的字符串；lockedTrans
+///    条目按 Delphi 归一化（清掉 translated/incomplete/validated）；
+/// 2. 在候选集上应用 scope comparator（`compareOptEverything` /
+///    `compareOptTranslatedAndValidated` / `compareOptSelection` /
+///    `compareSourceDestDiffandColab`）。
+///
+/// 与 `sky_strings_to_xml_entries`（固定“已有译文”的快速导出）不同，本函数
+/// 供交互式 XML Export 对话框使用，逐项对齐原版选项。
+pub fn collect_xml_export_entries(
+    strings: &[SkyString],
+    opts: &XmlExportOptions,
+) -> Vec<XmlStringEntry> {
+    strings
+        .iter()
+        // prepareSSTXML 候选集
+        .filter(|sk| !is_empty_sky(sk))
+        .filter(|sk| !is_locked_status(sk))
+        .filter(|sk| !is_prepare_sstxml_excluded(sk))
+        .filter(|sk| has_export_state(normalize_export_params(sk.params)))
+        // scope comparator（在归一化状态位上判定）
+        .filter(|sk| xml_scope_matches(sk, normalize_export_params(sk.params), opts))
+        .map(|sk| XmlStringEntry {
+            list_index: sk.list_index,
+            str_id: sk.esp_ptr.str_id,
+            edid: sk.edid.clone(),
+            record_sig: sk.esp_ptr.record_sig,
+            field_sig: sk.esp_ptr.field_sig,
+            index: sk.esp_ptr.index,
+            index_max: sk.esp_ptr.index_max,
+            source: sk.source.clone(),
+            translation: sk.translation.clone(),
         })
         .collect()
 }
@@ -811,5 +973,168 @@ mod tests {
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].source, "Hello");
         assert_eq!(entries[0].translation, "你好");
+    }
+
+    /// 构造一个带完整导出相关状态的 SkyString。
+    fn make_export_string(
+        id: u32,
+        source: &str,
+        translation: &str,
+        set_state: impl FnOnce(&mut SkyString),
+    ) -> SkyString {
+        let mut sk = SkyString::new(
+            id,
+            source.to_string(),
+            translation.to_string(),
+            *b"LCTN",
+            *b"FULL",
+        );
+        sk.esp_ptr.str_id = id as i32 + 100;
+        sk.edid = Some(format!("EDID{id}"));
+        sk.colab_id = if id % 2 == 0 { 0 } else { 7 };
+        sk.hash = crate::types::esp_pointer::string_hash(source);
+        sk.hash_trans = crate::types::esp_pointer::string_hash(translation);
+        set_state(&mut sk);
+        sk
+    }
+
+    fn translated(sk: &mut SkyString) {
+        sk.params.set(SkyStringParams::TRANSLATED, true);
+    }
+
+    fn validated(sk: &mut SkyString) {
+        sk.params.set(SkyStringParams::VALIDATED, true);
+    }
+
+    fn locked(sk: &mut SkyString) {
+        sk.params.set(SkyStringParams::LOCKED_TRANS, true);
+        sk.params.set(SkyStringParams::TRANSLATED, true);
+    }
+
+    fn no_trans(sk: &mut SkyString) {
+        sk.internal_params
+            .set(SkyStringInternalParams::PEX_NO_TRANS, true);
+    }
+
+    #[test]
+    fn test_xml_export_scope_everything() {
+        // 已翻译 + 空译文（无状态位）→ 候选集仅已翻译项
+        let strings = vec![
+            make_export_string(0, "Alpha", "A-zh", translated),
+            make_export_string(1, "Beta", "B-zh", validated),
+            make_export_string(2, "Gamma", "", |_| {}),
+        ];
+        let opts = XmlExportOptions::default(); // Everything
+        let entries = collect_xml_export_entries(&strings, &opts);
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0].edid.as_deref(), Some("EDID0"));
+    }
+
+    #[test]
+    fn test_xml_export_scope_translated_validated() {
+        let strings = vec![
+            make_export_string(0, "Alpha", "A-zh", translated),
+            make_export_string(1, "Beta", "B-zh", validated),
+            make_export_string(2, "Gamma", "G-zh", |sk| {
+                sk.params.set(SkyStringParams::INCOMPLETE_TRANS, true);
+            }),
+        ];
+        let opts = XmlExportOptions {
+            scope: XmlExportScope::TranslatedAndValidated,
+            ..Default::default()
+        };
+        let entries = collect_xml_export_entries(&strings, &opts);
+        assert_eq!(entries.len(), 2); // incomplete 排除
+    }
+
+    #[test]
+    fn test_xml_export_scope_selection_uses_stable_ids() {
+        let strings = vec![
+            make_export_string(10, "Alpha", "A-zh", translated),
+            make_export_string(20, "Beta", "B-zh", validated),
+        ];
+        let opts = XmlExportOptions {
+            scope: XmlExportScope::Selection,
+            selected_ids: Some(HashSet::from([20])),
+            ..Default::default()
+        };
+        let entries = collect_xml_export_entries(&strings, &opts);
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].source, "Beta");
+    }
+
+    #[test]
+    fn test_xml_export_scope_selection_empty_set_exports_none() {
+        let strings = vec![make_export_string(10, "Alpha", "A-zh", translated)];
+        let opts = XmlExportOptions {
+            scope: XmlExportScope::Selection,
+            selected_ids: Some(HashSet::new()),
+            ..Default::default()
+        };
+        assert!(collect_xml_export_entries(&strings, &opts).is_empty());
+    }
+
+    #[test]
+    fn test_xml_export_scope_diff_colab_or_hash_mismatch() {
+        // colab_id != 0 → diff
+        let strings = vec![
+            make_export_string(0, "Same", "Same-zh", translated), // colab 0, hash differs
+            make_export_string(1, "Colab", "Colab-zh", translated), // colab 7
+            make_export_string(2, "Identical", "Identical", translated), // colab 0, hash same
+        ];
+        let opts = XmlExportOptions {
+            scope: XmlExportScope::SourceDestDiff,
+            ..Default::default()
+        };
+        let entries = collect_xml_export_entries(&strings, &opts);
+        assert_eq!(entries.len(), 2);
+        assert!(entries.iter().all(|e| e.source != "Identical"));
+    }
+
+    #[test]
+    fn test_xml_export_excludes_locked_status_and_warnings() {
+        let strings = vec![
+            make_export_string(0, "Normal", "N-zh", translated),
+            make_export_string(1, "PexNoTrans", "", no_trans),
+            make_export_string(2, "Warning", "W-zh", |sk| {
+                sk.params.set(SkyStringParams::TRANSLATED, true);
+                sk.internal_params
+                    .set(SkyStringInternalParams::LOW_WARNING, true);
+            }),
+            make_export_string(3, "Deleted", "D-zh", |sk| {
+                sk.params.set(SkyStringParams::TRANSLATED, true);
+                sk.internal_params
+                    .set(SkyStringInternalParams::IS_DELETED, true);
+            }),
+        ];
+        let entries = collect_xml_export_entries(&strings, &XmlExportOptions::default());
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].source, "Normal");
+    }
+
+    #[test]
+    fn test_xml_export_normalizes_locked_trans_state() {
+        // lockedTrans 条目被归一化（清 translated），但 locked 本身仍在候选集 → 需再判 scope
+        let strings = vec![
+            make_export_string(0, "Locked", "L-zh", locked),
+            make_export_string(1, "Normal", "N-zh", translated),
+        ];
+        let opts = XmlExportOptions {
+            scope: XmlExportScope::TranslatedAndValidated,
+            ..Default::default()
+        };
+        let entries = collect_xml_export_entries(&strings, &opts);
+        // locked 条目归一化后无 translated → 不满足 Translated scope
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].source, "Normal");
+    }
+
+    #[test]
+    fn test_xml_export_edid_preserved_through_collect() {
+        let strings = vec![make_export_string(0, "Alpha", "A-zh", translated)];
+        let entries = collect_xml_export_entries(&strings, &XmlExportOptions::default());
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].edid.as_deref(), Some("EDID0"));
+        assert_eq!(entries[0].str_id, 100);
     }
 }

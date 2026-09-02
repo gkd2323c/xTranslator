@@ -23,8 +23,16 @@ import {
   SUPPORTED_GAME_IDS,
   type BatchProgress,
 } from "../api/strings";
-import type { LoadSstResponse, XmlImportResponse, SupportedGameId, SstApplyOptions } from "../api/strings";
+import type {
+  LoadSstResponse,
+  XmlImportResponse,
+  SupportedGameId,
+  SstApplyOptions,
+  XmlExportRequest,
+  XmlExportScope,
+} from "../api/strings";
 import { ApplySstDialog } from "./ApplySstDialog";
+import { XmlExportDialog } from "./XmlExportDialog";
 import { AdvSearchDialog } from "./AdvSearchDialog";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { listen } from "@tauri-apps/api/event";
@@ -128,6 +136,7 @@ type MenuGroup = {
 
 /** 目标语言代码映射 */
 const TARGET_LANGUAGE_CODES: Record<string, string> = {
+  english: "en",
   chinese: "zh",
   japanese: "ja",
   korean: "ko",
@@ -145,6 +154,7 @@ const TARGET_LANGUAGE_CODES: Record<string, string> = {
 
 /** 目标语言显示名称（备用） */
 const TARGET_LANGUAGE_FALLBACKS: Record<string, string> = {
+  english: "English",
   chinese: "Chinese",
   japanese: "Japanese",
   korean: "Korean",
@@ -235,12 +245,15 @@ export function GroupedMenuBar() {
   const [applySstDialogOpen, setApplySstDialogOpen] = useState(false);
   const [advSearchOpen, setAdvSearchOpen] = useState(false);
   const [pendingSstPath, setPendingSstPath] = useState<string | null>(null);
+  const [xmlExportOpen, setXmlExportOpen] = useState(false);
+  const [pendingXmlPath, setPendingXmlPath] = useState<string | null>(null);
   const [spellCheckCfg, setSpellCheckCfg] = useState<
     import("../api/strings").SpellCheckConfigDto | null
   >(null);
 
   const selectedIds = useAppStore((s) => s.selectedIds);
   const items = useAppStore((s) => s.items);
+  const allItems = useAppStore((s) => s.allItems);
 
   // ========== 自动恢复拼写检查 ==========
   useEffect(() => {
@@ -561,7 +574,13 @@ export function GroupedMenuBar() {
 
       setLoading(true);
       try {
-        const stats = await loadSst(path, options);
+        const effectiveOptions: SstApplyOptions = {
+          ...options,
+          same_language:
+            options?.same_language ??
+            language.trim().toLowerCase() === targetLang.trim().toLowerCase(),
+        };
+        const stats = await loadSst(path, effectiveOptions);
         setSstLoaded(path, stats);
         setIsDirty(true);
         toast.success(
@@ -577,8 +596,22 @@ export function GroupedMenuBar() {
         setLoading(false);
       }
     },
-    [espPath, loadAllStrings, setIsDirty, setLoading, setSstLoaded, t]
+    [
+      espPath,
+      language,
+      loadAllStrings,
+      setIsDirty,
+      setLoading,
+      setSstLoaded,
+      t,
+      targetLang,
+    ]
   );
+
+  const openSstApplyDialog = useCallback((path: string) => {
+    setPendingSstPath(path);
+    setApplySstDialogOpen(true);
+  }, []);
 
   const handleLoadSst = useCallback(async () => {
     const selected = await open({
@@ -588,9 +621,8 @@ export function GroupedMenuBar() {
     });
     const path = Array.isArray(selected) ? selected[0] : selected;
     if (!path) return;
-    setPendingSstPath(path);
-    setApplySstDialogOpen(true);
-  }, []);
+    openSstApplyDialog(path);
+  }, [openSstApplyDialog]);
 
   const handleSaveSst = async () => {
     const sstPath = await save({
@@ -626,28 +658,45 @@ export function GroupedMenuBar() {
     });
     if (!xmlPath) return;
 
-    setLoading(true);
-    setLoadProgress(null);
+    // 先展示 XML Export Options 对话框（对齐 Delphi TFormXmlOpt），
+    // 确认后再执行导出；取消则不导出。
+    setPendingXmlPath(xmlPath);
+    setXmlExportOpen(true);
+  };
 
-    try {
-      const unlisten = await listen<any>("xml-progress", (event) => {
-        setLoadProgress(event.payload);
-      });
+  const runXmlExport = useCallback(
+    async (path: string, scope: XmlExportScope) => {
+      setLoading(true);
+      setLoadProgress(null);
 
       try {
-        const count = await exportXml({ path: xmlPath, dest_lang: targetLang });
-        setIsDirty(false);
-        toast.success(t("toast.xmlExported", { count }));
+        const unlisten = await listen<any>("xml-progress", (event) => {
+          setLoadProgress(event.payload);
+        });
+
+        try {
+          const request: XmlExportRequest = { path, dest_lang: targetLang };
+          if (scope !== "everything") {
+            request.scope = scope;
+            if (scope === "selection") {
+              request.selected_ids = Array.from(selectedIds);
+            }
+          }
+          const count = await exportXml(request);
+          setIsDirty(false);
+          toast.success(t("toast.xmlExported", { count }));
+        } finally {
+          unlisten();
+        }
+      } catch (e: any) {
+        toast.error(`${t("menu.exportFailed")}: ${e}`);
       } finally {
-        unlisten();
+        setLoading(false);
+        setLoadProgress(null);
       }
-    } catch (e: any) {
-      toast.error(`${t("menu.exportFailed")}: ${e}`);
-    } finally {
-      setLoading(false);
-      setLoadProgress(null);
-    }
-  };
+    },
+    [targetLang, selectedIds, t]
+  );
 
   const importXmlFromPath = useCallback(
     async (path: string) => {
@@ -812,7 +861,7 @@ export function GroupedMenuBar() {
         return;
       }
       if (ext === "sst") {
-        void loadSstFromPath(path);
+        openSstApplyDialog(path);
         return;
       }
       if (ext === "xml") {
@@ -837,7 +886,7 @@ export function GroupedMenuBar() {
 
       toast.error(t("menu.dragDropUnsupported"));
     },
-    [importXmlFromPath, loadEspFromPath, loadSstFromPath, setActiveRightPanel, t]
+    [importXmlFromPath, loadEspFromPath, openSstApplyDialog, setActiveRightPanel, t]
   );
 
   // ========== Hook：拖放事件处理 ==========
@@ -1840,11 +1889,29 @@ export function GroupedMenuBar() {
               filtered_ids: options.restrict_to_filter
                 ? items.map((i) => i.id)
                 : undefined,
+              same_language:
+                language.trim().toLowerCase() === targetLang.trim().toLowerCase(),
             };
             loadSstFromPath(pendingSstPath, finalOptions);
           }
           setApplySstDialogOpen(false);
           setPendingSstPath(null);
+        }}
+      />
+      <XmlExportDialog
+        open={xmlExportOpen}
+        onClose={() => {
+          setXmlExportOpen(false);
+          setPendingXmlPath(null);
+        }}
+        exportPath={pendingXmlPath ?? ""}
+        selectedCount={selectedIds.size}
+        totalCount={allItems.length}
+        onConfirm={(scope) => {
+          const path = pendingXmlPath;
+          setXmlExportOpen(false);
+          setPendingXmlPath(null);
+          if (path) void runXmlExport(path, scope);
         }}
       />
       <AdvSearchDialog

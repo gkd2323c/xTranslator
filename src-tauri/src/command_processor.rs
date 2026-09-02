@@ -245,11 +245,12 @@ impl TauriCommandProcessorHost {
         path: PathBuf,
         compare_option: u8,
         apply_mode: u8,
+        same_language: bool,
     ) -> Result<(), String> {
         if !path.is_file() {
             return Err(format!("SST file does not exist: {}", path.display()));
         }
-        let options = processor_sst_options(compare_option, apply_mode)?;
+        let options = processor_sst_options(compare_option, apply_mode, same_language)?;
         let state = self.window.state::<Arc<AppState>>();
         commands::load_sst(state, path.to_string_lossy().into_owned(), Some(options))
             .await
@@ -1105,7 +1106,14 @@ impl CommandProcessorHost for TauriCommandProcessorHost {
                 apply_mode,
                 path,
             } => match self.resolve_apply_sst_path(globals, rule, path) {
-                Ok(path) => self.apply_sst(path, *compare_option, *apply_mode).await,
+                Ok(path) => {
+                    let same_language = languages_match(
+                        rule.lang_source.as_deref(),
+                        rule.lang_dest.as_deref(),
+                    );
+                    self.apply_sst(path, *compare_option, *apply_mode, same_language)
+                        .await
+                }
                 Err(error) => Err(error),
             },
             ProcessorCommandKind::ImportSst {
@@ -1113,7 +1121,14 @@ impl CommandProcessorHost for TauriCommandProcessorHost {
                 apply_mode,
                 path,
             } => match self.resolve_import_path(globals, path) {
-                Ok(path) => self.apply_sst(path, *compare_option, *apply_mode).await,
+                Ok(path) => {
+                    let same_language = languages_match(
+                        rule.lang_source.as_deref(),
+                        rule.lang_dest.as_deref(),
+                    );
+                    self.apply_sst(path, *compare_option, *apply_mode, same_language)
+                        .await
+                }
                 Err(error) => Err(error),
             },
             ProcessorCommandKind::ImportXml {
@@ -1229,9 +1244,19 @@ pub async fn run_command_processor(
     })
 }
 
+fn languages_match(source: Option<&str>, destination: Option<&str>) -> bool {
+    match (source, destination) {
+        (Some(source), Some(destination)) => {
+            source.trim().eq_ignore_ascii_case(destination.trim())
+        }
+        _ => false,
+    }
+}
+
 fn processor_sst_options(
     compare_option: u8,
     apply_mode: u8,
+    same_language: bool,
 ) -> Result<SstApplyOptionsDto, String> {
     let overwrite_scope = match compare_option {
         0 => SstOverwriteScopeDto::All,
@@ -1261,6 +1286,7 @@ fn processor_sst_options(
         overwrite_scope,
         match_mode,
         tag_only: false,
+        same_language,
         reset_state: false,
         restrict_to_filter: false,
         selected_ids: None,
@@ -1342,14 +1368,21 @@ mod tests {
 
     #[test]
     fn processor_numeric_options_map_to_delphi_dp03_matrix() {
-        let opts = processor_sst_options(2, 3).expect("valid Delphi options");
+        let opts = processor_sst_options(2, 3, false).expect("valid Delphi options");
         assert!(matches!(
             opts.overwrite_scope,
             SstOverwriteScopeDto::NoTransAndPartial
         ));
         assert!(matches!(opts.match_mode, SstMatchModeDto::StringOnly));
-        assert!(processor_sst_options(5, 1).is_err());
-        assert!(processor_sst_options(0, 4).is_err());
+        assert!(!opts.same_language);
+        assert!(processor_sst_options(0, 1, true)
+            .expect("same-language options")
+            .same_language);
+        assert!(processor_sst_options(5, 1, false).is_err());
+        assert!(processor_sst_options(0, 4, false).is_err());
+        assert!(languages_match(Some("English"), Some(" english ")));
+        assert!(!languages_match(Some("english"), Some("chinese")));
+        assert!(!languages_match(None, Some("english")));
     }
 
     #[test]

@@ -685,5 +685,16 @@
     "duration": "Duration: {{seconds}}s",
     "errors": "Errors ({{count}})",
     "batchFailed": "Batch failed: {{error}}"
+  },
+  "xmlExport": {
+    "title": "XML Export Options",
+    "file": "File",
+    "range": "Export Range",
+    "scopeAll": "All (Eligible strings)",
+    "scopeTranslated": "Translated & Validated",
+    "scopeSelection": "Selected Strings Only",
+    "scopeDiff": "Source ≠ Dest (or Colab)",
+    "scopeDiffHint": "Colab ID set or hash differs",
+    "totalHint": "Total strings: {{count}}"
   }
 }

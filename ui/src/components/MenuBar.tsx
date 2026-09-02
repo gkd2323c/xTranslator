@@ -2,8 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAppStore } from "../stores/appStore";
 import { Button, Input } from "./ui";
 import { loadEsp, loadSst, saveSst, exportXml, importXml, saveStrings, saveEsp, tcscConvert, tcscBatchConvert, updateTranslation, loadVocabulary, compareSourceDest, loadDataConfigs, delocalizeEsp, loadConfig, spellCheckLoad, spellCheckToggle, spellCheckConfig, SUPPORTED_GAME_IDS, type BatchProgress } from "../api/strings";
-import type { LoadSstResponse, XmlImportResponse, SupportedGameId, SstApplyOptions } from "../api/strings";
+import type { LoadSstResponse, XmlImportResponse, SupportedGameId, SstApplyOptions, XmlExportRequest, XmlExportScope } from "../api/strings";
 import { ApplySstDialog } from "./ApplySstDialog";
+import { XmlExportDialog } from "./XmlExportDialog";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
@@ -105,6 +106,7 @@ type MenuItem = {
 
 // 目标语言代码映射：用于翻译 API
 const TARGET_LANGUAGE_CODES: Record<string, string> = {
+  english: "en",
   chinese: "zh",
   japanese: "ja",
   korean: "ko",
@@ -122,6 +124,7 @@ const TARGET_LANGUAGE_CODES: Record<string, string> = {
 
 // 目标语言显示名称（备用）：当 Intl.DisplayNames 不可用时使用
 const TARGET_LANGUAGE_FALLBACKS: Record<string, string> = {
+  english: "English",
   chinese: "Chinese",
   japanese: "Japanese",
   korean: "Korean",
@@ -238,10 +241,13 @@ export function MenuBar() {
   const [showMergeSst, setShowMergeSst] = useState(false);        // SST 合并对话框
   const [applySstDialogOpen, setApplySstDialogOpen] = useState(false);
   const [pendingSstPath, setPendingSstPath] = useState<string | null>(null);
+  const [xmlExportOpen, setXmlExportOpen] = useState(false);
+  const [pendingXmlPath, setPendingXmlPath] = useState<string | null>(null);
   const [spellCheckCfg, setSpellCheckCfg] = useState<import("../api/strings").SpellCheckConfigDto | null>(null);
 
   const selectedIds = useAppStore((s) => s.selectedIds);
   const items = useAppStore((s) => s.items);
+  const allItems = useAppStore((s) => s.allItems);
 
   // ========== 自动恢复拼写检查 ==========
   // 三种持久状态的恢复策略：
@@ -545,7 +551,13 @@ export function MenuBar() {
 
     setLoading(true);
     try {
-      const stats = await loadSst(path, options);
+      const effectiveOptions: SstApplyOptions = {
+        ...options,
+        same_language:
+          options?.same_language ??
+          language.trim().toLowerCase() === targetLang.trim().toLowerCase(),
+      };
+      const stats = await loadSst(path, effectiveOptions);
       setSstLoaded(path, stats);
       setIsDirty(true);
       toast.success(t("toast.sstLoaded", { matched: stats.matched, unmatched: stats.unmatched }) + formatApplyStats(stats));
@@ -555,7 +567,12 @@ export function MenuBar() {
     } finally {
       setLoading(false);
     }
-  }, [espPath, loadAllStrings, setIsDirty, setLoading, setSstLoaded]);
+  }, [espPath, language, loadAllStrings, setIsDirty, setLoading, setSstLoaded, t, targetLang]);
+
+  const openSstApplyDialog = useCallback((path: string) => {
+    setPendingSstPath(path);
+    setApplySstDialogOpen(true);
+  }, []);
 
   const handleLoadSst = useCallback(async () => {
     const selected = await open({
@@ -565,10 +582,8 @@ export function MenuBar() {
     });
     const path = Array.isArray(selected) ? selected[0] : selected;
     if (!path) return;
-
-    setPendingSstPath(path);
-    setApplySstDialogOpen(true);
-  }, []);
+    openSstApplyDialog(path);
+  }, [openSstApplyDialog]);
 
   const handleSaveSst = async () => {
     const sstPath = await save({
@@ -600,28 +615,45 @@ export function MenuBar() {
     });
     if (!xmlPath) return;
 
-    setLoading(true);
-    setLoadProgress(null);
+    // 先展示 XML Export Options 对话框（对齐 Delphi TFormXmlOpt），
+    // 确认后再执行导出；取消则不导出。
+    setPendingXmlPath(xmlPath);
+    setXmlExportOpen(true);
+  };
 
-    try {
-      const unlisten = await listen<any>("xml-progress", (event) => {
-        setLoadProgress(event.payload);
-      });
+  const runXmlExport = useCallback(
+    async (path: string, scope: XmlExportScope) => {
+      setLoading(true);
+      setLoadProgress(null);
 
       try {
-        const count = await exportXml({ path: xmlPath, dest_lang: targetLang });
-        setIsDirty(false);
-        toast.success(t("toast.xmlExported", { count }));
+        const unlisten = await listen<any>("xml-progress", (event) => {
+          setLoadProgress(event.payload);
+        });
+
+        try {
+          const request: XmlExportRequest = { path, dest_lang: targetLang };
+          if (scope !== "everything") {
+            request.scope = scope;
+            if (scope === "selection") {
+              request.selected_ids = Array.from(selectedIds);
+            }
+          }
+          const count = await exportXml(request);
+          setIsDirty(false);
+          toast.success(t("toast.xmlExported", { count }));
+        } finally {
+          unlisten();
+        }
+      } catch (e: any) {
+        toast.error(`${t("menu.exportFailed")}: ${e}`);
       } finally {
-        unlisten();
+        setLoading(false);
+        setLoadProgress(null);
       }
-    } catch (e: any) {
-      toast.error(`${t("menu.exportFailed")}: ${e}`);
-    } finally {
-      setLoading(false);
-      setLoadProgress(null);
-    }
-  };
+    },
+    [targetLang, selectedIds, t]
+  );
 
   const importXmlFromPath = useCallback(async (path: string) => {
     if (!espPath) {
@@ -697,7 +729,7 @@ export function MenuBar() {
       return;
     }
     if (ext === "sst") {
-      void loadSstFromPath(path);
+      openSstApplyDialog(path);
       return;
     }
     if (ext === "xml") {
@@ -721,7 +753,7 @@ export function MenuBar() {
     }
 
     toast.error(t("menu.dragDropUnsupported"));
-  }, [importXmlFromPath, loadEspFromPath, loadSstFromPath, setActivePanel, t]);
+  }, [importXmlFromPath, loadEspFromPath, openSstApplyDialog, setActivePanel, t]);
 
   // ========== Hook：拖放事件处理 ==========
   /**
@@ -1450,11 +1482,28 @@ export function MenuBar() {
             ...options,
             selected_ids: options.overwrite_scope === "selection" ? Array.from(selectedIds) : undefined,
             filtered_ids: options.restrict_to_filter ? items.map((i) => i.id) : undefined,
+            same_language: language.trim().toLowerCase() === targetLang.trim().toLowerCase(),
           };
           const path = pendingSstPath;
           setApplySstDialogOpen(false);
           setPendingSstPath(null);
           void loadSstFromPath(path, fullOptions);
+        }}
+      />
+      <XmlExportDialog
+        open={xmlExportOpen}
+        onClose={() => {
+          setXmlExportOpen(false);
+          setPendingXmlPath(null);
+        }}
+        exportPath={pendingXmlPath ?? ""}
+        selectedCount={selectedIds.size}
+        totalCount={allItems.length}
+        onConfirm={(scope) => {
+          const path = pendingXmlPath;
+          setXmlExportOpen(false);
+          setPendingXmlPath(null);
+          if (path) void runXmlExport(path, scope);
         }}
       />
     </div>

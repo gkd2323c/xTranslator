@@ -249,6 +249,31 @@ pub struct XmlExportRequest {
     pub path: String,
     /// 目标语言（如 "chinese"）
     pub dest_lang: String,
+    /// 导出范围（Delphi `TFormXmlOpt.RadioGroup1` 的 ItemIndex）。
+    /// 缺省为 `everything`，保持与旧版“已有译文快速导出”一致。
+    #[serde(default)]
+    pub scope: Option<XmlExportScopeDto>,
+    /// Selection 范围使用的稳定 `u32` 字符串 ID 集合。
+    #[serde(default)]
+    pub selected_ids: Option<Vec<u32>>,
+    /// 是否导出对话条目的 FUZ 数据（对齐 Delphi `chk_exportFuzData`；
+    /// FUZ 元数据尚未接通时保留开关语义）。
+    #[serde(default)]
+    pub export_fuz: bool,
+}
+
+/// XML 导出范围（对齐 Delphi `TFormXmlOpt.RadioGroup1` 的 4 档）
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum XmlExportScopeDto {
+    /// 候选集内全部条目（Delphi `compareOptEverything`）
+    Everything,
+    /// 仅已翻译或已验证（Delphi `compareOptTranslatedAndValidated`）
+    TranslatedAndValidated,
+    /// 仅当前选中项（Delphi `compareOptSelection`）
+    Selection,
+    /// 源文 != 译文，或带协作 ID（Delphi `compareSourceDestDiffandColab`）
+    SourceDestDiff,
 }
 
 /// XML 导入响应
@@ -1239,6 +1264,9 @@ pub struct SstApplyOptionsDto {
     /// 仅打标记，不修改翻译文本
     #[serde(default)]
     pub tag_only: bool,
+    /// 源语言与目标语言相同，对齐 Delphi TESVTSameLanguage
+    #[serde(default)]
+    pub same_language: bool,
     /// 匹配前重置覆盖范围内的目标字符串状态（未命中项也会被重置）
     #[serde(default)]
     pub reset_state: bool,

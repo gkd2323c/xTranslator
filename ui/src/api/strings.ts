@@ -243,14 +243,16 @@ export interface SstApplyOptions {
   tag_only?: boolean;
   reset_state?: boolean;
   restrict_to_filter?: boolean;
+  // Delphi TESVTSameLanguage: source and destination language are identical.
+  same_language?: boolean;
   selected_ids?: number[];
   filtered_ids?: number[];
 }
 
 // 加载 SST 字典
 ///
-// 使用 T1-T4 分层匹配算法或指定高级选项将 SST 中的翻译应用到当前加载的字符串。
-// 返回匹配统计信息。
+// 使用默认或指定的高级选项将 SST 中的翻译应用到当前加载的字符串；省略 options
+// 时由后端选择默认 FormID + strict source/index matcher。返回匹配统计信息。
 export async function loadSst(
   sstPath: string,
   options?: SstApplyOptions,
@@ -592,9 +594,22 @@ export async function setApiKey(apiKey: string): Promise<void> {
   return setOpenAiApiKey(apiKey);
 }
 
+/** XML 导出范围（对齐 Delphi TFormXmlOpt.RadioGroup1 的 4 档） */
+export type XmlExportScope =
+  | "everything"
+  | "translated_and_validated"
+  | "selection"
+  | "source_dest_diff";
+
 export interface XmlExportRequest {
   path: string;
   dest_lang: string;
+  /** 缺省为 everything（等价旧版“已有译文”快速导出） */
+  scope?: XmlExportScope;
+  /** Selection 范围使用的稳定字符串 ID 集合 */
+  selected_ids?: number[];
+  /** 是否导出对话条目的 FUZ 数据 */
+  export_fuz?: boolean;
 }
 
 export interface XmlImportResponse {
