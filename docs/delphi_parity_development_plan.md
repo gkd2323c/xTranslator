@@ -37,8 +37,8 @@ Rust/Tauri 重写已经完成了绝大多数**核心翻译引擎**：ESP/ESM 解
 剩余差距主要集中在四类：
 
 - **主工作流没有真正接通的能力**：多游戏上下文、Localized/Hybrid 加载策略均已接通（DP-01/DP-07）。
-- **原版高级工作流缩水**：XML Export options；Apply SST、Advanced Search、BatchProcessor 已恢复（DP-03/DP-04/DP-05）。
-- **格式级兼容差距**：PEX opcode（LE fixture 待补）、XML EDID 信息；归档注入已实现（DP-06）。
+- **原版高级工作流缩水**：XML Export options 已恢复（DP-08）；Apply SST、Advanced Search、BatchProcessor 已恢复（DP-03/DP-04/DP-05）。
+- **格式级兼容差距**：PEX opcode（FO76/Starfield fixture 待补）、XML EDID 信息已闭环（DP-09）；归档注入已实现（DP-06）。
 - **低频辅助工具未移植**：DEFUI Component Generator、Codepage 手动覆盖、部分旧式工具窗。
 
 因此，当前版本更准确的描述是：
@@ -52,14 +52,14 @@ Rust/Tauri 重写已经完成了绝大多数**核心翻译引擎**：ESP/ESM 解
 | ID    | 优先级 | 差距                              | 当前状态                       | Delphi 参考                                                             | 当前实现入口                                                                   |
 | ----- | ------ | --------------------------------- | ------------------------------ | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
 | DP-01 | P0     | 多游戏上下文贯穿主流程            | ✅ **已完成**                   | `TESVT_main.pas` 游戏状态                                               | `game_detect.rs`, `appStore.ts`, `GroupedMenuBar.tsx`, `commands.rs::load_esp` |
-| DP-02 | P0     | PEX opcode / 反编译语义           | ⏳ **真实 LE fixture 待补**     | `TESVT_scriptPex.pas`                                                   | `crates/xt-core/src/pex/decompile.rs`                                          |
-| DP-03 | P0     | Apply SST 高级选项                | ⏳ **主体完成，VMAD/L3 待闭环** | `TESVT_ApplySSTOpts.*`                                                  | `matching.rs`, `commands.rs::load_sst`                                         |
+| DP-02 | P0     | PEX opcode / 反编译语义           | ✅ **Skyrim + FO4 fixture；FO76/Starfield L3 待补** | `TESVT_scriptPex.pas`                                                   | `crates/xt-core/src/pex/decompile.rs`                                          |
+| DP-03 | P0     | Apply SST 高级选项                | ✅ **核心完成；L3 交叉验证待补** | `TESVT_ApplySSTOpts.*`                                                  | `matching.rs`, `commands.rs::load_sst`                                         |
 | DP-04 | P1     | Advanced Search                   | ✅ **已完成**                   | `TESVT_AdvSearch.*`                                                     | `ui/src/components/AdvSearchDialog.tsx`, `appStore.ts`                        |
 | DP-05 | P1     | BatchProcessor 命令脚本           | ✅ **已完成（L3 交叉验证待补）** | `TESVT_commandProcessor.*`, `TESVT_main.pas::batchCommands/runCommands` | `xt-core::command_processor`、`src-tauri::command_processor`、`CommandProcessorDialog.tsx` |
 | DP-06 | P1     | BSA/BA2 注入                      | ✅ **已完成（真实归档交叉验证待补）** | `TESVT_bsa.pas::InjectData`                                             | `archive_inject.rs`, `bsa/injection.rs`, `ba2/injection.rs`                 |
 | DP-07 | P1     | Localized / Hybrid 加载策略       | ✅ **已完成（真实游戏交叉验证待补）** | `TESVT_delocOpts.*`, MainLoader                                         | `StringsLoadStrategy`, `commands.rs::load_esp`                                |
-| DP-08 | P1     | XML Export 选项                   | **缩水**                       | `TESVT_XMLExportOpts.*`                                                 | `XmlExportRequest`, `commands.rs::export_xml`                                  |
-| DP-09 | P2     | XML EDID 元数据完整性             | **部分缺失**                   | `TESVT_XMLFunc.pas`                                                     | `SkyString`, `xml/mod.rs`                                                      |
+| DP-08 | P1     | XML Export 选项                   | ✅ **已完成（L3 交叉验证待补）** | `TESVT_XMLExportOpts.*`                                                 | `xml/mod.rs::collect_xml_export_entries`, `XmlExportDialog.tsx`, `commands.rs::export_xml` |
+| DP-09 | P2     | XML EDID 元数据完整性             | ✅ **已完成（L3 交叉验证待补）** | `TESVT_XMLFunc.pas`                                                     | `SkyString.edid`, `xml/mod.rs`                                                  |
 | DP-10 | P2     | DEFUI Component Generator         | **未实现**                     | `TESVT_DefUIGen.*`, `doComponentGenerator`                              | 无对应实现                                                                     |
 | DP-11 | P2     | Codepage 手动选择/覆盖            | **底层有，工作流缺**           | `TESVT_Codepage.*`, `TESVT_ChooseCP.*`                                  | `strings/codepage.rs`                                                          |
 | DP-12 | P3     | Yandex / freeApi provider         | **未实现**                     | `TESVT_TranslatorApi.pas`                                               | `translation_api/`                                                             |
@@ -131,11 +131,11 @@ Rust/Tauri 重写已经完成了绝大多数**核心翻译引擎**：ESP/ESM 解
 
 ---
 
-### DP-02 PEX opcode 与原版对齐 (⏳ 待完成 - 等待真实 Little-Endian fixture)
+### DP-02 PEX opcode 与原版对齐 (✅ 核心与真实 BE/LE fixture 已完成)
 
 #### 状态
 
-⏳ **待完成（主体与写回层已修复，真实 Little-Endian fixture 待补）。** 已对齐真实 Bethesda PEX 头部规范、大小端、GameID 建模、Object Body 字段顺序与字节级无损写回；仓库现已加入 Bethesda PapyrusCompiler 实际产出的 Skyrim SE Big-Endian fixture，并通过真实 parse/decompile/byte-for-byte roundtrip。FO4/FO76/Starfield Little-Endian 仍缺真实编译器产物，L3 交叉验证尚未完全闭环。
+✅ **2026-09-02 完成核心验收闭环（FO76/Starfield 真实 fixture 仍待补）。** 已对齐真实 Bethesda PEX 头部规范、大小端、GameID 建模、Object Body 字段顺序与字节级无损写回；仓库现已加入 Bethesda PapyrusCompiler 实际产出的 Skyrim SE Big-Endian fixture，以及本机 Fallout 4/F4SE 构建环境中的 Little-Endian `Armor.pex` 与 `Form.pex` fixture，并通过真实 parse/decompile/byte-for-byte roundtrip。FO4 的 Little-Endian 路径已有真实产物与实际 `Return` opcode/value 断言覆盖；FO76/Starfield 尚缺对应编译器产物，因此保留游戏级 L3 验证边界。
 
 #### 目标
 
@@ -182,23 +182,25 @@ Rust/Tauri 重写已经完成了绝大多数**核心翻译引擎**：ESP/ESM 解
   - Starfield Little-Endian PEX 反编译测试（`test_decompile_real_starfield_little_endian_pex`），验证 uConst/Struct/Guard 段；
   - 大小端双 byte-for-byte roundtrip 测试（`test_roundtrip_big_endian_byte_for_byte` / `test_roundtrip_little_endian_byte_for_byte`）。
   - 新增 `crates/xt-core/tests/fixtures/pex/skyrim_se/XtPexFixture.pex.hex`：由 Skyrim Special Edition 自带 Bethesda `PapyrusCompiler.exe` 对项目自有 `XtPexFixture.psc` 实际编译产生，仅对 Header 中 UserName / ComputerName 做等长脱敏；`pex_real_fixture.rs` 验证真实编译产物能够 parse、decompile，并在无修改写回时 byte-for-byte 完全一致。
-  - **剩余边界**：FO4 / FO76 / Starfield Little-Endian 路径仍只有按真实规范构造的字节测试，尚缺对应游戏编译器实际产出的 fixture。
+  - 新增 `crates/xt-core/tests/fixtures/pex/fallout4/Armor.pex.hex` 与 `Form.pex.hex`：来自本机 Fallout 4/F4SE 构建环境中的真实 `Data/Scripts` PEX；Header 保留 `E:\github\f4se\scripts\build_src`、`ianpatt`、`KURTHNAGA` provenance，不将其描述为 Bethesda 原版发行资产。`pex_real_fixture.rs` 覆盖 Little-Endian Header、对象反编译、`Form.kSlotMask30` getter 的真实 `Return(1)` 指令解析、`parse→compile→parse` 与 byte-for-byte roundtrip。
+  - **剩余边界**：FO76 / Starfield Little-Endian 路径尚缺对应游戏编译器实际产出的 fixture；现有构造测试仍保留，用于覆盖 Guard/Struct 等 Starfield 特有布局。
 
 #### 验证结果
 
-- `cargo test -p xt-core --lib` → **307 passed / 0 failed**。
+- `cargo test -p xt-core --test pex_real_fixture` → **3 passed / 0 failed**（Skyrim SE Big-Endian 与 Fallout 4 Little-Endian 真实 fixture，其中 Form fixture 含实际 opcode/value 断言）。
+- `cargo test -p xt-core --lib` → **当前 346 passed / 0 failed**。
 - `cargo test --workspace` → **全部通过**。
 - `cargo check -p xtranslator-tauri` → **通过**。
 - `npx tsc --noEmit` → **通过**。
 - `git diff --check` → **通过**。
 
-#### 待办（真实文件交叉验证）
+#### 待办（剩余真实文件交叉验证）
 
-- 放入至少一个真实游戏 / Papyrus 编译器产出的 **Skyrim `.pex`** 与 **FO4/Starfield `.pex`** fixture，跑通 `decompile` 与 `parse→compile→parse` roundtrip，并将这两项测试命名为真实 fixture 测试，取代现场拼接。
+- 若取得 FO76 或 Starfield 的真实 Papyrus 编译器产物，再补对应 fixture，重点验证游戏专属 opcode / Struct / Guard 布局；这不再阻塞 DP-02 的 Skyrim + FO4 基线验收。
 
 ---
 
-### DP-03 恢复 Apply SST 高级选项 (⏳ 主体完成，VMAD/L3 待闭环)
+### DP-03 恢复 Apply SST 高级选项 (✅ 核心完成，L3 交叉验证待补)
 
 #### 原版能力
 
@@ -206,7 +208,7 @@ Rust/Tauri 重写已经完成了绝大多数**核心翻译引擎**：ESP/ESM 解
 
 **覆盖范围 (5 种)：**
 
-- All (全部未锁定项)
+- All（普通字符串为全部未锁定项；VMAD 由专用 comparator 决定，locked VMAD 仍可参与）
 - NoTrans Exclusive (仅未翻译项)
 - NoTransAndPartials（保留 Delphi 原名；实际比较器排除 `translated` / `validated` / `incompleteTrans`，即严格未翻译项）
 - Partial Only (仅部分翻译项)
@@ -231,9 +233,12 @@ Rust/Tauri 重写已经完成了绝大多数**核心翻译引擎**：ESP/ESM 解
    - 实现了 `SstOverwriteScope`、`SstMatchMode`、`SstApplyOptions` 及对应的稳定 `u32 id` 范围判定。
    - SST V4 FormID 模式已改为使用真实 `form_id` + Delphi `sanitizeFormID` 规则，不再把 `str_id` 三元组误当 FormID。
    - `StringOnly` 已改回 Delphi 的精确源文路径，不再借用 T3 规范化 / T4 Jaccard 模糊匹配。
-   - `reset_state` 已按 Delphi 改为候选预重置语义；未命中候选也会被重置，且 SST incomplete/locked 状态仍按来源保留。
+   - `reset_state` 已按 Delphi 改为候选预重置语义；未命中候选也会被重置，且 SST incomplete/locked 状态仍按来源保留；已有 `nTrans` 标记时也会在下一次匹配前重置，VMAD reset 使用源文 + `lockedTrans` 状态。
    - SST 正常应用与 `tag_only` 均同步 `colab_id`；`restrict_to_filter=true` 缺少 `filtered_ids` 时 fail-closed。
-   - matching 专项测试现为 35 项全绿；新增覆盖 StringOnly 未命中 reset、同语言不自动应用，以及 Tag Only 现代契约；原有 XML/通用 4-Tier 路径保持独立。
+   - VMAD EDID 条目已固定到 V4Strict 路径：三个 FormID 档位均对 VMAD 强制原文与 index 精确校验，普通字符串仍分别使用 V4Edid/V4Strict/V4Relax；VMAD 专用 comparator 不再被通用 `lockedTrans` 预过滤截断。VMAD 译文变更按 Delphi 标为 `validated`；同语言下即使译文未变而源文仍不同，也保持 `validated`，其余完全相同项才标为 `translated`。
+   - 拖放 SST 与菜单加载统一先进入 `ApplySstDialog`；`load_sst` 的 `options=None` 明确定义为默认高级 SST 选项，不再回退到通用 T1-T4 matcher。
+   - `same_language` 已从 UI 的源/目标语言状态（`language === targetLang`）写入 SST DTO，再映射到 `ApplyPolicy`；BatchProcessor 则从 `LangSource/LangDest` 规则推导；目标语言列表包含 English，因此同语言路径具备真实入口。
+   - matching 专项测试现为 43 项全绿；新增覆盖 VMAD 三档 FormID 正向路由、锁定目标资格、译文状态、同语言状态、`nTrans` 命中/未命中 reset、StringOnly 未命中 reset，以及 Tag Only 现代契约；原有 XML/通用 4-Tier 路径保持独立。
 2. **IPC DTO (`crates/xt-shared/src/dto.rs`)**：
    - 定义 `SstOverwriteScopeDto`, `SstMatchModeDto`, `SstApplyOptionsDto`。
 3. **Tauri 后端命令 (`src-tauri/src/commands.rs`)**：
@@ -245,14 +250,15 @@ Rust/Tauri 重写已经完成了绝大多数**核心翻译引擎**：ESP/ESM 解
 
 #### 当前验收状态
 
-- `cargo test -p xt-core matching::tests --lib` → **36 passed / 0 failed**。
-- `cargo test --workspace` → **通过**；其中 `xt-core` **322 passed / 0 failed**，其余 workspace 测试与 doc-tests 全绿，release-only 测试按测试声明保持 ignored。
+- `cargo test -p xt-core matching::tests --lib` → **43 passed / 0 failed**。
+- `cargo test --workspace` → **全部通过**；xt-core 单元测试 **346 passed / 0 failed**，集成测试与 doc-tests 也通过，release-only 测试按测试声明保持 ignored。
 - `cargo check -p xtranslator-tauri` → **通过**。
-- `npx vitest run` → **27 passed / 0 failed**（4 个测试文件）。
+- `npx vitest run` → **59 passed / 0 failed**（6 个测试文件）。
 - `npx tsc --noEmit` → **通过**。
+- `npm run build` → **通过**（Vite 仅提示既有的大 chunk warning）。
 - `git diff --check` → **通过**（仅报告仓库现有 LF→CRLF 提示，无 whitespace error）。
-- `cargo fmt --all -- --check` → **未通过**，但输出包含 DP-02/CLI 等本轮范围外的大量既有未格式化改动；本轮未为追求全局格式绿灯而改写这些无关文件。
-- **VMAD 进展**：已完成 `getfProcCompareOptVMADString` 的防污染保护机制，StringOnly 模式下 5 档 Scope 矩阵已全量单测覆盖（All / NoTransExclusive / NoTransAndPartial 屏蔽；PartialOnly / Selection 放行）；VMAD 其余专用 FormID/comparator Apply 路径仍待闭环。
+- `cargo fmt --all -- --check` → **未通过**，输出包含本轮范围外及既有 DP-02/DP-03/CLI 等未格式化改动；本轮未为追求全局格式绿灯而改写这些无关文件。
+- **VMAD 进展**：已完成 `getfProcCompareOptVMADString` 的防污染保护机制，StringOnly 模式下 5 档 Scope 矩阵已全量单测覆盖（All / NoTransExclusive / NoTransAndPartial 屏蔽；PartialOnly / Selection 放行）；三个 FormID 档位均已路由到 VMAD 专用 V4Strict 约束，locked VMAD 资格、VMAD+nTrans 未命中 reset，以及译文状态映射均有回归测试覆盖。
 - **尚未完成项（L3）**：按本文件第 9 节定义，SST apply 需要 Delphi / 真实游戏交叉验证；完成前不得宣称 100% Delphi parity。
 
 ---
@@ -546,6 +552,8 @@ Manual
 
 ### DP-08 XML Export 选项
 
+✅ **2026-09-02 完成（L3 交叉验证待补）。**
+
 #### 原版能力
 
 原版 XML Export 支持：
@@ -557,7 +565,7 @@ Manual
 - Split collaboration
 - 可选 FUZ 数据
 
-#### 当前差距
+#### 当前差距（已完成前）
 
 当前 `XmlExportRequest` 只有：
 
@@ -566,16 +574,36 @@ Manual
 
 `export_xml` 直接通过 `sky_strings_to_xml_entries()` 收集当前可导出条目，行为基本固定为“已有译文”。
 
-#### 目标
+#### 目标（已完成前）
 
 扩展请求 DTO，恢复导出范围和附加信息控制。
 
-#### 验收
+#### 实现内容
 
-- 四种 export scope 有测试。
-- Selection 使用稳定 IDs。
-- Diff 定义必须在 SPEC 中明确，不凭 UI 名称猜实现。
-- Split collaboration 与 `colab_id` 行为一致。
+- **核心（`crates/xt-core/src/xml/mod.rs`）**：新增 `XmlExportScope`（Everything / TranslatedAndValidated / Selection / SourceDestDiff，对应 Delphi `TFormXmlOpt.RadioGroup1` 4 档）与 `XmlExportOptions`；新增 `collect_xml_export_entries()`，分两步对齐 Delphi `XMLExportbase`：
+  1. `prepareSSTXML` 候选集：排除空串（`source` 与 `translation` 皆空）、`lockedStatus`（`pexNoTrans` 或 locked VMAD）、内部删除/警告标记（`isDeleted/lowwarning/warning/bigwarning/nTrans`）、无导出状态位（`sparams ∩ [translated,lockedTrans,incompleteTrans,validated] = ∅`）；lockedTrans 条目按 Delphi 归一化（清掉 translated/incomplete/validated）；
+  2. 候选集上应用 scope comparator（`compareOptEverything` / `compareOptTranslatedAndValidated` / `compareOptSelection` / `compareSourceDestDiffandColab`）。
+- **DTO（`xt-shared` + TS）**：`XmlExportRequest` 新增 `scope: Option<XmlExportScopeDto>`、`selected_ids: Option<Vec<u32>>`、`export_fuz: bool`；后端 `export_xml` 有 scope 时走 `collect_xml_export_entries`，缺省保持旧“已有译文”快速路径（批处理/finalize/CLI 不受影响）。
+- **UI**：新增 `XmlExportDialog`（All/Translated/Selection/Diff 单选，对齐 RadioGroup1），`MenuBar` 与 `GroupedMenuBar` 的 Export XML 菜单项先弹选项对话框、确认后携带 scope 导出；Selection 档自动把 `appStore.selectedIds`（稳定 u32 id）作为 `selected_ids`。
+- **FUZ 开关注记**：Delphi `chk_exportFuzData` 依赖 FUZ 元数据管道，当前 Rust 尚未接通，按仓库“不在 UI 假装生效”原则**不渲染无效开关**；`export_fuz` 字段保留在 DTO 以备后续接通。
+
+#### 验收（完成情况）
+
+- ✅ 四种 export scope 有测试（`xml::tests`：Everything / TranslatedAndValidated / Selection / SourceDestDiff + 排除条件 + lockedTrans 归一化 + EDID 保留，共 8 项新增）。
+- ✅ Selection 使用稳定 IDs（`selected_ids: Option<HashSet<u32>>`，前端由 `selectedIds` Set 映射）。
+- ✅ Diff 定义为 `colab_id != 0 || hash != hash_trans`（对照 Delphi `compareSourceDestDiffandColab` 源码，非 UI 名称猜测）。
+- ⚠️ Split collaboration：Diff scope 的 colab 语义已包含；“按 colab 拆分为多文件导出”为 Delphi 在 colab 模式下的附加文件拆分行为，Rust 当前导出单文件，未实现多文件拆分（低频，标记 L3 尾项）。
+- ⚠️ L3：需在真实游戏安装上与 Delphi 导出结果交叉验证条目范围。
+
+#### 验证结果
+
+- `cargo test -p xt-core --lib` → **354 passed / 0 failed**（新增 8 项 XML export scope 测试）。
+- `cargo test --workspace` → **全部通过**。
+- `cargo check -p xtranslator-tauri` → **通过**。
+- `npx tsc --noEmit` → **通过**。
+- `NODE_ENV=test npx vitest run` → **59 passed / 0 failed**（注意：不带 `NODE_ENV=test` 时 React 走 production build 导致 act 报错，属环境问题）。
+- `npm run build` → **通过**（仅既有大 chunk 提示）。
+- `git diff --check` → **通过**（仅仓库 LF→CRLF 提示）。
 
 ---
 
@@ -583,11 +611,25 @@ Manual
 
 ### DP-09 XML EDID 元数据
 
+✅ **2026-09-02 完成（与 DP-08 一并闭环）。**
+
+#### 背景（已完成前）
+
 当前 XML parser/writer 已能读写 `<EDID>`，但 `SkyString` 不保存 EDID 文本，`sky_strings_to_xml_entries()` 因此无法稳定导出它。
 
 建议不要只为 XML 临时查询记录树。更合理的是在解析期把需要跨工作流使用的 `edid` 作为运行时元数据保留在 `SkyString` 或单独 metadata table 中。
 
-验收：Delphi 有 EDID 的 XML 条目，新版在等价 export scope 下也能输出同样 EDID。
+#### 完成内容
+
+- `SkyString.edid: Option<String>` 字段（前序会话已加入）在 ESP 解析期从记录 EDID 字段填充：普通可翻译字段路径（`esp/parser.rs` 1218/1452）与 VMAD 字符串路径（1532）均已赋值。
+- `sky_strings_to_xml_entries()` 与 `collect_xml_export_entries()` 均输出 `sk.edid`（不再硬编码 `None`）。
+- 注记：Delphi `getEdidNameExport` 对 VMAD 字符串输出 `rec_edid + "_" + propName`；当前 `SkyString` 只保留裸 EDID（prop 名只进了 `edid_hash`），故 XML 导出的 VMAD 条目 EDID 为记录 EDID，未拼接 prop 名——如需完整对齐需在 SkyString 上补存 prop 名，标记为已知差异（L3）。
+
+#### 验收
+
+- ✅ 解析期填充：普通与 VMAD 字符串均有 `edid`（parser.rs 三处赋值）。
+- ✅ 导出：`collect_xml_export_entries`/`sky_strings_to_xml_entries` 输出 `sk.edid`；`test_xml_export_edid_preserved_through_collect` 覆盖。
+- ⚠️ L3：Delphi 有 EDID 的 XML 条目，新版在等价 export scope 下也能输出同样 EDID——需真实样本交叉验证（VMAD `_prop` 拼接差异见注记）。
 
 ---
 
@@ -732,13 +774,13 @@ MS Word backend 属于 Windows 特有兼容功能，应作为可选 adapter，�
 
 DP-01、DP-04、DP-05、DP-06、DP-07 已完成，后续严格按下面顺序推进：
 
-1. **DP-02 PEX opcode** — 修正已经发现的格式级风险。
-2. **DP-03 Apply SST options** — 恢复核心翻译工作流的用户控制能力。
+1. ~~**DP-02 PEX opcode**~~ — ✅ 2026-09-02：Skyrim SE 与 Fallout 4 真实 fixture 已覆盖；FO76/Starfield fixture 作为发布 QA 尾项。
+2. ~~**DP-03 Apply SST options**~~ — ✅ 2026-09-02：ApplySstDialog 已覆盖菜单与拖放入口，默认调用统一高级 matcher；VMAD 与 same-language 语义已接通，剩余仅 L3 交叉验证。
 3. ~~**DP-04 Advanced Search**~~ — ✅ 已完成（2026-09-01）：独立面板、六维度、按字段 Regex、REC:FIELD 联合、preset 持久化；Keyword 维度待数据管道。
 4. ~~**DP-05 BatchProcessor**~~ — ✅ 已完成（2026-09-01，L3 交叉验证待补）：完整白名单 parser + 全部 11 命令执行路径（含 GenerateDictionaries / LoadMasters / ApiTranslation）+ 独立 UI；ImportXml comparator 语义随 DP-09 闭环。
 5. ~~**DP-06 BSA/BA2 注入**~~ — ✅ 已完成（2026-09-01，真实归档交叉验证待补）：BSA zlib/LZ4 + BA2 GNRL zlib replacement injection，安全替换流程（临时文件→校验→备份→原子替换）。
 6. ~~**DP-07 Localized/Hybrid loading**~~ — ✅ 已完成（2026-09-01，真实游戏交叉验证待补）：DiskPreferred / ArchivePreferred / Manual 三策略 + 逐文件来源追踪 + UI 展示。
-7. **DP-08 / DP-09 XML export + EDID**。
+7. ~~**DP-08 / DP-09 XML export + EDID**~~ — ✅ 2026-09-02：XML Export Options 对话框（All/Translated/Selection/Diff）已接入两条菜单栏；collect_xml_export_entries 对齐 prepareSSTXML 候选集 + 4 comparator；SkyString.edid 解析期填充并随导出输出；8 项 scope 单测 + 59 vitest + 354 xt-core 全绿；Split-colab 多文件拆分与 VMAD `_prop` EDID 拼接标记为已知差异（L3）。
 8. **DP-10 / DP-11 辅助工具**。
 9. **P3 兼容尾项**。
 
